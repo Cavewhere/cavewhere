@@ -44,20 +44,39 @@ QQ.Item {
 
     QQ.HoverHandler {
         id: hoverId
+
+        onHoveredChanged: {
+            if (hoverId.hovered) {
+                tooltipLoader.active = true
+            }
+        }
     }
 
     // Its own ToolTip rather than the attached one, like FixStationErrorBadge:
     // the attached property routes through the app-wide shared instance, and
     // capping the width to wrap the sentence about a project with no frame
     // would cap every other tooltip with it. The style's own content item
-    // already wraps, so the cap is all this adds.
-    QC.ToolTip {
-        id: tooltipId
+    // already wraps, so the cap is all this adds. It is built on the first
+    // hover, so a table of fix rows carries no tooltip until one is pointed at,
+    // and then kept so it fades out like the others.
+    QQ.Loader {
+        id: tooltipLoader
+        active: false
 
-        visible: hoverId.hovered
-        delay: pickButton.tooltipDelay
-        text: pickButton.helpText
-        width: Math.min(tooltipId.implicitWidth, pickButton.tooltipWidth)
+        sourceComponent: QC.ToolTip {
+            id: tooltipId
+
+            objectName: "pickFromViewToolTip"
+            // A Loader-made popup would otherwise sit over the zero-size Loader.
+            parent: pickButton
+            delay: pickButton.tooltipDelay
+            text: pickButton.helpText
+            width: Math.min(tooltipId.implicitWidth, pickButton.tooltipWidth)
+
+            // Bound once the delay is set: a visible bound at creation would
+            // open the tip at once.
+            QQ.Component.onCompleted: tooltipId.visible = Qt.binding(() => hoverId.hovered)
+        }
     }
 
     QC.ToolButton {

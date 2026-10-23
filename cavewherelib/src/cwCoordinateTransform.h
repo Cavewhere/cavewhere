@@ -33,6 +33,15 @@
  * compare), isIdentity() is true and transform()/transformInPlace() skip
  * the proj call entirely. Useful for LAZ loaders whose source already
  * matches globalCS.
+ *
+ * Heights: toward a destination with a vertical axis (3D or compound), z is
+ * whatever PROJ makes of it. Toward a 2D destination (the project's LDP) z is
+ * scaled by the source's vertical unit over the destination's: a 3D source
+ * arrives from PROJ in meters; a compound's vertical half, or a 2D projected
+ * system's horizontal unit, is applied here; anything else is meters. Only the
+ * unit is applied, never a vertical datum or geoid. A caller whose z is meters
+ * by convention, such as a fix station's elevation, sees it scaled under a
+ * US survey foot inputCS — cwDeclination reads the elevation untransformed.
  */
 class CAVEWHERE_LIB_EXPORT cwCoordinateTransform
 {

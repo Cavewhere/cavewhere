@@ -20,9 +20,10 @@ QQ.Rectangle {
     readonly property int categoryColumnWidth: Math.round(140 * Theme.fontScale)
     readonly property int byteColumnWidth: Math.round(64 * Theme.fontScale)
     readonly property int separatorHeight: 1
-    readonly property int bytesPerMegabyte: 1024 * 1024
+    readonly property int inflationDecimals: 2
     readonly property int gpuMemoryBudgetMb: RootData.settings.renderingSettings.gpuMemoryBudgetMb
-    readonly property bool overBudget: statsModelId.totalGpuBytes > hudRootId.gpuMemoryBudgetMb * hudRootId.bytesPerMegabyte
+    readonly property int pointBudgetMillions: RootData.settings.renderingSettings.pointBudgetMillions
+    readonly property bool overBudget: statsModelId.totalGpuBytes > RootData.settings.renderingSettings.gpuBudgetBytes
 
     visible: RootData.settings.renderingSettings.showRenderStatsHud
 
@@ -31,6 +32,9 @@ QQ.Rectangle {
 
     color: Qt.alpha(Theme.floatingWidgetColor, hudRootId.backgroundOpacity)
     radius: Theme.floatingWidgetRadius
+
+    // The point cloud knobs panel is a desktop debugging aid, opened from here.
+    signal debugPanelRequested()
 
     RenderingStatsModel {
         id: statsModelId
@@ -145,6 +149,60 @@ QQ.Rectangle {
                 .arg(statsModelId.readyCpuText)
             color: Theme.text
             font.pixelSize: Theme.fontSizeCaption
+        }
+
+        // Point cloud octree residency for the last frame that streamed nodes.
+        // The SSE multiplier shows only while a view is drawing a coarser cut to
+        // stay inside the GPU budget.
+        RowLayout {
+            spacing: 0
+
+            QC.Label {
+                objectName: "renderStatsHudPointCloud"
+                text: qsTr("Point cloud: %1 / %2 nodes · %3 loading")
+                    .arg(statsModelId.residentNodes)
+                    .arg(statsModelId.selectedNodes)
+                    .arg(statsModelId.nodeLoadsInFlight)
+                color: Theme.text
+                font.pixelSize: Theme.fontSizeCaption
+            }
+
+            QC.Label {
+                objectName: "renderStatsHudPointCloudPoints"
+                text: qsTr(" · points %1 / %2 M")
+                    .arg(statsModelId.selectedPointsText)
+                    .arg(hudRootId.pointBudgetMillions)
+                color: Theme.text
+                font.pixelSize: Theme.fontSizeCaption
+            }
+
+            // The pick mirror is the CPU copy of every resident node, so at
+            // rest it matches the GPU figure.
+            QC.Label {
+                objectName: "renderStatsHudPointCloudMirrors"
+                text: qsTr(" · mirrors %1")
+                    .arg(statsModelId.pickMirrorText)
+                color: Theme.text
+                font.pixelSize: Theme.fontSizeCaption
+            }
+
+            QC.Label {
+                objectName: "renderStatsHudPointCloudSse"
+                text: qsTr(" · SSE ×%1")
+                    .arg(statsModelId.sseInflation.toFixed(hudRootId.inflationDecimals))
+                color: Theme.warning
+                font.pixelSize: Theme.fontSizeCaption
+                visible: statsModelId.sseInflation > 1
+            }
+        }
+
+        QC.Button {
+            objectName: "renderStatsHudDebugPanelButton"
+            text: qsTr("Point cloud knobs…")
+            font.pixelSize: Theme.fontSizeCaption
+            visible: RootData.desktopBuild
+            Layout.alignment: Qt.AlignRight
+            onClicked: hudRootId.debugPanelRequested()
         }
     }
 }

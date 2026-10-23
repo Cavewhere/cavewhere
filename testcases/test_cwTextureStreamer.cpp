@@ -4,15 +4,16 @@
 //Qt includes
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QRandomGenerator>
-#include <QSemaphore>
 #include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QThread>
+#include <QWaitCondition>
 
 //Std includes
 #include <limits>
@@ -21,7 +22,7 @@
 //Our includes
 #include "cwRenderMemoryLedger.h"
 #include "cwStreamedTexture.h"
-#include "cwTextureResidency.h"
+#include "cwMipMath.h"
 #include "cwTextureStreamer.h"
 
 namespace {
@@ -33,6 +34,7 @@ namespace {
     constexpr int kQuietPeriodMs = 30;
     constexpr int kLevelBytes = 16;
     constexpr qint64 kTinyCpuCap = 1;
+    const QString kRelativeRootName = QStringLiteral("streamed-root");
 
     // Shared state for the fake loader. The loader itself is copied into a
     // std::function and runs on cwConcurrent threads, so everything it touches
@@ -40,7 +42,9 @@ namespace {
     struct LoaderState
     {
         QMutex mutex;
-        QSemaphore gate;
+        QWaitCondition gateChanged;
+        // How many loads, counted in the order the loader was entered, may run
+        int releasedCalls = 0;
         bool gated = false;
         QStringList calledSourceIds;
         QString errorMessage;
@@ -53,6 +57,19 @@ namespace {
         {
             QMutexLocker locker(&mutex);
             return static_cast<int>(calledSourceIds.size());
+        }
+
+        // Let the next count loads finish, oldest call first. Ordered rather
+        // than a semaphore: with two loads waiting, a semaphore hands its
+        // permit to whichever thread the scheduler picks, so a test that says
+        // "let the stale one finish" sometimes finished the superseding one.
+        void releaseCalls(int count = 1)
+        {
+            {
+                QMutexLocker locker(&mutex);
+                releasedCalls += count;
+            }
+            gateChanged.wakeAll();
         }
 
         int finishedCount()
@@ -73,15 +90,20 @@ namespace {
         return [state](const cwStreamedTexture& source,
                        QRhiTexture::Format target,
                        int firstLevel) -> Monad::Result<cwCompressedTexture> {
+            int ticket = 0;
             {
                 QMutexLocker locker(&state->mutex);
+                ticket = static_cast<int>(state->calledSourceIds.size());
                 state->calledSourceIds.append(source.key.id);
                 ++state->concurrent;
                 state->maxConcurrent = std::max(state->maxConcurrent, state->concurrent);
             }
 
             if (state->gated) {
-                state->gate.acquire();
+                QMutexLocker locker(&state->mutex);
+                while (state->releasedCalls <= ticket) {
+                    state->gateChanged.wait(&state->mutex);
+                }
             }
 
             if (state->sleepMs > 0) {
@@ -102,9 +124,9 @@ namespace {
 
             cwCompressedTexture texture;
             texture.format = target;
-            texture.size = cw::residency::mipLevelSize(source.size, firstLevel);
+            texture.size = cw::mip::mipLevelSize(source.size, firstLevel);
 
-            const int levelCount = cw::residency::mipLevelCount(source.size) - firstLevel;
+            const int levelCount = cw::mip::mipLevelCount(source.size) - firstLevel;
             for (int i = 0; i < levelCount; i++) {
                 texture.mipLevels.append(QByteArray(kLevelBytes, '\0'));
             }
@@ -123,14 +145,14 @@ namespace {
 
         ~GateOpener()
         {
-            state->gate.release(kTeardownPermits);
+            state->releaseCalls(kTeardownPermits);
         }
     };
 
     cwStreamedTexture makeSource(const QString& id)
     {
         cwStreamedTexture source;
-        source.dataRootPath = QStringLiteral("/not/read/by/the/fake/loader");
+        source.setDataRootPath(QStringLiteral("/not/read/by/the/fake/loader"));
         source.key.id = id;
         source.key.path = QStringLiteral("textures");
         source.key.checksum = QStringLiteral("checksum-") + id;
@@ -191,7 +213,7 @@ TEST_CASE("cwTextureStreamer loads a request and hands it back", "[TextureStream
     CHECK(results.at(0).topLevel == kTopLevel);
     CHECK(results.at(0).error.isEmpty());
     CHECK_FALSE(results.at(0).texture.isNull());
-    CHECK(results.at(0).texture.size == cw::residency::mipLevelSize(source.size, kTopLevel));
+    CHECK(results.at(0).texture.size == cw::mip::mipLevelSize(source.size, kTopLevel));
 
     CHECK_FALSE(streamer.hasWork());
     CHECK(ledgerCpuBytes() == 0);
@@ -214,7 +236,7 @@ TEST_CASE("cwTextureStreamer ignores a repeat of what it is already doing", "[Te
     streamer.request(kItemId, source, kTargetFormat, kTopLevel, kPriority);
     CHECK(state->callCount() == 1);
 
-    state->gate.release();
+    state->releaseCalls();
     REQUIRE(waitFor([&]() { return state->finishedCount() == 1; }));
     QThread::msleep(kQuietPeriodMs);
 
@@ -222,6 +244,81 @@ TEST_CASE("cwTextureStreamer ignores a repeat of what it is already doing", "[Te
     streamer.request(kItemId, source, kTargetFormat, kTopLevel, kPriority);
     CHECK(state->callCount() == 1);
 
+    const auto results = drain(streamer, 1);
+    REQUIRE(results.size() == 1);
+    CHECK(results.at(0).generation == 1);
+    CHECK_FALSE(streamer.hasWork());
+}
+
+TEST_CASE("cwStreamedTexture treats every spelling of one data root as one root",
+          "[TextureStreamer]") {
+    // A root under the working directory, so the relative spelling names it too
+    const QString absoluteRoot = QDir::current().absoluteFilePath(kRelativeRootName);
+
+    cwStreamedTexture canonical = makeSource(QStringLiteral("item-root"));
+    canonical.setDataRootPath(absoluteRoot);
+
+    SECTION("a trailing slash is the same root") {
+        cwStreamedTexture other = canonical;
+        other.setDataRootPath(absoluteRoot + QStringLiteral("/"));
+        CHECK(other.dataRootPath() == absoluteRoot);
+        CHECK(other == canonical);
+    }
+
+    SECTION("dot segments are the same root") {
+        cwStreamedTexture other = canonical;
+        other.setDataRootPath(absoluteRoot + QStringLiteral("/./sub/.."));
+        CHECK(other.dataRootPath() == absoluteRoot);
+        CHECK(other == canonical);
+    }
+
+    SECTION("the relative spelling is the same root") {
+        cwStreamedTexture other = canonical;
+        other.setDataRootPath(kRelativeRootName);
+        CHECK(other.dataRootPath() == absoluteRoot);
+        CHECK(other == canonical);
+    }
+
+    SECTION("the constructor normalizes as the setter does") {
+        const cwStreamedTexture constructed(absoluteRoot + QStringLiteral("/"),
+                                            canonical.key,
+                                            canonical.size);
+        CHECK(constructed.dataRootPath() == absoluteRoot);
+        CHECK(constructed == canonical);
+    }
+
+    SECTION("an empty root stays empty instead of becoming the working directory") {
+        cwStreamedTexture other = canonical;
+        other.setDataRootPath(QString());
+        CHECK(other.dataRootPath().isEmpty());
+        CHECK(other.isNull());
+    }
+}
+
+TEST_CASE("cwTextureStreamer dedups a repeat whose data root is spelled differently",
+          "[TextureStreamer]") {
+    auto state = std::make_shared<LoaderState>();
+    state->gated = true;
+    cwTextureStreamer streamer(makeLoader(state));
+    GateOpener gateOpener {state};
+
+    constexpr quint32 kItemId = 21;
+    constexpr int kTopLevel = 1;
+    constexpr quint64 kPriority = 5;
+
+    const QString absoluteRoot = QDir::current().absoluteFilePath(kRelativeRootName);
+
+    cwStreamedTexture source = makeSource(QStringLiteral("item-21"));
+    source.setDataRootPath(absoluteRoot);
+    streamer.request(kItemId, source, kTargetFormat, kTopLevel, kPriority);
+    REQUIRE(waitFor([&]() { return state->callCount() == 1; }));
+
+    cwStreamedTexture respelled = source;
+    respelled.setDataRootPath(kRelativeRootName);
+    streamer.request(kItemId, respelled, kTargetFormat, kTopLevel, kPriority);
+    CHECK(state->callCount() == 1);
+
+    state->releaseCalls();
     const auto results = drain(streamer, 1);
     REQUIRE(results.size() == 1);
     CHECK(results.at(0).generation == 1);
@@ -246,7 +343,7 @@ TEST_CASE("cwTextureStreamer supersedes a request for a different level", "[Text
     streamer.request(kItemId, source, kTargetFormat, kFinalLevel, kPriority);
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
-    state->gate.release(2);
+    state->releaseCalls(2);
 
     const auto results = drain(streamer, 1);
     REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
@@ -278,14 +375,14 @@ TEST_CASE("cwTextureStreamer keeps the superseding load while the stale one fini
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
     //Let only the stale load finish — the superseding one is still in flight
-    state->gate.release();
+    state->releaseCalls();
     REQUIRE(waitFor([&]() { return state->finishedCount() == 1; }));
     QThread::msleep(kQuietPeriodMs);
 
     CHECK(streamer.hasWork());
     CHECK(streamer.takeReady().isEmpty());
 
-    state->gate.release();
+    state->releaseCalls();
 
     const auto results = drain(streamer, 1);
     REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
@@ -293,6 +390,38 @@ TEST_CASE("cwTextureStreamer keeps the superseding load while the stale one fini
     REQUIRE(results.size() == 1);
     CHECK(results.at(0).topLevel == kFinalLevel);
     CHECK(results.at(0).generation == 2);
+    CHECK(ledgerCpuBytes() == 0);
+}
+
+TEST_CASE("cwTextureStreamer hands back only the newest result for an item",
+          "[TextureStreamer]") {
+    //One slot per item id: asking for a new level forgets the result the old
+    //load already published, so a drain never sees a stale chain for an item.
+    //That is what lets cwStreamedItemState match a landing chain on its level
+    //alone, with no generation guard of its own.
+    auto state = std::make_shared<LoaderState>();
+    cwTextureStreamer streamer(makeLoader(state));
+
+    constexpr quint32 kItemId = 19;
+    constexpr int kStaleLevel = 4;
+    constexpr int kFinalLevel = 1;
+    constexpr quint64 kPriority = 1;
+
+    const cwStreamedTexture source = makeSource(QStringLiteral("item-19"));
+    streamer.request(kItemId, source, kTargetFormat, kStaleLevel, kPriority);
+    REQUIRE(waitFor([&]() { return state->finishedCount() == 1; }));
+
+    //The first chain is sitting in the ready queue, undrained, when the camera
+    //asks for a finer one
+    streamer.request(kItemId, source, kTargetFormat, kFinalLevel, kPriority);
+
+    const auto results = drain(streamer, 1);
+    REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
+
+    REQUIRE(results.size() == 1);
+    CHECK(results.at(0).itemId == kItemId);
+    CHECK(results.at(0).topLevel == kFinalLevel);
+    CHECK(streamer.takeReady().isEmpty());
     CHECK(ledgerCpuBytes() == 0);
 }
 
@@ -317,7 +446,7 @@ TEST_CASE("cwTextureStreamer reloads a canceled item asked for again", "[Texture
     streamer.request(kItemId, source, kTargetFormat, kTopLevel, kPriority);
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
-    state->gate.release(2);
+    state->releaseCalls(2);
 
     const auto results = drain(streamer, 1);
     REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
@@ -365,7 +494,7 @@ TEST_CASE("cwTextureStreamer runs queued requests highest priority first", "[Tex
 
     //One release and one drain per load: the first, the pinned one, and the rest
     for (int i = 0; i < kQueuedCount + 2; i++) {
-        state->gate.release();
+        state->releaseCalls();
         REQUIRE(drain(streamer, 1).size() == 1);
     }
 
@@ -419,7 +548,7 @@ TEST_CASE("cwTextureStreamer forgets canceled items", "[TextureStreamer]") {
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
     streamer.cancel(kCanceledItemId);
-    state->gate.release(2);
+    state->releaseCalls(2);
 
     const auto results = drain(streamer, 1);
     REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));

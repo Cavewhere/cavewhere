@@ -550,6 +550,125 @@ MainWindowTest {
             compare(RootData.pageView.currentPageItem.cave, folder, "the page edits the Folder's fixes")
         }
 
+        // A cave's count spans its subtree: a Section's fixes are the cave's too.
+        function test_aCavesFixStationLinkCountsItsSectionsFixes() {
+            const caves = setupCaveWithSection()
+            const page = gotoNodePage("Source/Data/Node=Side Cave", caves.cave)
+
+            const link = findChild(page, "fixStationsLink")
+            verify(link !== null && link.visible, "a cave page shows its fix stations")
+            compare(link.text, "0")
+
+            caves.section.fixStations.addFixStation()
+            tryCompare(link, "text", "1", 5000, "the section's fix counts on the cave")
+
+            caves.cave.fixStations.addFixStation()
+            tryCompare(link, "text", "2", 5000, "the cave's own fix counts beside it")
+
+            caves.section.fixStations.removeAt(0)
+            tryCompare(link, "text", "1", 5000, "a removed section fix leaves the count")
+        }
+
+        // Gives \a node one fix named B whose easting has a transposed leading
+        // digit: 1478000 in UTM 13N, outside the zone's valid range.
+        function addDomainBadFix(node) {
+            node.fixStations.addFixStation()
+            const idx = node.fixStations.index(node.fixStations.count - 1)
+            node.fixStations.setData(idx, "B", FixStationModel.StationNameRole)
+            node.fixStations.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
+            node.fixStations.setData(idx, 1478000.0, FixStationModel.EastingRole)
+            node.fixStations.setData(idx, 4430000.0, FixStationModel.NorthingRole)
+            node.fixStations.setData(idx, 1655.0, FixStationModel.ElevationRole)
+        }
+
+        function outOfRangeMessagesNaming(badge, nodeName) {
+            return badge.messages.filter(message => message.startsWith(nodeName + ": ")
+                                         && message.indexOf("outside the valid range") >= 0)
+        }
+
+        // The badge covers what the count covers: a Section's bad fix is the
+        // cave's warning too, named by the node it sits on.
+        function test_aCavesFixStationBadgeShowsItsSectionsWarning() {
+            const caves = setupCaveWithSection()
+            addNode(null, SurveyNodeKind.Cave, "Other Cave")
+            addDomainBadFix(caves.section)
+            tryVerify(() => RootData.region.fixStationValidator.fixStationWarningMessages.length === 1,
+                      5000, "the section's fix raises one project-wide warning")
+
+            const page = gotoNodePage("Source/Data/Node=Side Cave", caves.cave)
+            tryCompare(findChild(page, "fixStationsLink"), "text", "1", 5000)
+            const badge = findChild(page, "fixStationsBadge")
+            tryVerify(() => badge.visible, 5000,
+                      "the cave's badge shows its section's warning; messages=" + JSON.stringify(badge.messages))
+            compare(badge.messages.length, 1, "only the section's warning: " + badge.messages.join(" | "))
+            compare(outOfRangeMessagesNaming(badge, "Upper level").length, 1,
+                    "the line names the section: " + badge.messages.join(" | "))
+
+            const errors = caves.section.errorModel.errors
+            tryVerify(() => errors.count > 0, 5000)
+            for (let row = 0; row < errors.count; ++row) {
+                errors.setData(errors.index(row, 0), true, ErrorListModel.SuppressedRole)
+            }
+            tryVerify(() => !badge.visible, 5000,
+                      "suppressing the section's warning hides the cave's badge")
+
+            for (let row = 0; row < errors.count; ++row) {
+                errors.setData(errors.index(row, 0), false, ErrorListModel.SuppressedRole)
+            }
+            tryVerify(() => badge.visible, 5000, "unsuppressing brings the cave's badge back")
+        }
+
+        function test_aSiblingCavesFixStationBadgeStaysHidden() {
+            const caves = setupCaveWithSection()
+            const other = addNode(null, SurveyNodeKind.Cave, "Other Cave")
+            addDomainBadFix(caves.section)
+            tryVerify(() => RootData.region.fixStationValidator.fixStationWarningMessages.length === 1,
+                      5000, "the section's fix raises one project-wide warning")
+
+            const sidePage = gotoNodePage("Source/Data/Node=Side Cave", caves.cave)
+            const sideBadge = findChild(sidePage, "fixStationsBadge")
+            verify(sideBadge !== null)
+            tryVerify(() => sideBadge.visible, 5000, "the warning shows on its own cave's page")
+
+            const page = gotoNodePage("Source/Data/Node=Other Cave", other)
+            const badge = findChild(page, "fixStationsBadge")
+            verify(badge !== null)
+            verify(!badge.visible, "another cave's warning stays off this page: " + badge.messages.join(" | "))
+            compare(badge.messages.length, 0)
+        }
+
+        // A warning reads the same on every page that shows it, the node's own
+        // page included.
+        function test_aSectionsOwnFixStationBadgeNamesTheSection() {
+            const caves = setupCaveWithSection()
+            addDomainBadFix(caves.section)
+
+            const page = gotoNodePage("Source/Data/Node=Side Cave/Node=Upper level", caves.section)
+            const badge = findChild(page, "fixStationsBadge")
+            tryVerify(() => badge.visible, 5000, "the section's own warning shows its badge")
+            tryCompare(badge.messages, "length", 1)
+            compare(outOfRangeMessagesNaming(badge, "Upper level").length, 1,
+                    "the own line carries the node-name prefix: " + badge.messages.join(" | "))
+        }
+
+        function test_movingTheSectionCarriesItsBadgeToTheNewCave() {
+            const caves = setupCaveWithSection()
+            const other = addNode(null, SurveyNodeKind.Cave, "Other Cave")
+            addDomainBadFix(caves.section)
+            tryVerify(() => RootData.region.fixStationValidator.fixStationWarningMessages.length === 1,
+                      5000, "the section's fix raises one project-wide warning")
+
+            const page = gotoNodePage("Source/Data/Node=Other Cave", other)
+            const badge = findChild(page, "fixStationsBadge")
+            verify(!badge.visible, "the section still sits under Side Cave")
+
+            verify(other.moveHere(caves.section), "the section moves under Other Cave")
+            tryVerify(() => badge.visible, 5000,
+                      "the moved section's warning shows on its new cave; messages=" + JSON.stringify(badge.messages))
+            compare(outOfRangeMessagesNaming(badge, "Upper level").length, 1,
+                    "the line names the moved section: " + badge.messages.join(" | "))
+        }
+
         function test_headerNamesTheKindAndThePickerRelabels() {
             const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
             const page = gotoNodePage("Source/Data/Node=Side Cave", cave)

@@ -3,6 +3,7 @@
 #include <catch2/catch_approx.hpp>
 
 //Our includes
+#include "cwJobSettings.h"
 #include "cwTriangulateLiDARTask.h"
 #include "cwTriangulateLiDARInData.h"
 #include "cwNoteLiDARStation.h"
@@ -50,6 +51,43 @@ cwTriangulateLiDARInData liDARInData(const QString& gltfPath, const QString& dat
 
 }
 
+TEST_CASE("cwTriangulateLiDARTask returns one future per input, in input order", "[cwTriangulateLiDARTask]")
+{
+    cwJobSettings::initialize();
+
+    //The middle input has no station lookup, so it is the one that errors out
+    const int errorIndex = 1;
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("a1"), QVector3D(0.0f, 0.0f, 0.0f));
+
+    QList<cwTriangulateLiDARInData> inputs;
+    for(int i = 0; i < 3; i++) {
+        cwTriangulateLiDARInData data;
+        if(i != errorIndex) {
+            data.setStationLookup(lookup);
+        }
+        data.setGltfFilename(QStringLiteral("missing-scan-%1.gltf").arg(i));
+        inputs.append(data);
+    }
+
+    const auto futures = cwTriangulateLiDARTask::triangulate(inputs);
+    REQUIRE(futures.size() == inputs.size());
+
+    for(int i = 0; i < futures.size(); i++) {
+        auto future = futures.at(i);
+        AsyncFuture::waitForFinished(future); //Test-only
+        REQUIRE(future.resultCount() == 1);
+
+        const auto result = future.result();
+        if(i == errorIndex) {
+            CHECK(result.hasError());
+        } else {
+            CHECK_FALSE(result.hasError());
+        }
+    }
+}
+
 TEST_CASE("A LiDAR triangulation fills the progress tree it was given",
           "[cwTriangulateLiDARTask][Issue671]")
 {
@@ -71,7 +109,9 @@ TEST_CASE("A LiDAR triangulation fills the progress tree it was given",
                      &watcher, [&values](int value) { values.append(value); });
     watcher.setFuture(root->future());
 
-    auto future = cwTriangulateLiDARTask::triangulate({liDARInData(gltfPath, tempDir.path())}, root);
+    const auto futures = cwTriangulateLiDARTask::triangulate({liDARInData(gltfPath, tempDir.path())}, root);
+    REQUIRE(futures.size() == 1);
+    auto future = futures.first();
     REQUIRE(AsyncFuture::waitForFinished(future));
     REQUIRE(future.resultCount() == 1);
     REQUIRE_FALSE(future.result().hasError());
@@ -97,7 +137,9 @@ TEST_CASE("A LiDAR triangulation runs with no progress root", "[cwTriangulateLiD
     const QString gltfPath = QDir(tempDir.path()).filePath(QStringLiteral("scan.glb"));
     REQUIRE(QFile::copy(testcasesDatasetPath("test_cwGltfLoader/test.glb"), gltfPath));
 
-    auto future = cwTriangulateLiDARTask::triangulate({liDARInData(gltfPath, tempDir.path())});
+    const auto futures = cwTriangulateLiDARTask::triangulate({liDARInData(gltfPath, tempDir.path())});
+    REQUIRE(futures.size() == 1);
+    auto future = futures.first();
     REQUIRE(AsyncFuture::waitForFinished(future));
     REQUIRE(future.resultCount() == 1);
     REQUIRE_FALSE(future.result().hasError());
@@ -115,7 +157,9 @@ TEST_CASE("A LiDAR note without station positions finishes its own node",
     auto root = cwProgressNode::createRoot(QStringLiteral("Triangulating LiDAR notes"));
     root->expectChildren(1);
 
-    auto future = cwTriangulateLiDARTask::triangulate({data}, root);
+    const auto futures = cwTriangulateLiDARTask::triangulate({data}, root);
+    REQUIRE(futures.size() == 1);
+    auto future = futures.first();
     REQUIRE(AsyncFuture::waitForFinished(future));
     REQUIRE(future.resultCount() == 1);
     CHECK(future.result().hasError());

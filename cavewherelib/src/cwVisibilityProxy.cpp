@@ -22,3 +22,13 @@ void cwVisibilityProxy::setVisible(bool visible)
     applyVisible(visible);
     emit visibleChanged();
 }
+
+void cwVisibilityProxy::setColorValue(float value)
+{
+    if(m_colorValue == value) {
+        return;
+    }
+
+    m_colorValue = value;
+    applyColorValue(value);
+}

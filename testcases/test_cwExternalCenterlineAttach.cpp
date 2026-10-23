@@ -10,6 +10,7 @@
 #include <catch2/catch_approx.hpp>
 
 // Our
+#include "cwAttachedCenterlinesModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterlineAttach.h"
@@ -23,6 +24,7 @@
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwSignalSpy.h"
+#include "cwStation.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwTeam.h"
@@ -1852,4 +1854,38 @@ TEST_CASE("trip reload stays offered after the project is saved and reopened",
     CHECK(freshRoot->externalSourceSettings()->breadcrumbPath(tripId)
           == QFileInfo(source).absoluteFilePath());
     REQUIRE(freshRoot->externalCenterlineManager()->canReloadFromSource(reopened));
+}
+
+TEST_CASE("a trip attached to a file whose fix names its own *cs harvests its stations",
+          "[Attach][OwnCsHarvest]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("attach-own-cs-no-out"));
+    attachThroughManager(fixture.get(), fixture->trip,
+                         datasetExternalCenterlinePath(
+                             QStringLiteral("survex_own_cs_no_out/own_cs_no_out.svx")));
+    drainPipelines(fixture.get());
+
+    INFO("harvest error: " << fixture->trip->externalStationsError().toStdString());
+    CHECK(fixture->trip->externalStationsError().isEmpty());
+    CHECK(fixture->trip->externalStations().contains(QStringLiteral("ridge.e1")));
+    CHECK(fixture->trip->externalStations().contains(QStringLiteral("ridge.e3")));
+    CHECK(fixture->cave->fileFixedStations().contains(
+        cwStation::canonicalKey(fixture->trip->scopePrefix() + QStringLiteral("ridge.e1"))));
+}
+
+TEST_CASE("a source root whose fix names its own *cs harvests its stations",
+          "[Attach][OwnCsHarvest]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("attach-own-cs-no-out-root"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        fixture.get(), fixture->project->cavingRegion()->rootNode(),
+        datasetExternalCenterlinePath(QStringLiteral("survex_own_cs_no_out/own_cs_no_out.svx")));
+    drainPipelines(fixture.get());
+
+    const QString rowError =
+        managerOf(fixture.get())->attachedCenterlinesModel()->errorFor(root->id());
+    INFO("row error: " << rowError.toStdString());
+    CHECK(rowError.isEmpty());
+    CHECK(root->externalStations().contains(QStringLiteral("ridge.e1")));
+    CHECK(root->fileFixedStations().contains(cwStation::canonicalKey(QStringLiteral("ridge.e1"))));
 }

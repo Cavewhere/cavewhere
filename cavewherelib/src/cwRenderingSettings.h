@@ -8,6 +8,8 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwPointCloudShading.h"
+#include "cwRenderBudgets.h"
 
 class QQuickRhiItem;
 
@@ -19,10 +21,20 @@ class QQuickRhiItem;
 // it is platform dependent (e.g. Metal supports 1/2/4 but not 8).
 //
 // The budget knobs (gpuMemoryBudgetMb, cpuCacheBudgetMb, uploadBudgetMbPerFrame,
-// screenSpaceErrorPx) drive streamed-texture residency: the render thread reads
-// them through cwRenderBudgets each frame to pick mip levels, pace uploads, and
-// demote back under the GPU budget. The render-stats HUD reports the GPU total
-// against gpuMemoryBudgetMb.
+// screenSpaceErrorPx, pointBudgetMillions) drive streamed residency: the render
+// thread reads them through cwRenderBudgets each frame to pick mip levels, pace
+// uploads, cut the point octree, and demote back under the GPU budget. The
+// render-stats HUD reports the GPU total against gpuMemoryBudgetMb.
+//
+// The point cloud knobs switch one streaming or CLOD rule each so a picture
+// can be A/B'd (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 7). freezeCut,
+// maxLevel, inflationGovernor, governorSlew and evictionHold ride
+// cwRenderBudgets to the planner, forest and eviction; the thinning, sizing
+// and floor modes and the two pixel sizes ride pointCloudShading() to every
+// cloud's per-cloud uniform.
+// The section 8 debug knobs travel the same two ways: minLevel with the
+// budgets, debugView and showNodeBoxes with the shading.
+// Every default is the renderer's own rule.
 class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
 {
     Q_OBJECT
@@ -36,7 +48,53 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int cpuCacheBudgetMb READ cpuCacheBudgetMb WRITE setCpuCacheBudgetMb NOTIFY cpuCacheBudgetMbChanged)
     Q_PROPERTY(int uploadBudgetMbPerFrame READ uploadBudgetMbPerFrame WRITE setUploadBudgetMbPerFrame NOTIFY uploadBudgetMbPerFrameChanged)
     Q_PROPERTY(double screenSpaceErrorPx READ screenSpaceErrorPx WRITE setScreenSpaceErrorPx NOTIFY screenSpaceErrorPxChanged)
+    Q_PROPERTY(int pointBudgetMillions READ pointBudgetMillions WRITE setPointBudgetMillions NOTIFY pointBudgetMillionsChanged)
+    Q_PROPERTY(qint64 gpuBudgetBytes READ gpuBudgetBytes NOTIFY gpuMemoryBudgetMbChanged)
+    Q_PROPERTY(bool freezeCut READ freezeCut WRITE setFreezeCut NOTIFY freezeCutChanged)
+    Q_PROPERTY(int maxLevel READ maxLevel WRITE setMaxLevel NOTIFY maxLevelChanged)
+    Q_PROPERTY(int minLevel READ minLevel WRITE setMinLevel NOTIFY minLevelChanged)
+    Q_PROPERTY(bool inflationGovernor READ inflationGovernor WRITE setInflationGovernor NOTIFY inflationGovernorChanged)
+    Q_PROPERTY(double governorSlew READ governorSlew WRITE setGovernorSlew NOTIFY governorSlewChanged)
+    Q_PROPERTY(bool evictionHold READ evictionHold WRITE setEvictionHold NOTIFY evictionHoldChanged)
+    Q_PROPERTY(int thinningMode READ thinningMode WRITE setThinningMode NOTIFY thinningModeChanged)
+    Q_PROPERTY(int sizeMode READ sizeMode WRITE setSizeMode NOTIFY sizeModeChanged)
+    Q_PROPERTY(int floorMode READ floorMode WRITE setFloorMode NOTIFY floorModeChanged)
+    Q_PROPERTY(int spacingSource READ spacingSource WRITE setSpacingSource NOTIFY spacingSourceChanged)
+    Q_PROPERTY(double fixedPointSizePx READ fixedPointSizePx WRITE setFixedPointSizePx NOTIFY fixedPointSizePxChanged)
+    Q_PROPERTY(double maxPointSizePx READ maxPointSizePx WRITE setMaxPointSizePx NOTIFY maxPointSizePxChanged)
+    Q_PROPERTY(int debugView READ debugView WRITE setDebugView NOTIFY debugViewChanged)
+    Q_PROPERTY(bool showNodeBoxes READ showNodeBoxes WRITE setShowNodeBoxes NOTIFY showNodeBoxesChanged)
+    Q_PROPERTY(int revealFrames READ revealFrames WRITE setRevealFrames NOTIFY revealFramesChanged)
+    Q_PROPERTY(int revealMode READ revealMode WRITE setRevealMode NOTIFY revealModeChanged)
     Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
+
+    // The shared budget limits, exposed so the settings UI spin boxes range over
+    // the same numbers the setters clamp to.
+    Q_PROPERTY(int minimumGpuMemoryBudgetMb READ minimumGpuMemoryBudgetMb CONSTANT)
+    Q_PROPERTY(int maximumGpuMemoryBudgetMb READ maximumGpuMemoryBudgetMb CONSTANT)
+    Q_PROPERTY(int minimumCpuCacheBudgetMb READ minimumCpuCacheBudgetMb CONSTANT)
+    Q_PROPERTY(int maximumCpuCacheBudgetMb READ maximumCpuCacheBudgetMb CONSTANT)
+    Q_PROPERTY(int minimumUploadBudgetMbPerFrame READ minimumUploadBudgetMbPerFrame CONSTANT)
+    Q_PROPERTY(int maximumUploadBudgetMbPerFrame READ maximumUploadBudgetMbPerFrame CONSTANT)
+    Q_PROPERTY(double minimumScreenSpaceErrorPx READ minimumScreenSpaceErrorPx CONSTANT)
+    Q_PROPERTY(double maximumScreenSpaceErrorPx READ maximumScreenSpaceErrorPx CONSTANT)
+    Q_PROPERTY(int minimumPointBudgetMillions READ minimumPointBudgetMillions CONSTANT)
+    Q_PROPERTY(int maximumPointBudgetMillions READ maximumPointBudgetMillions CONSTANT)
+    Q_PROPERTY(double minimumGovernorSlew READ minimumGovernorSlew CONSTANT)
+    Q_PROPERTY(double maximumGovernorSlew READ maximumGovernorSlew CONSTANT)
+    Q_PROPERTY(int unlimitedLevel READ unlimitedLevel CONSTANT)
+    Q_PROPERTY(int maximumLevel READ maximumLevel CONSTANT)
+    Q_PROPERTY(int rootLevel READ rootLevel CONSTANT)
+    Q_PROPERTY(int thinningModeCount READ thinningModeCount CONSTANT)
+    Q_PROPERTY(int sizeModeCount READ sizeModeCount CONSTANT)
+    Q_PROPERTY(int floorModeCount READ floorModeCount CONSTANT)
+    Q_PROPERTY(int spacingSourceCount READ spacingSourceCount CONSTANT)
+    Q_PROPERTY(int debugViewCount READ debugViewCount CONSTANT)
+    Q_PROPERTY(int revealModeCount READ revealModeCount CONSTANT)
+    Q_PROPERTY(double minimumPointSizePx READ minimumPointSizePx CONSTANT)
+    Q_PROPERTY(double maximumPointSizePx READ maximumPointSizePx CONSTANT)
+    Q_PROPERTY(int minimumRevealFrames READ minimumRevealFrames CONSTANT)
+    Q_PROPERTY(int maximumRevealFrames READ maximumRevealFrames CONSTANT)
 
 public:
     int sampleCount() const { return m_sampleCount; }
@@ -60,8 +118,109 @@ public:
     double screenSpaceErrorPx() const { return m_screenSpaceErrorPx; }
     void setScreenSpaceErrorPx(double pixels);
 
+    int pointBudgetMillions() const { return m_pointBudgetMillions; }
+    void setPointBudgetMillions(int millions);
+
+    qint64 gpuBudgetBytes() const { return qint64(m_gpuMemoryBudgetMb) * cw::budgets::kBytesPerMegabyte; }
+
+    bool freezeCut() const { return m_freezeCut; }
+    void setFreezeCut(bool freeze);
+
+    //! The deepest level the point cloud cut refines to, unlimitedLevel for no cap
+    int maxLevel() const { return m_maxLevel; }
+    void setMaxLevel(int level);
+
+    //! The shallowest level the point clouds draw; the cut itself is unchanged
+    int minLevel() const { return m_minLevel; }
+    void setMinLevel(int level);
+
+    bool inflationGovernor() const { return m_inflationGovernor; }
+    void setInflationGovernor(bool governed);
+
+    //! The share of the gap to the governor's target the frame's inflation
+    //! closes per frame, 1 for the governor's own step
+    double governorSlew() const { return m_governorSlew; }
+    void setGovernorSlew(double slew);
+
+    bool evictionHold() const { return m_evictionHold; }
+    void setEvictionHold(bool hold);
+
+    //! A cw::pointcloud::ThinningMode
+    int thinningMode() const { return int(m_shading.thinningMode); }
+    void setThinningMode(int mode);
+
+    //! A cw::pointcloud::SizeMode
+    int sizeMode() const { return int(m_shading.sizeMode); }
+    void setSizeMode(int mode);
+
+    //! A cw::pointcloud::FloorMode
+    int floorMode() const { return int(m_shading.floorMode); }
+    void setFloorMode(int mode);
+
+    //! A cw::pointcloud::SpacingSource
+    int spacingSource() const { return int(m_shading.spacingSource); }
+    void setSpacingSource(int source);
+
+    double fixedPointSizePx() const { return m_shading.fixedPointSizePx; }
+    void setFixedPointSizePx(double pixels);
+
+    double maxPointSizePx() const { return m_shading.maxPointSizePx; }
+    void setMaxPointSizePx(double pixels);
+
+    //! A cw::pointcloud::DebugView
+    int debugView() const { return int(m_shading.debugView); }
+    void setDebugView(int view);
+
+    bool showNodeBoxes() const { return m_shading.showNodeBoxes; }
+    void setShowNodeBoxes(bool show);
+
+    //! The frames an arrival fades in over and a floor takes to move, 0 for
+    //! neither (cwPointCloudShading::revealFrames)
+    int revealFrames() const { return m_shading.revealFrames; }
+    void setRevealFrames(int frames);
+
+    //! A cw::pointcloud::RevealMode
+    int revealMode() const { return int(m_shading.revealMode); }
+    void setRevealMode(int mode);
+
+    //! The budget knobs in bytes, the form the render thread consumes
+    cwRenderBudgets budgets() const;
+
+    //! The shader-side point cloud knobs, the form every cloud's uniform takes
+    const cwPointCloudShading& pointCloudShading() const { return m_shading; }
+
+    static int minimumGpuMemoryBudgetMb() { return cw::budgets::kMinGpuBudgetMb; }
+    static int maximumGpuMemoryBudgetMb() { return cw::budgets::kMaxGpuBudgetMb; }
+    static int minimumCpuCacheBudgetMb() { return cw::budgets::kMinCpuBudgetMb; }
+    static int maximumCpuCacheBudgetMb() { return cw::budgets::kMaxCpuBudgetMb; }
+    static int minimumUploadBudgetMbPerFrame() { return cw::budgets::kMinUploadBudgetMbPerFrame; }
+    static int maximumUploadBudgetMbPerFrame() { return cw::budgets::kMaxUploadBudgetMbPerFrame; }
+    static double minimumScreenSpaceErrorPx() { return cw::budgets::kMinScreenSpaceErrorPx; }
+    static double maximumScreenSpaceErrorPx() { return cw::budgets::kMaxScreenSpaceErrorPx; }
+    static int minimumPointBudgetMillions() { return cw::budgets::kMinPointBudgetMillions; }
+    static int maximumPointBudgetMillions() { return cw::budgets::kMaxPointBudgetMillions; }
+    static double minimumGovernorSlew() { return cw::budgets::kMinGovernorSlew; }
+    static double maximumGovernorSlew() { return cw::budgets::kMaxGovernorSlew; }
+    static int unlimitedLevel() { return cw::budgets::kUnlimitedLevel; }
+    static int maximumLevel();
+    static int rootLevel() { return cw::budgets::kRootLevel; }
+    static int thinningModeCount() { return cw::pointcloud::kThinningModeCount; }
+    static int sizeModeCount() { return cw::pointcloud::kSizeModeCount; }
+    static int floorModeCount() { return cw::pointcloud::kFloorModeCount; }
+    static int spacingSourceCount() { return cw::pointcloud::kSpacingSourceCount; }
+    static int debugViewCount() { return cw::pointcloud::kDebugViewCount; }
+    static int revealModeCount() { return cw::pointcloud::kRevealModeCount; }
+    static double minimumPointSizePx() { return cw::pointcloud::kMinPointSizePx; }
+    static double maximumPointSizePx() { return cw::pointcloud::kMaxPointSizePx; }
+    static int minimumRevealFrames() { return cw::pointcloud::kMinRevealFrames; }
+    static int maximumRevealFrames() { return cw::pointcloud::kMaxRevealFrames; }
+
     bool isAtDefaults() const;
     Q_INVOKABLE void resetToDefaults();
+
+    //! The budget, streaming and CLOD knobs alone, which is what the point cloud
+    //! debug panel resets: MSAA and the HUD it is opened from stay as they are
+    Q_INVOKABLE void resetPointCloudKnobsToDefaults();
 
     // Apply sampleCount to item now and on every change. Connection scoped to item.
     void driveSampleCount(QQuickRhiItem* item);
@@ -76,6 +235,29 @@ signals:
     void cpuCacheBudgetMbChanged();
     void uploadBudgetMbPerFrameChanged();
     void screenSpaceErrorPxChanged();
+    void pointBudgetMillionsChanged();
+    void freezeCutChanged();
+    void maxLevelChanged();
+    void minLevelChanged();
+    void inflationGovernorChanged();
+    void governorSlewChanged();
+    void evictionHoldChanged();
+    void thinningModeChanged();
+    void sizeModeChanged();
+    void floorModeChanged();
+    void spacingSourceChanged();
+    void fixedPointSizePxChanged();
+    void maxPointSizePxChanged();
+    void debugViewChanged();
+    void showNodeBoxesChanged();
+    void revealFramesChanged();
+    void revealModeChanged();
+
+    //! Any one of the budgets() knobs moved
+    void budgetsChanged();
+
+    //! Any one of the pointCloudShading() knobs moved
+    void pointCloudShadingChanged();
     void supportedSampleCountsChanged();
     void isAtDefaultsChanged();
 
@@ -91,12 +273,21 @@ private:
     int m_sampleCount = 4; // overwritten from QSettings in the constructor; see kDefaultSampleCount
     bool m_showRenderStatsHud = false; // see kDefaultShowRenderStatsHud
 
-    // All four are overwritten from QSettings in the constructor; see the
-    // kDefault constants in the .cpp.
-    int m_gpuMemoryBudgetMb = 1536;
-    int m_cpuCacheBudgetMb = 512;
-    int m_uploadBudgetMbPerFrame = 8;
-    double m_screenSpaceErrorPx = 1.5;
+    // All five are overwritten from QSettings in the constructor.
+    int m_gpuMemoryBudgetMb = cw::budgets::kDefaultGpuBudgetMb;
+    int m_cpuCacheBudgetMb = cw::budgets::kDefaultCpuBudgetMb;
+    int m_uploadBudgetMbPerFrame = cw::budgets::kDefaultUploadBudgetMbPerFrame;
+    double m_screenSpaceErrorPx = cw::budgets::kDefaultScreenSpaceErrorPx;
+    int m_pointBudgetMillions = cw::budgets::kDefaultPointBudgetMillions;
+
+    // Overwritten from QSettings in the constructor, like the budgets.
+    bool m_freezeCut = cw::budgets::kDefaultFreezeCut;
+    int m_maxLevel = cw::budgets::kDefaultMaxLevel;
+    int m_minLevel = cw::budgets::kDefaultMinLevel;
+    bool m_inflationGovernor = cw::budgets::kDefaultInflationGovernor;
+    double m_governorSlew = cw::budgets::kDefaultGovernorSlew;
+    bool m_evictionHold = cw::budgets::kDefaultEvictionHold;
+    cwPointCloudShading m_shading;
 
     // Safe baseline until the QRhi backend reports the real set (see cwRhiScene).
     // Always kept sorted ascending and containing 1.

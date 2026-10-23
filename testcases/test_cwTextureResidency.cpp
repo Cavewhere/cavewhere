@@ -13,6 +13,7 @@
 
 //Our includes
 #include "cwGeometry.h"
+#include "cwMipMath.h"
 #include "cwTextureResidency.h"
 
 using namespace cw::residency;
@@ -76,51 +77,8 @@ namespace {
     }
 }
 
-TEST_CASE("mipLevelCount and mipLevelSize halve down to 1x1", "[TextureResidency]") {
-    CHECK(mipLevelCount(QSize(2048, 2048)) == 12);
-    CHECK(mipLevelCount(QSize(1, 1)) == 1);
-    CHECK(mipLevelCount(QSize(8192, 6720)) == 14);
-    CHECK(mipLevelCount(QSize()) == 0);
-
-    CHECK(mipLevelSize(QSize(2048, 2048), 0) == QSize(2048, 2048));
-    CHECK(mipLevelSize(QSize(2048, 2048), 11) == QSize(1, 1));
-    CHECK(mipLevelSize(QSize(10, 6), 1) == QSize(5, 3));
-    CHECK(mipLevelSize(QSize(10, 6), 2) == QSize(2, 1));
-    CHECK(mipLevelSize(QSize(10, 6), 3) == QSize(1, 1));
-}
-
-TEST_CASE("mipLevelBytes counts blocks and pixels exactly", "[TextureResidency]") {
-    constexpr qint64 kFourMebibytes = 4 * 1024 * 1024;
-    CHECK(mipLevelBytes(QRhiTexture::BC7, QSize(2048, 2048)) == kFourMebibytes);
-    CHECK(mipLevelBytes(QRhiTexture::ASTC_4x4, QSize(2048, 2048)) == kFourMebibytes);
-
-    //10x6 rounds up to 3x2 blocks
-    CHECK(mipLevelBytes(QRhiTexture::ASTC_4x4, QSize(10, 6)) == 3 * 2 * 16);
-    CHECK(mipLevelBytes(QRhiTexture::BC7, QSize(5, 1)) == 2 * 1 * 16);
-
-    //Tail levels are a single block
-    CHECK(mipLevelBytes(QRhiTexture::BC7, QSize(1, 1)) == 16);
-    CHECK(mipLevelBytes(QRhiTexture::ASTC_4x4, QSize(2, 2)) == 16);
-
-    CHECK(mipLevelBytes(QRhiTexture::RGBA8, QSize(64, 32)) == 64 * 32 * 4);
-    CHECK(mipLevelBytes(QRhiTexture::UnknownFormat, QSize(64, 32)) == 0);
-    CHECK(mipLevelBytes(QRhiTexture::BC7, QSize()) == 0);
-}
-
-TEST_CASE("chainBytes sums a level and everything coarser", "[TextureResidency]") {
-    const QSize size(2048, 2048);
-
-    //16 bytes per block, summed over the 12 levels of a 2048x2048 BC7 chain
-    CHECK(chainBytes(QRhiTexture::BC7, size, 0) == 5592432);
-    CHECK(chainBytes(QRhiTexture::BC7, size, 0) - chainBytes(QRhiTexture::BC7, size, 1)
-          == 4 * 1024 * 1024);
-    CHECK(chainBytes(QRhiTexture::BC7, size, 11) == 16);
-    CHECK(chainBytes(QRhiTexture::BC7, size, 12) == 0);
-    CHECK(chainBytes(QRhiTexture::BC7, size, -1) == chainBytes(QRhiTexture::BC7, size, 0));
-}
-
 TEST_CASE("pinnedBaseLevel finds the first level at or under 512", "[TextureResidency]") {
-    CHECK(mipLevelSize(QSize(8192, 6720), 4) == QSize(512, 420));
+    CHECK(cw::mip::mipLevelSize(QSize(8192, 6720), 4) == QSize(512, 420));
     CHECK(pinnedBaseLevel(QSize(8192, 6720)) == 4);
     CHECK(pinnedBaseLevel(QSize(256, 256)) == 0);
     CHECK(pinnedBaseLevel(QSize(512, 512)) == 0);
@@ -262,8 +220,8 @@ TEST_CASE("planEvictions demotes the least recently visible first", "[TextureRes
     CHECK(plan.at(3).itemIndex == 0);
 
     //Every demotion lands on the pinned base and reclaims levels 0 and 1
-    const qint64 expectedReclaim = chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 0)
-                                   - chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 2);
+    const qint64 expectedReclaim = cw::mip::chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 0)
+                                   - cw::mip::chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 2);
     for(const Demotion& demotion : plan) {
         CHECK(demotion.newTopLevel == 2);
         CHECK(demotion.reclaimedBytes == expectedReclaim);
@@ -277,8 +235,8 @@ TEST_CASE("planEvictions stops once the overshoot is covered", "[TextureResidenc
         residentItem(0, 3, false)
     };
 
-    const qint64 oneItem = chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 0)
-                           - chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 2);
+    const qint64 oneItem = cw::mip::chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 0)
+                           - cw::mip::chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 2);
 
     CHECK(planEvictions(items, 1).size() == 1);
     CHECK(planEvictions(items, oneItem).size() == 1);
@@ -301,6 +259,30 @@ TEST_CASE("planEvictions skips base-level and in-flight items", "[TextureResiden
     const QVector<Demotion> plan = planEvictions(items, 1024LL * 1024 * 1024);
     REQUIRE(plan.size() == 1);
     CHECK(plan.at(0).itemIndex == 3);
+}
+
+TEST_CASE("planEvictions credits what the demotions in flight will give back",
+          "[TextureResidency]") {
+    const qint64 perItem = cw::mip::chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 0)
+                           - cw::mip::chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 2);
+
+    ResidencyStats inFlight = residentItem(0, 1, false);
+    inFlight.demotionInFlight = true;
+
+    const QVector<ResidencyStats> items = {
+        inFlight,
+        residentItem(0, 2, false),
+        residentItem(0, 3, false)
+    };
+
+    //The demotion already running covers the whole overshoot, so the fleet is
+    //left to converge rather than losing two more items' detail
+    CHECK(planEvictions(items, perItem).isEmpty());
+
+    //Two items' worth over, one of them already promised: one more demotion
+    const QVector<Demotion> plan = planEvictions(items, perItem * 2);
+    REQUIRE(plan.size() == 1);
+    CHECK(plan.at(0).itemIndex == 1);
 }
 
 TEST_CASE("planEvictions returns a partial plan when it cannot cover the overshoot",
@@ -332,8 +314,8 @@ TEST_CASE("planEvictions walks a mixed fleet invisible-first and stops at the ov
         residentItem(0, 31, true)     //4: visible, older than 0 and 2
     };
 
-    const qint64 perItem = chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 0)
-                           - chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 2);
+    const qint64 perItem = cw::mip::chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 0)
+                           - cw::mip::chainBytes(QRhiTexture::BC7, QSize(2048, 2048), 2);
 
     const QVector<Demotion> plan = planEvictions(items, perItem * 3);
     REQUIRE(plan.size() == 3);

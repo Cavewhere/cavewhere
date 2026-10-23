@@ -3,8 +3,10 @@
 
 //Our includes
 #include "SignalSpyChecker.h"
+#include "SurveyTreeTestHelper.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwFixStationModel.h"
 #include "cwSignalSpy.h"
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
@@ -40,6 +42,9 @@ namespace {
         node->addTrip(trip);
         return trip;
     }
+
+    using SurveyTreeTestHelper::attachedFixes;
+    using SurveyTreeTestHelper::fixAt;
 }
 
 TEST_CASE("cwSurveyNode inserts, removes and undoes a child node", "[SurveyNode]")
@@ -320,6 +325,234 @@ TEST_CASE("cwSurveyNode relays fire once per level in a depth-3 tree", "[SurveyN
 
         //The walks still terminate.
         CHECK(c->path() == QStringList({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")}));
+    }
+}
+
+TEST_CASE("cwSurveyNode subtreeFixStationCount counts every fix at and below a node", "[SurveyNode]")
+{
+    //A -> B -> C, with the undo stack a user's edits run on.
+    cwCave a;
+    a.setName(QStringLiteral("A"));
+
+    QUndoStack undoStack;
+    a.setUndoStack(&undoStack);
+
+    cwCave* b = makeNode(QStringLiteral("B"));
+    a.addNode(b);
+    cwCave* c = makeNode(QStringLiteral("C"));
+    b->addNode(c);
+
+    SECTION("a new node counts nothing") {
+        cwCave fresh;
+        CHECK(fresh.subtreeFixStationCount() == 0);
+        CHECK(a.subtreeFixStationCount() == 0);
+    }
+
+    SECTION("an own fix raises the node and each ancestor once") {
+        cwSignalSpy aChanged(&a, &cwSurveyNode::subtreeFixStationCountChanged);
+        cwSignalSpy bChanged(b, &cwSurveyNode::subtreeFixStationCountChanged);
+        cwSignalSpy cChanged(c, &cwSurveyNode::subtreeFixStationCountChanged);
+
+        c->fixStations()->appendFixStation(fixAt(QStringLiteral("c1")));
+
+        CHECK(c->subtreeFixStationCount() == 1);
+        CHECK(b->subtreeFixStationCount() == 1);
+        CHECK(a.subtreeFixStationCount() == 1);
+        CHECK(cChanged.count() == 1);
+        CHECK(bChanged.count() == 1);
+        CHECK(aChanged.count() == 1);
+
+        b->fixStations()->appendFixStation(fixAt(QStringLiteral("b1")));
+
+        CHECK(c->subtreeFixStationCount() == 1);
+        CHECK(b->subtreeFixStationCount() == 2);
+        CHECK(a.subtreeFixStationCount() == 2);
+        CHECK(cChanged.count() == 1);
+        CHECK(bChanged.count() == 2);
+        CHECK(aChanged.count() == 2);
+
+        c->fixStations()->removeAt(0);
+
+        CHECK(c->subtreeFixStationCount() == 0);
+        CHECK(b->subtreeFixStationCount() == 1);
+        CHECK(a.subtreeFixStationCount() == 1);
+        CHECK(cChanged.count() == 2);
+        CHECK(bChanged.count() == 3);
+        CHECK(aChanged.count() == 3);
+    }
+
+    SECTION("a reset of the fix table to a new size lands on the new size") {
+        c->fixStations()->setFixStations({fixAt(QStringLiteral("c1")),
+                                          fixAt(QStringLiteral("c2")),
+                                          fixAt(QStringLiteral("c3"))});
+        CHECK(c->subtreeFixStationCount() == 3);
+        CHECK(a.subtreeFixStationCount() == 3);
+
+        c->fixStations()->setFixStations({fixAt(QStringLiteral("c1"))});
+        CHECK(c->subtreeFixStationCount() == 1);
+        CHECK(b->subtreeFixStationCount() == 1);
+        CHECK(a.subtreeFixStationCount() == 1);
+    }
+
+    SECTION("a trip's attached fixes count toward its node and every ancestor") {
+        cwTrip* trip = makeTrip(c, QStringLiteral("Topo 1"));
+
+        trip->setAttachedFixes(attachedFixes(QStringLiteral("t"), 3));
+        CHECK(c->subtreeFixStationCount() == 3);
+        CHECK(b->subtreeFixStationCount() == 3);
+        CHECK(a.subtreeFixStationCount() == 3);
+
+        trip->setAttachedFixes(attachedFixes(QStringLiteral("t"), 1));
+        CHECK(c->subtreeFixStationCount() == 1);
+        CHECK(a.subtreeFixStationCount() == 1);
+
+        trip->setAttachedFixes({});
+        CHECK(c->subtreeFixStationCount() == 0);
+        CHECK(b->subtreeFixStationCount() == 0);
+        CHECK(a.subtreeFixStationCount() == 0);
+    }
+
+    SECTION("a node's own attached fixes count beside its own fixes") {
+        c->fixStations()->appendFixStation(fixAt(QStringLiteral("c1")));
+        c->setAttachedFixes(attachedFixes(QStringLiteral("n"), 2));
+        CHECK(c->subtreeFixStationCount() == 3);
+        CHECK(a.subtreeFixStationCount() == 3);
+
+        c->setAttachedFixes({});
+        CHECK(c->subtreeFixStationCount() == 1);
+        CHECK(b->subtreeFixStationCount() == 1);
+        CHECK(a.subtreeFixStationCount() == 1);
+    }
+
+    SECTION("adding a child that holds fixes raises the parent, removing it lowers it") {
+        cwCave* d = makeNode(QStringLiteral("D"));
+        d->fixStations()->appendFixStation(fixAt(QStringLiteral("d1")));
+        d->fixStations()->appendFixStation(fixAt(QStringLiteral("d2")));
+        REQUIRE(d->subtreeFixStationCount() == 2);
+
+        b->addNode(d);
+        CHECK(b->subtreeFixStationCount() == 2);
+        CHECK(a.subtreeFixStationCount() == 2);
+
+        b->removeNode(b->indexOfNode(d));
+        CHECK(d->subtreeFixStationCount() == 2);
+        CHECK(b->subtreeFixStationCount() == 0);
+        CHECK(a.subtreeFixStationCount() == 0);
+    }
+
+    SECTION("a child removed for undo stays out of its old parent's count until the undo") {
+        c->fixStations()->appendFixStation(fixAt(QStringLiteral("c1")));
+        REQUIRE(a.subtreeFixStationCount() == 1);
+
+        b->removeNode(b->indexOfNode(c));
+        REQUIRE(b->childNodeCount() == 0);
+        CHECK(b->subtreeFixStationCount() == 0);
+        CHECK(a.subtreeFixStationCount() == 0);
+
+        cwSignalSpy aChanged(&a, &cwSurveyNode::subtreeFixStationCountChanged);
+        cwSignalSpy bChanged(b, &cwSurveyNode::subtreeFixStationCountChanged);
+
+        //The removed node keeps its own count current, and its old parent
+        //hears nothing of it.
+        c->fixStations()->appendFixStation(fixAt(QStringLiteral("c2")));
+        CHECK(c->subtreeFixStationCount() == 2);
+        CHECK(b->subtreeFixStationCount() == 0);
+        CHECK(a.subtreeFixStationCount() == 0);
+        CHECK(aChanged.count() == 0);
+        CHECK(bChanged.count() == 0);
+
+        undoStack.undo();
+        REQUIRE(c->parentNode() == b);
+        CHECK(b->subtreeFixStationCount() == 2);
+        CHECK(a.subtreeFixStationCount() == 2);
+    }
+
+    SECTION("removing a trip takes its attached fixes out, and undo brings them back") {
+        cwTrip* trip = makeTrip(c, QStringLiteral("Topo 1"));
+        trip->setAttachedFixes(attachedFixes(QStringLiteral("t"), 2));
+        REQUIRE(a.subtreeFixStationCount() == 2);
+
+        c->removeTrip(c->trips().indexOf(trip));
+        CHECK(c->subtreeFixStationCount() == 0);
+        CHECK(a.subtreeFixStationCount() == 0);
+
+        undoStack.undo();
+        REQUIRE(c->tripCount() == 1);
+        CHECK(c->subtreeFixStationCount() == 2);
+        CHECK(a.subtreeFixStationCount() == 2);
+    }
+}
+
+TEST_CASE("cwSurveyNode addNodes raises the parent's fix count once for the whole batch", "[SurveyNode]")
+{
+    //The loader's path: subtrees built off to the side, then handed over at once.
+    cwCave root;
+    root.setName(QStringLiteral("Root"));
+
+    cwCave* first = makeNode(QStringLiteral("First"));
+    first->fixStations()->appendFixStation(fixAt(QStringLiteral("f1")));
+
+    cwCave* second = makeNode(QStringLiteral("Second"));
+    second->fixStations()->appendFixStation(fixAt(QStringLiteral("s1")));
+    second->fixStations()->appendFixStation(fixAt(QStringLiteral("s2")));
+    cwCave* nested = makeNode(QStringLiteral("Nested"));
+    nested->fixStations()->appendFixStation(fixAt(QStringLiteral("n1")));
+    second->addNode(nested);
+    REQUIRE(second->subtreeFixStationCount() == 3);
+
+    cwSignalSpy rootChanged(&root, &cwSurveyNode::subtreeFixStationCountChanged);
+
+    root.addNodes({first, second});
+
+    CHECK(root.subtreeFixStationCount() == 4);
+    CHECK(rootChanged.count() == 1);
+}
+
+TEST_CASE("cwSurveyNode fix count survives a destroyed subtree", "[SurveyNode]")
+{
+    cwCave grandparent;
+    grandparent.setName(QStringLiteral("Grandparent"));
+
+    cwCave* parent = makeNode(QStringLiteral("Parent"));
+    grandparent.addNode(parent);
+    cwCave* child = makeNode(QStringLiteral("Child"));
+    parent->addNode(child);
+    child->fixStations()->appendFixStation(fixAt(QStringLiteral("c1")));
+    cwTrip* trip = makeTrip(child, QStringLiteral("Topo 1"));
+    trip->setAttachedFixes(attachedFixes(QStringLiteral("t"), 2));
+    REQUIRE(grandparent.subtreeFixStationCount() == 3);
+
+    QPointer<cwSurveyNode> parentPtr(parent);
+    QPointer<cwSurveyNode> childPtr(child);
+
+    SECTION("with no undo stack the removal destroys the subtree") {
+        cwSignalSpy grandparentChanged(&grandparent, &cwSurveyNode::subtreeFixStationCountChanged);
+
+        grandparent.removeNode(0);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+        CHECK(parentPtr.isNull());
+        CHECK(childPtr.isNull());
+        CHECK(grandparent.subtreeFixStationCount() == 0);
+        CHECK(grandparentChanged.count() == 1);
+    }
+
+    SECTION("a cleared undo stack destroys a removed subtree without a word upward") {
+        QUndoStack undoStack;
+        grandparent.setUndoStack(&undoStack);
+
+        grandparent.removeNode(0);
+        REQUIRE_FALSE(parentPtr.isNull());
+        REQUIRE(grandparent.subtreeFixStationCount() == 0);
+
+        cwSignalSpy grandparentChanged(&grandparent, &cwSurveyNode::subtreeFixStationCountChanged);
+        undoStack.clear();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+        CHECK(parentPtr.isNull());
+        CHECK(childPtr.isNull());
+        CHECK(grandparent.subtreeFixStationCount() == 0);
+        CHECK(grandparentChanged.count() == 0);
     }
 }
 
@@ -745,4 +978,42 @@ TEST_CASE("cwCavingRegion addNode names new nodes New <Kind>, unique among sibli
 
     undoStack.undo();
     CHECK(secondCave->childNodeCount() == 0);
+}
+
+TEST_CASE("cwSurveyNode isSelfOrDescendantOf follows the listed parent chain", "[SurveyNode]")
+{
+    cwCave a;
+    a.setName(QStringLiteral("A"));
+    cwCave* b = makeNode(QStringLiteral("B"));
+    a.addNode(b);
+    cwCave* c = makeNode(QStringLiteral("C"));
+    b->addNode(c);
+    cwCave* sibling = makeNode(QStringLiteral("Sibling"));
+    a.addNode(sibling);
+
+    CHECK(a.isSelfOrDescendantOf(&a));
+    CHECK(b->isSelfOrDescendantOf(&a));
+    CHECK(c->isSelfOrDescendantOf(&a));
+    CHECK(c->isSelfOrDescendantOf(b));
+
+    CHECK_FALSE(sibling->isSelfOrDescendantOf(b));
+    CHECK_FALSE(c->isSelfOrDescendantOf(sibling));
+    CHECK_FALSE(a.isSelfOrDescendantOf(b));
+    CHECK_FALSE(b->isSelfOrDescendantOf(c));
+    CHECK_FALSE(a.isSelfOrDescendantOf(nullptr));
+
+    SECTION("a node removed for undo sits outside its old parent until undone") {
+        QUndoStack undoStack;
+        a.setUndoStack(&undoStack);
+
+        a.removeNode(a.indexOfNode(b));
+        REQUIRE(b->parentNode() == &a);
+        CHECK_FALSE(b->isSelfOrDescendantOf(&a));
+        CHECK_FALSE(c->isSelfOrDescendantOf(&a));
+        CHECK(c->isSelfOrDescendantOf(b));
+
+        undoStack.undo();
+        CHECK(b->isSelfOrDescendantOf(&a));
+        CHECK(c->isSelfOrDescendantOf(&a));
+    }
 }

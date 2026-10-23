@@ -53,6 +53,10 @@ public:
 
     void invert();
 
+    // Re-walks every source row. For sources that forward no keyword edits,
+    // such as the keyword filter's accepted model.
+    void updateAllRows();
+
     int rowCount(const QModelIndex& parent = QModelIndex()) const;
     QVariant data(const QModelIndex& index, int role) const;
     Q_INVOKABLE bool setData(const QModelIndex &index, const QVariant &value, int role);
@@ -172,8 +176,6 @@ private:
     ModelData mData;
 
     Filter mFilter;
-
-    void updateAllRows();
 
     Filter createDefaultFilter();
 

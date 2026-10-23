@@ -1,0 +1,374 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+//Our includes
+#include "cwPointCloudForest.h"
+#include "cwPointOctreeManifest.h"
+#include "cwRenderBudgets.h"
+#include "cwRenderMemoryLedger.h"
+
+//Std includes
+#include <algorithm>
+#include <cmath>
+
+//The budget's maxLevel goes straight into the selection's
+static_assert(cw::budgets::kUnlimitedLevel == cw::octree::kUnlimitedLevel);
+
+namespace {
+//Every field the cut is selected from. The frustum follows from viewProjection.
+bool selectsSameCut(const cw::octree::ForestInput& a, const cw::octree::ForestInput& b)
+{
+    return a.trees == b.trees
+           && a.viewProjection == b.viewProjection
+           && a.absP11 == b.absP11
+           && a.viewportHeightPx == b.viewportHeightPx
+           && a.screenSpaceErrorPx == b.screenSpaceErrorPx
+           && a.sseInflation == b.sseInflation
+           && a.maxNodes == b.maxNodes
+           && a.maxPoints == b.maxPoints
+           && a.maxLevel == b.maxLevel;
+}
+}
+
+void cwPointCloudForest::setTree(const cwRHIObject* cloud,
+                                 const cwPointOctreeManifest* manifest)
+{
+    if (manifest == nullptr) {
+        removeTree(cloud);
+        return;
+    }
+
+    const int index = indexOfCloud(cloud);
+    if (index >= 0) {
+        //The cloud is already cut from this tree, so the frame keeps its cut
+        if (m_trees.at(index).manifest == manifest) {
+            return;
+        }
+        m_trees[index].manifest = manifest;
+    } else {
+        m_trees.append(Tree{cloud, manifest, cw::octree::Selection{}});
+    }
+
+    forgetLastCut();
+}
+
+void cwPointCloudForest::removeTree(const cwRHIObject* cloud)
+{
+    const int index = indexOfCloud(cloud);
+    if (index < 0) {
+        return;
+    }
+
+    m_trees.remove(index);
+    forgetLastCut();
+
+    //The last cloud of the view is gone, so whatever brings one back starts
+    //where a first frame starts rather than at the inflation the view left
+    if (m_trees.isEmpty()) {
+        m_sseInflation = 1.0;
+        m_sseInflationTarget = 1.0;
+        m_relaxedSteps = 1;
+        m_relaxProbeFrame = 0;
+        m_availableBytes = 0;
+    }
+}
+
+int cwPointCloudForest::indexOfCloud(const cwRHIObject* cloud) const
+{
+    for (int i = 0; i < m_trees.size(); i++) {
+        if (m_trees.at(i).cloud == cloud) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void cwPointCloudForest::forgetLastCut()
+{
+    //The cut names trees by position, and the manifests the probe would
+    //re-select from may be the ones going away
+    m_selected = cw::octree::ForestSelection{};
+    m_lastInput = cw::octree::ForestInput{};
+    m_desiredBytesRelaxed = -1;
+    m_pointCappedRelaxed = false;
+    m_lastProbe.reset();
+
+    for (Tree& tree : m_trees) {
+        tree.selection = cw::octree::Selection{};
+    }
+}
+
+bool cwPointCloudForest::anyNodeSelected() const
+{
+    for (const cw::octree::Selection& selection : m_selected.trees) {
+        if (!selection.nodes.isEmpty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void cwPointCloudForest::advance(const cwRenderBudgets& budgets)
+{
+    //A frozen cut is the one being looked at, so the governor holds with it
+    if (budgets.freezeCut) {
+        return;
+    }
+
+    if (!budgets.inflationGovernor) {
+        m_sseInflation = 1.0;
+        m_sseInflationTarget = 1.0;
+        m_desiredBytesRelaxed = -1;
+        m_pointCappedRelaxed = false;
+        m_relaxedSteps = 1;
+        m_relaxProbeFrame = 0;
+        return;
+    }
+
+    const qint64 availableBytes = availableBytesFor(budgets);
+
+    //No cloud drew, so there is no cut to measure. The governor holds where the
+    //last drawn frame left it rather than relaxing on the bytes of a cut nobody
+    //selected, which would hand the view back the whole unrelaxed cut in the
+    //first frame a cloud returns.
+    if (!anyNodeSelected()) {
+        return;
+    }
+
+    //The governor rules on the cut at its own target, which a slew in progress
+    //has not drawn yet, so the target holds until the inflation reaches it.
+    //A slew whose cut is over the GPU budget ends at once at the coarser of the
+    //two, so a view short of memory steps up every other frame rather than
+    //once per slew, and the next frame rules on a cut drawn at the target.
+    if (isSlewing()) {
+        if (m_selected.bytes > availableBytes) {
+            const double coarser = std::max(m_sseInflation, m_sseInflationTarget);
+            m_sseInflation = coarser;
+            m_sseInflationTarget = coarser;
+        } else {
+            slewTowardTarget(budgets.governorSlew);
+        }
+        return;
+    }
+
+    m_sseInflationTarget = cw::octree::nextSseInflation(inflationInput(availableBytes));
+    slewTowardTarget(budgets.governorSlew);
+
+    //What the next probe measures its relaxations against
+    m_availableBytes = availableBytes;
+
+    probeRelaxedCut();
+}
+
+void cwPointCloudForest::slewTowardTarget(double requestedSlew)
+{
+    //The budgets are a plain struct anyone can fill, and a slew outside the
+    //knob's range would stall or run away from the target; NaN takes the
+    //governor's own step
+    const double slew = std::isnan(requestedSlew)
+                            ? cw::budgets::kMaxGovernorSlew
+                            : std::clamp(requestedSlew, cw::budgets::kMinGovernorSlew,
+                                         cw::budgets::kMaxGovernorSlew);
+
+    //A whole slew is the governor's own step, assigned rather than computed so
+    //it carries no rounding
+    if (slew == cw::budgets::kMaxGovernorSlew) {
+        m_sseInflation = m_sseInflationTarget;
+        return;
+    }
+
+    //In log space, so a step up and a step down of one ratio take as many frames
+    const double remainingLogGap =
+        std::log(m_sseInflationTarget / m_sseInflation) * (1.0 - slew);
+    if (std::abs(remainingLogGap) <= cw::octree::kSseSlewArrivalLogGap) {
+        m_sseInflation = m_sseInflationTarget;
+    } else {
+        m_sseInflation = m_sseInflationTarget * std::exp(-remainingLogGap);
+    }
+}
+
+bool cwPointCloudForest::isSettling(const cwRenderBudgets& budgets) const
+{
+    //A frozen cut is the one being looked at, so the governor holds with it
+    if (budgets.freezeCut) {
+        return false;
+    }
+
+    //The next advance() puts an ungoverned view back at 1
+    if (!budgets.inflationGovernor) {
+        return m_sseInflation != 1.0 || m_sseInflationTarget != 1.0;
+    }
+
+    if (!anyNodeSelected()) {
+        return false;
+    }
+
+    if (isSlewing()) {
+        return true;
+    }
+
+    const qint64 availableBytes = availableBytesFor(budgets);
+    if (cw::octree::nextSseInflation(inflationInput(availableBytes)) != m_sseInflationTarget) {
+        return true;
+    }
+
+    //An inflated view steps down only on a probe's evidence, so it has settled
+    //once a probe has measured the cut it holds now, under the budget it has now
+    return m_sseInflationTarget > 1.0 && !probedLastCut(availableBytes);
+}
+
+qint64 cwPointCloudForest::availableBytesFor(const cwRenderBudgets& budgets)
+{
+    const auto* ledger = cwRenderMemoryLedger::instance();
+    const qint64 total = ledger->totalBytes(cwRenderMemoryLedger::Residency::Gpu);
+
+    //What is left for the clouds: everything that is not point cloud geometry
+    //comes off the top by what it holds. The clouds share the rest, which is
+    //why no other cloud's demand comes off it any more.
+    const qint64 cloudGeometryBytes =
+        ledger->bytes(cwRenderMemoryLedger::Category::PointCloudGeometry,
+                      cwRenderMemoryLedger::Residency::Gpu);
+    return std::max<qint64>(0, budgets.gpuBudgetBytes - (total - cloudGeometryBytes));
+}
+
+cw::octree::InflationInput cwPointCloudForest::inflationInput(qint64 availableBytes) const
+{
+    cw::octree::InflationInput inflation;
+    inflation.current = m_sseInflationTarget;
+    inflation.desiredBytes = m_selected.bytes;
+    inflation.desiredBytesRelaxed = m_desiredBytesRelaxed;
+    inflation.availableBytes = availableBytes;
+    inflation.pointCapped = m_selected.pointCapped;
+    inflation.pointCappedRelaxed = m_pointCappedRelaxed;
+    inflation.relaxedSteps = m_relaxedSteps;
+    return inflation;
+}
+
+bool cwPointCloudForest::probedLastCut(qint64 availableBytes) const
+{
+    return m_lastProbe.has_value()
+           && m_lastProbe->availableBytes == availableBytes
+           && selectsSameCut(m_lastProbe->input, m_lastInput);
+}
+
+void cwPointCloudForest::probeRelaxedCut()
+{
+    m_desiredBytesRelaxed = -1;
+    m_pointCappedRelaxed = false;
+    m_relaxedSteps = 1;
+
+    //The probe asks whether the target can step down, so it relaxes from the
+    //target; advance() runs it only once the inflation has reached it
+    if (m_sseInflationTarget <= 1.0) {
+        m_relaxProbeFrame = 0;
+        return;
+    }
+
+    m_relaxProbeFrame++;
+    if (m_relaxProbeFrame < cw::octree::kSseRelaxProbeFrames) {
+        return;
+    }
+    m_relaxProbeFrame = 0;
+
+    if (m_lastInput.trees.isEmpty()) {
+        return;
+    }
+
+    //The cut the next select() takes, once nothing else moves: the last one's
+    //camera and knobs at the inflation this probe relaxes from
+    m_lastProbe = Probe{m_lastInput, m_availableBytes};
+    m_lastProbe->input.sseInflation = m_sseInflationTarget;
+
+    // The step down is only taken on evidence: the cut one step finer, selected
+    // for real rather than estimated, and only on a probe frame because
+    // selection is not free. A probe keeps going while the finer cut still fits
+    // what the forest had last frame, so a deep inflation comes back in one
+    // probe rather than one probe per step. nextSseInflation() checks the
+    // deepest level again against this frame's bytes before taking it.
+    cw::octree::ForestInput relaxed = m_lastInput;
+    double level = m_sseInflationTarget;
+    int steps = 0;
+
+    while (level > 1.0) {
+        level = std::max(1.0, level / cw::octree::kSseInflationStep);
+        relaxed.sseInflation = level;
+
+        const cw::octree::ForestSelection probe = cw::octree::selectForest(relaxed);
+        steps++;
+
+        const bool fits = !probe.pointCapped
+                          && double(probe.bytes)
+                                 < double(m_availableBytes) * (1.0 - cw::octree::kSseRelaxMargin);
+
+        if (!fits) {
+            //The first level probed is the one the governor rules on when none fit
+            if (steps == 1) {
+                m_desiredBytesRelaxed = probe.bytes;
+                m_pointCappedRelaxed = probe.pointCapped;
+            }
+            return;
+        }
+
+        m_desiredBytesRelaxed = probe.bytes;
+        m_pointCappedRelaxed = false;
+        m_relaxedSteps = steps;
+    }
+}
+
+void cwPointCloudForest::select(const cwRHIObject::RenderData& renderData,
+                                const cwFrustum& frustum,
+                                const std::function<bool(const cwRHIObject*)>& draws)
+{
+    //Only a cut that exists can be frozen, so the first frame of a tree still cuts
+    if (renderData.budgets.freezeCut && anyNodeSelected()) {
+        return;
+    }
+
+    m_lastFrustum = frustum;
+
+    cw::octree::ForestInput input;
+    input.frustum = &m_lastFrustum;
+    input.viewProjection = renderData.viewProjectionMatrix;
+    input.absP11 = std::abs(double(renderData.projectionMatrix(1, 1)));
+    input.viewportHeightPx = renderData.viewportSize.height();
+    input.screenSpaceErrorPx = renderData.budgets.screenSpaceErrorPx;
+    input.sseInflation = m_sseInflation;
+    input.maxPoints = renderData.budgets.pointBudget;
+    input.maxLevel = renderData.budgets.maxLevel;
+
+    //The trees of the cut, in registration order, and where each one's slice
+    //goes back to
+    QVector<int> cutTrees;
+    cutTrees.reserve(m_trees.size());
+
+    for (int i = 0; i < m_trees.size(); i++) {
+        Tree& tree = m_trees[i];
+        tree.selection = cw::octree::Selection{};
+
+        if (!draws(tree.cloud)) {
+            continue;
+        }
+
+        cutTrees.append(i);
+        input.trees.append(cw::octree::ForestTree{tree.manifest});
+    }
+
+    m_selected = cw::octree::selectForest(input);
+    m_lastInput = input;
+
+    for (int i = 0; i < cutTrees.size(); i++) {
+        m_trees[cutTrees.at(i)].selection = m_selected.trees.at(i);
+    }
+}
+
+const cw::octree::Selection& cwPointCloudForest::selectionFor(const cwRHIObject* cloud) const
+{
+    static const cw::octree::Selection kNothingSelected;
+
+    const int index = indexOfCloud(cloud);
+    return index >= 0 ? m_trees.at(index).selection : kNothingSelected;
+}

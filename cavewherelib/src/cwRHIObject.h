@@ -5,7 +5,8 @@
 #include "cwScene.h"
 #include "cwRhiPipelineSet.h"
 #include "cwRenderObjectId.h"
-#include "cwRenderCullingStats.h"
+#include "cwRenderFrameStats.h"
+#include "cwRenderBudgets.h"
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 
@@ -25,29 +26,6 @@ class cwRenderObject;
 class cwAppearanceSlotted;
 class cwVisibilitySnapshot;
 class cwFrustum;
-
-namespace cw::budgets {
-    constexpr qint64 kBytesPerMegabyte = 1024 * 1024;
-
-    // Mirrors the cwRenderingSettings defaults so a frame renderer running
-    // without that singleton (tests, tools) still streams sensibly.
-    constexpr qint64 kDefaultGpuBudgetBytes = 1536 * kBytesPerMegabyte;
-    constexpr qint64 kDefaultCpuBudgetBytes = 512 * kBytesPerMegabyte;
-    constexpr qint64 kDefaultUploadBudgetBytesPerFrame = 8 * kBytesPerMegabyte;
-    constexpr double kDefaultScreenSpaceErrorPx = 1.5;
-}
-
-/**
- * The streaming budget knobs, read from cwRenderingSettings at the sync barrier
- * and stamped onto every RenderData alongside the camera, so the render thread
- * never reaches back across the barrier for them.
- */
-struct cwRenderBudgets {
-    qint64 gpuBudgetBytes = cw::budgets::kDefaultGpuBudgetBytes;
-    qint64 cpuBudgetBytes = cw::budgets::kDefaultCpuBudgetBytes;
-    qint64 uploadBudgetBytesPerFrame = cw::budgets::kDefaultUploadBudgetBytesPerFrame;
-    double screenSpaceErrorPx = cw::budgets::kDefaultScreenSpaceErrorPx;
-};
 
 class cwRHIObject {
 
@@ -161,7 +139,7 @@ public:
         // published once the frame is gathered. Objects with sub-item
         // granularity add their own item counts here. Null means don't count,
         // mirroring the frustum field's null-means-cull-nothing contract.
-        cwRenderCullingStats::Counts* cullingStats = nullptr;
+        cwRenderFrameStats::Culling* cullingStats = nullptr;
         // Per-object appearance slot this render job selects (0 = the live
         // appearance in slot 0; higher slots = a per-job override the offscreen
         // renderer acquired and uploaded for this object before gathering). The
@@ -169,6 +147,16 @@ public:
         // object's gather() turns it into Drawable::appearanceUniformOffset via its
         // own per-slot stride. The live frame always passes 0.
         int appearanceSlot = 0;
+        // True for the live frame, false for an offscreen export job, stamped
+        // from cwSceneGatherOptions::liveFrame. An export renders its own camera
+        // at full detail: the per-frame point budget and the relax probe belong
+        // to the view the user is watching, not to a job that draws once.
+        bool liveFrame = true;
+        // The batch this job's first pass consumes, stamped from
+        // cwSceneGatherOptions::resourceUpdateBatch. It is submitted after the
+        // gather, so a write an object records here reaches the GPU before the
+        // draws it gathers this frame. Null means the job offers no batch.
+        QRhiResourceUpdateBatch* resourceUpdateBatch = nullptr;
     };
 
     struct Drawable {
@@ -263,6 +251,16 @@ public:
     // camera's coarser selection demotes what the export pulled in.
     virtual bool residencyReady(const RenderData&) { return true; }
 
+    // Release everything this object streamed onto the GPU — a texture chain, a
+    // cloud's octree nodes: cancel the loads in flight, drop what is resident,
+    // and return the bytes to the ledger. The scene calls this on the render
+    // thread when its view stops drawing (the QQuickRhiItem was hidden),
+    // because a hidden view gets no frames and so can never demote its own
+    // residency against the process-wide budget. The presence invariant that
+    // keeps a resident texture or a cloud's root alive applies only to
+    // something being drawn, so a view drawing nothing may drop everything.
+    virtual void releaseStreamedResources() {}
+
     //Gather render objects
     virtual bool gather(const GatherContext& context,
                         QVector<PipelineBatch>& batches) {
@@ -270,6 +268,15 @@ public:
         Q_UNUSED(batches);
         return false;
     };
+
+    // Called instead of gather() on a frame this object draws nothing, because
+    // the visibility snapshot or a job's hiddenObjectIds hides it or the
+    // frustum misses it entirely. Runs once per object rather than once per
+    // pass, and carries the first pass's render data. An object that streams
+    // settles here: it drops the cut nothing is drawing and cancels the loads
+    // that cut asked for. What it already holds stays resident until the budget
+    // takes it, exactly as it would for an object still on screen.
+    virtual void gatherCulled(const GatherContext&) {}
 
     // Stable identity of the front-end cwRenderObject this backend object mirrors,
     // stamped by cwRhiFrameRenderer::registerRenderObject. Objects use it to read
@@ -373,11 +380,16 @@ protected:
 // scene begins the pass against the output target (typically the swap-chain),
 // invokes each effect's apply(), and ends the pass after the rest of the
 // scene-level draws. This keeps the pass count to one for the swap-chain.
+//
+// Each frame splits into two calls. prepare() runs outside any pass and does
+// all CPU-side work, enqueueing buffer writes on the batch it is given. apply()
+// only records commands into the open pass. QRhi accepts resource updates only
+// between passes, so apply() must leave cb->resourceUpdate() and every resource
+// update batch alone.
 class cwRhiPostProcessEffect {
 public:
     // Frame-level state that effects may need to precompute their own uniforms.
-    // Provided by cwRhiScene once per frame before apply(). Effects that don't
-    // care leave the default updateFrameUniforms() no-op.
+    // Provided once per frame to prepare().
     struct FrameUniformContext {
         QMatrix4x4 projectionMatrix;  // already pre-multiplied by clipSpaceCorrMatrix
         QSize viewportSize;
@@ -409,10 +421,11 @@ public:
     // the effect can rebuild SRBs that reference it.
     virtual void resize(QSize outputSize) { Q_UNUSED(outputSize); }
 
-    // Push per-frame CPU-side state. Called from cwRhiScene before apply() so
+    // Push per-frame CPU-side state and enqueue the effect's uniform writes on
+    // `batch`. Called once per frame outside any render pass, before apply(), so
     // the effect can derive UBO contents (e.g. projection-dependent constants)
     // without re-reading them from the global UBO (which lives in GPU memory).
-    virtual void updateFrameUniforms(const FrameUniformContext&) {}
+    virtual void prepare(const FrameUniformContext& ctx, QRhiResourceUpdateBatch* batch) = 0;
 
     // Emit pipeline+SRB+draw into `cb` (which must be inside an open beginPass
     // against the output target, typically the swap chain). The effect is the

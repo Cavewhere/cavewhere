@@ -167,6 +167,7 @@ public:
         void setTripSplayVertexRanges(QVector<cwLinePlotGeometry::VertexRange> ranges);
         void setTripUuids(QVector<QUuid> tripUuids);
         void setTripLengths(QVector<double> tripLengths);
+        void setSegmentErrors(QVector<float> segmentErrors);
 
         QVector<QVector3D> stationPositions() const;
 
@@ -181,6 +182,10 @@ public:
         QVector<cwLinePlotGeometry::VertexRange> tripSplayVertexRanges() const;
         QVector<QUuid> tripUuids() const;
         QVector<double> tripLengths() const;
+
+        // Survex closure error (σ) per segment of stationPositions, or
+        // cwLinePlotGeometry::kNoErrorValue; see cwLinePlotGeometry.
+        QVector<float> segmentErrors() const;
 
     public:
         void setRegionNetwork(cwSurveyNetwork network);
@@ -202,6 +207,7 @@ public:
         QVector<cwLinePlotGeometry::VertexRange> TripSplayVertexRanges;
         QVector<QUuid> TripUuids;
         QVector<double> TripLengths;
+        QVector<float> SegmentErrors;
         cwSurveyNetwork RegionNetwork;
         bool RegionNetworkChanged = false;
         cwStationPositionLookup RegionStationPositions;
@@ -415,6 +421,14 @@ inline void cwLinePlotTask::LinePlotResultData::setTripSplayVertexRanges(
 
 inline void cwLinePlotTask::LinePlotResultData::setTripUuids(QVector<QUuid> tripUuids) {
     TripUuids = std::move(tripUuids);
+}
+
+inline void cwLinePlotTask::LinePlotResultData::setSegmentErrors(QVector<float> segmentErrors) {
+    SegmentErrors = std::move(segmentErrors);
+}
+
+inline QVector<float> cwLinePlotTask::LinePlotResultData::segmentErrors() const {
+    return SegmentErrors;
 }
 
 inline QVector<cwLinePlotGeometry::VertexRange>

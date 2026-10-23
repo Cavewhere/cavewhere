@@ -1,0 +1,9 @@
+; A block whose one fix names its own geographic coordinate system, and no
+; *cs out anywhere. cavern refuses a geographic *cs out, so the system the
+; file names cannot double as the output.
+*begin plateau
+*cs LONG-LAT
+*fix l1 105.0 27.1 100
+*data normal from to tape compass clino
+l1 l2 10 0 0
+*end plateau

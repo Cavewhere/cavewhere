@@ -593,7 +593,7 @@ cwDiskCacher::Key cwImageProvider::imageCacheKey(const QString &pathToImage, con
 
     cwDiskCacher::Key key {
         keyPrefix + QStringLiteral("-") + info.fileName() + QStringLiteral(".") + cwImageProvider::imageCacheExtension(),
-        info.dir(),
+        info.path(),
         QString::number(parentImageHash, 16)
     };
 

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls as QC
+import QtQuick.Templates as T
 import QtCore as QtCore
 import QtTest
 import cavewherelib
@@ -8,15 +9,34 @@ import cw.TestLib
 MainWindowTest {
     id: rootId
 
-    //! The tooltip \a host declares as its own child, null when it has none.
-    function toolTipOf(host) {
-        const data = host.data
-        for (let i = 0; i < data.length; ++i) {
-            if (data[i] instanceof QC.ToolTip) {
-                return data[i]
-            }
-        }
-        return null
+    //! Hovers \a host through \a testCase and returns the window's shared
+    //! tooltip once it shows on \a host.
+    function hoverSharedToolTip(testCase, host) {
+        testCase.waitForRendering(rootId)
+        testCase.mouseMove(host, host.width / 2, host.height / 2)
+        const shared = host.QC.ToolTip.toolTip
+        testCase.tryVerify(() => shared.visible && shared.parent === host, 5000,
+                           "hovering " + host.objectName + " shows the window's shared tooltip")
+        return shared
+    }
+
+    //! Hovers \a host through \a testCase past the tooltip delay and checks
+    //! that the window's shared tooltip stays off it. Waits a fixed time,
+    //! since the point is that nothing shows.
+    function verifyNoSharedToolTip(testCase, host) {
+        testCase.waitForRendering(rootId)
+        testCase.mouseMove(host, host.width / 2, host.height / 2)
+        const shared = host.QC.ToolTip.toolTip
+        testCase.wait(Theme.toolTipDelay * 2)
+        testCase.verify(!(shared.visible && shared.parent === host),
+                        "hovering " + host.objectName + " shows no tooltip; it reads \"" + shared.text + "\"")
+        testCase.mouseMove(rootId, 0, 0)
+    }
+
+    //! Moves the pointer off the page through \a testCase and waits for \a tip to hide.
+    function leaveToolTip(testCase, tip) {
+        testCase.mouseMove(rootId, 0, 0)
+        testCase.tryVerify(() => !tip.visible, 5000, "leaving hides the tooltip")
     }
 
     //! Switches to the light scheme, hovers \a host through \a testCase, and
@@ -26,20 +46,14 @@ MainWindowTest {
         RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.Light
         testCase.tryVerify(() => !Theme.dark, 5000, "the scheme is light")
 
-        const tip = rootId.toolTipOf(host)
-        testCase.verify(tip !== null, host.objectName + " declares a tooltip")
-        testCase.waitForRendering(rootId)
-        testCase.mouseMove(host, host.width / 2, host.height / 2)
-        testCase.tryVerify(() => tip.visible, 5000, "hovering " + host.objectName + " shows its tooltip")
-
+        const tip = rootId.hoverSharedToolTip(testCase, host)
         testCase.verify(tip.contentItem.text.indexOf(text) >= 0,
                         "the tooltip reads \"" + tip.contentItem.text + "\"")
         testCase.verify(Qt.colorEqual(tip.background.color, Theme.toolTipSurface),
                         "tooltip surface " + tip.background.color + ", Theme " + Theme.toolTipSurface)
         testCase.verify(Qt.colorEqual(tip.contentItem.color, Theme.toolTipText),
                         "tooltip text " + tip.contentItem.color + ", Theme " + Theme.toolTipText)
-        testCase.mouseMove(rootId, 0, 0)
-        testCase.tryVerify(() => !tip.visible, 5000, "leaving " + host.objectName + " hides its tooltip")
+        rootId.leaveToolTip(testCase, tip)
     }
 
     //! The first item under \a item whose objectName starts with \a prefix.
@@ -59,6 +73,34 @@ MainWindowTest {
             }
         }
         return null
+    }
+
+    //! How many items under \a item, hidden ones included, satisfy \a matches.
+    function countDescendants(item, matches) {
+        let count = 0
+        if (item === null) {
+            return count
+        }
+        const children = item.children
+        for (let i = 0; i < children.length; ++i) {
+            const child = children[i]
+            if (matches(child)) {
+                ++count
+            }
+            count += rootId.countDescendants(child, matches)
+        }
+        return count
+    }
+
+    //! How many items under \a item, hidden ones included, have an objectName
+    //! starting with \a prefix.
+    function countWithPrefix(item, prefix) {
+        return rootId.countDescendants(item, child => String(child.objectName).startsWith(prefix))
+    }
+
+    //! How many CSComboBox items sit under \a item, hidden ones included.
+    function countCSComboBoxes(item) {
+        return rootId.countDescendants(item, child => child instanceof CSComboBox)
     }
 
     //! The visible descendants of \a item whose text contains \a text.
@@ -108,7 +150,7 @@ MainWindowTest {
         category: "FixStationPage"
     }
 
-    TestCase {
+    CWTestCase {
         name: "FixStationPage"
         when: windowShown
 
@@ -147,13 +189,18 @@ MainWindowTest {
             RootData.newProject()
 
             // Puts back the widths a test dragged, on the page's own category.
-            for (const key of ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]) {
+            for (const key of columnWidthKeys) {
                 fixColumnSettingsId.setValue(key, 0)
             }
             fixColumnSettingsId.sync()
+            RootData.settings.fontSettings.fontBaseSize = RootData.settings.fontSettings.defaultFontBaseSize
         }
 
         readonly property string coordinateTitle: "Coordinate (East, North / Lat, Long)"
+        readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]
+        readonly property int columnDrag: 80
+        readonly property int columnWidthTolerance: 2
+        readonly property int largerFontStep: 4
 
         //! The resize grip on the right edge of header \a title.
         function resizeGripOf(title) {
@@ -251,13 +298,24 @@ MainWindowTest {
 
         //! Row \a rowIndex's coordinate-system picker, once the delegate
         //! carrying it exists — the row is added to the model before the view
-        //! has built it.
+        //! has built it. At rest the row shows its system as text, and a
+        //! double-click on that text opens the picker.
         function waitForPicker(rowIndex) {
+            const fixPage = RootData.pageView.currentPageItem
             let picker = null
+            let label = null
             tryVerify(() => {
                 picker = findPicker(rowIndex)
-                return picker !== null
-            }, 5000, "row " + rowIndex + " inputCSComboBox should be reachable")
+                label = findChild(fixPage, "inputCSLabel." + rowIndex)
+                return picker !== null || (label !== null && label.visible)
+            }, 5000, "row " + rowIndex + " should show its coordinate system")
+            if (picker === null) {
+                doubleTap(label)
+                tryVerify(() => {
+                    picker = findPicker(rowIndex)
+                    return picker !== null
+                }, 5000, "double-clicking row " + rowIndex + "'s system should open its picker")
+            }
             return picker
         }
 
@@ -352,12 +410,7 @@ MainWindowTest {
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
 
-            // Wait for the row delegate (and its CSComboBox) to instantiate.
-            let picker = null
-            tryVerify(() => {
-                picker = findPicker(0)
-                return picker !== null
-            }, 5000, "row 0 inputCSComboBox should be reachable")
+            const picker = waitForPicker(0)
 
             // The picker emits committed(newCS) from any of its modes. Driving
             // the signal exercises the same handler that mouse interaction
@@ -375,16 +428,135 @@ MainWindowTest {
             tryVerify(() => m.data(idx, FixStationModel.InputCSRole) === "")
         }
 
+        //! Row \a rowIndex's at-rest system text, once the row shows it.
+        function waitForCSLabel(rowIndex) {
+            const fixPage = RootData.pageView.currentPageItem
+            let label = null
+            tryVerify(() => {
+                label = findChild(fixPage, "inputCSLabel." + rowIndex)
+                return label !== null && label.visible
+            }, 5000, "row " + rowIndex + " shows its coordinate system as text")
+            return label
+        }
+
+        //! Waits until row \a rowIndex's station cell exists, so the row is built.
+        function waitForRow(rowIndex) {
+            tryVerify(() => findChild(RootData.pageView.currentPageItem,
+                                      "stationCell." + rowIndex) !== null,
+                      5000, "row " + rowIndex + " is on the page")
+        }
+
+        // At rest an editable row names its system in plain text; the picker
+        // loads only once a double-click on that text opens it.
+        function test_anEditableRowShowsItsSystemAsTextUntilDoubleClicked() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            model.addFixStation()
+            model.setData(model.index(0), "EPSG:32612", FixStationModel.InputCSRole)
+            waitForRow(0)
+
+            compare(findPicker(0), null, "an editable row builds no picker at rest")
+
+            const label = waitForCSLabel(0)
+            compare(label.text, CSFormat.displayName("EPSG:32612"),
+                    "the row names its system the way the picker does")
+            verify(Qt.colorEqual(label.color, Theme.text),
+                   "the system reads in the ordinary text color, " + label.color
+                   + ", Theme " + Theme.text)
+
+            const tip = rootId.hoverSharedToolTip(this, label)
+            verify(tip.text.indexOf(CSFormat.displayName("EPSG:32612")) >= 0,
+                   "the tooltip names the full system: \"" + tip.text + "\"")
+            rootId.leaveToolTip(this, tip)
+
+            const picker = waitForPicker(0)
+            tryCompare(picker, "currentMode", CoordinateSystem.UTM)
+
+            picker.committed("EPSG:4326")
+            tryVerify(() => model.data(model.index(0), FixStationModel.InputCSRole) === "EPSG:4326",
+                      5000, "the opened picker commits onto the row")
+        }
+
+        // A blank system reads "none"; a single click selects the row and
+        // leaves the picker closed.
+        function test_aBlankEditableSystemReadsNoneAndASingleClickSelectsTheRow() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            model.addFixStation()
+            model.setData(model.index(0), "", FixStationModel.InputCSRole)
+            waitForRow(0)
+            const page = RootData.pageView.currentPageItem
+            const treeView = findChild(page, "fixStationTreeView")
+
+            compare(findPicker(0), null, "a blank editable row builds no picker at rest")
+            const label = waitForCSLabel(0)
+            compare(label.text, "none")
+
+            treeView.currentIndex = -1
+            waitForRendering(rootId)
+            mouseClick(label)
+            tryCompare(treeView, "currentIndex", 0, 5000, "a single click selects the row")
+            compare(findPicker(0), null, "and leaves the picker closed")
+        }
+
+        // Rows renumber when one is added, so the open picker closes rather
+        // than land on another fix; Escape closes it too.
+        function test_thePickerClosesOnEscapeAndWhenRowsShift() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            const model = cave.fixStations
+            model.addFixStation()
+            model.setData(model.index(0), "EPSG:32612", FixStationModel.InputCSRole)
+            waitForRow(0)
+
+            waitForPicker(0)
+            compare(page.editingCSRow, 0)
+            model.addFixStation()
+            tryCompare(page, "editingCSRow", -1, 5000, "a row added closes the picker")
+            tryVerify(() => findPicker(0) === null, 5000, "and unloads it")
+
+            // A second double-tap this soon would count as taps three and four.
+            page.editingCSRow = 0
+            tryVerify(() => findPicker(0) !== null, 5000, "the picker reopens")
+            keyClick(Qt.Key_Escape)
+            tryCompare(page, "editingCSRow", -1, 5000, "Escape closes the picker")
+            tryVerify(() => findPicker(0) === null, 5000, "and the row shows its text again")
+        }
+
+        // The narrow layout's row shares the at-rest text and opens the same
+        // picker on a double-click.
+        function test_theNarrowLayoutOpensThePickerOnADoubleClick() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            const model = cave.fixStations
+            model.addFixStation()
+            model.setData(model.index(0), "EPSG:32612", FixStationModel.InputCSRole)
+
+            rootId.width = Theme.breakpointPanelCollapse - 100
+            tryVerify(() => page.isNarrow, 5000, "the page should be in its narrow layout")
+            tryVerify(() => findChild(page, "narrowFixRow.0") !== null, 5000,
+                      "the row takes its narrow delegate")
+
+            compare(findPicker(0), null, "the narrow row builds no picker at rest")
+            const label = waitForCSLabel(0)
+            compare(label.text, CSFormat.displayName("EPSG:32612"))
+
+            waitForRendering(rootId)
+            const picker = waitForPicker(0)
+            picker.committed("EPSG:4326")
+            tryVerify(() => model.data(model.index(0), FixStationModel.InputCSRole) === "EPSG:4326",
+                      5000, "the narrow picker commits onto the row")
+
+            rootId.width = defaultWindowWidth
+            tryVerify(() => !page.isNarrow, 5000, "and the layout goes back")
+        }
+
         function test_inputCSPickerModes() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
 
-            let picker = null
-            tryVerify(() => {
-                picker = findPicker(0)
-                return picker !== null
-            }, 5000, "row 0 inputCSComboBox should be reachable")
+            const picker = waitForPicker(0)
 
             // A fix station always has a coordinate system of its own, so
             // there is no "Local" here — that is what a blank input CS used to
@@ -407,11 +579,7 @@ MainWindowTest {
             addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
 
-            let picker = null
-            tryVerify(() => {
-                picker = findPicker(0)
-                return picker !== null
-            }, 5000, "row 0 inputCSComboBox should be reachable")
+            const picker = waitForPicker(0)
 
             tryCompare(picker, "currentMode", CoordinateSystem.UTM)
 
@@ -1694,16 +1862,15 @@ MainWindowTest {
             verify(header !== null, "the page has a Coordinate header")
             const startWidth = header.width
             const startMinimum = page.wideMinimumWidth
-            const drag = 80
 
-            dragColumnEdge(coordinateTitle, -drag)
-            tryVerify(() => Math.abs(header.width - (startWidth - drag)) <= 2, 5000,
+            dragColumnEdge(coordinateTitle, -columnDrag)
+            tryVerify(() => Math.abs(header.width - (startWidth - columnDrag)) <= columnWidthTolerance, 5000,
                       "the Coordinate header narrows by the drag, from " + startWidth
-                      + " to about " + (startWidth - drag) + ", got " + header.width)
+                      + " to about " + (startWidth - columnDrag) + ", got " + header.width)
             const draggedWidth = header.width
             tryCompare(coordinateCell.parent, "width", draggedWidth, 5000,
                        "the fix row's coordinate cell follows its column")
-            verify(Math.abs(page.wideMinimumWidth - (startMinimum - drag)) <= 2,
+            verify(Math.abs(page.wideMinimumWidth - (startMinimum - columnDrag)) <= columnWidthTolerance,
                    "the table needs less room once a column narrows")
             verify(!page.isNarrow, "the page keeps the wide layout")
 
@@ -1764,6 +1931,121 @@ MainWindowTest {
             verify(page.wideMinimumWidth <= page.width,
                    "the widened table (" + page.wideMinimumWidth + ") still fits the page ("
                    + page.width + ")")
+        }
+
+        //! Right-clicks header \a title and returns the header's menu area
+        //! once its menu is open.
+        function openColumnHeaderMenu(title) {
+            const page = RootData.pageView.currentPageItem
+            const menuArea = findChild(page, "fixColumnHeaderMenu")
+            verify(menuArea !== null, "the column header carries a context menu")
+            const cell = rootId.headerCell(title)
+            verify(cell !== null, "the page has a " + title + " header")
+            mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+            tryVerify(() => menuArea.menu.opened, 5000,
+                      "right-clicking the " + title + " header opens its menu")
+            return menuArea
+        }
+
+        //! The item named \a name in \a menuArea's menu, null when there is none.
+        function menuItemNamed(menuArea, name) {
+            const menu = menuArea.menu
+            for (let i = 0; i < menu.count; ++i) {
+                const item = menu.itemAt(i)
+                if (item !== null && item.objectName === name) {
+                    return item
+                }
+            }
+            return null
+        }
+
+        // The header's "Reset column widths" puts a dragged column back at its
+        // default width and stores the default sentinel in its place.
+        function test_resetColumnWidthsRestoresTheDefaults() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            cave.fixStations.addFixStation()
+            findCoordinateCell(0)
+            waitForRendering(page)
+
+            const header = rootId.headerCell(coordinateTitle)
+            verify(header !== null, "the page has a Coordinate header")
+            const defaultWidth = header.width
+
+            let menuArea = openColumnHeaderMenu(coordinateTitle)
+            let resetItem = menuItemNamed(menuArea, "resetColumnWidthsMenuItem")
+            verify(resetItem !== null, "the header menu offers Reset column widths")
+            verify(!resetItem.enabled, "the reset is disabled while every column has its default width")
+            menuArea.menu.close()
+            tryVerify(() => !menuArea.menu.visible, 5000, "the header menu closes")
+
+            dragColumnEdge(coordinateTitle, -columnDrag)
+            tryVerify(() => Math.abs(header.width - (defaultWidth - columnDrag)) <= columnWidthTolerance, 5000,
+                      "the Coordinate header narrows by the drag, got " + header.width)
+            const draggedWidth = header.width
+            compare(Number(fixColumnSettingsId.value("coordinateColumnWidth", 0)), draggedWidth,
+                    "the dragged width is stored")
+
+            menuArea = openColumnHeaderMenu(coordinateTitle)
+            resetItem = menuItemNamed(menuArea, "resetColumnWidthsMenuItem")
+            verify(resetItem !== null, "the header menu offers Reset column widths")
+            verify(resetItem.enabled, "the reset is enabled once a column has a stored width")
+            mouseClick(resetItem)
+            tryVerify(() => !menuArea.menu.visible, 5000, "choosing the reset closes the menu")
+
+            tryCompare(header, "width", defaultWidth, 5000,
+                       "the Coordinate header returns to its default width")
+            tryCompare(findCoordinateCell(0).parent, "width", defaultWidth, 5000,
+                       "and the fix row's coordinate cell follows it")
+            for (const key of columnWidthKeys) {
+                compare(Number(fixColumnSettingsId.value(key, 0)), 0,
+                        key + " holds the default sentinel after the reset")
+            }
+
+            menuArea = openColumnHeaderMenu(coordinateTitle)
+            resetItem = menuItemNamed(menuArea, "resetColumnWidthsMenuItem")
+            verify(!resetItem.enabled, "the reset is disabled again once every width is the default")
+            menuArea.menu.close()
+            tryVerify(() => !menuArea.menu.visible, 5000, "the header menu closes")
+        }
+
+        // A larger font gives a page built afterwards wider default columns,
+        // while a width the user dragged stays as stored.
+        function test_defaultColumnWidthsGrowWithTheFontScale() {
+            const fontSettings = RootData.settings.fontSettings
+            fontSettings.fontBaseSize = fontSettings.defaultFontBaseSize
+            gotoFixStations()
+            waitForRendering(RootData.pageView.currentPageItem)
+            const smallWidth = rootId.headerCell("Input CS").columnWidth
+
+            fontSettings.fontBaseSize = fontSettings.defaultFontBaseSize + largerFontStep
+            RootData.newProject()
+            gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            waitForRendering(page)
+            let header = null
+            tryVerify(() => {
+                header = rootId.headerCell("Input CS")
+                return header !== null
+            }, 5000, "the rebuilt page has an Input CS header")
+            verify(header.columnWidth > smallWidth,
+                   "the default Input CS width grows with the font, from " + smallWidth
+                   + " to " + header.columnWidth)
+
+            fontSettings.fontBaseSize = fontSettings.defaultFontBaseSize
+            tryVerify(() => !page.isNarrow, 5000, "the page shows its wide layout")
+            waitForRendering(page)
+            const startWidth = header.width
+            dragColumnEdge("Input CS", -Theme.tableColumnMinimumWidth)
+            tryVerify(() => header.width < startWidth, 5000, "the Input CS column narrows")
+            const draggedWidth = header.columnWidth
+
+            fontSettings.fontBaseSize = fontSettings.defaultFontBaseSize + largerFontStep
+            tryVerify(() => Theme.fontScale > fontSettings.defaultFontBaseSize / 16.0, 5000,
+                      "the font scale grows")
+            compare(header.columnWidth, draggedWidth, "a dragged width stays as stored")
+            compare(Number(fixColumnSettingsId.value("inputCSColumnWidth", 0)), draggedWidth,
+                    "and its setting is unchanged")
         }
 
         function test_fixStationsLinkCount() {
@@ -2117,6 +2399,94 @@ MainWindowTest {
             verify(!rootId.showsText(rowA, "No fixed stations"), "a row with fixes shows no empty-state text")
         }
 
+        //! The page's help box named \a objectName, checked present.
+        function pageHelpBox(objectName) {
+            const help = findChild(RootData.pageView.currentPageItem, objectName)
+            verify(help !== null, objectName + " must exist")
+            return help
+        }
+
+        // While a filter is active, a node row counts the fixes the filter
+        // shows out of its own; a node with none at all keeps its one
+        // "No fixed stations" chip.
+        function test_aFilteredNodeRowCountsTheFixesTheFilterShows() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            typeInto(filterField(), "s1")
+            tryCompare(view, "rows", 4, 5000, "the filter keeps s1 and its node rows")
+
+            const rowA = shownRow(view, "nodeRow.A")
+            verify(rowA !== null, "A's row is shown")
+            tryVerify(() => rootId.showsText(rowA, "0 of 3 fixes"), 5000,
+                      "A shows none of its three fixes, got \""
+                      + rootId.itemsShowingText(rowA, "fix").map(item => item.text).join("\", \"") + "\"")
+            const rowSub = shownRow(view, "nodeRow.Sub")
+            verify(rowSub !== null, "Sub's row is shown")
+            tryVerify(() => rootId.showsText(rowSub, "1 of 2 fixes"), 5000,
+                      "Sub shows one of its two fixes, got \""
+                      + rootId.itemsShowingText(rowSub, "fix").map(item => item.text).join("\", \"") + "\"")
+
+            const rootRow = shownRow(view, "nodeRow.")
+            verify(rootRow !== null, "the project root's row is shown")
+            compare(rootId.itemsShowingText(rootRow, "No fixed stations").length, 1,
+                    "the fixless root keeps one \"No fixed stations\" chip")
+            verify(!rootId.showsText(rootRow, " of "), "the fixless root shows no filtered count")
+        }
+
+        // A filter that matches nothing says so, names the filter and offers
+        // to clear it; the project still has fixes, so the empty-project box
+        // stays hidden.
+        function test_aFilterThatMatchesNothingSaysSoAndClears() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const field = filterField()
+            typeInto(field, "zzz")
+            tryCompare(view, "rows", 1, 5000, "only the page's own row is left")
+
+            const noMatches = pageHelpBox("noFilterMatchesHelpBox")
+            tryVerify(() => noMatches.visible, 5000, "the no-match box shows")
+            verify(noMatches.text.indexOf("zzz") >= 0,
+                   "the no-match box names the filter, got \"" + noMatches.text + "\"")
+            verify(!pageHelpBox("noFixStationsHelpBox").visible,
+                   "the project has fixes, so the empty-project box stays hidden")
+
+            noMatches.linkActivated("clear")
+            tryCompare(field, "text", "", 5000, "the link clears the filter")
+            tryVerify(() => !noMatches.visible, 5000, "the no-match box hides once the filter clears")
+            verifyRowsMatchModel(view, initialRowCount, "every row is back")
+        }
+
+        // Clearing the filter puts every node row back on its whole count.
+        function test_clearingTheFilterRestoresTheWholeCounts() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const field = filterField()
+            typeInto(field, "s1")
+            tryCompare(view, "rows", 4, 5000, "the filter keeps s1 and its node rows")
+            const filteredA = shownRow(view, "nodeRow.A")
+            verify(filteredA !== null, "A's row is shown")
+            tryVerify(() => rootId.showsText(filteredA, "0 of 3 fixes"), 5000,
+                      "A counts its filtered fixes first")
+
+            clearField(field)
+            tryCompare(field, "text", "")
+            verifyRowsMatchModel(view, initialRowCount, "every row is back")
+
+            const expected = { "A": "3 fixes", "Sub": "2 fixes", "B": "4 fixes" }
+            for (const name in expected) {
+                tryVerify(() => {
+                    const row = shownRow(view, "nodeRow." + name)
+                    return row !== null && rootId.showsText(row, expected[name])
+                }, 5000, name + " shows " + expected[name])
+            }
+            for (const name of ["", "A", "Sub", "B"]) {
+                tryVerify(() => {
+                    const row = shownRow(view, "nodeRow." + name)
+                    return row !== null && !rootId.showsText(row, " of ")
+                }, 5000, "node row \"" + name + "\" shows no filtered count")
+            }
+        }
+
         // One button collapses every node below the page's own row and expands
         // them again; it follows a single node's chevron too.
         function test_oneButtonTogglesExpandAndCollapseAll() {
@@ -2142,6 +2512,29 @@ MainWindowTest {
             tryCompare(view, "rows", initialRowCount - 4, 5000, "collapsing B hides its fixes")
             tryCompare(button, "text", "Expand all", 5000,
                        "one closed node turns the button to expand all")
+        }
+
+        // Deleting the only collapsed node leaves nothing to expand, so the
+        // page drops its id and the toggle offers collapse again.
+        function test_deletingTheOnlyCollapsedNodeClearsTheExpandAllState() {
+            const caves = makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const page = RootData.pageView.currentPageItem
+            const button = expandToggle()
+
+            mouseClick(shownChevron(view, "B"))
+            tryCompare(view, "rows", initialRowCount - 4, 5000, "collapsing B hides its fixes")
+            tryCompare(page, "hasCollapsedNodes", true, 5000, "B is the one closed node")
+            tryCompare(button, "text", "Expand all")
+
+            const root = RootData.region.rootNode
+            root.removeNode(root.indexOfNode(caves.b))
+            tryCompare(view, "rows", initialRowCount - 5, 5000, "B's row leaves the tree")
+
+            tryCompare(page, "hasCollapsedNodes", false, 5000,
+                       "with B gone no node is closed")
+            tryCompare(expandToggle(), "text", "Collapse all", 5000,
+                       "the toggle offers collapse all again")
         }
 
         // The page's toggle is the shared ExpandCollapseButton the survey
@@ -2234,6 +2627,16 @@ MainWindowTest {
         readonly property string subtreeFixture:
             "external-centerlines/survex_subtree_fixes/ridge.svx"
         readonly property int subtreeFixCount: 4
+        // A tree tall enough to scroll, where every cave's own fixes meet
+        // the read-only rows its attachment lists.
+        readonly property int mixedCaveCount: 10
+        readonly property int mixedOwnFixCount: 5
+        readonly property string mixedOwnPrefix: "own"
+        readonly property int sweepStep: 40
+        readonly property int sweepMaxSteps: 500
+        readonly property int toggleRuns: 3
+        readonly property int toggledCaveCount: 2
+        readonly property list<string> fixControlPrefixes: ["readOnlyLock.", "fixRowMenu.", "pickFromViewButton."]
 
         function init() {
             RootData.project.newProject()
@@ -2299,6 +2702,26 @@ MainWindowTest {
             return item
         }
 
+        //! Opens the bare-fix system picker of the owner named \a ownerName:
+        //! at rest its node row shows the system as text, and a double-click on
+        //! that text loads the picker. Returns the picker.
+        function openOwnerPicker(ownerName) {
+            const label = waitForChild("bareFixSystemValue." + ownerName)
+            waitForRendering(rootId)
+            doubleTap(label)
+            return waitForChild("bareFixSystemCombo." + ownerName)
+        }
+
+        //! A new cave named \a caveName with \a tripCount trips, named t0, t1, ….
+        function makeManyTripCave(caveName, tripCount) {
+            const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, caveName)
+            for (let i = 0; i < tripCount; ++i) {
+                cave.addTrip()
+                cave.trip(i).name = "t" + i
+            }
+            return cave
+        }
+
         //! How many attached fixes \a node and its descendants list: a file's
         //! fix sits on the derived node whose file holds it.
         function subtreeAttachedFixCount(node) {
@@ -2340,10 +2763,11 @@ MainWindowTest {
             // The file names no system for d1, so it is placed at the origin.
             compare(waitForChild("noCoordinateSystemBadge.1").text, "none \u2192 origin")
             const attachedCoordinate = waitForChild("coordinateCell.1")
-            compare(attachedCoordinate.text, "0 0 0")
+            compare(attachedCoordinate.text, "0, 0, 0.000m")
             verify(waitForChild("readOnlyLock.1") !== null, "the row carries the lock")
             compare(liveChild("readOnlyLock.0"), null, "the node's own row does not")
             compare(liveChild("inputCSComboBox.1"), null, "nor a system to pick")
+            compare(liveChild("inputCSLabel.1"), null, "nor a system to double-click")
             compare(liveChild("pickFromViewButton.1"), null, "nor a pick button")
             verify(waitForChild("pickFromViewButton.0") !== null)
 
@@ -2401,9 +2825,10 @@ MainWindowTest {
             rootId.width = Theme.breakpointPanelCollapse / 2
             const narrowRow = waitForChild("narrowFixRow.0")
             const narrowLock = waitForChild("readOnlyLock.0")
-            const narrowTip = rootId.toolTipOf(narrowLock)
-            verify(narrowTip !== null && narrowTip.text.indexOf("survex_blocks.svx") >= 0,
-                   "the narrow lock's tooltip names the file")
+            const narrowTip = rootId.hoverSharedToolTip(this, narrowLock)
+            verify(narrowTip.text.indexOf("survex_blocks.svx") >= 0,
+                   "the narrow lock's tooltip names the file: \"" + narrowTip.text + "\"")
+            rootId.leaveToolTip(this, narrowTip)
             const wordedSource = Array.from(narrowRow.children).filter(
                                      child => child instanceof QC.Label
                                      && String(child.text).indexOf("survex_blocks.svx") >= 0)
@@ -2412,6 +2837,260 @@ MainWindowTest {
             compare(waitForChild("noCoordinateSystemBadge.0").text, "none \u2192 origin")
             compare(liveChild("pickFromViewButton.0"), null)
             rootId.width = wideWidth
+        }
+
+        //! The Fix Stations page's tree at \a address, once the page is current.
+        function openFixStationTree(address) {
+            RootData.pageSelectionModel.currentPageAddress = address
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "should land on fixStationPage at " + address)
+            return findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
+        }
+
+        //! The choice of \a chooser whose roleValue is \a value, null for none.
+        function delegateChoiceFor(chooser, value) {
+            const choices = chooser.choices
+            for (let i = 0; i < choices.length; ++i) {
+                if (choices[i].roleValue === value) {
+                    return choices[i]
+                }
+            }
+            return null
+        }
+
+        //! Checks that \a view's current chooser, the \a layout one, picks by
+        //! delegateKind and gives each of the four kinds a delegate of its own.
+        function verifyOneDelegatePerKind(view, layout) {
+            const chooser = view.delegate
+            compare(chooser.role, "delegateKind", "the " + layout + " chooser picks by delegateKind")
+            const kinds = [FixStationTreeModel.NodeDelegate, FixStationTreeModel.TripDelegate,
+                           FixStationTreeModel.EditableFix, FixStationTreeModel.ReadOnlyFix]
+            const delegates = kinds.map(kind => {
+                verify(kind !== undefined, "every delegate kind is a FixStationTreeModel value")
+                const choice = delegateChoiceFor(chooser, kind)
+                verify(choice !== null, "the " + layout + " chooser has a choice for kind " + kind)
+                verify(choice.delegate !== null, "and that choice has a delegate")
+                return choice.delegate
+            })
+            for (let i = 0; i < delegates.length; ++i) {
+                for (let j = i + 1; j < delegates.length; ++j) {
+                    verify(delegates[i] !== delegates[j],
+                           "the " + layout + " kinds " + kinds[i] + " and " + kinds[j]
+                           + " each have their own delegate")
+                }
+            }
+        }
+
+        // A node's own, editable fix rows and its attached, read-only ones
+        // come from separate delegates in both layouts, so the view pools
+        // each kind apart and a reused delegate never switches kind.
+        function test_fixRowKindsEachHaveTheirOwnDelegate() {
+            const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, "Kinds")
+            cave.fixStations.addFixStation("k1")
+            const view = openFixStationTree("Source/Data/Node=Kinds/Fix Stations")
+            tryVerify(() => view.rows > 0, 5000, "the tree shows the cave's fix")
+
+            const wideWidth = rootId.width
+            try {
+                verifyOneDelegatePerKind(view, "wide")
+                const wideChooser = view.delegate
+                rootId.width = Theme.breakpointPanelCollapse / 2
+                tryVerify(() => view.delegate !== wideChooser, 5000, "the narrow layout has its own chooser")
+                verifyOneDelegatePerKind(view, "narrow")
+            } finally {
+                rootId.width = wideWidth
+            }
+        }
+
+        //! Saves the project and builds mixedCaveCount caves, each with
+        //! mixedOwnFixCount fixes of its own and one trip that attaches
+        //! bare_fix.svx, so every cave's own rows meet read-only rows.
+        //! Returns the number of fix rows the caves hold.
+        function makeMixedFixCaves(projectBaseName) {
+            saveProjectAs(projectBaseName)
+            const source = TestHelper.testcasesDatasetPath(
+                             "external-centerlines/survex_bare_fix/bare_fix.svx")
+            const attachedCount = (cave) => {
+                let count = cave.attachedFixes.count
+                for (let i = 0; i < cave.tripCount; ++i) {
+                    count += cave.trip(i).attachedFixes.count
+                }
+                return count
+            }
+            let fixRows = 0
+            for (let c = 0; c < mixedCaveCount; ++c) {
+                const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, "M" + c)
+                cave.addTrip()
+                for (let f = 0; f < mixedOwnFixCount; ++f) {
+                    cave.fixStations.addFixStation(mixedOwnPrefix + c + "_" + f)
+                }
+                attachSourceToTrip(cave.trip(0), source)
+                tryVerify(() => attachedCount(cave) > 0, 20000, "the scan lists M" + c + "'s attached fix")
+                fixRows += mixedOwnFixCount + attachedCount(cave)
+            }
+            return fixRows
+        }
+
+        //! Scrolls \a view from the top to the bottom and back in sweepStep
+        //! steps, laying it out and calling \a visit after every step.
+        //! Returns the number of steps.
+        function sweep(view, visit) {
+            let steps = 0
+            while (view.contentY + view.height < view.contentHeight - 1 && steps < sweepMaxSteps) {
+                view.contentY = Math.min(view.contentY + sweepStep, view.contentHeight - view.height)
+                view.forceLayout()
+                visit()
+                ++steps
+            }
+            while (view.contentY > 0 && steps < 2 * sweepMaxSteps) {
+                view.contentY = Math.max(view.contentY - sweepStep, 0)
+                view.forceLayout()
+                visit()
+                ++steps
+            }
+            return steps
+        }
+
+        //! Collapses and expands \a view's root toggleRuns times, logging each
+        //! run's timings tagged \a tag.
+        function timeRootToggles(view, tag) {
+            for (let run = 0; run < toggleRuns; ++run) {
+                const start = Date.now()
+                view.collapse(0)
+                view.forceLayout()
+                const collapsed = Date.now()
+                view.expand(0)
+                view.forceLayout()
+                const expanded = Date.now()
+                console.info(tag, "root collapse ms", collapsed - start, "expand ms", expanded - collapsed,
+                             "rows", view.rows)
+            }
+        }
+
+        function addUnique(list, value) {
+            if (list.indexOf(value) < 0) {
+                list.push(value)
+            }
+        }
+
+        // Scrolling across the meeting of a node's own fix rows and its
+        // attached ones, and collapsing and expanding a cave above them,
+        // hands each fix delegate rows of one kind only, and
+        // the lock, the right-click menu and the pick button a delegate built
+        // stay the objects it built. The timings and object counts are
+        // logged for comparison; only the kinds and identities are asserted.
+        function test_aScrolledFixDelegateKeepsOneKindAndItsControls() {
+            const fixRows = makeMixedFixCaves("fix-station-delegate-kinds")
+            const view = openFixStationTree("Source/Data/Fix Stations")
+            // The root, every cave's node row and every fix.
+            tryVerify(() => view.rows >= 1 + mixedCaveCount + fixRows, 10000, "every node and fix has a row")
+            waitForRendering(rootId)
+            verify(view.contentHeight > 2 * view.height,
+                   "the tree is tall enough to scroll, content " + view.contentHeight
+                   + " view " + view.height + "; raise mixedCaveCount")
+            const rowCount = view.rows
+
+            timeRootToggles(view, "SP2")
+            tryCompare(view, "rows", rowCount, 5000, "expanding the root shows every row again")
+
+            const scrollStart = Date.now()
+            const timedSteps = sweep(view, () => {})
+            console.info("SP2 scroll top-bottom-top ms", Date.now() - scrollStart, "steps", timedSteps,
+                         "rows", rowCount)
+
+            // One record per fix delegate: the stations and kinds it showed
+            // and the lock, menu and pick button objects found under it.
+            const records = []
+            const recordOf = (item) => {
+                const known = records.find(record => record.item === item)
+                if (known !== undefined) {
+                    return known
+                }
+                const record = { item: item, stations: [], kinds: [], controls: [[], [], []] }
+                records.push(record)
+                return record
+            }
+            const shownFixItems = () => {
+                const items = []
+                for (let row = 0; row < view.rows; ++row) {
+                    const item = view.itemAtCell(Qt.point(0, row))
+                    if (item !== null && String(item.objectName).startsWith("fixRow.")) {
+                        items.push(item)
+                    }
+                }
+                return items
+            }
+            const kindOf = (item) => String(item.stationName).startsWith(mixedOwnPrefix) ? "editable" : "readOnly"
+            const visit = () => {
+                for (const item of shownFixItems()) {
+                    const record = recordOf(item)
+                    addUnique(record.stations, String(item.stationName))
+                    addUnique(record.kinds, kindOf(item))
+                    for (let p = 0; p < fixControlPrefixes.length; ++p) {
+                        const control = rootId.findChildWithPrefix(item, fixControlPrefixes[p])
+                        if (control !== null) {
+                            addUnique(record.controls[p], control)
+                        }
+                    }
+                }
+            }
+            visit()
+            const trackedSteps = sweep(view, visit)
+
+            // Collapsing a cave mid-tree shifts every row below it, and the
+            // pool hands each shifted row the delegate last used at that
+            // table row, which can be a delegate of the other fix kind.
+            const nodeRowOf = (name) => {
+                for (let row = 0; row < view.rows; ++row) {
+                    const item = view.itemAtCell(Qt.point(0, row))
+                    if (item !== null && item.objectName === "nodeRow." + name) {
+                        return row
+                    }
+                }
+                return -1
+            }
+            for (let c = 0; c < toggledCaveCount; ++c) {
+                const name = "M" + c
+                const nodeRow = nodeRowOf(name)
+                verify(nodeRow >= 0, name + " has a row on screen")
+                const start = Date.now()
+                view.collapse(nodeRow)
+                view.forceLayout()
+                visit()
+                view.expand(nodeRow)
+                view.forceLayout()
+                visit()
+                console.info("SP2 node", name, "collapse+expand ms", Date.now() - start)
+            }
+            tryCompare(view, "rows", rowCount, 5000, "expanding the caves shows every row again")
+
+            const reused = records.filter(record => record.stations.length > 1)
+            const mixed = records.filter(record => record.kinds.length > 1)
+            const rebuilt = records.filter(record => record.controls.some(objects => objects.length > 1))
+            const editable = records.filter(record => record.kinds.indexOf("editable") >= 0)
+            const readOnly = records.filter(record => record.kinds.indexOf("readOnly") >= 0)
+            const distinct = fixControlPrefixes.map((prefix, p) =>
+                records.reduce((sum, record) => sum + record.controls[p].length, 0))
+            console.info("SP2 sweep steps", trackedSteps, "fix delegates", records.length,
+                         "reused", reused.length, "showing both kinds", mixed.length,
+                         "rebuilding a control", rebuilt.length,
+                         "editable delegates", editable.length, "read-only delegates", readOnly.length)
+            console.info("SP2 distinct objects seen: locks", distinct[0], "menus", distinct[1],
+                         "pick buttons", distinct[2])
+
+            for (const kind of ["editable", "readOnly"]) {
+                const item = shownFixItems().find(shown => kindOf(shown) === kind)
+                if (item !== undefined) {
+                    console.info("SP2 one", kind, "fix delegate: loaders",
+                                 rootId.countDescendants(item, child => child instanceof Loader),
+                                 "items", rootId.countDescendants(item, () => true))
+                }
+            }
+
+            verify(reused.length > 0, "the sweep hands some fix delegate a second row")
+            compare(mixed.length, 0, "every fix delegate shows rows of one kind only")
+            compare(rebuilt.length, 0, "every fix delegate keeps the lock, menu and pick button it built")
         }
 
         // The lock's tooltip names the file in the tooltip colors in the
@@ -2467,8 +3146,8 @@ MainWindowTest {
             // The System column names the system and the code cavern places it in.
             compare(waitForChild("inputCSText.0").text, "North American 1927, UTM zone 13N (EPSG:26713)")
             // The .mak writes [f,1568241.5,14534120.7,5429.8]; the row shows
-            // the meters cavern solves with, and no unit letter.
-            compare(waitForChild("coordinateCell.0").text, "478000.0092 4429999.98936 1655.00304")
+            // the meters cavern solves with, in the project's units.
+            compare(waitForChild("coordinateCell.0").text, "478000.0092, 4429999.98936, 1655.003m")
             verify(waitForChild("readOnlyLock.0") !== null, "the row is the file's")
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + String(cave.name)
@@ -2528,10 +3207,36 @@ MainWindowTest {
             tryCompare(findChild(page, "fixStationTreeView"), "count", 2)
             compare(waitForChild("stationCell.0").text, "ref.A")
             verify(waitForChild("referenceChip.0") !== null, "the reference fix carries the chip")
-            compare(waitForChild("coordinateCell.0").text, "10 20 30")
+            compare(waitForChild("coordinateCell.0").text, "10, 20, 30.000m")
 
             compare(waitForChild("stationCell.1").text, "ref.B")
             compare(liveChild("referenceChip.1"), null, "the plain fix carries none")
+        }
+
+        // A file fix in a grid shows its coordinate in the project's units,
+        // the way a native row does, and its editor offers the text as the
+        // file writes it.
+        function test_anAttachedRowShowsItsCoordinateInTheProjectUnits() {
+            saveProjectAs("fix-station-attached-units")
+            const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
+                                              "external-centerlines/survex_native_cs_scope/own_cs_fix.svx"))
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
+
+            const page = openFixStationsOf(cave)
+            tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
+            compare(waitForChild("stationCell.0").text, "scoped.S1")
+            const coordinateCell = waitForChild("coordinateCell.0")
+            const previousUnits = RootData.region.unitSystem
+            RootData.region.unitSystem = Units.Metric
+            tryCompare(coordinateCell, "text", "500200, 3000000, 100.000m", 5000,
+                       "the file's meters read with the project's unit")
+
+            RootData.region.unitSystem = Units.Imperial
+            tryCompare(coordinateCell, "text", "500200, 3000000, 328.08ft", 5000,
+                       "the elevation follows the project's unit system, suffix and all")
+            compare(coordinateCell.editValue, "500200 3000000 100")
+
+            RootData.region.unitSystem = previousUnits
         }
 
         // In a georeferenced project, a file fix with no coordinate system
@@ -2561,11 +3266,15 @@ MainWindowTest {
             tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
             compare(waitForChild("stationCell.0").text, "bare.A")
 
-            verify(waitForChild("bareFixSystemCombo.AttachedCave") !== null,
-                   "the owner's page offers a system for the file's bare fixes")
+            const ownerRow = waitForChild("nodeRow.AttachedCave")
+            compare(rootId.countWithPrefix(ownerRow, "bareFixSystemCombo."), 0,
+                    "the owner's row builds no picker at rest")
+            compare(waitForChild("bareFixSystemValue.AttachedCave").text, "unset",
+                    "the owner's page names the unset system for the file's bare fixes")
             const badge = waitForChild("noCoordinateSystemBadge.0")
 
-            page.setBareFixCoordinateSystem(0, "UTM48N")
+            const combo = openOwnerPicker("AttachedCave")
+            combo.committed("UTM48N")
             tryVerify(() => cave.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
                       "the choice lands on the attachment")
             tryVerify(() => badge.text.indexOf("UTM48N") >= 0, 5000,
@@ -2601,7 +3310,7 @@ MainWindowTest {
 
             const page = openFixStationsOf(cave)
             tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
-            verify(waitForChild("bareFixSystemCombo.AttachedCave") !== null)
+            verify(waitForChild("bareFixSystemValue.AttachedCave") !== null)
 
             page.setBareFixCoordinateSystem(0, "UTM48N")
             tryVerify(() => cave.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
@@ -2626,7 +3335,7 @@ MainWindowTest {
 
             const page = openFixStationsOf(cave)
             tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
-            verify(waitForChild("bareFixSystemCombo.AttachedCave") !== null)
+            verify(waitForChild("bareFixSystemValue.AttachedCave") !== null)
             page.setBareFixCoordinateSystem(0, "UTM48N")
             tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 10000,
                       "the choice gives the project a frame")
@@ -2743,8 +3452,10 @@ MainWindowTest {
 
             // The owner's control sits on the owner's node row.
             const ownerRow = waitForChild("nodeRow.ridge")
-            tryVerify(() => findChild(ownerRow, "bareFixSystemCombo.ridge") !== null, 5000,
-                      "the owner's row offers a system for the file's bare fixes")
+            tryVerify(() => findChild(ownerRow, "bareFixSystemValue.ridge") !== null, 5000,
+                      "the owner's row names a system for the file's bare fixes")
+            verify(isInside(openOwnerPicker("ridge"), ownerRow),
+                   "and opens its picker there on a double-click")
 
             const entrancesRow = waitForChild("tripRow.entrances")
             tryVerify(() => rootId.showsText(entrancesRow, "without coordinate system"), 5000,
@@ -2811,6 +3522,8 @@ MainWindowTest {
                       "the trip row carries the block's badge")
             compare(findChild(tripRow, "bareFixSystemCombo.simmons_hall"), null,
                     "the trip row offers no system of its own")
+            compare(findChild(tripRow, "bareFixSystemValue.simmons_hall"), null,
+                    "nor names one")
 
             const unsetInherited = liveChild("inheritedSystem.simmons_hall")
             verify(unsetInherited === null || !unsetInherited.visible,
@@ -2818,8 +3531,10 @@ MainWindowTest {
 
             // The owner's control stays on the owner's node row.
             const ownerRow = waitForChild("nodeRow.leaf")
-            tryVerify(() => findChild(ownerRow, "bareFixSystemCombo.leaf") !== null, 5000,
-                      "the owner's row offers a system for the file's bare fixes")
+            tryVerify(() => findChild(ownerRow, "bareFixSystemValue.leaf") !== null, 5000,
+                      "the owner's row names a system for the file's bare fixes")
+            verify(isInside(openOwnerPicker("leaf"), ownerRow),
+                   "and opens its picker there on a double-click")
             page.setBareFixCoordinateSystem(0, "UTM48N")
             tryVerify(() => root.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
                       "the choice lands on the attachment")
@@ -2842,6 +3557,425 @@ MainWindowTest {
             const toggle = findChild(page, "expandToggleButton")
             verify(toggle !== null, "the page has one expand/collapse toggle")
             tryVerify(() => toggle.visible, 5000, "a page whose rows are trip rows offers Collapse all")
+        }
+
+        //! Attaches bare_fix.svx to trips t3 and t17 of \a cave and waits for
+        //! the scan to list each one's bare fix on the cave.
+        function attachBareFixesToTwoTrips(cave) {
+            const source = TestHelper.testcasesDatasetPath(
+                             "external-centerlines/survex_bare_fix/bare_fix.svx")
+            attachSourceToTrip(cave.trip(3), source)
+            attachSourceToTrip(cave.trip(17), source)
+            tryVerify(() => cave.attachedFixes.bareFixCount(cave.trip(3).id) > 0
+                            && cave.attachedFixes.bareFixCount(cave.trip(17).id) > 0,
+                      20000, "the scan lists both trips' bare fixes on the cave")
+        }
+
+        //! Logs the owner labels and pickers under \a item, tagged \a what.
+        function logOwnerControls(what, item) {
+            console.info("SP1", what,
+                         "bareFixSystemValue", rootId.countWithPrefix(item, "bareFixSystemValue."),
+                         "bareFixSystemCombo", rootId.countWithPrefix(item, "bareFixSystemCombo."),
+                         "CSComboBox", rootId.countCSComboBoxes(item))
+        }
+
+        // A node row names the system of each trip whose attachment holds a
+        // fix with no coordinate system, and builds a picker only for the one
+        // the user double-clicks: a cave of many trips builds nothing for the
+        // trips that need none.
+        function test_aNodeRowBuildsOwnerControlsOnlyForTripsWithBareFixes() {
+            saveProjectAs("fix-station-owner-controls")
+            const big = makeManyTripCave("Big", 40)
+            attachBareFixesToTwoTrips(big)
+
+            openFixStationsOf(big)
+            const row = waitForChild("nodeRow.Big")
+            waitForRendering(rootId)
+            logOwnerControls("Big row at rest", row)
+            compare(rootId.countWithPrefix(row, "bareFixSystemCombo."), 0,
+                    "no picker at rest")
+            compare(rootId.countCSComboBoxes(row), 0, "no CSComboBox at rest")
+            waitForChild("bareFixSystemValue.t3")
+            waitForChild("bareFixSystemValue.t17")
+            compare(rootId.countWithPrefix(row, "bareFixSystemValue."), 2,
+                    "one owner label per trip whose file holds a bare fix")
+
+            // One picker is open at a time.
+            openOwnerPicker("t17")
+            const combo = openOwnerPicker("t3")
+            logOwnerControls("Big row with t3's picker open", row)
+            compare(rootId.countWithPrefix(row, "bareFixSystemCombo."), 1,
+                    "opening t3's picker closes t17's")
+            compare(rootId.countCSComboBoxes(row), 1)
+            compare(liveChild("bareFixSystemCombo.t17"), null)
+
+            combo.committed("UTM48N")
+            tryVerify(() => big.trip(3).externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
+                      "the choice lands on t3's attachment")
+            compare(big.trip(17).externalCenterline.fixCoordinateSystem, "",
+                    "and on no other trip")
+            RootData.futureManagerModel.waitForFinished()
+            compare(liveChild("bareFixSystemCombo.t3"), combo,
+                    "the picker stays open across the rescan its choice starts")
+
+            keyClick(Qt.Key_Escape)
+            tryVerify(() => rootId.countWithPrefix(row, "bareFixSystemCombo.") === 0, 5000,
+                      "Escape closes the picker")
+            tryCompare(waitForChild("bareFixSystemValue.t3"), "text", CSFormat.displayName("UTM48N"),
+                       5000, "and the label names the chosen system")
+            compare(waitForChild("bareFixSystemValue.t17").text, "unset")
+        }
+
+        // A node none of whose trips' files holds a bare fix builds no owner
+        // control at all.
+        function test_aNodeRowWithNoBareFixOwnersBuildsNoOwnerControls() {
+            const plain = makeManyTripCave("Plain", 40)
+            openFixStationsOf(plain)
+            const row = waitForChild("nodeRow.Plain")
+            logOwnerControls("Plain row", row)
+            compare(rootId.countWithPrefix(row, "bareFixSystemValue."), 0, "no owner label")
+            compare(rootId.countWithPrefix(row, "bareFixSystemCombo."), 0, "no owner picker")
+            compare(rootId.countCSComboBoxes(row), 0, "no CSComboBox")
+        }
+
+        // Collapsing and expanding the region's root and scrolling the whole
+        // tree build no system picker on any node row; only the double-click
+        // does. The timings are logged for comparison, never asserted.
+        function test_aRootCollapseAndExpandBuildsNoSystemPickers() {
+            saveProjectAs("fix-station-owner-controls-toggle")
+            const big = makeManyTripCave("Big", 40)
+            attachBareFixesToTwoTrips(big)
+            const caveCount = 40
+            for (let c = 1; c <= caveCount; ++c) {
+                makeManyTripCave("C" + c, 20 + (c * 7) % 30)
+            }
+
+            const view = openFixStationTree("Source/Data/Fix Stations")
+            // The root, Big, Big's two attached fixes and every cave.
+            tryCompare(view, "rows", caveCount + 4, 10000, "every node and fix has a row")
+            waitForChild("nodeRow.Big")
+            waitForRendering(rootId)
+            logOwnerControls("tree at open", view.contentItem)
+            const pickersAtOpen = rootId.countWithPrefix(view.contentItem, "bareFixSystemCombo.")
+
+            timeRootToggles(view, "SP1")
+
+            const scrollStart = Date.now()
+            const steps = sweep(view, () => {})
+            console.info("SP1 scroll top-bottom-top ms", Date.now() - scrollStart, "steps", steps)
+
+            logOwnerControls("tree after the toggles and the scroll", view.contentItem)
+            compare(pickersAtOpen, 0, "the open tree builds no picker")
+            compare(rootId.countWithPrefix(view.contentItem, "bareFixSystemCombo."), 0,
+                    "the toggles and the scroll build no picker")
+            compare(rootId.countWithPrefix(waitForChild("nodeRow.Big"), "bareFixSystemValue."), 2,
+                    "Big's row still names its two owners' systems")
+        }
+
+        readonly property string popupCaveName: "Popups"
+        readonly property string popupTripName: "t0"
+        readonly property string popupUtmCS: "EPSG:32612"
+        readonly property string popupOwnerCS: "UTM48N"
+        //! An easting past UTM's domain, so the row's coordinate warns.
+        readonly property double popupOutOfDomainEasting: 1478000.0
+        readonly property double popupNorthing: 4430000.0
+
+        //! \a root and every object under it reachable through an item's data,
+        //! a popup's contentData and a Loader's item, each once.
+        function objectsUnder(root) {
+            const seen = new Set()
+            const pending = [root]
+            while (pending.length > 0) {
+                const obj = pending.pop()
+                if (obj === null || obj === undefined || seen.has(obj)) {
+                    continue
+                }
+                seen.add(obj)
+                const data = obj.data !== undefined ? obj.data
+                                                    : (obj.contentData !== undefined ? obj.contentData : [])
+                for (let i = 0; i < data.length; ++i) {
+                    pending.push(data[i])
+                }
+                if (obj instanceof Loader && obj.item !== null) {
+                    pending.push(obj.item)
+                }
+            }
+            return Array.from(seen)
+        }
+
+        function popupsUnder(root) {
+            return objectsUnder(root).filter(obj => obj instanceof T.Popup)
+        }
+
+        function layersUnder(root) {
+            return objectsUnder(root).filter(obj => obj.layer !== undefined && obj.layer !== null
+                                                    && obj.layer.enabled)
+        }
+
+        function namesOf(objects) {
+            return objects.map(obj => String(obj)).join(" ")
+        }
+
+        //! How many of \a objects there are and which, read now: the layout
+        //! switch destroys the wide rows' objects.
+        function tally(what, objects) {
+            return { what: what, count: objects.length, names: namesOf(objects) }
+        }
+
+        //! Logs \a row's object, item, popup and layer counts tagged \a what.
+        function logRowCost(what, row) {
+            console.info("SP3", what, row.objectName,
+                         "objects", objectsUnder(row).length,
+                         "items", rootId.countDescendants(row, () => true),
+                         "popups", popupsUnder(row).length,
+                         "layers", layersUnder(row).length)
+        }
+
+        //! Saves the project and builds popupCaveName with three fixes of its
+        //! own and one trip that attaches bare_fix.svx: own0 names popupUtmCS,
+        //! own1's coordinate leaves its system's domain, and the third has
+        //! neither a name nor a system. Opens the cave's Fix Stations tree and returns it.
+        function makePopupFixture(projectBaseName) {
+            saveProjectAs(projectBaseName)
+            const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, popupCaveName)
+            cave.addTrip()
+            cave.trip(0).name = popupTripName
+            const model = cave.fixStations
+            const utmRow = model.addFixStation("own0")
+            model.setData(model.index(utmRow), popupUtmCS, FixStationModel.InputCSRole)
+            const outOfDomainRow = model.addFixStation("own1")
+            model.setData(model.index(outOfDomainRow), "EPSG:32613", FixStationModel.InputCSRole)
+            model.setData(model.index(outOfDomainRow), popupOutOfDomainEasting, FixStationModel.EastingRole)
+            model.setData(model.index(outOfDomainRow), popupNorthing, FixStationModel.NorthingRole)
+            model.addFixStation()
+            model.setData(model.index(model.rowCount() - 1), "", FixStationModel.InputCSRole)
+            attachSourceToTrip(cave.trip(0), TestHelper.testcasesDatasetPath(
+                                   "external-centerlines/survex_bare_fix/bare_fix.svx"))
+            tryVerify(() => subtreeAttachedFixCount(cave) > 0, 20000, "the scan lists the file's fix")
+
+            const view = openFixStationTree("Source/Data/Node=" + popupCaveName + "/Fix Stations")
+            tryVerify(() => liveChild("fixRow.own0") !== null && readOnlyFixRow(view) !== null,
+                      10000, "the tree shows an editable and a read-only fix row")
+            waitForRendering(rootId)
+            return view
+        }
+
+        //! The first shown fix row that carries the read-only lock.
+        function readOnlyFixRow(view) {
+            for (let row = 0; row < view.rows; ++row) {
+                const item = view.itemAtCell(Qt.point(0, row))
+                if (item !== null && String(item.objectName).startsWith("fixRow.")
+                        && rootId.countWithPrefix(item, "readOnlyLock.") > 0) {
+                    return item
+                }
+            }
+            return null
+        }
+
+        // A fix row at rest builds no tooltip, menu or offscreen layer: each
+        // waits for the hover or right-click that shows it, in both layouts.
+        // The per-row counts and the toggle and layout timings are logged
+        // for comparison; only the counts are asserted.
+        function test_aFixRowAtRestBuildsNoPopupOrLayer() {
+            const view = makePopupFixture("fix-station-popups-at-rest")
+            const wideEditable = liveChild("fixRow.own0")
+            const wideReadOnly = readOnlyFixRow(view)
+            const editableRow = wideEditable.fixRow
+            logRowCost("wide editable", wideEditable)
+            logRowCost("wide read-only", wideReadOnly)
+            const counts = [
+                tally("a wide editable row's popups", popupsUnder(wideEditable)),
+                tally("a wide read-only row's popups", popupsUnder(wideReadOnly)),
+                tally("a wide read-only row's layers", layersUnder(wideReadOnly)),
+            ]
+
+            timeRootToggles(view, "SP3")
+
+            const wideWidth = rootId.width
+            try {
+                const start = Date.now()
+                rootId.width = Theme.breakpointPanelCollapse / 2
+                tryVerify(() => liveChild("narrowFixRow." + editableRow) !== null, 5000,
+                          "the narrow layout shows the rows")
+                console.info("SP3 first narrow layout build ms", Date.now() - start)
+                waitForRendering(rootId)
+                const narrowEditable = liveChild("fixRow.own0")
+                // The narrow rows are taller, so the read-only one sits below the fold.
+                view.contentY = Math.max(0, view.contentHeight - view.height)
+                view.forceLayout()
+                tryVerify(() => readOnlyFixRow(view) !== null, 5000, "the narrow layout shows the read-only row")
+                const narrowReadOnly = readOnlyFixRow(view)
+                logRowCost("narrow editable", narrowEditable)
+                logRowCost("narrow read-only", narrowReadOnly)
+                counts.push(tally("a narrow editable row's popups", popupsUnder(narrowEditable)))
+                counts.push(tally("a narrow read-only row's popups", popupsUnder(narrowReadOnly)))
+                counts.push(tally("a narrow read-only row's layers", layersUnder(narrowReadOnly)))
+            } finally {
+                rootId.width = wideWidth
+            }
+            tryVerify(() => liveChild("narrowFixRow." + editableRow) === null, 5000,
+                      "the wide layout is back")
+
+            for (const count of counts) {
+                compare(count.count, 0, count.what + " at rest: " + count.names)
+            }
+
+            // The lock is tinted without an offscreen layer, in the subtle
+            // text color it showed in before.
+            const lock = waitForChild("readOnlyLock." + readOnlyFixRow(view).fixRow)
+            const lockImage = objectsUnder(lock).find(obj => obj.source !== undefined
+                                                         && String(obj.source).indexOf("lock.svg") >= 0)
+            verify(lockImage !== undefined, "the lock shows lock.svg")
+            verify(lockImage.color !== undefined, "the lock image " + lockImage + " carries its own color")
+            verify(Qt.colorEqual(lockImage.color, Theme.textSubtle),
+                   "the lock reads " + lockImage.color + ", Theme " + Theme.textSubtle)
+        }
+
+        // Hovering a fix row's system, warnings, lock and badge, and the
+        // node row's bare-fix system, shows the window's one shared tooltip
+        // with the text each showed before.
+        function test_aFixRowsHoverShowsTheSharedToolTip() {
+            const view = makePopupFixture("fix-station-popups-hover")
+            const editable = liveChild("fixRow.own0")
+
+            const csLabel = waitForChild("inputCSLabel." + editable.fixRow)
+            let tip = rootId.hoverSharedToolTip(this, csLabel)
+            verify(tip.text.indexOf(CSFormat.displayName(popupUtmCS)) >= 0,
+                   "the tooltip names the full system: \"" + tip.text + "\"")
+            rootId.leaveToolTip(this, tip)
+
+            const outOfDomain = liveChild("fixRow.own1")
+            const coordinateWarning = waitForChild("coordinateWarning." + outOfDomain.fixRow)
+            tip = rootId.hoverSharedToolTip(this, coordinateWarning)
+            compare(tip.text, coordinateWarning.message, "the coordinate warning says what is wrong")
+            rootId.leaveToolTip(this, tip)
+
+            const unnamed = liveChild("fixRow.")
+            const noSystemLabel = waitForChild("inputCSLabel." + unnamed.fixRow)
+            compare(noSystemLabel.text, "none")
+            rootId.verifyNoSharedToolTip(this, noSystemLabel)
+
+            const stationWarning = waitForChild("stationWarning." + unnamed.fixRow)
+            tip = rootId.hoverSharedToolTip(this, stationWarning)
+            compare(tip.text, stationWarning.message, "the station warning says what is wrong")
+            rootId.leaveToolTip(this, tip)
+
+            const readOnly = readOnlyFixRow(view)
+            tip = rootId.hoverSharedToolTip(this, waitForChild("readOnlyLock." + readOnly.fixRow))
+            verify(tip.text.indexOf("bare_fix.svx") >= 0, "the lock names the file: \"" + tip.text + "\"")
+            rootId.leaveToolTip(this, tip)
+
+            const badge = waitForChild("noCoordinateSystemBadge." + readOnly.fixRow)
+            tip = rootId.hoverSharedToolTip(this, badge)
+            verify(tip.text.indexOf(badge.unset ? "bare_fix.svx" : badge.readInWarning) >= 0,
+                   "the badge says where the fix is placed: \"" + tip.text + "\"")
+            rootId.leaveToolTip(this, tip)
+
+            const ownerRow = waitForChild("nodeRow." + popupCaveName)
+            compare(popupsUnder(ownerRow).length, 0,
+                    "the owner's row builds no tooltip at rest: " + namesOf(popupsUnder(ownerRow)))
+            const ownerLabel = waitForChild("bareFixSystemValue." + popupTripName)
+            compare(ownerLabel.text, "unset")
+            rootId.verifyNoSharedToolTip(this, ownerLabel)
+
+            const combo = openOwnerPicker(popupTripName)
+            combo.committed(popupOwnerCS)
+            keyClick(Qt.Key_Escape)
+            tryCompare(ownerLabel, "text", CSFormat.displayName(popupOwnerCS))
+            tip = rootId.hoverSharedToolTip(this, ownerLabel)
+            compare(tip.text, CSFormat.inlineDescription(popupOwnerCS),
+                    "the owner's system names the full system")
+            rootId.leaveToolTip(this, tip)
+        }
+
+        //! Right-clicks \a stationCell and checks that its row's menu, which
+        //! nothing builds before, opens offering to remove \a stationName and
+        //! hands that row to the remove question. Opens it a second time and
+        //! checks that it opens where the first click opened it.
+        function verifyRightClickMenu(stationCell, rowMenu, stationName) {
+            compare(rowMenu.menu, null, "the row builds no menu before a right-click")
+            waitForRendering(rootId)
+            const clickX = stationCell.width / 2
+            const clickY = stationCell.height / 2
+            mouseClick(stationCell, clickX, clickY, Qt.RightButton)
+            const menu = rowMenu.menu
+            verify(menu !== null, "the first right-click builds the menu")
+            tryVerify(() => menu.opened, 5000, "and opens it")
+            const menuAt = menu.parent.mapToItem(stationCell, menu.x, menu.y)
+            fuzzyCompare(menuAt.x, clickX, 1, "the menu opens at the pointer")
+            fuzzyCompare(menuAt.y, clickY, 1)
+            compare(menu.count, 1, "the menu holds one item")
+            compare(menu.itemAt(0).text, "Remove " + stationName)
+            const firstX = menu.x
+            const firstY = menu.y
+
+            const removeAskBox = findChild(RootData.pageView.currentPageItem, "removeChallange")
+            mouseClick(menu.itemAt(0))
+            tryVerify(() => !menu.visible, 5000, "choosing Remove closes the menu")
+            tryVerify(() => removeAskBox.visible, 5000, "and asks whether to remove the fix")
+            compare(removeAskBox.removeName, stationName)
+            compare(removeAskBox.indexToRemove, rowMenu.row)
+            mouseClick(findChild(removeAskBox, "cancelButton"))
+            tryVerify(() => !removeAskBox.visible)
+
+            mouseClick(stationCell, clickX, clickY, Qt.RightButton)
+            compare(rowMenu.menu, menu, "the row keeps the menu it built")
+            tryVerify(() => menu.opened, 5000, "a second right-click opens it again")
+            compare(menu.x, firstX, "where the first click opened it")
+            compare(menu.y, firstY)
+            menu.close()
+            tryVerify(() => !menu.visible)
+        }
+
+        // A fix row's right-click menu is built by the first right-click, and
+        // that click opens it, in both layouts.
+        function test_aFixRowsFirstRightClickBuildsAndOpensItsMenu() {
+            makePopupFixture("fix-station-popups-menu")
+            const fixRow = liveChild("fixRow.own0").fixRow
+            verifyRightClickMenu(waitForChild("stationCell." + fixRow),
+                                 liveChild("fixRowMenu." + fixRow), "own0")
+
+            const wideWidth = rootId.width
+            try {
+                rootId.width = Theme.breakpointPanelCollapse / 2
+                tryVerify(() => liveChild("narrowFixRow." + fixRow) !== null, 5000,
+                          "the narrow layout shows the rows")
+                const narrowRow = liveChild("fixRow.own0")
+                verifyRightClickMenu(waitForChild("stationCell." + narrowRow.fixRow),
+                                     liveChild("fixRowMenu." + narrowRow.fixRow), "own0")
+            } finally {
+                rootId.width = wideWidth
+            }
+        }
+
+        // The pick button builds its own width-capped tooltip on the first
+        // hover, and that tooltip still waits out its delay.
+        function test_thePickButtonBuildsItsToolTipOnHover() {
+            makePopupFixture("fix-station-popups-pick")
+            const row = liveChild("fixRow.own0")
+            const button = waitForChild("pickFromViewButton." + row.fixRow)
+            verify(!button.canPick, "the project has no frame, so the tooltip holds the long sentence")
+            compare(popupsUnder(button).length, 0,
+                    "the pick button builds no tooltip before a hover: " + namesOf(popupsUnder(button)))
+
+            waitForRendering(rootId)
+            const hoverStart = Date.now()
+            mouseMove(button, button.width / 2, button.height / 2)
+            const tip = objectsUnder(button).find(obj => obj.objectName === "pickFromViewToolTip")
+            verify(tip !== undefined, "hovering builds the button's tooltip: " + namesOf(popupsUnder(button)))
+            verify(!tip.visible, "the tooltip waits for its delay")
+            tryVerify(() => tip.visible, 5000, "then shows")
+            const shownAfter = Date.now() - hoverStart
+            console.info("SP3 pick tooltip shown after ms", shownAfter, "delay", button.tooltipDelay)
+            verify(shownAfter >= button.tooltipDelay - 50,
+                   "the tooltip showed after " + shownAfter + " ms, its delay is " + button.tooltipDelay)
+            compare(tip.text, button.helpText)
+            verify(tip.implicitWidth > button.tooltipWidth,
+                   "the sentence is " + tip.implicitWidth + " wide, past the cap")
+            compare(tip.width, button.tooltipWidth, "the cap wraps it")
+            rootId.leaveToolTip(this, tip)
+            compare(objectsUnder(button).find(obj => obj.objectName === "pickFromViewToolTip"), tip,
+                    "the button keeps the tooltip it built, so it fades out like the others")
         }
     }
 }

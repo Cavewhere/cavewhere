@@ -11,7 +11,7 @@
 TEST_CASE("Cache image provider round-trips encoded keys", "[cwCacheImageProvider]")
 {
     cwDiskCacher::Key key;
-    key.path = QDir(QStringLiteral("Fever Dreams/trips/Trip 2/notes"));
+    key.path = QStringLiteral("Fever Dreams/trips/Trip 2/notes");
     key.id = QStringLiteral("156-16_420x632crop-5.jpeg.cw_img_cache");
     key.checksum = QStringLiteral("abc123def456");
 
@@ -19,7 +19,7 @@ TEST_CASE("Cache image provider round-trips encoded keys", "[cwCacheImageProvide
 
     cwDiskCacher::Key decoded;
     REQUIRE(cwCacheImageProvider::decodeKey(encoded, &decoded));
-    CHECK(decoded.path.path() == key.path.path());
+    CHECK(decoded.path == key.path);
     CHECK(decoded.id == key.id);
     CHECK(decoded.checksum == key.checksum);
 }
@@ -60,7 +60,7 @@ TEST_CASE("Cache image provider strips ?v= and serves the cached image", "[cwCac
     REQUIRE(tempDir.isValid());
 
     cwDiskCacher::Key key;
-    key.path = QDir(QStringLiteral("sketch-icons"));
+    key.path = QStringLiteral("sketch-icons");
     key.id = QStringLiteral("deadbeef-cafebabe");
 
     cwDiskCacher cacher(tempDir.path());
@@ -104,7 +104,7 @@ TEST_CASE("Cache image provider folds the version token into the scaled cache ke
     REQUIRE(tempDir.isValid());
 
     cwDiskCacher::Key key;
-    key.path = QDir(QStringLiteral("sketch-icons"));
+    key.path = QStringLiteral("sketch-icons");
     key.id = QStringLiteral("feedface-0001");
 
     cwDiskCacher cacher(tempDir.path());

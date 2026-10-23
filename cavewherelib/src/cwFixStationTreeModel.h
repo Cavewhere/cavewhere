@@ -53,6 +53,15 @@ public:
     };
     Q_ENUM(RowKind)
 
+    //! The delegate that draws a row (DelegateKindRole).
+    enum DelegateKind {
+        NodeDelegate = 0,
+        TripDelegate = 1,
+        EditableFix = 2,
+        ReadOnlyFix = 3
+    };
+    Q_ENUM(DelegateKind)
+
     //! Numbered clear of the fix table's role blocks (cwFixStationModel's
     //! Qt::UserRole + 1…, cwFixStationDiagnosticsModel's + 100…,
     //! cwAttachedFixModel's + 200…), which fix rows forward.
@@ -89,7 +98,14 @@ public:
         SubtreeUnsetFixCountRole,
         //! The cwTrip a trip row stands for, or whose fixes a fix row lists;
         //! null on every other row.
-        TripObjectRole
+        TripObjectRole,
+        //! On a node row, the node's trips, in trip order, whose own
+        //! attachment lists a fix that names no coordinate system; each
+        //! chooses the system those fixes read in. Empty on every other row.
+        BareFixOwnerTripsRole,
+        //! The delegate that draws the row: a node row, a trip row, one of a
+        //! node's own editable fixes, or a fix an attached file holds.
+        DelegateKindRole
     };
     Q_ENUM(Roles)
 
@@ -153,6 +169,10 @@ private:
     };
     LeavingRows m_leavingRows;
     QSet<const QObject*> m_leavingHolders;
+
+    //! Each connected node's BareFixOwnerTripsRole, kept so the role is
+    //! announced only when the list changes.
+    QHash<const cwSurveyNode*, QList<cwTrip*>> m_bareFixOwnerTrips;
 
     bool isLeaving(const QObject* holder, int row) const;
 
@@ -221,9 +241,15 @@ private:
     void emitAttachmentChanged(const cwSurveyNode* node);
 
     void emitNodeRowChanged(const cwSurveyNode* node, const QList<int>& roles);
+
+    //! Recounts \a node's bare-fix owner trips, announcing them when they changed.
+    void refreshBareFixOwnerTrips(const cwSurveyNode* node);
+    //! Stores \a owners as \a node's bare-fix owner trips, announcing them
+    //! when they differ from the ones stored.
+    void setBareFixOwnerTrips(const cwSurveyNode* node, const QList<cwTrip*>& owners);
+    static QList<cwTrip*> bareFixOwnerTrips(const cwSurveyNode* node);
     void emitTripRowChanged(const cwTrip* trip, const QList<int>& roles);
 
-    static int subtreeFixCount(const cwSurveyNode* node);
     static int subtreeBareFixCount(const cwSurveyNode* node);
     static int subtreeUnsetFixCount(const cwSurveyNode* node);
     static int attachmentBareFixCount(const cwSurveyNode* owner);

@@ -13,6 +13,7 @@
 #include "cwCoordinateTransform.h"
 #include "cwDeclination.h"
 #include "cwGeoPoint.h"
+#include "LazFixtureHelper.h"
 
 //Qt includes
 #include <QDateTime>
@@ -136,4 +137,33 @@ TEST_CASE("cwDeclination: concurrent computes match single threaded values", "[c
     }
 
     CHECK(badResults == 0);
+}
+
+TEST_CASE("cwDeclination: a US survey foot system keeps the elevation in meters",
+          "[cwDeclination][verticalUnit]")
+{
+    // High enough that the field visibly changes between this elevation and
+    // the same number read as US survey feet
+    constexpr double kElevationMeters = 300000.0;
+    constexpr double kSameDeclinationDegrees = 1e-6;
+    constexpr double kElevationEffectDegrees = 1e-3;
+    const cwGeoPoint kentuckyWgs84(kKentuckyLongitude, kKentuckyLatitude, kElevationMeters);
+
+    const auto stateplane = cwCoordinateTransform::transformPoint(Wgs84, kKentuckyFtUsCrs, kentuckyWgs84);
+    REQUIRE(stateplane.has_value());
+    const cwGeoPoint fix(stateplane->x, stateplane->y, kElevationMeters);
+
+    const QDateTime date = makeDate(2024, 6, 15);
+    const auto geoResult = cwDeclination::compute(kentuckyWgs84, Wgs84, date);
+    const auto ftUsResult = cwDeclination::compute(fix, kKentuckyFtUsCrs, date);
+    const auto scaledResult = cwDeclination::compute(
+        cwGeoPoint(kentuckyWgs84.x, kentuckyWgs84.y, kElevationMeters * kMetersPerUsSurveyFoot),
+        Wgs84, date);
+    REQUIRE_FALSE(geoResult.hasError());
+    REQUIRE_FALSE(ftUsResult.hasError());
+    REQUIRE_FALSE(scaledResult.hasError());
+
+    REQUIRE_THAT(scaledResult.value(),
+                 !WithinAbs(geoResult.value(), kElevationEffectDegrees));
+    CHECK_THAT(ftUsResult.value(), WithinAbs(geoResult.value(), kSameDeclinationDegrees));
 }

@@ -17,8 +17,7 @@
 
 //Our includes
 #include "cwGlobals.h"
-#include "cwRenderCullingStats.h"
-#include "cwTextureStreamingStats.h"
+#include "cwRenderFrameStats.h"
 
 // Read-only view of cwRenderMemoryLedger for QML. One row per ledger category,
 // refreshed by a timer while running is true.
@@ -43,6 +42,14 @@ class CAVEWHERE_LIB_EXPORT cwRenderingStatsModel : public QAbstractListModel
     Q_PROPERTY(int demotionsInFlight READ demotionsInFlight NOTIFY streamingChanged)
     //! Counts the frames that published streaming counts, so a reader can tell a fresh frame from a stale one
     Q_PROPERTY(qint64 streamingRevision READ streamingRevision NOTIFY streamingChanged)
+    Q_PROPERTY(int residentNodes READ residentNodes NOTIFY pointCloudChanged)
+    Q_PROPERTY(int selectedNodes READ selectedNodes NOTIFY pointCloudChanged)
+    Q_PROPERTY(int nodeLoadsInFlight READ nodeLoadsInFlight NOTIFY pointCloudChanged)
+    Q_PROPERTY(qint64 selectedPoints READ selectedPoints NOTIFY pointCloudChanged)
+    Q_PROPERTY(QString selectedPointsText READ selectedPointsText NOTIFY pointCloudChanged)
+    Q_PROPERTY(double sseInflation READ sseInflation NOTIFY pointCloudChanged)
+    Q_PROPERTY(qint64 pickMirrorBytes READ pickMirrorBytes NOTIFY pointCloudChanged)
+    Q_PROPERTY(QString pickMirrorText READ pickMirrorText NOTIFY pointCloudChanged)
 
 public:
     enum Roles {
@@ -59,7 +66,7 @@ public:
     QVariant data(const QModelIndex& index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    bool running() const { return m_running; }
+    bool running() const { return m_timer.isActive(); }
     void setRunning(bool running);
 
     qint64 totalGpuBytes() const { return m_totalGpuBytes; }
@@ -72,13 +79,22 @@ public:
     int totalItems() const { return m_culling.itemsTotal; }
     int culledItems() const { return m_culling.itemsCulled; }
 
-    int streamedItems() const { return m_streaming.streamedItems; }
-    int loadsInFlight() const { return m_streaming.loadsInFlight; }
-    int itemsBelowDesired() const { return m_streaming.itemsBelowDesired; }
-    qint64 readyCpuBytes() const { return m_streaming.readyCpuBytes; }
-    QString readyCpuText() const { return formattedBytes(m_streaming.readyCpuBytes); }
-    int demotionsInFlight() const { return m_streaming.demotionsInFlight; }
-    qint64 streamingRevision() const { return qint64(m_lastStreamingRevision); }
+    int streamedItems() const { return m_streamingFrame.counts.streamedItems; }
+    int loadsInFlight() const { return m_streamingFrame.counts.loadsInFlight; }
+    int itemsBelowDesired() const { return m_streamingFrame.counts.itemsBelowDesired; }
+    qint64 readyCpuBytes() const { return m_streamingFrame.counts.readyCpuBytes; }
+    QString readyCpuText() const { return formattedBytes(m_streamingFrame.counts.readyCpuBytes); }
+    int demotionsInFlight() const { return m_streamingFrame.counts.demotionsInFlight; }
+    qint64 streamingRevision() const { return qint64(m_streamingFrame.revision); }
+
+    int residentNodes() const { return m_pointCloud.residentNodes; }
+    int selectedNodes() const { return m_pointCloud.selectedNodes; }
+    int nodeLoadsInFlight() const { return m_pointCloud.nodeLoadsInFlight; }
+    qint64 selectedPoints() const { return m_pointCloud.selectedPoints; }
+    QString selectedPointsText() const { return formattedMillions(m_pointCloud.selectedPoints); }
+    double sseInflation() const { return m_pointCloud.sseInflation; }
+    qint64 pickMirrorBytes() const { return m_pointCloud.pickMirrorBytes; }
+    QString pickMirrorText() const { return formattedBytes(m_pointCloud.pickMirrorBytes); }
 
     //! Re-reads the ledger now, for the HUD's refresh affordance
     Q_INVOKABLE void refresh();
@@ -86,11 +102,15 @@ public:
     //! Bytes as B/KB/MB/GB, base 1024, one decimal above a kilobyte
     static QString formattedBytes(qint64 bytes);
 
+    //! A count in millions with one decimal, e.g. "17.2 M"
+    static QString formattedMillions(qint64 count);
+
 signals:
     void totalsChanged();
     void runningChanged();
     void cullingChanged();
     void streamingChanged();
+    void pointCloudChanged();
 
 private slots:
     void poll();
@@ -105,12 +125,11 @@ private:
     QList<Row> m_rows;
     qint64 m_totalGpuBytes = 0;
     qint64 m_totalCpuBytes = 0;
-    quint64 m_lastRevision = 0;
-    cwRenderCullingStats::Counts m_culling;
-    quint64 m_lastCullingRevision = 0;
-    cwTextureStreamingStats::Counts m_streaming;
-    quint64 m_lastStreamingRevision = 0;
-    bool m_running = false;
+    quint64 m_lastLedgerRevision = 0;
+    cwRenderFrameStats::Culling m_culling;
+    cwRenderFrameStats::StreamingFrame m_streamingFrame;
+    cwRenderFrameStats::PointCloud m_pointCloud;
+    quint64 m_lastFrameStatsRevision = 0;
 };
 
 #endif // CWRENDERINGSTATSMODEL_H

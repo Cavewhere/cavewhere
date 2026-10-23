@@ -16,6 +16,7 @@
 #include "cwRenderObject.h"
 #include "cwTracked.h"
 #include "cwLinePlotGeometry.h"
+#include "cwColorByUniform.h"
 
 // Qt includes
 #include <QVector3D>
@@ -55,11 +56,29 @@ public:
     // it, never mutate it in place.
     void setRangeVisible(int start, int count, bool visible);
 
+    // Per-vertex color-by value (cwColorByUniform::PerElement), both vertices
+    // of a shot share it; setGeometry resets every vertex to 0. Like
+    // setRangeVisible it flips one trip's span and ignores an out-of-range span.
+    // The render thread holds a copy, so it is published by write-to-a-copy.
+    void setRangeColorValue(int start, int count, float value);
+
+    // Per-segment loop closure error in sigma (cwColorByUniform::PerSegmentError),
+    // one float per segment as cwLinePlotGeometry::Result::segmentErrors lays it
+    // out; cwLinePlotGeometry::kNoErrorValue marks a leg outside any loop.
+    // setGeometry resets it to empty, and each solve replaces the whole vector.
+    // It is its own buffer, apart from the color values: setRangeColorValue is
+    // change-guarded, so sharing one buffer would leave stale errors wherever a
+    // keyword slot did not change on the way back to Keyword mode. The render
+    // thread holds a copy, so it is published by write-to-a-copy.
+    void setSegmentErrors(QVector<float> errors);
+
     float maxZValue() const;
     float minZValue() const;
 
     QVector<QVector3D> points() const;
     QVector<quint8> visibility() const;
+    QVector<float> colorValues() const;
+    QVector<float> segmentErrors() const;
 
     // Endpoints of the line segment whose first vertex is firstIndex — the value
     // cwRayHit::firstIndex carries for a line hit (under the iota index list it is
@@ -67,6 +86,10 @@ public:
     // firstIndex is out of range. Stations ARE these vertices, so this is the seam
     // clamp-to-station picking reads to snap a centerline hit onto a survey station.
     std::optional<std::pair<QVector3D, QVector3D>> segmentEndpoints(int firstIndex) const;
+
+    // The color-by block the centerline shader reads (pushed by cwColorBy).
+    void setColorBy(const cwColorByUniform& uniform);
+    cwColorByUniform colorBy() const;
 
 signals:
     // Emitted whenever setGeometry() replaces the vertex data (and therefore the
@@ -95,6 +118,9 @@ private:
     };
 
     cwTracked<Data> m_data;
+    cwTracked<cwColorByUniform> m_colorBy;
+    cwTracked<QVector<float>> m_colorValues;
+    cwTracked<QVector<float>> m_segmentErrors;
 
     // Authoring copy of the per-vertex mask — the source for setRangeVisible's
     // range-flip math and for updateVisibility's re-seed. Consumers read the
@@ -134,9 +160,24 @@ inline QVector<QVector3D> cwRenderLinePlot::points() const
     return m_data.value().points;
 }
 
+inline cwColorByUniform cwRenderLinePlot::colorBy() const
+{
+    return m_colorBy.value();
+}
+
 inline QVector<quint8> cwRenderLinePlot::visibility() const
 {
     return m_visibility;
+}
+
+inline QVector<float> cwRenderLinePlot::colorValues() const
+{
+    return m_colorValues.value();
+}
+
+inline QVector<float> cwRenderLinePlot::segmentErrors() const
+{
+    return m_segmentErrors.value();
 }
 
 #endif // CWRENDERLINEPLOT_H

@@ -32,12 +32,22 @@ QQ.Item {
         //        console.debug("Update state: " + teamTable.state )
     }
 
-    SectionHeader {
-        id: titleRow
+    SectionLabel {
+        id: titleLabel
         anchors.horizontalCenter: parent.horizontalCenter
         text: "Team"
-        showAddButton: teamTable.editable
-        onAddClicked: {
+    }
+
+    AddButton {
+        id: addTeamMemberButton
+        objectName: "addTeamMember"
+        anchors.top: titleLabel.bottom
+        anchors.topMargin: 5
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "Add Team Member"
+        visible: teamTable.editable
+
+        onClicked: {
             teamTable.model.addTeamMember();
             teamList.currentIndex = teamList.count - 1
         }
@@ -46,7 +56,7 @@ QQ.Item {
     QQ.Item {
         id: personTable
 
-        anchors.top: titleRow.bottom
+        anchors.top: teamTable.editable ? addTeamMemberButton.bottom : titleLabel.bottom
         anchors.topMargin: 5
 
         width: teamList.width

@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 #include "cwRHIObject.h"
 #include "cwOffscreenRenderJob.h"
@@ -18,13 +19,17 @@
 #include "cwSceneVisibility.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwStreamedTexture.h"
+#include "cwMipMath.h"
 #include "cwTextureResidency.h"
 
 #include "CwRhiSceneTestAccess.h"
 #include "CwRhiTexturedItemsTestAccess.h"
+#include "TestGeometryBuilders.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
+#include <QBox3D>
 #include <QMatrix4x4>
 #include <QSize>
 #include <QString>
@@ -73,39 +78,13 @@ constexpr int kStreamedTextureDimension = 2048;
 
 cwGeometry unitQuad()
 {
-    cwGeometry geometry({
-        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
-        { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
-    });
-
-    geometry.resizeVertices(4);
-    const auto* position = geometry.attribute(cwGeometry::Semantic::Position);
-    const auto* texCoord = geometry.attribute(cwGeometry::Semantic::TexCoord0);
-
-    const QVector<QVector3D> positions = {
-        QVector3D(-kQuadHalfExtent, -kQuadHalfExtent, 0.0f),
-        QVector3D( kQuadHalfExtent, -kQuadHalfExtent, 0.0f),
-        QVector3D( kQuadHalfExtent,  kQuadHalfExtent, 0.0f),
-        QVector3D(-kQuadHalfExtent,  kQuadHalfExtent, 0.0f),
-    };
-    const QVector<QVector2D> uvs = {
-        QVector2D(0.0f, 0.0f), QVector2D(1.0f, 0.0f),
-        QVector2D(1.0f, 1.0f), QVector2D(0.0f, 1.0f),
-    };
-    for (int i = 0; i < positions.size(); ++i) {
-        geometry.set(position, i, positions.at(i));
-        geometry.set(texCoord, i, uvs.at(i));
-    }
-
-    geometry.setIndices({0u, 1u, 2u, 0u, 2u, 3u});
-    geometry.setType(cwGeometry::Type::Triangles);
-    return geometry;
+    return cwTestGeometry::texturedQuad(kQuadHalfExtent);
 }
 
 cwStreamedTexture streamedSource(const QString& id)
 {
     cwStreamedTexture source;
-    source.dataRootPath = QStringLiteral("/not/read/without/a/drain");
+    source.setDataRootPath(QStringLiteral("/not/read/without/a/drain"));
     source.key.id = id;
     source.key.path = QStringLiteral("textures");
     source.key.checksum = QStringLiteral("checksum-") + id;
@@ -175,8 +154,8 @@ qint64 demotionReclaim()
 {
     const QSize size(kStreamedTextureDimension, kStreamedTextureDimension);
     const QRhiTexture::Format format = CwRhiTexturedItemsTestAccess::streamTargetFormat();
-    return cw::residency::chainBytes(format, size, 0)
-           - cw::residency::chainBytes(format, size, streamedBaseLevel());
+    return cw::mip::chainBytes(format, size, 0)
+           - cw::mip::chainBytes(format, size, streamedBaseLevel());
 }
 
 // Counts the warnings the residency floor logs, so a test can tell one
@@ -314,24 +293,85 @@ TEST_CASE("a streamed item measures its texel density when it reaches the render
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
     REQUIRE(backend != nullptr);
     REQUIRE(CwRhiTexturedItemsTestAccess::hasItem(*backend, id));
 
-    // Density is measured in updateBoundsFromGeometry, the one moment the
-    // geometry is on the render thread.
+    // Density is measured in setLocalBounds, the one moment the geometry is on
+    // the render thread.
     CHECK_THAT(CwRhiTexturedItemsTestAccess::uvPerMeter(*backend, id),
                Catch::Matchers::WithinAbs(kQuadUvPerMeter, 1e-6));
     CHECK(CwRhiTexturedItemsTestAccess::boundsValid(*backend, id));
-    CHECK(CwRhiTexturedItemsTestAccess::streamSource(*backend, id) == item.streamedTexture);
+    CHECK(CwRhiTexturedItemsTestAccess::streamSource(*backend, id) == item.texture.streamed());
     // Nothing is resident yet, and the streamed path leaves the legacy
     // whole-texture upload alone.
     CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id)
           == CwRhiTexturedItemsTestAccess::noResidentLevel());
     CHECK_FALSE(CwRhiTexturedItemsTestAccess::textureNeedsUpdate(*backend, id));
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("an item's world bounds come from the box the GUI thread measured",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    constexpr float kTranslation = 10.0f;
+    constexpr float kScale = 2.0f;
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+    item.modelMatrix.translate(kTranslation, 0.0f, 0.0f);
+    item.modelMatrix.scale(kScale);
+    const uint32_t id = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+    REQUIRE(CwRhiTexturedItemsTestAccess::hasItem(*backend, id));
+    CHECK(CwRhiTexturedItemsTestAccess::boundsValid(*backend, id));
+
+    const std::optional<QBox3D> united = backend->worldBounds();
+    REQUIRE(united.has_value());
+    const float half = kQuadHalfExtent * kScale;
+    CHECK(united->minimum() == QVector3D(kTranslation - half, -half, 0.0f));
+    CHECK(united->maximum() == QVector3D(kTranslation + half, half, 0.0f));
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
+TEST_CASE("an item whose geometry carries no positions reports no world bounds",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    // No vertices at all, so the GUI thread has no box to hand over and the
+    // item draws rather than risking a wrong cull.
+    cwRenderTexturedItems::Item item;
+    item.geometry = cwGeometry(cwRenderTexturedItems::geometryLayout());
+    const uint32_t id = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+    REQUIRE(CwRhiTexturedItemsTestAccess::hasItem(*backend, id));
+
+    CHECK_FALSE(CwRhiTexturedItemsTestAccess::boundsValid(*backend, id));
+    CHECK_FALSE(backend->worldBounds().has_value());
 
     render.removeItem(id);
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
@@ -352,7 +392,7 @@ TEST_CASE("re-sending a streamed descriptor keeps residency, changing it resets 
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = first;
+    item.texture = first;
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -381,6 +421,52 @@ TEST_CASE("re-sending a streamed descriptor keeps residency, changing it resets 
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
 }
 
+TEST_CASE("a re-publish spelling the data root differently keeps residency",
+          "[TexturedItemsStreaming]")
+{
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwRenderTexturedItems render;
+    render.setScene(&scene);
+    render.setParent(nullptr);
+
+    // A root under the working directory, so the relative spelling names it too
+    const QString relativeRoot = QStringLiteral("streamed-root");
+    const QString absoluteRoot = QDir::current().absoluteFilePath(relativeRoot);
+
+    cwStreamedTexture first = streamedSource(QStringLiteral("scrap-1"));
+    first.setDataRootPath(absoluteRoot);
+
+    cwRenderTexturedItems::Item item;
+    item.geometry = unitQuad();
+    item.texture = first;
+    const uint32_t id = render.addItem(item);
+
+    cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
+    REQUIRE(backend != nullptr);
+
+    constexpr int kResidentLevel = 3;
+    CwRhiTexturedItemsTestAccess::setResidentTopLevel(*backend, id, kResidentLevel);
+
+    // One producer re-running can spell the same directory two ways. Both name
+    // the same KTX2 bytes, so residency holds.
+    cwStreamedTexture respelled = first;
+    respelled.setDataRootPath(relativeRoot);
+    render.updateStreamedTexture(id, respelled);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id) == kResidentLevel);
+
+    respelled.setDataRootPath(absoluteRoot + QStringLiteral("/"));
+    render.updateStreamedTexture(id, respelled);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id) == kResidentLevel);
+    CHECK(CwRhiTexturedItemsTestAccess::streamSource(*backend, id) == first);
+
+    render.removeItem(id);
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+}
+
 TEST_CASE("selection asks for the pinned base before anything is resident",
           "[TexturedItemsStreaming]")
 {
@@ -393,7 +479,7 @@ TEST_CASE("selection asks for the pinned base before anything is resident",
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -417,7 +503,7 @@ TEST_CASE("selection asks for the pinned base before anything is resident",
 
     CwRhiTexturedItemsTestAccess::selectStreamLevel(*backend, id, context);
 
-    const int base = cw::residency::pinnedBaseLevel(item.streamedTexture.size);
+    const int base = cw::residency::pinnedBaseLevel(item.texture.streamed().size);
     CHECK(CwRhiTexturedItemsTestAccess::requestedTopLevel(*backend, id) == base);
     CHECK(CwRhiTexturedItemsTestAccess::hasStreamingWork(*backend));
 
@@ -486,7 +572,7 @@ TEST_CASE("a load for a replaced descriptor never lands on the item",
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -541,11 +627,11 @@ TEST_CASE("the GPU budget demotes the least recently gathered items first",
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
 
-    item.streamedTexture = streamedSource(QStringLiteral("oldest"));
+    item.texture = streamedSource(QStringLiteral("oldest"));
     const uint32_t oldest = render.addItem(item);
-    item.streamedTexture = streamedSource(QStringLiteral("middle"));
+    item.texture = streamedSource(QStringLiteral("middle"));
     const uint32_t middle = render.addItem(item);
-    item.streamedTexture = streamedSource(QStringLiteral("newest"));
+    item.texture = streamedSource(QStringLiteral("newest"));
     const uint32_t newest = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -614,7 +700,7 @@ TEST_CASE("a promotion supersedes a demotion in flight", "[TexturedItemsStreamin
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -671,7 +757,7 @@ TEST_CASE("a camera back on the resident level cancels the demotion instead of r
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -727,7 +813,7 @@ TEST_CASE("an item the camera keeps wanting finer is left alone frame after fram
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -789,7 +875,7 @@ TEST_CASE("a fleet already at its pinned base warns once, not every frame",
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
 
     cwRhiTexturedItems* backend = syncedBackend(rhiScene, scene, render);
@@ -847,7 +933,7 @@ TEST_CASE("an offscreen job waits while its camera wants more detail than is res
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     const uint32_t id = render.addItem(item);
     REQUIRE(waitForItemVisible(scene, render.renderObjectId(), id));
 
@@ -893,7 +979,7 @@ TEST_CASE("an item outside the job's frustum never holds the job back",
 
     cwRenderTexturedItems::Item item;
     item.geometry = unitQuad();
-    item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+    item.texture = streamedSource(QStringLiteral("scrap-1"));
     item.modelMatrix = offscreenPose;
     const uint32_t id = render.addItem(item);
     REQUIRE(waitForItemVisible(scene, render.renderObjectId(), id));
@@ -925,7 +1011,7 @@ TEST_CASE("a bigger export asks for a finer level than a small one",
 
         cwRenderTexturedItems::Item item;
         item.geometry = unitQuad();
-        item.streamedTexture = streamedSource(QStringLiteral("scrap-1"));
+        item.texture = streamedSource(QStringLiteral("scrap-1"));
         const uint32_t id = render.addItem(item);
         REQUIRE(waitForItemVisible(scene, render.renderObjectId(), id));
 

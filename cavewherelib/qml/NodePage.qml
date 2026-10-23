@@ -211,6 +211,15 @@ StandardPage {
     // file it comes from.
     readonly property bool isDerived: nodePageArea.isSourced && !nodePageArea.isSourceRoot
 
+    // The project's fix-station warnings on this node and its descendants,
+    // matching the subtree the count covers. The invokable has no change
+    // signal; reading fixStationWarningMessages is what re-runs this binding.
+    readonly property list<string> fixStationWarningMessages: {
+        const validator = RootData.region.fixStationValidator
+        return validator.fixStationWarningMessages.length > 0
+                ? validator.fixStationWarningMessagesUnder(nodePageArea.currentNode) : []
+    }
+
     // What the wide layout's tree column shows above the tree.
     readonly property bool showsWideSourceCard: nodePageArea.isSourceRoot && !nodePageArea.isNarrow
     readonly property bool showsWideDerivedFileLabel: nodePageArea.isDerived && !nodePageArea.isNarrow
@@ -395,13 +404,6 @@ StandardPage {
         }
     }
 
-    // Counts what the Fix Stations page lists: the node's fixes and every
-    // fix under it.
-    FixStationTreeModel {
-        id: fixStationTreeId
-        rootNode: nodePageArea.currentNode
-    }
-
     // A derived node takes its fixed positions from the file, so it offers no
     // fix stations of its own; its source root keeps the row (W4d).
     RowLayout {
@@ -418,7 +420,7 @@ StandardPage {
 
             LinkText {
                 objectName: "fixStationsLink"
-                text: fixStationTreeId.fixRowCount
+                text: nodePageArea.currentNode ? nodePageArea.currentNode.subtreeFixStationCount : 0
                 onClicked: {
                     RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Fix Stations");
                 }
@@ -426,8 +428,7 @@ StandardPage {
 
             FixStationErrorBadge {
                 objectName: "fixStationsBadge"
-                errorModel: nodePageArea.currentNode ? nodePageArea.currentNode.errorModel : null
-                errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
+                messages: nodePageArea.fixStationWarningMessages
             }
         }
 
@@ -841,15 +842,14 @@ StandardPage {
                     QC.Label { text: "Fix stations:" }
 
                     LinkText {
-                        text: fixStationTreeId.fixRowCount
+                        text: nodePageArea.currentNode ? nodePageArea.currentNode.subtreeFixStationCount : 0
                         onClicked: {
                             RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Fix Stations");
                         }
                     }
 
                     FixStationErrorBadge {
-                        errorModel: nodePageArea.currentNode ? nodePageArea.currentNode.errorModel : null
-                        errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
+                        messages: nodePageArea.fixStationWarningMessages
                     }
                 }
 

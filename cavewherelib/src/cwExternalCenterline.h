@@ -160,8 +160,14 @@ public:
     //! system names no valid CRS or the coordinate does not parse.
     std::optional<Placement> placementIn(const QString& system) const;
 
+    //! The fix's easting and northing in the units of the system it solves in,
+    //! and its elevation in meters, read from its coordinate the way cavern
+    //! solves it. Empty when the system it solves in
+    //! is geographic (the numbers are degrees) or the text does not parse.
+    std::optional<cwGeoPoint> gridPosition() const;
+
     //! The first three numbers of \a coordinate (a fix's coordinate text) in
-    //! the order the file writes them, in meters. Empty when they do not parse.
+    //! the order the file writes them. Empty when they do not parse.
     static std::optional<cwGeoPoint> positionOf(const QString& coordinate);
 
     bool operator==(const cwAttachedFix& other) const = default;

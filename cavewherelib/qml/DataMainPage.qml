@@ -191,6 +191,31 @@ StandardPage {
                 }
             }
 
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.delegatePadding
+
+                QC.Label {
+                    text: qsTr("Fix stations:")
+                }
+
+                LinkText {
+                    objectName: "projectFixStationsLink"
+                    text: RootData.region.rootNode.subtreeFixStationCount
+                    onClicked: {
+                        RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                                   "Fix Stations");
+                    }
+                }
+
+                FixStationErrorBadge {
+                    objectName: "projectFixStationsBadge"
+                    messages: RootData.region.fixStationValidator.fixStationWarningMessages
+                }
+
+                QQ.Item { Layout.fillWidth: true }
+            }
+
             // Everything the project's coordinates are expressed in, read as one
             // group: the units they are shown in, where the frame sits, what it
             // is centered on, and what it is measured against. Units is the only

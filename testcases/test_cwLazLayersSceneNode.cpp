@@ -8,18 +8,28 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QPointer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 
+#include "cwFutureManagerModel.h"
+#include "cwFutureManagerToken.h"
 #include "cwKeywordItemModel.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwLazLayersSceneNode.h"
+#include "cwPointOctreeManifest.h"
 #include "cwRenderPointCloud.h"
+#include "cwRenderingSettings.h"
+#include "cwRhiScene.h"
 #include "cwScene.h"
 
+#include "CwRhiSceneTestAccess.h"
 #include "LazFixtureHelper.h"
+
+#include <functional>
 
 namespace {
 
@@ -130,8 +140,8 @@ TEST_CASE("scene node materializes on re-enable and survives subsequent loadStat
 
     // Re-enable: materialize must run before the layer fires its first
     // loadStatusChanged of the new load. After waiting for Loaded the render
-    // object should have geometry pushed into it without any "no render object
-    // for layer" warning.
+    // object should have the octree pushed into it without any "no render
+    // object for layer" warning.
     layer->setEnabled(true);
     REQUIRE(node.pointCloudForLayer(layer) != nullptr);
     REQUIRE(waitForLazLayerLoaded(layer));
@@ -330,4 +340,296 @@ TEST_CASE("scene node survives rapid enable/disable toggling without leaks",
     // Final state: enabled. The render object exists and the scene has no
     // stale pending items beyond the single live one.
     REQUIRE(node.pointCloudForLayer(layer) != nullptr);
+}
+
+TEST_CASE("scene node hands the layer's octree to the render cloud and clears it on error",
+          "[cwLazLayersSceneNode]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    cwLazLayer* layer = addLazViaRescan(model, gisLayersDir, QStringLiteral("octree-handoff"));
+    REQUIRE(layer != nullptr);
+
+    REQUIRE(waitForLazLayerLoaded(layer));
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Loaded);
+
+    cwRenderPointCloud* renderCloud = node.pointCloudForLayer(layer);
+    REQUIRE(renderCloud != nullptr);
+    REQUIRE(renderCloud->octree() == layer->octree());
+    REQUIRE(renderCloud->pointCount() == layer->pointCount());
+    REQUIRE(renderCloud->bboxMin() == layer->bboxMin());
+    REQUIRE(renderCloud->bboxMax() == layer->bboxMax());
+
+    // The file goes away under the layer, so the rebuild fails and the render
+    // cloud must stop pointing at an octree the cache no longer answers for.
+    REQUIRE(QFile::remove(layer->sourcePath()));
+    layer->reload();
+    REQUIRE(waitForLazLayerLoaded(layer));
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Error);
+    REQUIRE_FALSE(layer->errorMessage().isEmpty());
+
+    REQUIRE(node.pointCloudForLayer(layer) == renderCloud);
+    REQUIRE(renderCloud->octree().isNull());
+    REQUIRE(renderCloud->pointCount() == 0);
+}
+
+TEST_CASE("scene node keeps the render cloud in step with a restarted build",
+          "[cwLazLayersSceneNode]")
+{
+    QTemporaryDir tempDir;
+    QTemporaryDir movedRoot;
+    REQUIRE(tempDir.isValid());
+    REQUIRE(movedRoot.isValid());
+
+    cwScene scene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    // Big enough that the first build is still running when the cache root
+    // moves under it.
+    QVector<QVector3D> points;
+    constexpr int kPointCount = 200000;
+    points.reserve(kPointCount);
+    for (int i = 0; i < kPointCount; ++i) {
+        points.append(QVector3D(float(i % 997), float(i % 991), float(i % 983)));
+    }
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    const QString lazPath = gisLayersDir.filePath(QStringLiteral("superseded.laz"));
+    REQUIRE(writeSyntheticLazFile(lazPath, points));
+
+    cwFutureManagerModel manager;
+    cwFutureManagerToken futureToken(&manager);
+    model.setFutureManagerToken(futureToken);
+
+    LazJobRecorder jobs(&manager);
+    model.setGisLayersDir(gisLayersDir);
+    model.rescan();
+    REQUIRE(model.count() == 1);
+
+    cwLazLayer* layer = model.layerAt(0);
+    REQUIRE(layer != nullptr);
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Loading);
+
+    // Wait for the job so the root really does move under a running build,
+    // rather than under a probe that has not asked for one yet.
+    REQUIRE(jobs.waitForName(
+        QStringLiteral("Building point cloud octree: %1").arg(QFileInfo(lazPath).baseName())));
+
+    // Supersede the in-flight build. The superseded one must never publish:
+    // the scene node only hears loadStatusChanged, and a second Loaded is no
+    // change at all, so a stale publish would leave the render cloud drawing
+    // an octree the layer has already replaced.
+    layer->setCacheRootPath(movedRoot.path());
+
+    constexpr int kBuildTimeoutMs = 30000;
+    REQUIRE(waitForLazLayerLoaded(layer, kBuildTimeoutMs));
+    REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    REQUIRE(layer->octree().cacheRootPath() == QDir(movedRoot.path()).absolutePath());
+
+    cwRenderPointCloud* renderCloud = node.pointCloudForLayer(layer);
+    REQUIRE(renderCloud != nullptr);
+    REQUIRE(renderCloud->octree() == layer->octree());
+}
+
+TEST_CASE("scene node fans the spacing coverage out to clouds it already has and to later ones",
+          "[cwLazLayersSceneNode]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    REQUIRE(node.spacingCoverage() == cw::pointcloud::kDefaultSpacingCoverage);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    cwLazLayer* first = addLazViaRescan(model, gisLayersDir, QStringLiteral("coverage-first"));
+    REQUIRE(first != nullptr);
+
+    cwRenderPointCloud* firstCloud = node.pointCloudForLayer(first);
+    REQUIRE(firstCloud != nullptr);
+    REQUIRE(firstCloud->spacingCoverage() == cw::pointcloud::kDefaultSpacingCoverage);
+
+    QSignalSpy coverageSpy(&node, &cwLazLayersSceneNode::spacingCoverageChanged);
+
+    constexpr float kTunedCoverage = 3.0f;
+    node.setSpacingCoverage(kTunedCoverage);
+    CHECK(node.spacingCoverage() == kTunedCoverage);
+    CHECK(coverageSpy.count() == 1);
+    CHECK(firstCloud->spacingCoverage() == kTunedCoverage);
+
+    // A layer that arrives afterward has to come up at the tuned coverage, or
+    // the cloud the user is looking at and the one that just loaded would
+    // draw sprites of different sizes.
+    cwLazLayer* second = addLazViaRescan(model, gisLayersDir, QStringLiteral("coverage-second"));
+    REQUIRE(second != nullptr);
+
+    cwRenderPointCloud* secondCloud = node.pointCloudForLayer(second);
+    REQUIRE(secondCloud != nullptr);
+    CHECK(secondCloud->spacingCoverage() == kTunedCoverage);
+
+    // Out-of-range requests clamp to the [0.25, 8] range the P+wheel gesture
+    // spans, instead of letting a sprite swallow the cloud or shrink every
+    // point to the shader's 1px floor.
+    constexpr float kMinCoverage = 0.25f;
+    constexpr float kMaxCoverage = 8.0f;
+
+    node.setSpacingCoverage(100.0f);
+    CHECK(node.spacingCoverage() == kMaxCoverage);
+    CHECK(firstCloud->spacingCoverage() == kMaxCoverage);
+
+    node.setSpacingCoverage(-1.0f);
+    CHECK(node.spacingCoverage() == kMinCoverage);
+    CHECK(secondCloud->spacingCoverage() == kMinCoverage);
+}
+
+TEST_CASE("scene node fans the rendering settings' shading out to clouds it already has and to later ones",
+          "[cwLazLayersSceneNode]")
+{
+    cwRenderingSettings::initialize();
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    cwLazLayer* first = addLazViaRescan(model, gisLayersDir, QStringLiteral("shading-first"));
+    REQUIRE(first != nullptr);
+
+    cwRenderPointCloud* firstCloud = node.pointCloudForLayer(first);
+    REQUIRE(firstCloud != nullptr);
+    CHECK(firstCloud->shading() == cwPointCloudShading());
+
+    constexpr double kFixedPointSizePx = 7.0;
+    settings->setThinningMode(int(cw::pointcloud::ThinningMode::Off));
+    settings->setSizeMode(int(cw::pointcloud::SizeMode::FixedPixels));
+    settings->setFixedPointSizePx(kFixedPointSizePx);
+    CHECK(firstCloud->shading() == settings->pointCloudShading());
+    CHECK(firstCloud->shading().thinningMode == cw::pointcloud::ThinningMode::Off);
+
+    cwLazLayer* second = addLazViaRescan(model, gisLayersDir, QStringLiteral("shading-second"));
+    REQUIRE(second != nullptr);
+
+    cwRenderPointCloud* secondCloud = node.pointCloudForLayer(second);
+    REQUIRE(secondCloud != nullptr);
+    CHECK(secondCloud->shading() == settings->pointCloudShading());
+
+    settings->resetToDefaults();
+    CHECK(firstCloud->shading() == cwPointCloudShading());
+    CHECK(secondCloud->shading() == cwPointCloudShading());
+}
+
+TEST_CASE("every point cloud debug panel knob asks the scene for a frame",
+          "[cwLazLayersSceneNode]")
+{
+    cwRenderingSettings::initialize();
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    cwLazLayer* layer = addLazViaRescan(model, gisLayersDir, QStringLiteral("panel-knobs"));
+    REQUIRE(layer != nullptr);
+    REQUIRE(node.pointCloudForLayer(layer) != nullptr);
+
+    constexpr int kCappedLevel = 3;
+    constexpr int kIsolatedLevel = 2;
+    constexpr double kFixedPointSizePx = 5.0;
+    constexpr double kMaxPointSizePx = 12.0;
+    constexpr float kTunedCoverage = 3.0f;
+
+    // Everything PointCloudDebugPanel.qml edits
+    struct Knob {
+        const char* name;
+        std::function<void()> change;
+    };
+
+    const QVector<Knob> knobs = {
+        {"freezeCut", [&] { settings->setFreezeCut(true); }},
+        {"inflationGovernor", [&] { settings->setInflationGovernor(false); }},
+        {"evictionHold", [&] { settings->setEvictionHold(true); }},
+        {"maxLevel", [&] { settings->setMaxLevel(kCappedLevel); }},
+        {"minLevel", [&] { settings->setMinLevel(kIsolatedLevel); }},
+        {"debugView",
+         [&] { settings->setDebugView(int(cw::pointcloud::DebugView::ResidencyAge)); }},
+        {"showNodeBoxes", [&] { settings->setShowNodeBoxes(true); }},
+        {"gpuMemoryBudgetMb", [&] { settings->setGpuMemoryBudgetMb(cw::budgets::kMinGpuBudgetMb); }},
+        {"cpuCacheBudgetMb", [&] { settings->setCpuCacheBudgetMb(cw::budgets::kMinCpuBudgetMb); }},
+        {"uploadBudgetMbPerFrame",
+         [&] { settings->setUploadBudgetMbPerFrame(cw::budgets::kMinUploadBudgetMbPerFrame); }},
+        {"pointBudgetMillions",
+         [&] { settings->setPointBudgetMillions(cw::budgets::kMinPointBudgetMillions); }},
+        {"screenSpaceErrorPx",
+         [&] { settings->setScreenSpaceErrorPx(cw::budgets::kMaxScreenSpaceErrorPx); }},
+        {"thinningMode",
+         [&] { settings->setThinningMode(int(cw::pointcloud::ThinningMode::Discrete)); }},
+        {"sizeMode", [&] { settings->setSizeMode(int(cw::pointcloud::SizeMode::FixedPixels)); }},
+        {"fixedPointSizePx", [&] { settings->setFixedPointSizePx(kFixedPointSizePx); }},
+        {"floorMode", [&] { settings->setFloorMode(int(cw::pointcloud::FloorMode::Off)); }},
+        {"spacingCoverage", [&] { node.setSpacingCoverage(kTunedCoverage); }},
+        {"maxPointSizePx", [&] { settings->setMaxPointSizePx(kMaxPointSizePx); }},
+    };
+
+    for (const Knob& knob : knobs) {
+        INFO(knob.name);
+
+        // A render object with an update already queued has its frame asked
+        // for, so each knob starts from a drained scene the way it would
+        // after the frame that drew the last one
+        CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+
+        QSignalSpy frameSpy(&scene, &cwScene::needsRendering);
+        knob.change();
+        CHECK(frameSpy.count() >= 1);
+    }
+
+    settings->resetToDefaults();
+    node.setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
 }

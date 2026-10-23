@@ -23,6 +23,8 @@ class CAVEWHERE_LIB_EXPORT cwTeam : public QAbstractListModel
     Q_OBJECT
     QML_NAMED_ELEMENT(Team)
 
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
+
 public:
     enum TeamModelRoles{
         NameRole,
@@ -45,6 +47,8 @@ public:
     void setTeamMembers(QList<cwTeamMember> team);
     QList<cwTeamMember> teamMembers() const;
 
+    int count() const { return Team.size(); }
+
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;
 
@@ -58,6 +62,7 @@ public:
     cwTeamData data() const { return {Team}; };
 
 signals:
+    void countChanged();
 
 public slots:
 

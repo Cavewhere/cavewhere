@@ -2,12 +2,13 @@
 
 #include "cwFrustum.h"
 #include "cwKtx2Codec.h"
+#include "cwMipMath.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
 #include "cwRhiLimits.h"
 #include "cwTextureResidency.h"
-#include "cwTextureStreamingStats.h"
 
 #include <QByteArray>
 #include <QDebug>
@@ -19,30 +20,14 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <limits>
 #include <utility>
 
 namespace {
 constexpr int kFallbackUniformSize = 16; // minimum to satisfy uniform alignment
 // Meshes up to this many vertices index with uint16, halving the index buffer.
 constexpr qsizetype kMaxUInt16VertexCount = 65535;
-// Textured items upload RGBA8 with a full mip chain.
-constexpr qint64 kRgba8BytesPerPixelNumerator = 4;
-constexpr qint64 kRgba8BytesPerPixelDenominator = 1;
-constexpr bool kMipmapped = true;
-// Items are tallied on this one pass so a frame that gathers every pass counts
-// each item once. It is the first pass of cwRhiFrameRenderer's draw order.
-constexpr cwRHIObject::RenderPass kCullingStatsPass = cwRHIObject::RenderPass::Background;
-// The pinned base level is loaded ahead of every detail level: an item without a
-// texture has nothing to draw, and everything else is a refinement.
-constexpr quint64 kPinnedBasePriority = std::numeric_limits<quint64>::max();
-// A demotion outranks every refinement — it is what brings the scene back under
-// budget — but still yields to an item that has nothing to draw at all.
-constexpr quint64 kDemotionPriority = kPinnedBasePriority - 1;
-// An offscreen job is blocked until its levels land, so its refinements outrank
-// every live one — but an item with nothing to draw, and the demotion that brings
-// the scene back under budget, still go first.
-constexpr quint64 kExportPriority = kDemotionPriority - 1;
+// Textured items upload RGBA8 with a full mip chain starting at level 0.
+constexpr int kWholeImageTopLevel = 0;
 }
 
 cwRhiTexturedItems::cwRhiTexturedItems() = default;
@@ -120,15 +105,15 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             item->material = payload.material;
             item->geometry = payload.geometry;
             item->geometryNeedsUpdate = !item->geometry.indices().isEmpty();
-            item->image = payload.texture;
-            item->streamSource = payload.streamedTexture;
+            item->image = payload.texture.image();
+            item->streamSource = payload.texture.streamed();
             item->textureNeedsUpdate = !item->image.isNull();
             item->uniformBlock = payload.uniformBlock;
             item->uniformNeedsUpdate = true;
             item->pipelineNeedsUpdate = true;
             item->modelMatrix = payload.modelMatrix;
             item->modelMatrixNeedsUpdate = true;
-            item->updateBoundsFromGeometry();
+            item->setLocalBounds(payload.localBounds);
 
             // Ids are monotonic, so an Add never targets a live id.
             Q_ASSERT(!m_items.contains(id));
@@ -152,17 +137,18 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             if (state.geometryDirty) {
                 item->geometry = payload.geometry;
                 item->geometryNeedsUpdate = true;
-                item->updateBoundsFromGeometry();
+                item->setLocalBounds(payload.localBounds);
             }
             if (state.textureDirty) {
-                item->image = payload.texture;
+                const cwStreamedTexture streamSource = payload.texture.streamed();
+                item->image = payload.texture.image();
                 // A streamed source uploads through streamResources instead, and
                 // the item keeps drawing what it has until the first level lands.
-                item->textureNeedsUpdate = payload.streamedTexture.isNull();
-                if (!(item->streamSource == payload.streamedTexture)) {
-                    item->streamSource = payload.streamedTexture;
+                item->textureNeedsUpdate = !payload.texture.isStreamed();
+                if (!(item->streamSource == streamSource)) {
+                    item->streamSource = streamSource;
                     m_streamer.cancel(id);
-                    item->resetResidency();
+                    item->streaming.releaseAll();
                 }
             }
             if (state.materialDirty && !(item->material == payload.material)) {
@@ -186,6 +172,16 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
     }
 
     renderItems->m_pendingChanges.clear();
+
+    if (renderItems->m_sharedUniformBlock.isChanged()) {
+        m_sharedUniformBlock = renderItems->m_sharedUniformBlock.value();
+        renderItems->m_sharedUniformBlock.resetChanged();
+        for (Item* item : std::as_const(m_items)) {
+            if (item->material.wantsPerDrawUniform()) {
+                item->uniformNeedsUpdate = true;
+            }
+        }
+    }
 }
 
 void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
@@ -236,8 +232,6 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
     const auto desiredPass = context.renderPass;
     bool appended = false;
 
-    tallyCullingStats(context);
-
     // const iteration: the mapped values are Item* (the pointee is non-const, so
     // item->ensurePipeline() below is still callable) — avoids a QHash detach.
     for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
@@ -257,12 +251,19 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
             continue;
         }
 
+        // Every item is tallied in the pass it draws into, so a frame that
+        // gathers every pass counts each visible item exactly once.
+        if (context.cullingStats) {
+            ++context.cullingStats->itemsTotal;
+        }
+
         // Scraps and LiDAR meshes share this one render object, so whole-object
         // culling can't help them — each item tests its own box here, ahead of
         // ensurePipeline so a culled item skips the pipeline work too.
-        if (context.frustum
-            && item->boundsValid
-            && !context.frustum->intersects(item->worldBounds)) {
+        if (item->isCulledBy(context.frustum)) {
+            if (context.cullingStats) {
+                ++context.cullingStats->itemsCulled;
+            }
             continue;
         }
 
@@ -327,13 +328,11 @@ void cwRhiTexturedItems::selectStreamLevel(uint32_t id, Item* item, const Gather
 
     item->lastVisibleFrame = m_frame->frameCounter();
 
-    if (item->residentTopLevel == kNoResidentLevel
-        && item->requestedTopLevel == kNoResidentLevel) {
-        // Nothing to draw yet: the pinned base outranks every refinement.
+    if (item->streaming.needsPinnedBase()) {
+        // Nothing to draw yet: the pinned base outranks every refinement, and
+        // the selection math below would only pick the same level.
         const int base = cw::residency::pinnedBaseLevel(item->streamSource.size);
-        item->requestedTopLevel = base;
-        m_streamer.request(id, item->streamSource, streamTargetFormat(), base,
-                           kPinnedBasePriority);
+        applyStreamAction(id, item, item->streaming.requestPinnedBase(base));
         return;
     }
 
@@ -348,35 +347,25 @@ void cwRhiTexturedItems::selectStreamLevel(uint32_t id, Item* item, const Gather
     input.viewportHeightPx = renderData.viewportSize.height();
     input.screenSpaceErrorPx = renderData.budgets.screenSpaceErrorPx;
 
-    const int desired = cw::residency::desiredTopLevel(input);
-    item->desiredTopLevel = desired;
+    applyStreamAction(id, item,
+                      item->streaming.refineTo(cw::residency::desiredTopLevel(input), priority));
+}
 
-    // The level the item is heading for: what a load is running for, or what it
-    // holds when nothing is open. Only refinements are asked for here; giving
-    // detail back is the budget's job, in enforceGpuBudget.
-    const int target = item->requestedTopLevel == kNoResidentLevel
-                           ? item->residentTopLevel
-                           : item->requestedTopLevel;
+void cwRhiTexturedItems::applyStreamAction(uint32_t id, Item* item,
+                                           const cwStreamedItemState::Action& action)
+{
+    using Kind = cwStreamedItemState::Action::Kind;
 
-    if (desired < target) {
-        if (desired == item->residentTopLevel) {
-            // The open request is a demotion the camera has changed its mind
-            // about, and what is resident is already the wanted level: drop the
-            // request rather than reloading bytes the item holds.
-            item->requestedTopLevel = kNoResidentLevel;
-            item->demotionInFlight = false;
-            m_streamer.cancel(id);
-            return;
-        }
-
-        // A demotion in flight is superseded by this: the streamer bumps the
-        // item's generation, so the coarse chain is dropped when it lands.
-        item->requestedTopLevel = desired;
-        item->demotionInFlight = false;
-        m_streamer.request(id, item->streamSource, streamTargetFormat(), desired,
-                           priority == StreamPriority::Export
-                               ? kExportPriority
-                               : quint64(target - desired));
+    switch (action.kind) {
+    case Kind::None:
+        break;
+    case Kind::Cancel:
+        m_streamer.cancel(id);
+        break;
+    case Kind::Request:
+        m_streamer.request(id, item->streamSource, streamTargetFormat(), action.level,
+                           action.priority);
+        break;
     }
 }
 
@@ -404,9 +393,7 @@ bool cwRhiTexturedItems::residencyReady(const RenderData& jobRenderData)
             continue;
         }
 
-        if (frustum.isValid()
-            && item->boundsValid
-            && !frustum.intersects(item->worldBounds)) {
+        if (item->isCulledBy(&frustum)) {
             continue;
         }
 
@@ -414,8 +401,7 @@ bool cwRhiTexturedItems::residencyReady(const RenderData& jobRenderData)
         // unready, so the whole scene's loads are in flight by the next frame.
         selectStreamLevel(it.key(), item, context, StreamPriority::Export);
 
-        if (item->residentTopLevel == kNoResidentLevel
-            || item->residentTopLevel > item->desiredTopLevel) {
+        if (item->streaming.isBelowDesired()) {
             ready = false;
         }
     }
@@ -442,9 +428,10 @@ void cwRhiTexturedItems::enforceGpuBudget(const cwRenderBudgets& budgets)
     streamedItems.reserve(m_items.size());
     stats.reserve(m_items.size());
 
-    // What the demotions already running will give back. Crediting it keeps the
-    // frames they take to land from unraveling the whole fleet.
-    qint64 promisedBytes = 0;
+    // Whether anything is already on its way back to its base. The planner
+    // credits what those demotions will give back; this only tells a fleet that
+    // is still converging from one that has nothing left to give.
+    bool demotionsInFlight = false;
     for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
         Item* item = it.value();
         if (!item || item->streamSource.isNull()) {
@@ -454,21 +441,17 @@ void cwRhiTexturedItems::enforceGpuBudget(const cwRenderBudgets& budgets)
         cw::residency::ResidencyStats itemStats;
         itemStats.textureSize = item->streamSource.size;
         itemStats.format = format;
-        itemStats.residentTopLevel = item->residentTopLevel;
-        itemStats.desiredTopLevel = item->desiredTopLevel;
+        itemStats.residentTopLevel = item->streaming.residentTopLevel();
+        itemStats.desiredTopLevel = item->streaming.desiredTopLevel();
         itemStats.lastVisibleFrame = item->lastVisibleFrame;
         // gather() runs after streamResources, so the newest frame an item was
         // seen in is the one the counter still sits on. An item that has never
         // been gathered holds nothing for the planner to take anyway.
         itemStats.visibleThisFrame = item->lastVisibleFrame == frame;
-        itemStats.demotionInFlight = item->demotionInFlight;
+        itemStats.demotionInFlight = item->streaming.isDemotionInFlight();
 
         if (itemStats.demotionInFlight && itemStats.residentTopLevel >= 0) {
-            const int itemBase = cw::residency::pinnedBaseLevel(itemStats.textureSize);
-            promisedBytes +=
-                cw::residency::chainBytes(format, itemStats.textureSize,
-                                          itemStats.residentTopLevel)
-                - cw::residency::chainBytes(format, itemStats.textureSize, itemBase);
+            demotionsInFlight = true;
         }
 
         streamedItems.append({it.key(), item});
@@ -476,11 +459,11 @@ void cwRhiTexturedItems::enforceGpuBudget(const cwRenderBudgets& budgets)
     }
 
     const QVector<cw::residency::Demotion> plan =
-        cw::residency::planEvictions(stats, overshoot - promisedBytes);
+        cw::residency::planEvictions(stats, overshoot);
     if (plan.isEmpty()) {
         // Nothing planned and nothing in flight: what is resident is what the
         // views need, and the budget is simply set below that floor.
-        if (promisedBytes == 0 && !m_atResidencyFloor) {
+        if (!demotionsInFlight && !m_atResidencyFloor) {
             m_atResidencyFloor = true;
             qWarning() << "Render memory is" << overshoot
                        << "bytes over the GPU budget of" << budgets.gpuBudgetBytes
@@ -497,26 +480,68 @@ void cwRhiTexturedItems::enforceGpuBudget(const cwRenderBudgets& budgets)
         // The coarse chain lands through the same drain and swap a promotion
         // uses, so the fine texture keeps drawing until it is complete and the
         // ledger drops at the swap.
-        item->requestedTopLevel = demotion.newTopLevel;
-        item->demotionInFlight = true;
-        m_streamer.request(id, item->streamSource, format, demotion.newTopLevel,
-                           kDemotionPriority);
+        applyStreamAction(id, item, item->streaming.requestDemotion(demotion.newTopLevel));
     }
+}
+
+void cwRhiTexturedItems::releaseStreamedResources()
+{
+    for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
+        Item* item = it.value();
+        if (!item || item->streamSource.isNull()) {
+            continue;
+        }
+
+        // Cancel first: the streamer bumps the item's generation, so a load
+        // already in flight finishes into the void instead of landing on an item
+        // that has given everything back.
+        m_streamer.cancel(it.key());
+
+        item->streaming.releaseAll();
+        // Forgotten too, so the item asks again from whatever camera brings the
+        // view back rather than from the one that left.
+        item->streaming.forgetDesired();
+
+        delete item->texture;
+        item->texture = nullptr;
+        item->textureBytes.setBytes(0);
+
+        // The bindings sampled the texture just freed. streamResources rebuilds
+        // them against the loading texture before anything gathers the item again.
+        delete item->srb;
+        item->srb = nullptr;
+    }
+
+    // Nothing is resident, so the next over-budget frame gets a fresh warning
+    // rather than being silenced by the state this one left.
+    m_atResidencyFloor = false;
 }
 
 bool cwRhiTexturedItems::streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes)
 {
     m_streamer.setMaxPendingCpuBytes(data.renderData.budgets.cpuBudgetBytes);
 
+    // An item whose streamed texture was released — the view drawing it was
+    // hidden — holds no bindings at all. Rebuild them here, against the loading
+    // texture the first load also draws behind, so the item is drawable from
+    // this frame on rather than waiting on a synchronize that may never come.
+    for (auto item : std::as_const(m_items)) {
+        if (item->resourcesInitialized && !item->srb) {
+            item->createShaderResourceBindings(data, m_sharedData);
+        }
+    }
+
     // Results the streamer hands over are transient: what an item still wants is
     // stashed on it, and everything else dies with the local vector.
     const QVector<cwTextureStreamer::Result> ready = m_streamer.takeReady();
     for (const cwTextureStreamer::Result& result : ready) {
         Item* item = m_items.value(result.itemId, nullptr);
+        // The streamer holds one slot per item and forgets the old result when a
+        // new load is asked for, so a drained result is always the newest one
+        // for its item: matching the open request's level is the whole guard.
         if (!item
             || item->streamSource.isNull()
-            || result.topLevel != item->requestedTopLevel
-            || result.generation < item->acceptedGeneration) {
+            || !item->streaming.wantsLevel(result.topLevel)) {
             continue;
         }
 
@@ -525,22 +550,17 @@ bool cwRhiTexturedItems::streamResources(ResourceUpdateData& data, qint64& remai
             // next frame rather than leaving the item stuck at this level.
             qWarning() << "Streaming level" << result.topLevel << "for item" << result.itemId
                        << "failed:" << result.error;
-            item->requestedTopLevel = kNoResidentLevel;
-            item->demotionInFlight = false;
+            item->streaming.abandonRequest();
             continue;
         }
 
-        item->clearPendingUpload();
-        item->acceptedGeneration = result.generation;
-        item->pendingUpload.readyLevels = result.texture;
-        item->pendingUpload.readyTopLevel = result.topLevel;
-        item->pendingUpload.nextLevelToUpload = 0;
+        item->streaming.beginUpload(result.texture, result.topLevel);
     }
 
     bool anythingUploadedThisFrame = false;
     bool levelsRemain = false;
     for (auto item : std::as_const(m_items)) {
-        if (item->pendingUpload.readyTopLevel == kNoResidentLevel) {
+        if (!item->streaming.hasPendingUpload()) {
             continue;
         }
 
@@ -569,7 +589,7 @@ void cwRhiTexturedItems::publishStreamingStats() const
 {
     const cwTextureStreamer::Pending pending = m_streamer.pending();
 
-    cwTextureStreamingStats::Counts counts;
+    cwRenderFrameStats::Streaming counts;
     counts.loadsInFlight = pending.loads;
     counts.readyCpuBytes = pending.cpuBytes;
 
@@ -580,46 +600,18 @@ void cwRhiTexturedItems::publishStreamingStats() const
 
         ++counts.streamedItems;
 
-        if (item->demotionInFlight) {
+        if (item->streaming.isDemotionInFlight()) {
             ++counts.demotionsInFlight;
         }
 
         // Coarser than the camera asked for, counting an item that holds nothing
         // yet — its pinned base is still on the way.
-        if (item->residentTopLevel == kNoResidentLevel
-            || item->residentTopLevel > item->desiredTopLevel) {
+        if (item->streaming.isBelowDesired()) {
             ++counts.itemsBelowDesired;
         }
     }
 
-    cwTextureStreamingStats::instance()->publish(counts);
-}
-
-void cwRhiTexturedItems::tallyCullingStats(const GatherContext& context) const
-{
-    if (!context.cullingStats || context.renderPass != kCullingStatsPass) {
-        return;
-    }
-
-    for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
-        const Item* item = it.value();
-        if (!item) {
-            continue;
-        }
-
-        if (context.visibility
-            && !context.visibility->subVisible(renderObjectId(), it.key())) {
-            continue;
-        }
-
-        ++context.cullingStats->itemsTotal;
-
-        if (context.frustum
-            && item->boundsValid
-            && !context.frustum->intersects(item->worldBounds)) {
-            ++context.cullingStats->itemsCulled;
-        }
-    }
+    cwRenderFrameStats::instance()->publishStreaming(counts);
 }
 
 std::optional<QBox3D> cwRhiTexturedItems::worldBounds() const
@@ -648,29 +640,12 @@ cwRhiTexturedItems::Item::~Item()
     delete indexBuffer;
     delete uniformBuffer;
     delete texture;
-    delete pendingUpload.stagingTexture;
     delete srb;
 }
 
-void cwRhiTexturedItems::Item::clearPendingUpload()
+bool cwRhiTexturedItems::Item::isCulledBy(const cwFrustum* frustum) const
 {
-    delete pendingUpload.stagingTexture;
-    pendingUpload = {};
-}
-
-void cwRhiTexturedItems::Item::failPendingUpload()
-{
-    clearPendingUpload();
-    requestedTopLevel = kNoResidentLevel;
-    demotionInFlight = false;
-}
-
-void cwRhiTexturedItems::Item::resetResidency()
-{
-    clearPendingUpload();
-    residentTopLevel = kNoResidentLevel;
-    requestedTopLevel = kNoResidentLevel;
-    demotionInFlight = false;
+    return frustum && boundsValid && !frustum->intersects(worldBounds);
 }
 
 bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& data,
@@ -678,6 +653,7 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
                                                    qint64& remainingUploadBytes,
                                                    bool& anythingUploadedThisFrame)
 {
+    cwStreamedItemState::PendingUpload& pendingUpload = streaming.pendingUpload();
     const QVector<QByteArray>& levels = pendingUpload.readyLevels.mipLevels;
     const QSize topLevelSize = pendingUpload.readyLevels.size;
     const QRhiTexture::Format format = pendingUpload.readyLevels.format;
@@ -691,7 +667,7 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
         if (!pendingUpload.stagingTexture->create()) {
             qWarning() << "Creating a streamed texture of format" << int(format)
                        << "at size" << topLevelSize << "failed, keeping the resident texture";
-            failPendingUpload();
+            streaming.failUpload();
             return false;
         }
     }
@@ -705,17 +681,17 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
                    << "at size" << topLevelSize << "holds" << levels.size()
                    << "levels, expected" << expectedLevelCount
                    << "levels, keeping the resident texture";
-        failPendingUpload();
+        streaming.failUpload();
         return false;
     }
 
     for (int level = pendingUpload.nextLevelToUpload; level < levels.size(); level++) {
-        const QSize levelSize = cw::residency::mipLevelSize(topLevelSize, level);
-        if (levels.at(level).size() != cw::residency::mipLevelBytes(format, levelSize)) {
+        const QSize levelSize = cw::mip::mipLevelSize(topLevelSize, level);
+        if (levels.at(level).size() != cw::mip::mipLevelBytes(format, levelSize)) {
             qWarning() << "Streamed level" << level << "of format" << int(format)
                        << "at size" << levelSize << "holds" << levels.at(level).size()
                        << "bytes, keeping the resident texture";
-            failPendingUpload();
+            streaming.failUpload();
             return false;
         }
     }
@@ -726,7 +702,7 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
         while (pendingUpload.nextLevelToUpload < levels.size()) {
             const int level = pendingUpload.nextLevelToUpload;
             const QByteArray& levelBytes = levels.at(level);
-            const QSize levelSize = cw::residency::mipLevelSize(topLevelSize, level);
+            const QSize levelSize = cw::mip::mipLevelSize(topLevelSize, level);
 
             if (!cw::residency::takeFromBudget(remainingUploadBytes, levelBytes.size(),
                                                anythingUploadedThisFrame)) {
@@ -781,16 +757,12 @@ bool cwRhiTexturedItems::Item::uploadPendingLevels(const ResourceUpdateData& dat
     }
 
     // The last level landed: swap the finished chain in atomically (render thread
-    // only), so the item never goes a frame without a texture.
+    // only), so the item never goes a frame without a texture. Taking it closes
+    // the request, so the next selection pass measures against the new level.
     delete texture;
-    texture = pendingUpload.stagingTexture;
-    residentTopLevel = pendingUpload.readyTopLevel;
-    demotionInFlight = false;
-    textureBytes.setBytes(cw::residency::chainBytes(format, streamSource.size,
-                                                    residentTopLevel));
-
-    pendingUpload.stagingTexture = nullptr;   // ownership moved to `texture`
-    clearPendingUpload();
+    texture = streaming.takeUploadedTexture();
+    textureBytes.setBytes(
+        cw::mip::chainBytes(format, streamSource.size, streaming.residentTopLevel()));
 
     createShaderResourceBindings(data, sharedData);
     return false;
@@ -811,30 +783,18 @@ void cwRhiTexturedItems::Item::initializeResources(const ResourceUpdateData& dat
 }
 
 /**
- * Recomputes localBounds from the geometry payload and refreshes worldBounds.
+ * Adopts the bounds the GUI thread measured for this payload and refreshes
+ * worldBounds.
  *
- * Only synchronize can call this — updateGeometryBuffers drops the geometry
- * once it has been uploaded. Geometry without positions leaves the bounds
- * invalid, so the item keeps drawing.
+ * Only synchronize can call this — updateGeometryBuffers drops the geometry once
+ * it has been uploaded. A payload with no bounds leaves the item's bounds
+ * invalid, so it keeps drawing.
  */
-void cwRhiTexturedItems::Item::updateBoundsFromGeometry()
+void cwRhiTexturedItems::Item::setLocalBounds(const std::optional<QBox3D>& bounds)
 {
-    boundsValid = false;
-    localBounds = QBox3D();
+    boundsValid = bounds.has_value();
+    localBounds = bounds.value_or(QBox3D());
     worldBounds = QBox3D();
-    uvPerMeter = 0.0;
-
-    const auto* positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
-    const qsizetype vertexCount = geometry.vertexCount();
-    if (!positionAttribute || vertexCount == 0) {
-        return;
-    }
-
-    for (qsizetype index = 0; index < vertexCount; index++) {
-        localBounds.unite(geometry.value<QVector3D>(positionAttribute, index));
-    }
-
-    boundsValid = true;
     updateWorldBounds();
 
     // Selection needs the geometry's texel density, and this is the one moment
@@ -949,11 +909,7 @@ void cwRhiTexturedItems::Item::updateTextureResource(const ResourceUpdateData& d
             texture->create();
         }
 
-        textureBytes.setBytes(
-                    cwRenderMemoryLedger::estimatedTextureBytes(size,
-                                                                kRgba8BytesPerPixelNumerator,
-                                                                kRgba8BytesPerPixelDenominator,
-                                                                kMipmapped));
+        textureBytes.setBytes(cw::mip::chainBytes(QRhiTexture::RGBA8, size, kWholeImageTopLevel));
     }
 
     if (texture && !image.isNull()) {
@@ -1100,15 +1056,15 @@ void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdate
 
 QByteArray cwRhiTexturedItems::Item::buildPerDrawUniformPayload() const
 {
-    QByteArray payload;
+    // modelMatrix, then the shared color-by block, then the item's own block.
+    // Shaders that declare only the matrix ignore the rest.
+    const QByteArray sharedBlock = owner ? owner->m_sharedUniformBlock : QByteArray();
     const int matrixBytes = sizeof(float) * 16;
-    payload.resize(matrixBytes + uniformBlock.size());
-
-    std::memcpy(payload.data(), modelMatrix.constData(), matrixBytes);
-    if (!uniformBlock.isEmpty()) {
-        std::memcpy(payload.data() + matrixBytes, uniformBlock.constData(), uniformBlock.size());
-    }
-
+    QByteArray payload;
+    payload.reserve(matrixBytes + sharedBlock.size() + uniformBlock.size());
+    payload.append(reinterpret_cast<const char*>(modelMatrix.constData()), matrixBytes);
+    payload.append(sharedBlock);
+    payload.append(uniformBlock);
     return payload;
 }
 

@@ -3,10 +3,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "cwRenderCullingStats.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwRenderingStatsModel.h"
-#include "cwTextureStreamingStats.h"
 
 //Qt includes
 #include <QSignalSpy>
@@ -22,22 +21,32 @@ constexpr qint64 kMegabyte = kKilobyte * kKilobyte;
 constexpr qint64 kGigabyte = kMegabyte * kKilobyte;
 constexpr qint64 kOneAndAHalfMegabytes = kMegabyte + kMegabyte / 2;
 constexpr qint64 kTwoGigabytes = 2 * kGigabyte;
+constexpr qint64 kThreeMegabytes = 3 * kMegabyte;
 constexpr int kCategoryCount = 5;
 constexpr int kPointCloudRow = 0;
 constexpr int kLinePlotRow = 3;
 constexpr int kLongerThanPollInterval = 1200;
-constexpr cwRenderCullingStats::Counts kCounts {
+constexpr cwRenderFrameStats::Culling kCounts {
     .objectsTotal = 9,
     .objectsCulled = 4,
     .itemsTotal = 25,
     .itemsCulled = 20
 };
-constexpr cwTextureStreamingStats::Counts kStreamingCounts {
+constexpr cwRenderFrameStats::Streaming kStreamingCounts {
     .streamedItems = 12,
     .loadsInFlight = 3,
     .itemsBelowDesired = 5,
     .readyCpuBytes = kOneAndAHalfMegabytes,
     .demotionsInFlight = 2
+};
+constexpr qint64 kMillion = 1000000;
+constexpr cwRenderFrameStats::PointCloud kPointCloudCounts {
+    .residentNodes = 41,
+    .selectedNodes = 57,
+    .selectedPoints = 17200000,
+    .nodeLoadsInFlight = 6,
+    .sseInflation = 1.25,
+    .pickMirrorBytes = kThreeMegabytes
 };
 
 // The ledger is process-wide, so every test works in deltas from what it finds
@@ -75,6 +84,14 @@ qint64 rowCpuBytes(const cwRenderingStatsModel& model, int row)
 }
 
 } // namespace
+
+TEST_CASE("cwRenderingStatsModel: formattedMillions reads a point count in millions",
+          "[RenderingStatsModel]") {
+    CHECK(cwRenderingStatsModel::formattedMillions(0) == QStringLiteral("0.0 M"));
+    CHECK(cwRenderingStatsModel::formattedMillions(kPointCloudCounts.selectedPoints)
+          == QStringLiteral("17.2 M"));
+    CHECK(cwRenderingStatsModel::formattedMillions(16 * kMillion) == QStringLiteral("16.0 M"));
+}
 
 TEST_CASE("cwRenderingStatsModel: formattedBytes covers the unit boundaries",
           "[RenderingStatsModel]") {
@@ -145,11 +162,15 @@ TEST_CASE("cwRenderingStatsModel: refresh re-reads roles and totals from the led
 
 TEST_CASE("cwRenderingStatsModel: refresh reads the published culling counts",
           "[RenderingStatsModel]") {
+    //A known baseline so the model's construction-time snapshot differs from kCounts
+    cwRenderFrameStats::instance()->publishCulling({});
+
     cwRenderingStatsModel model;
 
     QSignalSpy cullingSpy(&model, &cwRenderingStatsModel::cullingChanged);
+    QSignalSpy streamingSpy(&model, &cwRenderingStatsModel::streamingChanged);
 
-    cwRenderCullingStats::instance()->publish(kCounts);
+    cwRenderFrameStats::instance()->publishCulling(kCounts);
 
     model.refresh();
 
@@ -159,18 +180,26 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published culling counts",
     CHECK(model.culledItems() == kCounts.itemsCulled);
     CHECK(cullingSpy.count() == 1);
 
+    //Publishing culling alone leaves the streaming half quiet
+    CHECK(streamingSpy.count() == 0);
+
     //Without a new published frame the model stays quiet
     model.refresh();
     CHECK(cullingSpy.count() == 1);
+    CHECK(streamingSpy.count() == 0);
 }
 
 TEST_CASE("cwRenderingStatsModel: refresh reads the published streaming counts",
           "[RenderingStatsModel]") {
+    //A known baseline so the model's construction-time snapshot differs from kStreamingCounts
+    cwRenderFrameStats::instance()->publishStreaming({});
+
     cwRenderingStatsModel model;
 
     QSignalSpy streamingSpy(&model, &cwRenderingStatsModel::streamingChanged);
+    QSignalSpy cullingSpy(&model, &cwRenderingStatsModel::cullingChanged);
 
-    cwTextureStreamingStats::instance()->publish(kStreamingCounts);
+    cwRenderFrameStats::instance()->publishStreaming(kStreamingCounts);
 
     model.refresh();
 
@@ -183,12 +212,16 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published streaming counts",
     CHECK(model.demotionsInFlight() == kStreamingCounts.demotionsInFlight);
     CHECK(streamingSpy.count() == 1);
 
+    //Publishing streaming alone leaves the culling half quiet
+    CHECK(cullingSpy.count() == 0);
+
     //Without a new published frame the model stays quiet
     model.refresh();
     CHECK(streamingSpy.count() == 1);
+    CHECK(cullingSpy.count() == 0);
 
     //A frame with nothing streaming reads back as zeros
-    cwTextureStreamingStats::instance()->publish({});
+    cwRenderFrameStats::instance()->publishStreaming({});
     model.refresh();
 
     CHECK(model.streamedItems() == 0);
@@ -197,6 +230,55 @@ TEST_CASE("cwRenderingStatsModel: refresh reads the published streaming counts",
     CHECK(model.readyCpuBytes() == 0);
     CHECK(model.demotionsInFlight() == 0);
     CHECK(streamingSpy.count() == 2);
+    CHECK(cullingSpy.count() == 0);
+}
+
+TEST_CASE("cwRenderingStatsModel: refresh reads the published point cloud counts",
+          "[RenderingStatsModel]") {
+    //A known baseline so the model's construction-time snapshot differs from kPointCloudCounts
+    cwRenderFrameStats::instance()->publishPointCloud({});
+
+    cwRenderingStatsModel model;
+
+    QSignalSpy pointCloudSpy(&model, &cwRenderingStatsModel::pointCloudChanged);
+    QSignalSpy streamingSpy(&model, &cwRenderingStatsModel::streamingChanged);
+    QSignalSpy cullingSpy(&model, &cwRenderingStatsModel::cullingChanged);
+
+    cwRenderFrameStats::instance()->publishPointCloud(kPointCloudCounts);
+
+    model.refresh();
+
+    CHECK(model.residentNodes() == kPointCloudCounts.residentNodes);
+    CHECK(model.selectedNodes() == kPointCloudCounts.selectedNodes);
+    CHECK(model.nodeLoadsInFlight() == kPointCloudCounts.nodeLoadsInFlight);
+    CHECK(model.selectedPoints() == kPointCloudCounts.selectedPoints);
+    CHECK(model.selectedPointsText()
+          == cwRenderingStatsModel::formattedMillions(kPointCloudCounts.selectedPoints));
+    CHECK(model.sseInflation() == kPointCloudCounts.sseInflation);
+    CHECK(model.pickMirrorBytes() == kPointCloudCounts.pickMirrorBytes);
+    CHECK(model.pickMirrorText()
+          == cwRenderingStatsModel::formattedBytes(kPointCloudCounts.pickMirrorBytes));
+    CHECK(pointCloudSpy.count() == 1);
+
+    //Publishing the point cloud alone leaves the other parts quiet
+    CHECK(streamingSpy.count() == 0);
+    CHECK(cullingSpy.count() == 0);
+
+    //Without a new published frame the model stays quiet
+    model.refresh();
+    CHECK(pointCloudSpy.count() == 1);
+
+    //A frame with no octree reads back as the resting values
+    cwRenderFrameStats::instance()->publishPointCloud({});
+    model.refresh();
+
+    CHECK(model.residentNodes() == 0);
+    CHECK(model.selectedNodes() == 0);
+    CHECK(model.nodeLoadsInFlight() == 0);
+    CHECK(model.selectedPoints() == 0);
+    CHECK(model.sseInflation() == 1.0);
+    CHECK(model.pickMirrorBytes() == 0);
+    CHECK(pointCloudSpy.count() == 2);
 }
 
 TEST_CASE("cwRenderingStatsModel: polling picks up a published streaming frame",
@@ -206,9 +288,9 @@ TEST_CASE("cwRenderingStatsModel: polling picks up a published streaming frame",
 
     QSignalSpy streamingSpy(&model, &cwRenderingStatsModel::streamingChanged);
 
-    cwTextureStreamingStats::Counts counts = kStreamingCounts;
+    cwRenderFrameStats::Streaming counts = kStreamingCounts;
     counts.loadsInFlight = kStreamingCounts.loadsInFlight + 1;
-    cwTextureStreamingStats::instance()->publish(counts);
+    cwRenderFrameStats::instance()->publishStreaming(counts);
 
     QTest::qWait(kLongerThanPollInterval);
 
@@ -222,12 +304,12 @@ TEST_CASE("cwRenderingStatsModel: polling runs only while running is true",
     LedgerScope linePlotCpu(Category::LinePlotGeometry, Residency::Cpu);
 
     cwRenderingStatsModel model;
+    CHECK_FALSE(model.running());
+
     const qint64 startGpuBytes = rowGpuBytes(model, kLinePlotRow);
     const qint64 startCpuBytes = rowCpuBytes(model, kLinePlotRow);
 
     QSignalSpy runningSpy(&model, &cwRenderingStatsModel::runningChanged);
-
-    CHECK_FALSE(model.running());
 
     cwRenderMemoryLedger::instance()->adjust(Category::LinePlotGeometry,
                                              Residency::Gpu,

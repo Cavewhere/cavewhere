@@ -6,7 +6,7 @@ import cw.TestLib
 MainWindowTest {
     id: rootId
 
-    TestCase {
+    CWTestCase {
         name: "FixStationsRoundTrip"
         when: windowShown
 
@@ -26,13 +26,24 @@ MainWindowTest {
             RootData.newProject()
         }
 
+        //! Commits \a cs through row \a rowIndex's picker, which a double-click
+        //! on the row's system opens.
         function setInputCSViaPicker(rowIndex, cs) {
             const fixPage = RootData.pageView.currentPageItem
             let picker = null
+            let label = null
             tryVerify(() => {
                 picker = findChild(fixPage, "inputCSComboBox." + rowIndex)
-                return picker !== null
-            }, 5000, "row " + rowIndex + " inputCSComboBox should be reachable")
+                label = findChild(fixPage, "inputCSLabel." + rowIndex)
+                return picker !== null || (label !== null && label.visible)
+            }, 5000, "row " + rowIndex + " should show its coordinate system")
+            if (picker === null) {
+                doubleTap(label)
+                tryVerify(() => {
+                    picker = findChild(fixPage, "inputCSComboBox." + rowIndex)
+                    return picker !== null
+                }, 5000, "double-clicking row " + rowIndex + "'s system should open its picker")
+            }
             picker.committed(cs)
         }
 

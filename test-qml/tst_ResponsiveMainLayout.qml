@@ -76,12 +76,29 @@ MainWindowTest {
             verify(syncBtn.visible, "SyncButton should be visible at wide width")
         }
 
-        function test_syncButtonAlwaysVisibleAtNarrow() {
+        function test_syncButtonMovesIntoHamburgerAtNarrow() {
             rootId.width = 400
-            waitForRendering(rootId)
+            tryCompare(rootId.mainWindow, "layoutSize", Theme.LayoutSize.Narrow)
             let syncBtn = ObjectFinder.findObjectByChain(rootId, "rootId->mainWindow->linkBar->syncButton")
             verify(syncBtn !== null, "syncButton not found")
-            verify(syncBtn.visible, "SyncButton should be visible at narrow width")
+            verify(!syncBtn.visible, "SyncButton should be hidden at narrow width")
+
+            let hamburger = ObjectFinder.findObjectByChain(rootId, "rootId->mainWindow->linkBar->hamburgerButton")
+            let syncMenu = findChild(hamburger, "hamburgerSyncMenu")
+            verify(syncMenu !== null, "hamburger Sync submenu not found")
+            verify(findChild(syncMenu, "syncNowMenuItem") !== null)
+            verify(findChild(syncMenu, "remoteSettingsMenuItem") !== null)
+            verify(findChild(syncMenu, "historyMenuItem") !== null)
+        }
+
+        function test_hamburgerSettingsOpensSettingsPage() {
+            rootId.width = 400
+            tryCompare(rootId.mainWindow, "layoutSize", Theme.LayoutSize.Narrow)
+            let hamburger = ObjectFinder.findObjectByChain(rootId, "rootId->mainWindow->linkBar->hamburgerButton")
+            let settingsItem = findChild(hamburger, "hamburgerSettingsMenuItem")
+            verify(settingsItem !== null, "hamburger Settings item not found")
+            settingsItem.triggered()
+            tryCompare(RootData.pageSelectionModel, "currentPageAddress", "Settings")
         }
 
         function test_hamburgerHiddenAtWide() {

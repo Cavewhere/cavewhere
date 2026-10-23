@@ -4,7 +4,7 @@
 #include "cwRhiItemRenderer.h"
 #include "cwEDLEffect.h"
 #include "cwFrustum.h"
-#include "cwRenderCullingStats.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderingSettings.h"
 
 #include <algorithm>
@@ -179,12 +179,18 @@ void cwRhiFrameRenderer::destroyRhiObject(cwRHIObject* rhiObject)
     m_rhiObjects.removeOne(rhiObject);
     m_rhiObjectsToInitilize.removeOne(rhiObject);
     m_rhiNeedResourceUpdate.removeOne(rhiObject);
+    m_pointCloudForest.removeTree(rhiObject);
     delete rhiObject;
 }
 
 void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
 {
     auto rhi = cb->rhi();
+
+    // Before any cloud streams, so the threshold refreshSseThreshold() writes
+    // for the shader and the cut gatherScene() selects are one frame's
+    // inflation rather than two.
+    m_pointCloudForest.advance(m_budgets);
 
     // The renderer's render target is the authoritative source for viewport
     // pixel size — it accounts for devicePixelRatio, where cwCamera's
@@ -280,21 +286,19 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
     // Streamed uploads ride this frame's batch, sharing one budget across every
     // object so a frame's upload cost is bounded whatever the scene holds.
     qint64 remainingUploadBytes = m_budgets.uploadBudgetBytesPerFrame;
-    m_hasPendingStreamingWork = false;
+    bool streamedWorkLeft = false;
     for(auto object : std::as_const(m_rhiObjects)) {
-        m_hasPendingStreamingWork = object->streamResources(resourceUpdateData, remainingUploadBytes)
-                                    || m_hasPendingStreamingWork;
+        streamedWorkLeft = object->streamResources(resourceUpdateData, remainingUploadBytes)
+                           || streamedWorkLeft;
     }
 
     std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount> passBatches;
 
-    gatherScene(passBatches, perPassRenderData);
+    // drawScene() submits the batch with its first pass, so what a gather
+    // writes into it lands before this frame's draws.
+    gatherScene(passBatches, perPassRenderData, {.resourceUpdateBatch = resources});
 
-    // Gather is where streamed items ask for the levels this camera wants, so a
-    // load requested there needs a frame of its own to land in.
-    for(auto object : std::as_const(m_rhiObjects)) {
-        m_hasPendingStreamingWork = m_hasPendingStreamingWork || object->hasStreamingWork();
-    }
+    recordPendingStreamingWork(streamedWorkLeft);
 
     const QColor clearColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0);
 
@@ -308,6 +312,30 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
     drawScene(cb, renderer->renderTarget(), edlActive ? &m_edlOffscreen : nullptr,
               passBatches, perPassRenderData, resources, liveFrameContext,
               kLiveCameraOffset, clearColor);
+}
+
+void cwRhiFrameRenderer::recordPendingStreamingWork(bool streamedWorkLeft)
+{
+    // Gather is where streamed items ask for the levels this camera wants, so a
+    // load requested there needs a frame of its own to land in.
+    const bool gatheredWorkLeft =
+        std::any_of(m_rhiObjects.cbegin(), m_rhiObjects.cend(),
+                    [](const cwRHIObject* object) { return object->hasStreamingWork(); });
+
+    // The governor takes one step a frame and steps down only on a probe every
+    // few frames, so a cut it has yet to settle on needs frames of its own.
+    m_hasPendingStreamingWork = streamedWorkLeft
+                                || gatheredWorkLeft
+                                || m_pointCloudForest.isSettling(m_budgets);
+}
+
+void cwRhiFrameRenderer::releaseStreamedResources()
+{
+    for(auto object : std::as_const(m_rhiObjects)) {
+        object->releaseStreamedResources();
+    }
+
+    m_hasPendingStreamingWork = false;
 }
 
 cwRhiFrameRenderer::ClipSpaceCamera cwRhiFrameRenderer::stampCamera(
@@ -567,15 +595,55 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
     const cwFrustum frustum = cwFrustum::fromViewProjection(
         perPassRenderData[0].viewProjectionMatrix);
 
-    cwRenderCullingStats::Counts cullingStats;
+    cwRenderFrameStats::Culling cullingStats;
 
     quint32 objectOrder = 0;
-    for (auto object : std::as_const(m_rhiObjects)) {
-        // Snapshot gate ANDed with the per-job overlay. Objects carry their own
-        // ids now, so the overlay is tested directly — no id→pointer resolve
-        // pass; contains() on the live frame's empty set is a cheap no-op.
+
+    // An object that draws nothing this frame settles here instead of
+    // gathering: once for the whole object rather than once per pass, handed
+    // the first pass's render data, which stands in for the frame because every
+    // pass shares this job's camera.
+    constexpr auto kCulledPass = cwRHIObject::RenderPass::Background;
+    const auto settleCulled = [&](cwRHIObject* object) {
+        object->gatherCulled(cwRHIObject::GatherContext {
+            &perPassRenderData[static_cast<int>(kCulledPass)],
+            kCulledPass,
+            objectOrder,
+            &m_visibility,
+            &frustum,
+            &cullingStats,
+            options.appearanceSlotForObject.value(object, 0),
+            options.liveFrame,
+            options.resourceUpdateBatch
+        });
+    };
+
+    // Snapshot gate ANDed with the per-job overlay. Objects carry their own
+    // ids now, so the overlay is tested directly — no id→pointer resolve pass;
+    // contains() on the live frame's empty set is a cheap no-op.
+    const auto objectShown = [&](const cwRHIObject* object) {
         const cwRenderObjectId id = object->renderObjectId();
-        if (!m_visibility.objectVisible(id) || options.hiddenObjectIds.contains(id)) {
+        return m_visibility.objectVisible(id) && !options.hiddenObjectIds.contains(id);
+    };
+
+    const auto objectInFrustum = [&](const cwRHIObject* object) {
+        const std::optional<QBox3D> bounds = object->worldBounds();
+        return !bounds.has_value() || frustum.intersects(bounds.value());
+    };
+
+    // The forest cuts the trees of the clouds this job draws, so the gate it
+    // asks with is the loop's own: a cloud handed a slice it never draws, or
+    // drawing with a slice the cut left out, is the drift this shares away.
+    if (options.liveFrame) {
+        m_pointCloudForest.select(perPassRenderData[0], frustum,
+                                  [&](const cwRHIObject* object) {
+                                      return objectShown(object) && objectInFrustum(object);
+                                  });
+    }
+
+    for (auto object : std::as_const(m_rhiObjects)) {
+        if (!objectShown(object)) {
+            settleCulled(object);
             ++objectOrder;
             continue;
         }
@@ -584,9 +652,9 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
 
         // objectOrder still advances, as on the visibility path above, so draw
         // order stays stable as the camera moves.
-        const std::optional<QBox3D> bounds = object->worldBounds();
-        if (bounds.has_value() && !frustum.intersects(bounds.value())) {
+        if (!objectInFrustum(object)) {
             ++cullingStats.objectsCulled;
+            settleCulled(object);
             ++objectOrder;
             continue;
         }
@@ -599,7 +667,9 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
                 &m_visibility,
                 &frustum,
                 &cullingStats,
-                options.appearanceSlotForObject.value(object, 0)
+                options.appearanceSlotForObject.value(object, 0),
+                options.liveFrame,
+                options.resourceUpdateBatch
             };
             object->gather(context, batches);
         }
@@ -607,7 +677,9 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
         ++objectOrder;
     }
 
-    cwRenderCullingStats::instance()->publish(cullingStats);
+    if (options.liveFrame) {
+        cwRenderFrameStats::instance()->publishCulling(cullingStats);
+    }
 }
 
 void cwRhiFrameRenderer::drainBatches(QRhiCommandBuffer* cb,
@@ -741,11 +813,18 @@ void cwRhiFrameRenderer::drawScene(QRhiCommandBuffer* cb,
         // cloud and paint the whole scene with the (black) cloud-clear colour.
         const QColor edlClear = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0);
 
+        // The composite's uniform writes ride the frame batch so they land
+        // before any pass opens. A caller without a batch gets a fresh one.
+        QRhiResourceUpdateBatch* frameBatch = resources
+                                                  ? resources
+                                                  : cb->rhi()->nextResourceUpdateBatch();
+        edl->effect->prepare(frameContext, frameBatch);
+
         // Pass A — scene offscreen: Background + Opaque into sceneColor with
-        // sceneDepth. Consumes the caller's resource-update batch.
+        // sceneDepth. Consumes the frame batch.
         {
             QRhiGraphicsPipeline* bound = nullptr;
-            cb->beginPass(edl->sceneTarget.get(), edlClear, { 1.0f, 0 }, resources);
+            cb->beginPass(edl->sceneTarget.get(), edlClear, { 1.0f, 0 }, frameBatch);
             cb->setViewport(offscreenViewport);
             drainBatches(cb, passBatchFor(RP::Background), bound, passDataFor(RP::Background), cameraUniformOffset);
             drainBatches(cb, passBatchFor(RP::Opaque), bound, passDataFor(RP::Opaque), cameraUniformOffset);
@@ -769,7 +848,6 @@ void cwRhiFrameRenderer::drawScene(QRhiCommandBuffer* cb,
         cb->beginPass(finalTarget, clearColor, { 1.0f, 0 }, nullptr);
         cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
 
-        edl->effect->updateFrameUniforms(frameContext);
         edl->effect->apply(cb, edl->sceneColor.get(), edl->cloudColor.get(), edl->depth.get(),
                            outputSize, cameraUniformOffset);
 

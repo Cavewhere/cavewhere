@@ -100,13 +100,17 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
                          //The render thread streams the KTX2 entry, so decoding
                          //the PNG crop here would only throw the pixels away
                          if(!croppedResult.compressedKey.id.isEmpty()) {
-                             return cwConcurrent::run([scrap, cropFuture, scrapNode]()
+                             const cwItemTexture streamed
+                                 = cwStreamedTexture(dataRootDir.absolutePath(),
+                                                     croppedResult.compressedKey,
+                                                     croppedResult.croppedSize);
+                             return cwConcurrent::run([scrap, cropFuture, streamed, scrapNode]()
                                                       {
                                                           //The scope hands the scrap's node back when the geometry is done
                                                           cwProgressScope scope(scrapNode);
                                                           return triangulateGeometry(scrap,
                                                                                      cropFuture.result(),
-                                                                                     cwTextureUploadTask::UploadResult(),
+                                                                                     streamed,
                                                                                      scrapNode);
                                                       });
                          }
@@ -126,7 +130,7 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
                                                                   cwProgressScope scope(scrapNode);
                                                                   return triangulateGeometry(scrap,
                                                                                              cropFuture.result(),
-                                                                                             uploadFuture.result(),
+                                                                                             uploadFuture.result().image,
                                                                                              scrapNode);
                                                               });
                                  }).future();
@@ -169,7 +173,7 @@ QFuture<cwCropImageTask::Result> cwTriangulateTask::cropScrap(const cwTriangulat
 
 cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInData &scrap,
                                                           const cwCropImageTask::Result& croppedResult,
-                                                          const cwTextureUploadTask::UploadResult& imageData,
+                                                          const cwItemTexture& texture,
                                                           const cwProgressNodePtr& scrapNode)
 {
     cwProgressScope triangulating(scrapNode, QStringLiteral("Triangulating"));
@@ -237,10 +241,8 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
     geometry.setCullBackfaces(false);
 
     cwTriangulatedData outputData;
-    outputData.setCroppedImageData(imageData);
+    outputData.setTexture(texture);
     outputData.setCroppedImage(croppedResult.image);
-    outputData.setCompressedTextureKey(croppedResult.compressedKey);
-    outputData.setCroppedImageSize(croppedResult.croppedSize);
     outputData.setScrapGeometry(geometry);
     outputData.setLeadPoints(leadPoints);
 

@@ -9,6 +9,11 @@
 
 //Qt includes
 #include <QSettings>
+#include <QSignalSpy>
+#include <QVector>
+
+//Std includes
+#include <functional>
 
 TEST_CASE("cwRenderingSettings is a singleton defaulting to 4x MSAA", "[cwRenderingSettings]")
 {
@@ -172,12 +177,15 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
     uploadSpy.setObjectName("uploadBudgetMbPerFrameSpy");
     cwSignalSpy errorSpy(settings, &cwRenderingSettings::screenSpaceErrorPxChanged);
     errorSpy.setObjectName("screenSpaceErrorPxSpy");
+    cwSignalSpy pointSpy(settings, &cwRenderingSettings::pointBudgetMillionsChanged);
+    pointSpy.setObjectName("pointBudgetMillionsSpy");
 
     SpyChecker checker = {
         {&gpuSpy, 0},
         {&cpuSpy, 0},
         {&uploadSpy, 0},
         {&errorSpy, 0},
+        {&pointSpy, 0},
     };
 
     QSettings diskSettings;
@@ -187,6 +195,7 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         CHECK(settings->cpuCacheBudgetMb() == 512);
         CHECK(settings->uploadBudgetMbPerFrame() == 8);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(1.5));
+        CHECK(settings->pointBudgetMillions() == 16);
         CHECK(settings->isAtDefaults());
     }
 
@@ -199,17 +208,21 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         checker[&uploadSpy]++;
         settings->setScreenSpaceErrorPx(2.5);
         checker[&errorSpy]++;
+        settings->setPointBudgetMillions(32);
+        checker[&pointSpy]++;
         checker.checkSpies();
 
         CHECK(settings->gpuMemoryBudgetMb() == 2048);
         CHECK(settings->cpuCacheBudgetMb() == 1024);
         CHECK(settings->uploadBudgetMbPerFrame() == 16);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(2.5));
+        CHECK(settings->pointBudgetMillions() == 32);
 
         CHECK(diskSettings.value(QStringLiteral("rendering/gpuMemoryBudgetMb")).toInt() == 2048);
         CHECK(diskSettings.value(QStringLiteral("rendering/cpuCacheBudgetMb")).toInt() == 1024);
         CHECK(diskSettings.value(QStringLiteral("rendering/uploadBudgetMbPerFrame")).toInt() == 16);
         CHECK(diskSettings.value(QStringLiteral("rendering/screenSpaceErrorPx")).toDouble() == Catch::Approx(2.5));
+        CHECK(diskSettings.value(QStringLiteral("rendering/pointBudgetMillions")).toInt() == 32);
 
         CHECK_FALSE(settings->isAtDefaults());
     }
@@ -226,11 +239,68 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
 
         settings->setScreenSpaceErrorPx(0.0);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(0.5));
+
+        settings->setPointBudgetMillions(0);
+        CHECK(settings->pointBudgetMillions() == 1);
     }
 
-    SECTION("the screen-space error clamps at its upper edge") {
+    SECTION("values above the maximum clamp down") {
+        settings->setGpuMemoryBudgetMb(1000000);
+        CHECK(settings->gpuMemoryBudgetMb() == 65536);
+
+        settings->setCpuCacheBudgetMb(1000000);
+        CHECK(settings->cpuCacheBudgetMb() == 16384);
+
+        settings->setUploadBudgetMbPerFrame(1000);
+        CHECK(settings->uploadBudgetMbPerFrame() == 256);
+
         settings->setScreenSpaceErrorPx(100.0);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(8.0));
+
+        settings->setPointBudgetMillions(100000);
+        CHECK(settings->pointBudgetMillions() == 512);
+    }
+
+    SECTION("the exposed limits match the values the setters clamp to") {
+        CHECK(cwRenderingSettings::minimumGpuMemoryBudgetMb() == 256);
+        CHECK(cwRenderingSettings::maximumGpuMemoryBudgetMb() == 65536);
+        CHECK(cwRenderingSettings::minimumCpuCacheBudgetMb() == 64);
+        CHECK(cwRenderingSettings::maximumCpuCacheBudgetMb() == 16384);
+        CHECK(cwRenderingSettings::minimumUploadBudgetMbPerFrame() == 1);
+        CHECK(cwRenderingSettings::maximumUploadBudgetMbPerFrame() == 256);
+        CHECK(cwRenderingSettings::minimumScreenSpaceErrorPx() == Catch::Approx(0.5));
+        CHECK(cwRenderingSettings::maximumScreenSpaceErrorPx() == Catch::Approx(8.0));
+        CHECK(cwRenderingSettings::minimumPointBudgetMillions() == 1);
+        CHECK(cwRenderingSettings::maximumPointBudgetMillions() == 512);
+    }
+
+    SECTION("budgets() converts the megabyte knobs to bytes") {
+        settings->setGpuMemoryBudgetMb(2048);
+        settings->setCpuCacheBudgetMb(1024);
+        settings->setUploadBudgetMbPerFrame(16);
+        settings->setScreenSpaceErrorPx(2.5);
+        settings->setPointBudgetMillions(32);
+
+        CHECK(settings->gpuBudgetBytes() == qint64(2048) * cw::budgets::kBytesPerMegabyte);
+
+        const cwRenderBudgets budgets = settings->budgets();
+        CHECK(budgets.gpuBudgetBytes == qint64(2048) * cw::budgets::kBytesPerMegabyte);
+        CHECK(budgets.cpuBudgetBytes == qint64(1024) * cw::budgets::kBytesPerMegabyte);
+        CHECK(budgets.uploadBudgetBytesPerFrame == qint64(16) * cw::budgets::kBytesPerMegabyte);
+        CHECK(budgets.screenSpaceErrorPx == Catch::Approx(2.5));
+        CHECK(budgets.pointBudget == qint64(32) * cw::budgets::kPointsPerMillion);
+    }
+
+    SECTION("the default budgets match a default-constructed cwRenderBudgets") {
+        settings->resetToDefaults();
+
+        const cwRenderBudgets defaults;
+        const cwRenderBudgets budgets = settings->budgets();
+        CHECK(budgets.gpuBudgetBytes == defaults.gpuBudgetBytes);
+        CHECK(budgets.cpuBudgetBytes == defaults.cpuBudgetBytes);
+        CHECK(budgets.uploadBudgetBytesPerFrame == defaults.uploadBudgetBytesPerFrame);
+        CHECK(budgets.screenSpaceErrorPx == Catch::Approx(defaults.screenSpaceErrorPx));
+        CHECK(budgets.pointBudget == defaults.pointBudget);
     }
 
     SECTION("setting the current value is a no-op and emits nothing") {
@@ -238,6 +308,7 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         settings->setCpuCacheBudgetMb(settings->cpuCacheBudgetMb());
         settings->setUploadBudgetMbPerFrame(settings->uploadBudgetMbPerFrame());
         settings->setScreenSpaceErrorPx(settings->screenSpaceErrorPx());
+        settings->setPointBudgetMillions(settings->pointBudgetMillions());
         checker.checkSpies();
     }
 
@@ -264,6 +335,564 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         CHECK(settings->cpuCacheBudgetMb() == 512);
         CHECK(settings->uploadBudgetMbPerFrame() == 8);
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(1.5));
+        CHECK(settings->pointBudgetMillions() == 16);
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
+TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip isAtDefaults",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    using cw::pointcloud::DebugView;
+    using cw::pointcloud::FloorMode;
+    using cw::pointcloud::SizeMode;
+    using cw::pointcloud::SpacingSource;
+    using cw::pointcloud::ThinningMode;
+
+    constexpr int kCappedLevel = 3;
+    constexpr int kIsolatedLevel = 2;
+    constexpr double kFixedPointSizePx = 5.0;
+    constexpr double kMaxPointSizePx = 12.0;
+    constexpr double kGovernorSlew = 0.5;
+    constexpr int kRevealFrames = 16;
+
+    // One knob each: how to move it off its default, what QSettings holds
+    // afterward, and the notify signal that has to fire once.
+    struct Knob {
+        const char* name;
+        std::function<void()> change;
+        QString key;
+        QVariant persisted;
+        void (cwRenderingSettings::*notify)();
+    };
+
+    const QVector<Knob> knobs = {
+        {"freezeCut", [&] { settings->setFreezeCut(true); },
+         QStringLiteral("rendering/pointCloud/freezeCut"), true,
+         &cwRenderingSettings::freezeCutChanged},
+        {"maxLevel", [&] { settings->setMaxLevel(kCappedLevel); },
+         QStringLiteral("rendering/pointCloud/maxLevel"), kCappedLevel,
+         &cwRenderingSettings::maxLevelChanged},
+        {"minLevel", [&] { settings->setMinLevel(kIsolatedLevel); },
+         QStringLiteral("rendering/pointCloud/minLevel"), kIsolatedLevel,
+         &cwRenderingSettings::minLevelChanged},
+        {"inflationGovernor", [&] { settings->setInflationGovernor(false); },
+         QStringLiteral("rendering/pointCloud/inflationGovernor"), false,
+         &cwRenderingSettings::inflationGovernorChanged},
+        {"governorSlew", [&] { settings->setGovernorSlew(kGovernorSlew); },
+         QStringLiteral("rendering/pointCloud/governorSlew"), kGovernorSlew,
+         &cwRenderingSettings::governorSlewChanged},
+        {"evictionHold", [&] { settings->setEvictionHold(true); },
+         QStringLiteral("rendering/pointCloud/evictionHold"), true,
+         &cwRenderingSettings::evictionHoldChanged},
+        {"thinningMode", [&] { settings->setThinningMode(int(ThinningMode::Discrete)); },
+         QStringLiteral("rendering/pointCloud/thinningMode"), int(ThinningMode::Discrete),
+         &cwRenderingSettings::thinningModeChanged},
+        {"sizeMode", [&] { settings->setSizeMode(int(SizeMode::FixedPixels)); },
+         QStringLiteral("rendering/pointCloud/sizeMode"), int(SizeMode::FixedPixels),
+         &cwRenderingSettings::sizeModeChanged},
+        {"floorMode", [&] { settings->setFloorMode(int(FloorMode::Off)); },
+         QStringLiteral("rendering/pointCloud/floorMode"), int(FloorMode::Off),
+         &cwRenderingSettings::floorModeChanged},
+        {"spacingSource", [&] { settings->setSpacingSource(int(SpacingSource::Grid)); },
+         QStringLiteral("rendering/pointCloud/spacingSource"), int(SpacingSource::Grid),
+         &cwRenderingSettings::spacingSourceChanged},
+        {"fixedPointSizePx", [&] { settings->setFixedPointSizePx(kFixedPointSizePx); },
+         QStringLiteral("rendering/pointCloud/fixedPointSizePx"), kFixedPointSizePx,
+         &cwRenderingSettings::fixedPointSizePxChanged},
+        {"maxPointSizePx", [&] { settings->setMaxPointSizePx(kMaxPointSizePx); },
+         QStringLiteral("rendering/pointCloud/maxPointSizePx"), kMaxPointSizePx,
+         &cwRenderingSettings::maxPointSizePxChanged},
+        {"debugView", [&] { settings->setDebugView(int(DebugView::ResidencyAge)); },
+         QStringLiteral("rendering/pointCloud/debugView"), int(DebugView::ResidencyAge),
+         &cwRenderingSettings::debugViewChanged},
+        {"showNodeBoxes", [&] { settings->setShowNodeBoxes(true); },
+         QStringLiteral("rendering/pointCloud/showNodeBoxes"), true,
+         &cwRenderingSettings::showNodeBoxesChanged},
+        {"revealFrames", [&] { settings->setRevealFrames(kRevealFrames); },
+         QStringLiteral("rendering/pointCloud/revealFrames"), kRevealFrames,
+         &cwRenderingSettings::revealFramesChanged},
+        {"revealMode",
+         [&] { settings->setRevealMode(int(cw::pointcloud::RevealMode::Cover)); },
+         QStringLiteral("rendering/pointCloud/revealMode"),
+         int(cw::pointcloud::RevealMode::Cover), &cwRenderingSettings::revealModeChanged},
+    };
+
+    SECTION("the knobs start at the renderer's own rules") {
+        const cwRenderBudgets defaults;
+        const cwRenderBudgets budgets = settings->budgets();
+        CHECK(budgets.freezeCut == defaults.freezeCut);
+        CHECK(budgets.maxLevel == defaults.maxLevel);
+        CHECK(budgets.maxLevel == cwRenderingSettings::unlimitedLevel());
+        CHECK(budgets.minLevel == defaults.minLevel);
+        CHECK(budgets.minLevel == cwRenderingSettings::rootLevel());
+        CHECK(budgets.inflationGovernor == defaults.inflationGovernor);
+        CHECK(budgets.evictionHold == defaults.evictionHold);
+        CHECK(settings->pointCloudShading() == cwPointCloudShading());
+        CHECK(settings->maxPointSizePx() == Catch::Approx(cw::pointcloud::kMaxPointSizePx));
+        CHECK(settings->debugView() == int(DebugView::Off));
+        CHECK_FALSE(settings->showNodeBoxes());
+        CHECK(settings->isAtDefaults());
+    }
+
+    for (const Knob& knob : knobs) {
+        DYNAMIC_SECTION("moving " << knob.name << " persists it, fires once, and leaves the defaults") {
+            QSignalSpy notifySpy(settings, knob.notify);
+            QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+
+            knob.change();
+
+            CHECK(notifySpy.count() == 1);
+            CHECK(defaultsSpy.count() == 1);
+            CHECK_FALSE(settings->isAtDefaults());
+
+            QSettings diskSettings;
+            CHECK(diskSettings.value(knob.key) == knob.persisted);
+
+            //Setting the same value again is a no-op
+            knob.change();
+            CHECK(notifySpy.count() == 1);
+
+            settings->resetPointCloudKnobsToDefaults();
+            CHECK(notifySpy.count() == 2);
+            CHECK(settings->isAtDefaults());
+        }
+    }
+
+    SECTION("the streaming knobs reach cwRenderBudgets") {
+        settings->setFreezeCut(true);
+        settings->setMaxLevel(kCappedLevel);
+        settings->setMinLevel(kIsolatedLevel);
+        settings->setInflationGovernor(false);
+        settings->setEvictionHold(true);
+
+        const cwRenderBudgets budgets = settings->budgets();
+        CHECK(budgets.freezeCut);
+        CHECK(budgets.maxLevel == kCappedLevel);
+        CHECK(budgets.minLevel == kIsolatedLevel);
+        CHECK_FALSE(budgets.inflationGovernor);
+        CHECK(budgets.evictionHold);
+    }
+
+    SECTION("the shader knobs reach pointCloudShading and announce it") {
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+
+        settings->setThinningMode(int(ThinningMode::Off));
+        settings->setSizeMode(int(SizeMode::OwnSpacing));
+        settings->setFloorMode(int(FloorMode::Off));
+        settings->setFixedPointSizePx(kFixedPointSizePx);
+        settings->setMaxPointSizePx(kMaxPointSizePx);
+        settings->setDebugView(int(DebugView::DecimationPreview));
+        settings->setShowNodeBoxes(true);
+        CHECK(shadingSpy.count() == 7);
+
+        const cwPointCloudShading& shading = settings->pointCloudShading();
+        CHECK(shading.thinningMode == ThinningMode::Off);
+        CHECK(shading.sizeMode == SizeMode::OwnSpacing);
+        CHECK(shading.floorMode == FloorMode::Off);
+        CHECK(shading.fixedPointSizePx == Catch::Approx(kFixedPointSizePx));
+        CHECK(shading.maxPointSizePx == Catch::Approx(kMaxPointSizePx));
+        CHECK(shading.debugView == DebugView::DecimationPreview);
+        CHECK(shading.showNodeBoxes);
+    }
+
+    SECTION("minLevel and maxLevel stay ordered, the edited knob wins") {
+        settings->setMaxLevel(kIsolatedLevel);
+        settings->setMinLevel(kCappedLevel);
+        CHECK(settings->minLevel() == kCappedLevel);
+        CHECK(settings->maxLevel() == kCappedLevel);
+
+        settings->setMaxLevel(kIsolatedLevel);
+        CHECK(settings->maxLevel() == kIsolatedLevel);
+        CHECK(settings->minLevel() == kIsolatedLevel);
+
+        settings->setMaxLevel(cwRenderingSettings::unlimitedLevel());
+        settings->setMinLevel(kCappedLevel);
+        CHECK(settings->maxLevel() == cwRenderingSettings::unlimitedLevel());
+        CHECK(settings->minLevel() == kCappedLevel);
+
+        const cwRenderBudgets budgets = settings->budgets();
+        CHECK(budgets.minLevel == kCappedLevel);
+        CHECK(budgets.maxLevel == cwRenderingSettings::unlimitedLevel());
+    }
+
+    SECTION("out-of-range values clamp") {
+        settings->setMaxLevel(-10);
+        CHECK(settings->maxLevel() == cwRenderingSettings::unlimitedLevel());
+        settings->setMaxLevel(1000);
+        CHECK(settings->maxLevel() == cwRenderingSettings::maximumLevel());
+
+        settings->setMinLevel(-1);
+        CHECK(settings->minLevel() == cwRenderingSettings::rootLevel());
+        settings->setMinLevel(1000);
+        CHECK(settings->minLevel() == cwRenderingSettings::maximumLevel());
+
+        settings->setDebugView(-1);
+        CHECK(settings->debugView() == int(DebugView::Off));
+        settings->setDebugView(100);
+        CHECK(settings->debugView() == cwRenderingSettings::debugViewCount() - 1);
+
+        settings->setThinningMode(-1);
+        CHECK(settings->thinningMode() == 0);
+        settings->setThinningMode(100);
+        CHECK(settings->thinningMode() == cwRenderingSettings::thinningModeCount() - 1);
+        settings->setSizeMode(100);
+        CHECK(settings->sizeMode() == cwRenderingSettings::sizeModeCount() - 1);
+        settings->setFloorMode(100);
+        CHECK(settings->floorMode() == cwRenderingSettings::floorModeCount() - 1);
+
+        settings->setFixedPointSizePx(0.0);
+        CHECK(settings->fixedPointSizePx() == Catch::Approx(cwRenderingSettings::minimumPointSizePx()));
+        settings->setMaxPointSizePx(1000.0);
+        CHECK(settings->maxPointSizePx() == Catch::Approx(cwRenderingSettings::maximumPointSizePx()));
+    }
+
+    SECTION("resetting the point cloud knobs leaves MSAA and the HUD alone") {
+        settings->setShowRenderStatsHud(true);
+        settings->setThinningMode(int(ThinningMode::Off));
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->thinningMode() == int(ThinningMode::Continuous));
+        CHECK(settings->showRenderStatsHud());
+    }
+
+    settings->resetToDefaults();
+}
+
+TEST_CASE("cwRenderingSettings governorSlew defaults to the governor's own step, clamps, and persists",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    constexpr double kHalfSlew = 0.5;
+    constexpr double kBelowRange = 0.0;
+    constexpr double kAboveRange = 2.0;
+    const QString key = QStringLiteral("rendering/pointCloud/governorSlew");
+
+    SECTION("the default closes a quarter of the gap to the target each frame") {
+        CHECK(cw::budgets::kDefaultGovernorSlew == 0.25);
+        CHECK(settings->governorSlew() == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
+        CHECK(cwRenderBudgets().governorSlew == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
+        CHECK(settings->budgets().governorSlew == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("the range is the open-closed unit interval the forest steps over") {
+        CHECK(cwRenderingSettings::minimumGovernorSlew() == Catch::Approx(cw::budgets::kMinGovernorSlew));
+        CHECK(cwRenderingSettings::maximumGovernorSlew() == Catch::Approx(cw::budgets::kMaxGovernorSlew));
+        CHECK(cwRenderingSettings::minimumGovernorSlew() > 0.0);
+        CHECK(cwRenderingSettings::maximumGovernorSlew() == Catch::Approx(1.0));
+        CHECK(cwRenderingSettings::minimumGovernorSlew() < cwRenderingSettings::maximumGovernorSlew());
+    }
+
+    SECTION("values outside the range clamp to its ends") {
+        settings->setGovernorSlew(kBelowRange);
+        CHECK(settings->governorSlew() == Catch::Approx(cwRenderingSettings::minimumGovernorSlew()));
+        settings->setGovernorSlew(kAboveRange);
+        CHECK(settings->governorSlew() == Catch::Approx(cwRenderingSettings::maximumGovernorSlew()));
+    }
+
+    SECTION("a slew round-trips through QSettings and reaches the budgets") {
+        QSignalSpy slewSpy(settings, &cwRenderingSettings::governorSlewChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+        QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+
+        settings->setGovernorSlew(kHalfSlew);
+
+        CHECK(slewSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 1);
+        CHECK(defaultsSpy.count() == 1);
+        CHECK(settings->governorSlew() == Catch::Approx(kHalfSlew));
+        CHECK(settings->budgets().governorSlew == Catch::Approx(kHalfSlew));
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toDouble() == Catch::Approx(kHalfSlew));
+
+        settings->setGovernorSlew(kHalfSlew);
+        CHECK(slewSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 1);
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->governorSlew() == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
+        CHECK(diskSettings.value(key).toDouble() == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
+TEST_CASE("cwRenderingSettings spacingSource defaults to local, clamps, and persists",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    using cw::pointcloud::SpacingSource;
+    const QString key = QStringLiteral("rendering/pointCloud/spacingSource");
+
+    SECTION("the default sizes and thins by each point's local native spacing") {
+        CHECK(cw::pointcloud::kDefaultSpacingSource == SpacingSource::Local);
+        CHECK(cwPointCloudShading().spacingSource == SpacingSource::Local);
+        CHECK(settings->spacingSource() == int(SpacingSource::Local));
+        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Local);
+        CHECK(cwRenderingSettings::spacingSourceCount() == cw::pointcloud::kSpacingSourceCount);
+        CHECK(cwRenderingSettings::spacingSourceCount() == 3);
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("values outside the enum clamp to its ends") {
+        settings->setSpacingSource(-1);
+        CHECK(settings->spacingSource() == int(SpacingSource::Grid));
+        settings->setSpacingSource(100);
+        CHECK(settings->spacingSource() == cwRenderingSettings::spacingSourceCount() - 1);
+        CHECK(settings->spacingSource() == int(SpacingSource::Local));
+    }
+
+    SECTION("measured round-trips through QSettings and reaches the shading") {
+        QSignalSpy sourceSpy(settings, &cwRenderingSettings::spacingSourceChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+
+        settings->setSpacingSource(int(SpacingSource::Measured));
+
+        CHECK(sourceSpy.count() == 1);
+        CHECK(shadingSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 0);
+        CHECK(settings->spacingSource() == int(SpacingSource::Measured));
+        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Measured);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Measured));
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->spacingSource() == int(SpacingSource::Local));
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("grid round-trips through QSettings and reaches the shading") {
+        QSignalSpy sourceSpy(settings, &cwRenderingSettings::spacingSourceChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+        QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+
+        settings->setSpacingSource(int(SpacingSource::Grid));
+
+        CHECK(sourceSpy.count() == 1);
+        CHECK(shadingSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 0);
+        CHECK(defaultsSpy.count() == 1);
+        CHECK(settings->spacingSource() == int(SpacingSource::Grid));
+        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Grid);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Grid));
+
+        settings->setSpacingSource(int(SpacingSource::Grid));
+        CHECK(sourceSpy.count() == 1);
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->spacingSource() == int(SpacingSource::Local));
+        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Local));
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
+TEST_CASE("cwRenderingSettings revealFrames defaults to eight frames, clamps, and persists",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    const QString key = QStringLiteral("rendering/pointCloud/revealFrames");
+    constexpr int kEightFrames = 8;
+    constexpr int kOff = 0;
+    constexpr int kBelowRange = -3;
+    constexpr int kAboveRange = 1000;
+
+    SECTION("the default fades an arrival in and moves a floor over eight frames") {
+        CHECK(cw::pointcloud::kDefaultRevealFrames == kEightFrames);
+        CHECK(cwPointCloudShading().revealFrames == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(settings->revealFrames() == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(settings->pointCloudShading().revealFrames == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("the range runs from off to sixty frames") {
+        CHECK(cwRenderingSettings::minimumRevealFrames() == cw::pointcloud::kMinRevealFrames);
+        CHECK(cwRenderingSettings::maximumRevealFrames() == cw::pointcloud::kMaxRevealFrames);
+        CHECK(cwRenderingSettings::minimumRevealFrames() == 0);
+        CHECK(cwRenderingSettings::maximumRevealFrames() == 60);
+    }
+
+    SECTION("values outside the range clamp to its ends") {
+        settings->setRevealFrames(kAboveRange);
+        CHECK(settings->revealFrames() == cwRenderingSettings::maximumRevealFrames());
+        settings->setRevealFrames(kBelowRange);
+        CHECK(settings->revealFrames() == cwRenderingSettings::minimumRevealFrames());
+    }
+
+    SECTION("turning the ramp off round-trips through QSettings and reaches the shading") {
+        QSignalSpy framesSpy(settings, &cwRenderingSettings::revealFramesChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+        QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+
+        settings->setRevealFrames(kOff);
+
+        CHECK(framesSpy.count() == 1);
+        CHECK(shadingSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 0);
+        CHECK(defaultsSpy.count() == 1);
+        CHECK(settings->revealFrames() == kOff);
+        CHECK(settings->pointCloudShading().revealFrames == kOff);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == kOff);
+
+        settings->setRevealFrames(kOff);
+        CHECK(framesSpy.count() == 1);
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->revealFrames() == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(diskSettings.value(key).toInt() == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
+TEST_CASE("cwRenderingSettings revealMode defaults to grow, clamps, and persists",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    using cw::pointcloud::RevealMode;
+    const QString key = QStringLiteral("rendering/pointCloud/revealMode");
+    constexpr int kBelowRange = -1;
+    constexpr int kAboveRange = 100;
+
+    SECTION("the enum holds cover and grow, and the default is grow") {
+        CHECK(int(RevealMode::Cover) == 0);
+        CHECK(int(RevealMode::Grow) == 1);
+        CHECK(cw::pointcloud::kRevealModeCount == 2);
+        CHECK(cw::pointcloud::kDefaultRevealMode == RevealMode::Grow);
+        CHECK(cwPointCloudShading().revealMode == RevealMode::Grow);
+        CHECK(settings->revealMode() == int(RevealMode::Grow));
+        CHECK(settings->pointCloudShading().revealMode == RevealMode::Grow);
+        CHECK(cwRenderingSettings::revealModeCount() == cw::pointcloud::kRevealModeCount);
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("values outside the enum clamp to its ends") {
+        settings->setRevealMode(kAboveRange);
+        CHECK(settings->revealMode() == cwRenderingSettings::revealModeCount() - 1);
+        CHECK(settings->revealMode() == int(RevealMode::Grow));
+        settings->setRevealMode(kBelowRange);
+        CHECK(settings->revealMode() == int(RevealMode::Cover));
+    }
+
+    SECTION("cover round-trips through QSettings and reaches the shading") {
+        QSignalSpy modeSpy(settings, &cwRenderingSettings::revealModeChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+        QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+
+        settings->setRevealMode(int(RevealMode::Cover));
+
+        CHECK(modeSpy.count() == 1);
+        CHECK(shadingSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 0);
+        CHECK(defaultsSpy.count() == 1);
+        CHECK(settings->revealMode() == int(RevealMode::Cover));
+        CHECK(settings->pointCloudShading().revealMode == RevealMode::Cover);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == int(RevealMode::Cover));
+
+        settings->setRevealMode(int(RevealMode::Cover));
+        CHECK(modeSpy.count() == 1);
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(modeSpy.count() == 2);
+        CHECK(settings->revealMode() == int(RevealMode::Grow));
+        CHECK(diskSettings.value(key).toInt() == int(RevealMode::Grow));
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
+TEST_CASE("cwRenderingSettings debugView reaches the sprite density view, clamps to it, and persists it",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    using cw::pointcloud::DebugView;
+    const QString key = QStringLiteral("rendering/pointCloud/debugView");
+    constexpr int kAboveRange = 100;
+
+    SECTION("the count reaches past the sprite density view") {
+        CHECK(cwRenderingSettings::debugViewCount() == cw::pointcloud::kDebugViewCount);
+        CHECK(cwRenderingSettings::debugViewCount() == int(DebugView::SpriteDensity) + 1);
+    }
+
+    SECTION("a value past the enum clamps to the sprite density view") {
+        settings->setDebugView(kAboveRange);
+        CHECK(settings->debugView() == cwRenderingSettings::debugViewCount() - 1);
+        CHECK(settings->debugView() == int(DebugView::SpriteDensity));
+    }
+
+    SECTION("the sprite density view round-trips through QSettings and reaches the shading") {
+        QSignalSpy viewSpy(settings, &cwRenderingSettings::debugViewChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+
+        settings->setDebugView(int(DebugView::SpriteDensity));
+
+        CHECK(viewSpy.count() == 1);
+        CHECK(shadingSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 0);
+        CHECK(settings->debugView() == int(DebugView::SpriteDensity));
+        CHECK(settings->pointCloudShading().debugView == DebugView::SpriteDensity);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == int(DebugView::SpriteDensity));
+
+        //The view before it keeps its stored value's meaning
+        settings->setDebugView(int(DebugView::DecimationPreview));
+        CHECK(settings->debugView() == int(DebugView::DecimationPreview));
+        CHECK(diskSettings.value(key).toInt() == int(DebugView::DecimationPreview));
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->debugView() == int(DebugView::Off));
         CHECK(settings->isAtDefaults());
     }
 
@@ -316,4 +945,84 @@ TEST_CASE("cwRenderingSettings honors the backend's supported sample counts", "[
 
     settings->setSupportedSampleCounts({1, 2, 4, 8});
     settings->setSampleCount(4);
+}
+
+TEST_CASE("cwRenderingSettings announces every budget knob through budgetsChanged",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    constexpr int kCappedLevel = 3;
+    constexpr int kIsolatedLevel = 2;
+    constexpr double kFixedPointSizePx = 5.0;
+    constexpr double kMaxPointSizePx = 12.0;
+
+    // budgetsChanged is what asks the scene for a frame when one of these
+    // moves, so a knob missing from it would wait for the camera to move
+    struct Knob {
+        const char* name;
+        std::function<void()> change;
+        bool rideBudgets;
+    };
+
+    const QVector<Knob> knobs = {
+        {"gpuMemoryBudgetMb", [&] { settings->setGpuMemoryBudgetMb(cw::budgets::kMinGpuBudgetMb); }, true},
+        {"cpuCacheBudgetMb", [&] { settings->setCpuCacheBudgetMb(cw::budgets::kMinCpuBudgetMb); }, true},
+        {"uploadBudgetMbPerFrame",
+         [&] { settings->setUploadBudgetMbPerFrame(cw::budgets::kMinUploadBudgetMbPerFrame); }, true},
+        {"screenSpaceErrorPx",
+         [&] { settings->setScreenSpaceErrorPx(cw::budgets::kMaxScreenSpaceErrorPx); }, true},
+        {"pointBudgetMillions",
+         [&] { settings->setPointBudgetMillions(cw::budgets::kMinPointBudgetMillions); }, true},
+        {"freezeCut", [&] { settings->setFreezeCut(true); }, true},
+        {"maxLevel", [&] { settings->setMaxLevel(kCappedLevel); }, true},
+        {"minLevel", [&] { settings->setMinLevel(kIsolatedLevel); }, true},
+        {"inflationGovernor", [&] { settings->setInflationGovernor(false); }, true},
+        {"governorSlew",
+         [&] { settings->setGovernorSlew(cw::budgets::kMinGovernorSlew); }, true},
+        {"evictionHold", [&] { settings->setEvictionHold(true); }, true},
+        {"thinningMode",
+         [&] { settings->setThinningMode(int(cw::pointcloud::ThinningMode::Discrete)); }, false},
+        {"sizeMode", [&] { settings->setSizeMode(int(cw::pointcloud::SizeMode::FixedPixels)); }, false},
+        {"floorMode", [&] { settings->setFloorMode(int(cw::pointcloud::FloorMode::Off)); }, false},
+        {"spacingSource",
+         [&] { settings->setSpacingSource(int(cw::pointcloud::SpacingSource::Grid)); }, false},
+        {"fixedPointSizePx", [&] { settings->setFixedPointSizePx(kFixedPointSizePx); }, false},
+        {"maxPointSizePx", [&] { settings->setMaxPointSizePx(kMaxPointSizePx); }, false},
+        {"debugView",
+         [&] { settings->setDebugView(int(cw::pointcloud::DebugView::ResidencyAge)); }, false},
+        {"showNodeBoxes", [&] { settings->setShowNodeBoxes(true); }, false},
+        {"revealFrames",
+         [&] { settings->setRevealFrames(cw::pointcloud::kMaxRevealFrames); }, false},
+        {"revealMode",
+         [&] { settings->setRevealMode(int(cw::pointcloud::RevealMode::Cover)); }, false},
+    };
+
+    for (const Knob& knob : knobs) {
+        INFO(knob.name);
+        settings->resetToDefaults();
+
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+
+        knob.change();
+
+        // Each knob rides exactly one of the two ways to the render thread
+        if (knob.rideBudgets) {
+            CHECK(budgetsSpy.count() == 1);
+            CHECK(shadingSpy.count() == 0);
+        } else {
+            CHECK(budgetsSpy.count() == 0);
+            CHECK(shadingSpy.count() == 1);
+        }
+
+        // Setting the value it already holds announces nothing
+        knob.change();
+        CHECK(budgetsSpy.count() + shadingSpy.count() == 1);
+    }
+
+    settings->resetToDefaults();
 }

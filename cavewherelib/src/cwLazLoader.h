@@ -9,87 +9,35 @@
 #define CWLAZLOADER_H
 
 //Qt includes
-#include <QFuture>
 #include <QString>
-#include <QVector3D>
 
 //Our includes
 #include "CaveWhereLibExport.h"
-#include "cwGeometry.h"
 #include "cwGeoPoint.h"
 
 class LASheader;
 
 /**
- * Result of a single LAZ load. Geometry holds Type::Points with one
- * Position(Vec3) attribute, in the project's frame (frameCS).
- */
-struct CAVEWHERE_LIB_EXPORT cwLazLoadResult
-{
-    cwGeometry geometry;
-    QVector3D bboxMin;
-    QVector3D bboxMax;
-    QString sourceCS; // CS actually used during load (override > LAZ-embedded > "")
-
-    // The CS the file itself declares, before any override — what a header
-    // synthesized from this result must record as the file's own.
-    QString embeddedCS;
-    // True once the header pass opened the file; an open failure delivers an
-    // empty result with this still false.
-    bool headerRead = false;
-
-    // The header's bounding box in the file's own CRS, before the transform
-    // into frameCS that bboxMin/bboxMax carry.
-    // A cloud's position in its own CRS exists nowhere else in the result, and
-    // deriving a coordinate frame from a cloud needs exactly that. Read during
-    // the header pass, so it costs nothing beyond what the load already does.
-    cwGeoPoint sourceBboxMin;
-    cwGeoPoint sourceBboxMax;
-    // Mean planar spacing between points in meters, derived from XY bbox area:
-    //   sqrt((dx * dy) / pointCount)
-    // Drives world-space point radius in PointCloud.vert so points just touch
-    // their neighbors — gap-free coverage is what lets EDL produce surfaces
-    // rather than punching the background through. 0 when no points loaded.
-    float meanSpacingXY = 0.0f;
-};
-
-/**
- * LAZ/LAS file loader.
+ * Header-level reader for LAZ/LAS files, wrapping LAStools' LASlib.
  *
- * Wraps LAStools' LASlib reader. Single static load() returns a QFuture so the
- * caller can wrap it in a cwFuture and hand it to cwFutureManagerToken::addJob
- * for global progress tracking.
- *
- * Threading: each load() spins a worker on cwConcurrent's thread pool. The
- * worker constructs its own LASreader and cwCoordinateTransform, neither of
- * which is thread-safe across instances — never share the future's worker
- * state with the caller.
- *
- * Cancellation: honored via QPromise::isCanceled() between point chunks.
+ * Points reach the renderer through cwPointOctreeBuilder; this class answers
+ * only the header-level questions — where the file sits and what CRS it is in.
+ * Both calls read the header alone and return synchronously.
  */
 class CAVEWHERE_LIB_EXPORT cwLazLoader
 {
 public:
-    struct Request {
-        QString path;              //!< absolute filesystem path to a .laz / .las file
-        QString sourceCSOverride;  //!< empty → use LAZ-embedded CS (or identity)
-        QString frameCS;           //!< destination CS: the project's local projection
-        qsizetype maxPoints = -1;  //!< stop after this many; -1 means all
-    };
-
-    static QFuture<cwLazLoadResult> load(const Request& request);
-
     /**
      * Header-only probe. Opens the LAZ, reads the embedded CS and
      * raw bounding box, then closes — no point iteration, microseconds.
      *
      * This is how a project whose only georeferenced input is a point cloud
-     * gets a frame at all: the loader transforms points into the project's
-     * frame, so the frame has to exist before the load can run, but the frame
-     * is derived from the cloud's own coordinates. The probe breaks the cycle
-     * by reading the position out of the header without loading anything.
-     * cwLazLayer runs one per layer off the GUI thread, including for layers
-     * that are disabled and will never decode a point.
+     * gets a frame at all: the octree builder transforms points into the
+     * project's frame, so the frame has to exist before the build can run, but
+     * the frame is derived from the cloud's own coordinates. The probe breaks
+     * the cycle by reading the position out of the header without loading
+     * anything. cwLazLayer runs one per layer off the GUI thread, including
+     * for layers that are disabled and will never build an octree.
      */
     struct ProbeResult {
         bool valid = false;        //!< false if the file could not be opened
@@ -101,10 +49,9 @@ public:
     static ProbeResult probeHeader(const QString& path);
 
     /**
-     * Resolves the source CRS for a LAZ file using the same precedence the
-     * loader applies: explicit @a override wins; otherwise the LAZ's
-     * embedded OGC WKT VLR (if present); otherwise the GeoTIFF GeoKeys as
-     * "EPSG:<code>"; otherwise empty (identity).
+     * Resolves the source CRS for a LAZ file: explicit @a override wins;
+     * otherwise the LAZ's embedded OGC WKT VLR (if present); otherwise the
+     * GeoTIFF GeoKeys as "EPSG:<code>"; otherwise empty (identity).
      */
     static QString resolveSourceCS(const QString& override, const LASheader& header);
 };

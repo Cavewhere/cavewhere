@@ -8,6 +8,9 @@
 //Our includes
 #include "cwExternalStationHarvest.h"
 #include "cwCavernRunner.h"
+#include "cwCoordinateTransform.h"
+#include "cwExternalCenterline.h"
+#include "cwExternalCenterlineScanner.h"
 #include "cwExternalIncludeWriter.h"
 #include "cwLinePlotErrorCodes.h"
 #include "cwStation.h"
@@ -88,6 +91,57 @@ QString withoutDriverNoise(const QString& logText, const QString& workingDirecto
 
 namespace {
 
+/**
+ * The system the driver puts in force around \a absoluteEntry, or empty. Only
+ * a Survex closure that fixes a station gets one: cavern refuses a fix under a
+ * *cs with no *cs out (error 437), and reads a bare fix in the *cs out the file
+ * names. That is the file's own *cs out, else the system of its first fix that
+ * names one, made projected since cavern outputs only in a projected system.
+ * The harvest reads names, not positions, so any such system serves.
+ *
+ * A .mak or .wpj sets its own output when none is in force, and a closure that
+ * fixes nothing keeps cavern's implicit origin fix, which any *cs defeats.
+ */
+QString outputSystemFor(const QString& absoluteEntry)
+{
+    if(cwExternalCenterlineScanner::formatFor(absoluteEntry)
+       != cwExternalCenterlineScanner::Format::Survex) {
+        return QString();
+    }
+
+    const auto scan = cwExternalCenterlineScanner::scan(absoluteEntry);
+    if(scan.hasError() || scan.value().fixes.isEmpty()) {
+        return QString();
+    }
+    if(!scan.value().outputCoordinateSystem.isEmpty()) {
+        return scan.value().outputCoordinateSystem;
+    }
+
+    for(const cwExternalCenterlineScanner::ScannedFix& scanned : scan.value().fixes) {
+        if(!scanned.hasCoordinateSystem()) {
+            continue;
+        }
+        cwAttachedFix fix;
+        fix.coordinate = scanned.coordinate;
+        fix.coordinateSystem = scanned.coordinateSystem;
+        fix.placementSystem = scanned.placementSystem;
+        const QString system = fix.solveSystem();
+        const auto placement = fix.placementIn(system);
+        if(!placement.has_value()) {
+            continue;
+        }
+        if(!cwCoordinateTransform::isGeographic(placement->cs)) {
+            return system;
+        }
+        const QString projected =
+            cwCoordinateTransform::deriveProjectedOutputCS(placement->cs, placement->point);
+        if(!projected.isEmpty()) {
+            return projected;
+        }
+    }
+    return QString();
+}
+
 Monad::Result<QStringList> namesOf(const Monad::Result<cwExternalStationHarvest::Stations>& result)
 {
     if(result.hasError()) {
@@ -97,8 +151,7 @@ Monad::Result<QStringList> namesOf(const Monad::Result<cwExternalStationHarvest:
 }
 
 Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
-                                                      const QStringList& seedStations,
-                                                      const QString& bareFixSystem = QString())
+                                                      const QStringList& seedStations)
 {
     const QString absoluteEntry = QFileInfo(entryFile).absoluteFilePath();
 
@@ -135,23 +188,26 @@ Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
                                 LinePlotErrorCode::ExportFailed);
         }
 
-        //No *cs and no named *begin: a *cs would defeat netskel's implicit
-        //origin fix, and a named *begin would add a naming level the region
-        //solve doesn't have. A *fix takes the place of the implicit fix only
-        //for the components the caller seeds. The seeds are spelled as cavern
-        //reported them, so they keep their case — Compass names are
-        //case-sensitive — inside an unnamed block that keeps *case from
-        //reaching the include.
+        //No *cs unless the closure fixes a station that needs one (see
+        //outputSystemFor), and no named *begin: a *cs would defeat netskel's
+        //implicit origin fix, and a named *begin would add a naming level the
+        //region solve doesn't have. The system comes before the seeds, which
+        //cavern refuses once a *cs follows them. A *fix takes the place of the
+        //implicit fix only for the components the caller seeds. The seeds are
+        //spelled as cavern reported them, so they keep their case — Compass
+        //names are case-sensitive — inside an unnamed block that keeps *case
+        //from reaching the include.
         QTextStream stream(&driver);
+        const QString outputSystem = outputSystemFor(absoluteEntry);
+        if(!outputSystem.isEmpty()) {
+            cwSurvexExporterUtils::writeFileOutputSystem(stream, outputSystem);
+        }
         if(!seedStations.isEmpty()) {
             stream << "*begin" << Qt::endl << "*case preserve" << Qt::endl;
             for(const QString& station : seedStations) {
                 stream << "*fix " << station << " 0 0 0" << Qt::endl;
             }
             stream << "*end" << Qt::endl;
-        }
-        if(!bareFixSystem.isEmpty()) {
-            cwSurvexExporterUtils::writeFileOutputSystem(stream, bareFixSystem);
         }
         cwSurvexCS::SidecarWriter sidecars;
         cwSurvexExporterUtils::CsScope scope(sidecars);
@@ -222,10 +278,9 @@ Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entr
 }
 
 Monad::Result<cwExternalStationHarvest::Stations>
-cwExternalStationHarvest::harvestWithFixes(const QString& entryFile,
-                                           const QString& bareFixSystem)
+cwExternalStationHarvest::harvestWithFixes(const QString& entryFile)
 {
-    return run(entryFile, {}, bareFixSystem);
+    return run(entryFile, {});
 }
 
 Monad::Result<QStringList> cwExternalStationHarvest::harvestComponents(const QString& entryFile,

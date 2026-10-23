@@ -1,5 +1,6 @@
 #include "cwTriangulateLiDARTask.h"
 #include "cwConcurrent.h"
+#include "cwGeometryBounds.h"
 #include "cwGltfBaseColorTexture.h"
 #include "cwGltfLoader.h"
 #include "cwTriangulateStation.h"
@@ -35,10 +36,10 @@ qsizetype geometryCount(const QVector<cw::gltf::MeshCPU>& meshes)
 
 }
 
-QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDARTask::triangulate(const QList<cwTriangulateLiDARInData> &liDARs,
-                                                                                                   const cwProgressNodePtr& progressRoot)
+QList<QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > > cwTriangulateLiDARTask::triangulate(const QList<cwTriangulateLiDARInData> &liDARs,
+                                                                                                          const cwProgressNodePtr& progressRoot)
 {
-    return cwConcurrent::mapped(liDARs, [progressRoot](const cwTriangulateLiDARInData& data) {
+    const auto triangulateOne = [progressRoot](const cwTriangulateLiDARInData& data) {
         //The scope names the scan, and hands the note's node back on every
         //return below
         cwProgressScope noteScope(progressRoot, QFileInfo(data.gltfFilename()).fileName());
@@ -98,8 +99,16 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
                     morphPositions(geometry, meshScope);
                 }
 
+                //Measured on this worker thread, so the render thread never
+                //walks the vertices again at the sync barrier
+                const auto localBounds = cw::geometry::positionBounds(geometry);
+
                 //Add the render item
                 auto& item = renderItems.emplaceBack(std::move(geometry));
+                item.localBounds = localBounds;
+                // The mesh draws with the scrap shaders, which read a per-draw block.
+                item.material = cwRenderTexturedItems::scrapMaterial();
+                item.uniformBlock = cwRenderTexturedItems::emptyItemBlock();
 
                 const cwProgressScope textureScope(textures,
                                                    QStringLiteral("Texture %1").arg(geometryIndex + 1));
@@ -110,8 +119,16 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
         }
 
         return Monad::Result<QVector<cwRenderTexturedItems::Item> >(renderItems);
+    };
 
-    });
+    QList<QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > > futures;
+    futures.reserve(liDARs.size());
+    for(const cwTriangulateLiDARInData& liDAR : liDARs) {
+        futures.append(cwConcurrent::run([data = liDAR, triangulateOne]() {
+            return triangulateOne(data);
+        }));
+    }
+    return futures;
 }
 
 QVector<cwRenderTexturedItems::Item> cwTriangulateLiDARTask::reserveRenderItems(const QVector<cw::gltf::MeshCPU> &meshes)

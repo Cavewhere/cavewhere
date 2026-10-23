@@ -67,11 +67,10 @@ asks what to do with whatever project you already have open, exactly as **Open**
 does.
 
 The cave arrives as an ordinary project on your disk. Orbit it, edit it, break
-it; none of that matters. Your changes stay on your machine and never reach the
-shared copy online unless you deliberately sync. I recommend breaking it on
+it; none of that matters. The PhakeCave3000 repository is read-only, so there is
+no syncing your changes back to it even if you tried. I recommend breaking it on
 purpose: change a shot distance and watch the loop closure shift and the scraps
-re-carpet to follow. Nothing you do here can damage anyone
-else's copy.
+re-carpet to follow. Nothing you do here can damage anyone else's copy.
 
 ## Next steps
 

@@ -1,6 +1,8 @@
 #ifndef LAZFIXTUREHELPER_H
 #define LAZFIXTUREHELPER_H
 
+#include <QByteArray>
+#include <QMetaObject>
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -8,9 +10,13 @@
 #include <QVector3D>
 #include <QtTypes>
 
+#include "cwGeoPoint.h"
+
+class cwFutureManagerModel;
 class cwLazLayer;
 class cwLazLayerModel;
 class cwRootData;
+class LASheader;
 
 /**
  * The OGC WKT for a WGS 84 / UTM zone — the minimal form PROJ accepts, which is
@@ -18,6 +24,24 @@ class cwRootData;
  * single frame could have come from.
  */
 QString utmZoneWkt(int zone, int centralMeridian);
+
+//! Meters in one US survey foot, the unit Kentucky's state-plane lidar uses
+//! for both its eastings and its heights.
+constexpr double kMetersPerUsSurveyFoot = 0.304800609601219;
+
+//! A spot in central Kentucky, inside EPSG:3089's area of use
+constexpr double kKentuckyLatitude = 37.5;
+constexpr double kKentuckyLongitude = -84.5;
+
+//! NAD83 / Kentucky Single Zone (ftUS): a 2D state plane in US survey feet
+const QString kKentuckyFtUsCrs = QStringLiteral("EPSG:3089");
+
+/**
+ * The WKT1 compound CRS a Kentucky lidar tile declares: NAD83 / Kentucky
+ * Single Zone (ftUS, EPSG:3089) + NAVD88 height (ftUS, EPSG:6360). Both the
+ * horizontal and the vertical halves are in US survey feet.
+ */
+QString kentuckyFtUsCompoundWkt();
 
 /**
  * One synthetic point carrying the standard LAS attributes a clip must pass
@@ -50,6 +74,9 @@ bool writeAttributedLazFile(const QString& outPath,
  */
 struct LazFileContents {
     quint8 pointDataFormat = 0;
+    //! The count the header declares. The points below come from iterating,
+    //! so a header that declares the wrong count shows up only here.
+    qint64 headerPointCount = 0;
     QVector<LazAttributePoint> points;
     QVector3D headerBboxMin;
     QVector3D headerBboxMax;
@@ -58,6 +85,33 @@ struct LazFileContents {
 /// Reads every point (and the header format) from the .laz at @a path. On open
 /// failure returns an empty contents with no points.
 LazFileContents readLazFile(const QString& path);
+
+/**
+ * How a fixture's points are compressed on disk. LASwriteOpener picks by
+ * extension and offers no compressor of its own, so anything but the default
+ * goes through LASwriterLAS directly.
+ */
+enum class LazCompression {
+    ByExtension,  //!< .laz chunked, .las uncompressed
+    PointWise     //!< LASZIP_COMPRESSOR_POINTWISE: a seek decodes from the start
+};
+
+/**
+ * Whether a fixture's OGC WKT VLR (LASF_Projection 2112) ends in a NUL. The
+ * spec asks for one, but some writers omit it, leaving a record exactly
+ * strlen(wkt) bytes long.
+ */
+enum class WktTermination {
+    NulTerminated,
+    Unterminated
+};
+
+/**
+ * Store @a wkt in @a header as an OGC WKT VLR whose record is exactly
+ * wkt.size() bytes with no trailing NUL, the way such writers leave it.
+ * LASheader::set_geo_ogc_wkt always appends a NUL, so it can't build one.
+ */
+void setUnterminatedOgcWkt(LASheader& header, const QByteArray& wkt);
 
 /**
  * Test helper: writes a small synthetic point cloud to a .laz file.
@@ -71,7 +125,19 @@ LazFileContents readLazFile(const QString& path);
  */
 bool writeSyntheticLazFile(const QString& outPath,
                            const QVector<QVector3D>& points,
-                           const QString& wktCS = QString());
+                           const QString& wktCS = QString(),
+                           LazCompression compression = LazCompression::ByExtension,
+                           WktTermination wktTermination = WktTermination::NulTerminated);
+
+/**
+ * writeSyntheticLazFile for points in double precision, for a fixture whose
+ * coordinates run to millions of meters, where a float holds half a meter.
+ */
+bool writeSyntheticGeoLazFile(const QString& outPath,
+                              const QVector<cwGeoPoint>& points,
+                              const QString& wktCS = QString(),
+                              LazCompression compression = LazCompression::ByExtension,
+                              WktTermination wktTermination = WktTermination::NulTerminated);
 
 /**
  * Build a PID-tagged .laz path inside @a dir. Including
@@ -114,8 +180,41 @@ void spinEventLoopSlice();
  * Both halves matter: the frame is derived from the headers, and the point
  * decodes wait on the frame, so a model whose probes have all landed can still
  * have every row mid-decode.
+ *
+ * The default budget is generous on purpose: it only bounds how long a real
+ * failure takes to report. A decode into a frame it hasn't seen builds a new
+ * PROJ operation from proj.db, which takes a fraction of a second alone but
+ * close to ten seconds late in a full ASAN run on a loaded machine.
  */
-bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs = 10000);
+bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs = 60000);
+
+/**
+ * Records the name of every job announced by @a manager while it lives.
+ *
+ * A job that finishes between two event-loop slices is gone before any poll
+ * could see it, so the names are collected as the rows arrive rather than read
+ * back off the model. An empty list is therefore proof that no job ran — which
+ * is what a cache hit must look like.
+ */
+class LazJobRecorder
+{
+public:
+    explicit LazJobRecorder(cwFutureManagerModel* manager);
+    ~LazJobRecorder();
+
+    LazJobRecorder(const LazJobRecorder&) = delete;
+    LazJobRecorder& operator=(const LazJobRecorder&) = delete;
+
+    QStringList names() const { return m_names; }
+
+    /// Spin until a job called @a name has been announced, or @a timeoutMs
+    /// elapses. Returns whether it was seen.
+    bool waitForName(const QString& name, int timeoutMs = 10000);
+
+private:
+    QStringList m_names;
+    QMetaObject::Connection m_connection;
+};
 
 /**
  * Hand @a externalPaths to @a root's region.lazLayers via addFromFiles and

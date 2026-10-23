@@ -129,6 +129,13 @@ QtObject {
     readonly property int fontSizeLarge:   Math.round(24 * fontScale)
     readonly property int fontSizeXLarge:  Math.round(30 * fontScale)
 
+    // Body copy renders in the system family, so it scales from the UI family's
+    // default size rather than from fontScale, which bakes in the boost a condensed
+    // chrome face needs (Yanone Kaffeesatz at 16 reads like a regular face at 14).
+    readonly property real bodyTextScale: RootData.settings.fontSettings.fontBaseSize
+                                          / RootData.settings.fontSettings.defaultFontBaseSize
+    readonly property int fontSizeBodyText: Math.round(14 * bodyTextScale)
+
     // Responsive layout tiers
     enum LayoutSize { Narrow, Medium, Wide }
 
@@ -240,6 +247,8 @@ QtObject {
     // Room a fixed-width table sets aside for a vertical scrollbar when it works
     // out whether it still fits the page it is on.
     readonly property int scrollBarAllowance: 16
+    // Fixed "Last opened" column on the Sources page; fits a yyyy-MM-dd HH:mm stamp.
+    readonly property int recentProjectDateColumnWidth: 150
 
     // Tallest a floating list (a review list, a popup's rows) grows before it
     // scrolls, so it leaves the window behind it usable. Font-scaled so a

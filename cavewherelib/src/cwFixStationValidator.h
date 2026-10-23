@@ -12,7 +12,9 @@
 #include <QObject>
 #include <QHash>
 #include <QList>
+#include <QPointer>
 #include <QSet>
+#include <QStringList>
 #include <QUuid>
 #include <QQmlEngine>
 
@@ -27,6 +29,45 @@ class cwCavingRegion;
 class cwSurveyNode;
 class cwErrorListModel;
 enum class cwErrorTypeId : int;
+
+/**
+ * One unsuppressed fix-station warning and the node whose errorModel carries
+ * it. The message is the node's own warning text, without the name prefix
+ * cwFixStationValidator::fixStationWarningMessages() adds.
+ */
+class CAVEWHERE_LIB_EXPORT cwFixStationWarning
+{
+    Q_GADGET
+    QML_VALUE_TYPE(cwFixStationWarning)
+
+    Q_PROPERTY(cwSurveyNode* node READ node FINAL)
+    Q_PROPERTY(QString message READ message FINAL)
+
+public:
+    cwFixStationWarning() = default;
+    cwFixStationWarning(cwSurveyNode* node, const QString& message);
+
+    cwSurveyNode* node() const;
+    QString message() const { return m_message; }
+
+    bool operator==(const cwFixStationWarning& other) const;
+
+private:
+    QPointer<cwSurveyNode> m_node;
+    QString m_message;
+};
+
+//QML reads each entry's node to filter by subtree, so the list is registered as
+//a QML sequence. See cwExternalSourceAttentionRowListRegistration.
+class cwFixStationWarningListRegistration
+{
+    Q_GADGET
+    QML_FOREIGN(QList<cwFixStationWarning>)
+    QML_ANONYMOUS
+    QML_SEQUENTIAL_CONTAINER(cwFixStationWarning)
+};
+
+Q_DECLARE_METATYPE(cwFixStationWarning)
 
 /**
  * Finds fix stations whose coordinate is almost certainly a data-entry error
@@ -58,11 +99,12 @@ class CAVEWHERE_LIB_EXPORT cwFixStationValidator : public QObject
     Q_PROPERTY(int outlierCount READ outlierCount NOTIFY outlierCountChanged FINAL)
     Q_PROPERTY(cwCave* firstOutlierCave READ firstOutlierCave NOTIFY firstOutlierCaveChanged FINAL)
 
-    //! The stable errorTypeIds this validator pushes onto a cave's errorModel —
-    //! the fix-station warning kinds ({596,597,598}). A fix-station badge binds a
-    //! cave's errorModel to just these so it stays distinct from the all-warnings
-    //! page banner. Constant: the id set is fixed at compile time.
-    Q_PROPERTY(QList<int> fixStationErrorTypeIds READ fixStationErrorTypeIds CONSTANT FINAL)
+    //! Every unsuppressed fix-station warning in the project, in tree pre-order,
+    //! each tagged with its node. fixStationWarningMessages is the same list as
+    //! "<node name>: <message>" lines, for the Data page's badge; a node page's
+    //! badge shows the subset from fixStationWarningMessagesUnder().
+    Q_PROPERTY(QList<cwFixStationWarning> fixStationWarnings READ fixStationWarnings NOTIFY fixStationWarningsChanged FINAL)
+    Q_PROPERTY(QStringList fixStationWarningMessages READ fixStationWarningMessages NOTIFY fixStationWarningsChanged FINAL)
 
 public:
     //! One reprojected fix station plus the provenance needed to attribute a
@@ -113,12 +155,22 @@ public:
     int outlierCount() const { return m_outlierCount; }
     cwCave* firstOutlierCave() const { return m_firstOutlierCave; }
 
+    //! The errorTypeIds this validator pushes onto a node's errorModel: the
+    //! fix-station warning kinds.
     static QList<int> fixStationErrorTypeIds();
+
+    QList<cwFixStationWarning> fixStationWarnings() const { return m_fixStationWarnings; }
+    QStringList fixStationWarningMessages() const { return m_fixStationWarningMessages; }
+
+    //! The fixStationWarningMessages lines whose node is \a node or one of its
+    //! descendants. Changes only alongside fixStationWarningsChanged.
+    Q_INVOKABLE QStringList fixStationWarningMessagesUnder(cwSurveyNode* node) const;
 
 signals:
     void warningMessageChanged();
     void outlierCountChanged();
     void firstOutlierCaveChanged();
+    void fixStationWarningsChanged();
 
 private:
     QList<FixCandidate> gatherCandidates() const;
@@ -128,8 +180,14 @@ private:
     //! object's own connections to the caves' fix stations and the region's CS,
     //! so a fix-coordinate edit re-attributes without an external trigger.
     void revalidate();
+    //! revalidate()'s body: writes every node's warning rows.
+    void revalidateNodes();
 
     void syncNodeConnections();
+
+    //! Collects fixStationWarnings() from the nodes' error lists. Also runs on a
+    //! suppression, which changes a list without a revalidate().
+    void rebuildFixStationWarnings();
 
     //! One node's warning of one kind: its text, and the first fix it names,
     //! which is where a click on the warning takes the user.
@@ -178,6 +236,13 @@ private:
     //! mirrored here — a copy would stop matching the row once the user suppresses
     //! it (cwError equality includes the suppressed flag).
     QSet<cwSurveyNode*> m_nodesWithWarning;
+
+    QList<cwFixStationWarning> m_fixStationWarnings;
+    QStringList m_fixStationWarningMessages;
+
+    //! Set while revalidate() writes warnings, so the list is rebuilt once per
+    //! pass rather than once per written row.
+    bool m_isRevalidating = false;
 };
 
 #endif // CWFIXSTATIONVALIDATOR_H

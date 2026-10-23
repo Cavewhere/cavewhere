@@ -58,12 +58,8 @@ cwTrip* addTrip(cwSurveyNode* node, const QString& name, const QStringList& stat
     return trip;
 }
 
-cwFixStation fixAt(const QString& stationName)
-{
-    cwFixStation fix;
-    fix.setStationName(stationName);
-    return fix;
-}
+using SurveyTreeTestHelper::attachedFixes;
+using SurveyTreeTestHelper::fixAt;
 
 QStringList fixNames(const cwSurveyNode* node)
 {
@@ -309,6 +305,61 @@ TEST_CASE("Moving a node carries its qualified fixes and equates one level up", 
     CHECK(fixNames(tree.sideCave) == QStringList({oldLabel + QStringLiteral(".s1"), QStringLiteral("b1")}));
     CHECK(tree.otherCave->fixStations()->count() == 0);
     CHECK(equates->equates() == QList<cwEquate>({intoSection}));
+}
+
+TEST_CASE("Move to… carries a node's fix count from one branch to the other", "[SurveyNode]")
+{
+    Tree tree;
+    cwSurveyNode* root = tree.region.rootNode();
+    tree.upperLevel->fixStations()->appendFixStation(fixAt(QStringLiteral("s1")));
+    tree.trip3->setAttachedFixes(attachedFixes(QStringLiteral("t"), 2));
+    REQUIRE(tree.upperLevel->subtreeFixStationCount() == 3);
+    REQUIRE(tree.sideCave->subtreeFixStationCount() == 3);
+    REQUIRE(tree.kentucky->subtreeFixStationCount() == 3);
+    REQUIRE(root->subtreeFixStationCount() == 3);
+
+    REQUIRE(tree.otherCave->moveHere(tree.upperLevel));
+    REQUIRE(tree.upperLevel->parentNode() == tree.otherCave);
+
+    CHECK(tree.upperLevel->subtreeFixStationCount() == 3);
+    CHECK(tree.sideCave->subtreeFixStationCount() == 0);
+    CHECK(tree.kentucky->subtreeFixStationCount() == 0);
+    CHECK(tree.otherCave->subtreeFixStationCount() == 3);
+    CHECK(root->subtreeFixStationCount() == 3);
+
+    tree.undoStack.undo();
+    REQUIRE(tree.upperLevel->parentNode() == tree.sideCave);
+
+    CHECK(tree.sideCave->subtreeFixStationCount() == 3);
+    CHECK(tree.kentucky->subtreeFixStationCount() == 3);
+    CHECK(tree.otherCave->subtreeFixStationCount() == 0);
+    CHECK(root->subtreeFixStationCount() == 3);
+}
+
+TEST_CASE("Moving a trip moves its attached fixes and the fixes that follow it", "[SurveyNode]")
+{
+    Tree tree;
+    cwSurveyNode* root = tree.region.rootNode();
+    tree.sideCave->fixStations()->appendFixStation(fixAt(QStringLiteral("a1")));
+    tree.sideCave->fixStations()->appendFixStation(fixAt(QStringLiteral("b1")));
+    tree.trip1->setAttachedFixes(attachedFixes(QStringLiteral("t"), 2));
+    REQUIRE(tree.sideCave->subtreeFixStationCount() == 4);
+    REQUIRE(root->subtreeFixStationCount() == 4);
+
+    //a1 leaves with Trip 1 (only Trip 1 holds it); b1 stays with Trip 2.
+    REQUIRE(tree.otherCave->moveHere(tree.trip1));
+
+    CHECK(tree.sideCave->subtreeFixStationCount() == 1);
+    CHECK(tree.kentucky->subtreeFixStationCount() == 1);
+    CHECK(tree.otherCave->subtreeFixStationCount() == 3);
+    CHECK(root->subtreeFixStationCount() == 4);
+
+    tree.undoStack.undo();
+
+    CHECK(tree.sideCave->subtreeFixStationCount() == 4);
+    CHECK(tree.kentucky->subtreeFixStationCount() == 4);
+    CHECK(tree.otherCave->subtreeFixStationCount() == 0);
+    CHECK(root->subtreeFixStationCount() == 4);
 }
 
 TEST_CASE("A moved trip takes a free name and keeps living after the stack lets go", "[SurveyNode]")

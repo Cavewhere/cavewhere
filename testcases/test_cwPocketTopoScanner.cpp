@@ -437,7 +437,7 @@ TEST_CASE("PocketTopo references are fixes in meters with no coordinate system",
                               .nodePath = QString(),
                               .tripPath = QString()};
     CHECK(scan.fixes == QList<ScannedFix>({expected}));
-    CHECK(scan.hasFixWithoutCoordinateSystem());
+    CHECK_FALSE(scan.fixes.first().hasCoordinateSystem());
 }
 
 TEST_CASE("scanPocketTopo fails on a file it cannot read", "[Scanner][PocketTopo]")

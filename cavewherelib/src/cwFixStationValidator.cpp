@@ -21,6 +21,7 @@
 #include "cwStation.h"
 
 //Qt includes
+#include <QScopedValueRollback>
 #include <QStringList>
 
 //Std includes
@@ -80,6 +81,22 @@ double distanceFromFrameOrigin(const cwGeoPoint& p)
 
 } // namespace
 
+cwFixStationWarning::cwFixStationWarning(cwSurveyNode* node, const QString& message) :
+    m_node(node),
+    m_message(message)
+{
+}
+
+cwSurveyNode* cwFixStationWarning::node() const
+{
+    return m_node.data();
+}
+
+bool cwFixStationWarning::operator==(const cwFixStationWarning& other) const
+{
+    return m_node == other.m_node && m_message == other.m_message;
+}
+
 cwFixStationValidator::cwFixStationValidator(cwCavingRegion* region) :
     QObject(region),
     m_region(region)
@@ -105,6 +122,18 @@ cwFixStationValidator::cwFixStationValidator(cwCavingRegion* region) :
 
     syncNodeConnections();
     revalidate();
+}
+
+QStringList cwFixStationValidator::fixStationWarningMessagesUnder(cwSurveyNode* node) const
+{
+    QStringList messages;
+    for (int i = 0; i < m_fixStationWarnings.size(); ++i) {
+        const cwSurveyNode* warningNode = m_fixStationWarnings.at(i).node();
+        if (warningNode != nullptr && warningNode->isSelfOrDescendantOf(node)) {
+            messages.append(m_fixStationWarningMessages.at(i));
+        }
+    }
+    return messages;
 }
 
 QList<int> cwFixStationValidator::fixStationErrorTypeIds()
@@ -255,6 +284,48 @@ QString stationNameFor(cwSurveyNode* node, const QUuid& fixId)
 } // namespace
 
 void cwFixStationValidator::revalidate()
+{
+    {
+        const QScopedValueRollback revalidating(m_isRevalidating, true);
+        revalidateNodes();
+    }
+    rebuildFixStationWarnings();
+}
+
+void cwFixStationValidator::rebuildFixStationWarnings()
+{
+    if (m_isRevalidating || m_region == nullptr) {
+        return;
+    }
+    if (m_nodesWithWarning.isEmpty() && m_fixStationWarnings.isEmpty()) {
+        return;
+    }
+
+    const QList<int> typeIds = fixStationErrorTypeIds();
+    QList<cwFixStationWarning> warnings;
+    QStringList messages;
+    const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
+    for (cwSurveyNode* node : nodes) {
+        if (!m_nodesWithWarning.contains(node)) {
+            continue;
+        }
+        const QString name = node->name();
+        const QStringList nodeMessages = node->errorModel()->errors()->warningMessagesForTypeIds(typeIds);
+        for (const QString& message : nodeMessages) {
+            warnings.append(cwFixStationWarning(node, message));
+            messages.append(name.isEmpty() ? message : QStringLiteral("%1: %2").arg(name, message));
+        }
+    }
+
+    if (m_fixStationWarnings == warnings && m_fixStationWarningMessages == messages) {
+        return;
+    }
+    m_fixStationWarnings = warnings;
+    m_fixStationWarningMessages = messages;
+    emit fixStationWarningsChanged();
+}
+
+void cwFixStationValidator::revalidateNodes()
 {
     const Classification classification = currentClassification();
 
@@ -464,6 +535,7 @@ void cwFixStationValidator::syncNodeConnections()
                 if (node->fixStations() != nullptr) {
                     disconnect(node->fixStations(), nullptr, this, nullptr);
                 }
+                disconnect(node->errorModel()->errors(), nullptr, this, nullptr);
             }
             setNodeWarning(node, cwErrorTypeId::FixStationOutlier, NodeWarning());
             setNodeWarning(node, cwErrorTypeId::FixStationDomain, NodeWarning());
@@ -497,6 +569,8 @@ void cwFixStationValidator::syncNodeConnections()
         // collisions, so a change to them must re-attribute.
         connect(node, &cwSurveyNode::attachedFixesChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
+        connect(node->errorModel()->errors(), &cwErrorListModel::warningMessagesChanged,
+                this, &cwFixStationValidator::rebuildFixStationWarnings, Qt::UniqueConnection);
         m_connectedNodes.insert(node);
     }
 }

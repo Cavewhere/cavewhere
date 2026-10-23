@@ -3,77 +3,130 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <QDir>
+#include <QTemporaryDir>
 #include <QVector3D>
 
-#include "cwGeometry.h"
+#include <memory>
+
+#include "cwPointOctree.h"
+#include "cwPointOctreeManifest.h"
+#include "cwPointOctreePack.h"
+#include "cwPointOctreeSource.h"
 #include "cwRHIPointCloud.h"
 #include "cwRenderPointCloud.h"
-#include "TestGeometryBuilders.h"
 
 // Friend accessor (declared friend in cwRenderPointCloud.h) so the
-// re-upload regression test can observe the private change trackers
+// re-publish regression test can observe the private change trackers
 // without putting test scaffolding on the production API.
 struct CwRenderPointCloudTestAccess {
-    static bool geometryChanged(const cwRenderPointCloud& c) {
-        return c.m_geometry.isChanged();
+    static bool sourceChanged(const cwRenderPointCloud& c) {
+        return c.m_source.isChanged();
     }
     static bool renderStateChanged(const cwRenderPointCloud& c) {
         return c.m_renderState.isChanged();
     }
-    // Mimics the RHI back-end consuming a geometry upload — updateResources
-    // resets the tracker after staging the vertex buffer.
-    static void clearGeometryChanged(cwRenderPointCloud& c) {
-        c.m_geometry.resetChanged();
+    // Mimics the RHI back-end consuming a source publish — synchronize resets
+    // the tracker after rebuilding its node table.
+    static void clearSourceChanged(cwRenderPointCloud& c) {
+        c.m_source.resetChanged();
+    }
+    // Mimics the RHI back-end consuming a render-state publish —
+    // updateResources resets the tracker after re-writing the uniform.
+    static void clearRenderStateChanged(cwRenderPointCloud& c) {
+        c.m_renderState.resetChanged();
     }
 };
+
+namespace {
+
+    constexpr double kRootSize = 128.0;
+
+    cwPointOctreeSource makeSource(const QString& fingerprint)
+    {
+        auto manifest = std::make_shared<cwPointOctreeManifest>();
+        manifest->rootMin = QVector3D(-1.0f, -2.0f, -3.0f);
+        manifest->rootSize = kRootSize;
+        manifest->pointCount = 3;
+        manifest->bboxMin = QVector3D(-1.0f, -2.0f, -3.0f);
+        manifest->bboxMax = QVector3D(1.0f, 2.0f, 3.0f);
+        manifest->meanSpacingXY = 0.5f;
+        manifest->fingerprint = fingerprint;
+        manifest->nodes.append(cwPointOctreeNode());
+
+        // One directory and one LAZ path for every source, so two sources of
+        // one fingerprint share a cache root and compare equal. Each call
+        // writes a pack of its own, so none is rewritten while an earlier
+        // source still maps it.
+        static const QTemporaryDir cacheRoot;
+        static int packCount = 0;
+        REQUIRE(cacheRoot.isValid());
+        const QString lazPath = QDir(cacheRoot.path()).filePath(QStringLiteral("cloud.laz"));
+        const QString packPath = cw::octree::packPath(cacheRoot.path(), lazPath)
+                                 + QString::number(packCount++);
+
+        // The root node is empty, which is all a front-end test reads of it
+        cwPointOctreePack::Writer writer(packPath);
+        REQUIRE(writer.isOpen());
+        REQUIRE(writer.append(cw::octree::cellKey(manifest->nodes.constFirst()), QByteArray()));
+        REQUIRE(writer.finish(*manifest));
+
+        std::shared_ptr<const cwPointOctreePack> pack = cwPointOctreePack::open(packPath);
+        REQUIRE(pack != nullptr);
+        return cwPointOctreeSource(cacheRoot.path(), lazPath, fingerprint, std::move(pack));
+    }
+
+} // namespace
 
 TEST_CASE("cwRenderPointCloud: starts empty", "[cwRenderPointCloud]") {
     cwRenderPointCloud cloud;
     REQUIRE(cloud.pointCount() == 0);
+    REQUIRE(cloud.octree().isNull());
     REQUIRE(cloud.bboxMin() == QVector3D());
     REQUIRE(cloud.bboxMax() == QVector3D());
 }
 
-TEST_CASE("cwRenderPointCloud: setGeometry populates Data", "[cwRenderPointCloud]") {
-    cwRenderPointCloud cloud;
-
-    const QVector<QVector3D> points = {
-        QVector3D(0.0f, 0.0f, 0.0f),
-        QVector3D(1.0f, 2.0f, 3.0f),
-        QVector3D(-1.0f, -2.0f, -3.0f)
-    };
-    const QVector3D bboxMin(-1.0f, -2.0f, -3.0f);
-    const QVector3D bboxMax(1.0f, 2.0f, 3.0f);
-
-    cloud.setGeometry({
-        .geometry = cwTestGeometry::points(points),
-        .bboxMin = bboxMin,
-        .bboxMax = bboxMax,
-        .meanSpacingXY = 0.5f,
-    });
-
-    REQUIRE(cloud.pointCount() == points.size());
-    REQUIRE(cloud.bboxMin() == bboxMin);
-    REQUIRE(cloud.bboxMax() == bboxMax);
-    REQUIRE(cloud.meanSpacingXY() == 0.5f);
-}
-
-TEST_CASE("cwRenderPointCloud: clear resets vertex data but keeps pointSize",
+TEST_CASE("cwRenderPointCloud: setOctree publishes the manifest's numbers",
           "[cwRenderPointCloud]") {
     cwRenderPointCloud cloud;
-    cloud.setPointSize(5.5f);
+    cloud.setOctree(makeSource(QStringLiteral("fingerprint")));
 
-    cloud.setGeometry({
-        .geometry = cwTestGeometry::points({ QVector3D(1.0f, 1.0f, 1.0f) }),
-        .bboxMin = QVector3D(1.0f, 1.0f, 1.0f),
-        .bboxMax = QVector3D(1.0f, 1.0f, 1.0f),
-        .meanSpacingXY = 0.0f,
-    });
-    REQUIRE(cloud.pointCount() == 1);
+    REQUIRE(cloud.pointCount() == 3);
+    REQUIRE(cloud.bboxMin() == QVector3D(-1.0f, -2.0f, -3.0f));
+    REQUIRE(cloud.bboxMax() == QVector3D(1.0f, 2.0f, 3.0f));
+    REQUIRE(cloud.meanSpacingXY() == 0.5f);
+    REQUIRE_FALSE(cloud.octree().isNull());
+}
+
+TEST_CASE("cwRenderPointCloud: clear drops the octree but keeps the sprite knob",
+          "[cwRenderPointCloud]") {
+    cwRenderPointCloud cloud;
+    cloud.setSpacingCoverage(2.5f);
+
+    cloud.setOctree(makeSource(QStringLiteral("fingerprint")));
+    REQUIRE(cloud.pointCount() == 3);
 
     cloud.clear();
     REQUIRE(cloud.pointCount() == 0);
-    REQUIRE(cloud.pointSize() == 5.5f);
+    REQUIRE(cloud.octree().isNull());
+    REQUIRE(cloud.spacingCoverage() == 2.5f);
+}
+
+TEST_CASE("cwRenderPointCloud: spacing coverage starts at the default and follows its setter",
+          "[cwRenderPointCloud]") {
+    using Access = CwRenderPointCloudTestAccess;
+
+    cwRenderPointCloud cloud;
+    REQUIRE(cloud.spacingCoverage() == cw::pointcloud::kDefaultSpacingCoverage);
+    REQUIRE_FALSE(Access::renderStateChanged(cloud));
+
+    cloud.setSpacingCoverage(0.5f);
+    CHECK(cloud.spacingCoverage() == 0.5f);
+    CHECK(Access::renderStateChanged(cloud));
+
+    Access::clearRenderStateChanged(cloud);
+    cloud.setSpacingCoverage(0.5f);
+    CHECK_FALSE(Access::renderStateChanged(cloud));
 }
 
 TEST_CASE("cwRenderPointCloud: createRHIObject returns cwRHIPointCloud",
@@ -91,56 +144,49 @@ TEST_CASE("cwRenderPointCloud: createRHIObject returns cwRHIPointCloud",
     delete rhiObject;
 }
 
-TEST_CASE("cwRenderPointCloud: a uniform-only change does not dirty the geometry tracker",
+TEST_CASE("cwRenderPointCloud: a uniform-only change does not dirty the source tracker",
           "[cwRenderPointCloud]") {
-    // Regression guard for the point-cloud re-upload trap.
+    // Regression guard for the point-cloud re-stream trap.
     //
-    // The RHI back-end (cwRHIPointCloud::updateResources) re-stages the
-    // potentially multi-GB vertex buffer only when the geometry tracker
-    // reports a change. Geometry and the cheap render knobs (world radius,
-    // point size) are tracked separately for exactly this reason: a
-    // uniform-only setter must NOT mark geometry dirty, or every P+wheel
-    // tick / offline render view would re-upload the whole cloud (an
-    // unbounded staging leak across a sweep). Before the split, one shared
-    // always-"changed" tracker meant any setter re-uploaded geometry.
+    // The RHI back-end (cwRHIPointCloud::synchronize) throws away its whole
+    // node table — every resident buffer with it — when the source tracker
+    // reports a change. The source and the cheap render knob (spacing
+    // coverage) are tracked separately for exactly this reason: a uniform-only
+    // setter must NOT mark the source dirty, or every P+wheel
+    // tick would drop the cloud's residency and re-stream it from the root.
     using Access = CwRenderPointCloudTestAccess;
 
     cwRenderPointCloud cloud;
-    cloud.setGeometry({
-        .geometry = cwTestGeometry::points({
-            QVector3D(0.0f, 0.0f, 0.0f),
-            QVector3D(1.0f, 2.0f, 3.0f),
-            QVector3D(-1.0f, -2.0f, -3.0f),
-        }),
-        .bboxMin = QVector3D(-1.0f, -2.0f, -3.0f),
-        .bboxMax = QVector3D(1.0f, 2.0f, 3.0f),
-        .meanSpacingXY = 0.5f,
-    });
+    cloud.setOctree(makeSource(QStringLiteral("fingerprint")));
 
-    // setGeometry dirties the geometry tracker → the back-end uploads.
-    REQUIRE(Access::geometryChanged(cloud));
+    // setOctree dirties the source tracker → the back-end rebuilds.
+    REQUIRE(Access::sourceChanged(cloud));
 
-    // Simulate the back-end consuming that upload.
-    Access::clearGeometryChanged(cloud);
-    REQUIRE_FALSE(Access::geometryChanged(cloud));
+    // Simulate the back-end consuming that publish.
+    Access::clearSourceChanged(cloud);
+    REQUIRE_FALSE(Access::sourceChanged(cloud));
 
-    // A uniform-only change must leave the geometry tracker clean (no
-    // re-upload) while marking render state dirty (cheap UBO update).
-    cloud.setWorldRadius(cloud.worldRadius() + 1.0f);
-    REQUIRE_FALSE(Access::geometryChanged(cloud));
+    // A uniform-only change must leave the source tracker clean (no re-stream)
+    // while marking render state dirty (cheap UBO update).
+    cloud.setSpacingCoverage(cloud.spacingCoverage() + 1.0f);
+    REQUIRE_FALSE(Access::sourceChanged(cloud));
     REQUIRE(Access::renderStateChanged(cloud));
+}
 
-    // Same for point size.
-    Access::clearGeometryChanged(cloud);
-    cloud.setPointSize(cloud.pointSize() + 1.0f);
-    REQUIRE_FALSE(Access::geometryChanged(cloud));
+TEST_CASE("cwRenderPointCloud: re-publishing the same octree is a no-op",
+          "[cwRenderPointCloud]") {
+    using Access = CwRenderPointCloudTestAccess;
 
-    // A genuine geometry change does re-dirty the geometry tracker.
-    cloud.setGeometry({
-        .geometry = cwTestGeometry::points({ QVector3D(2.0f, 2.0f, 2.0f) }),
-        .bboxMin = QVector3D(2.0f, 2.0f, 2.0f),
-        .bboxMax = QVector3D(2.0f, 2.0f, 2.0f),
-        .meanSpacingXY = 0.25f,
-    });
-    REQUIRE(Access::geometryChanged(cloud));
+    cwRenderPointCloud cloud;
+    cloud.setOctree(makeSource(QStringLiteral("fingerprint")));
+    Access::clearSourceChanged(cloud);
+
+    // A freshly built manifest of the same octree: the same cache root, path,
+    // and fingerprint, so identity holds and residency survives.
+    cloud.setOctree(makeSource(QStringLiteral("fingerprint")));
+    REQUIRE_FALSE(Access::sourceChanged(cloud));
+
+    // A rebuilt LAZ has a new fingerprint, and that does have to reset.
+    cloud.setOctree(makeSource(QStringLiteral("other-fingerprint")));
+    REQUIRE(Access::sourceChanged(cloud));
 }

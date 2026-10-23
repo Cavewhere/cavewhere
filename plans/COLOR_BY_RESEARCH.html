@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Color By Research</title>
+<style>
+  :root { --bg:#1a1d21; --panel:#23272e; --panel2:#2b3038; --ink:#e6e9ee; --muted:#9aa4b2; --accent:#5aa9e6; --accent2:#7ddc8f; --warn:#e6b35a; --bad:#e66a6a; --line:#3a414b; --code-bg:#15181c;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width:980px; margin:0 auto; padding:48px 28px 120px; }
+  h1 { font-size:30px; margin:0 0 6px; } h2 { font-size:22px; margin:52px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  h3 { font-size:17px; margin:28px 0 8px; color:var(--accent); }
+  .sub { color:var(--muted); margin:0 0 8px; }
+  code { font-family:var(--mono); font-size:13.5px; background:var(--code-bg); padding:1.5px 6px; border-radius:4px; }
+  pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:14px 16px; overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.5; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:16px 0; font-size:14px; }
+  th, td { border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top; }
+  th { background:var(--panel2); }
+  .callout { border-left:3px solid var(--accent); background:var(--panel2); padding:12px 16px; margin:16px 0; border-radius:0 8px 8px 0; }
+  .callout.warn { border-color:var(--warn); } .callout.ok { border-color:var(--accent2); } .callout.bad { border-color:var(--bad); }
+  .ramp { height:18px; border-radius:4px; margin:4px 0 10px; border:1px solid var(--line); }
+  .sw { display:inline-block; width:18px; height:18px; border-radius:4px; vertical-align:middle; margin-right:6px; border:1px solid var(--line); }
+  .fig { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px; margin:22px 0; }
+  .figcap { color:var(--muted); font-size:13.5px; margin-top:10px; text-align:center; }
+  svg text { font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+</style></head><body><div class="wrap">
+
+<h1>Color By — research and proposed design</h1>
+<p class="sub"><b>Implementation plan: <code>plans/COLOR_BY_PLAN.md</code></b> (that file is the authority). Color the 3D view (centerline, scraps, later point clouds) by depth, cave, trip, date, caver, or loop membership. Status: research only, nothing implemented. Branch <code>colorBy</code>.</p>
+
+<h2>1. What exists today</h2>
+<table>
+<tr><th>Element</th><th>Color today</th><th>Per-element metadata that survives to the GPU</th><th>Hook we can reuse</th></tr>
+<tr><td>Centerline (<code>cwRenderLinePlot</code> / <code>cwRHILinePlot</code>)</td>
+<td>Constants in <code>LinePlot.frag:14-19</code>: red centerline, pink splays. No color uniform or property.</td>
+<td>One instanced draw for the whole region. Per instance: <code>iFrom</code>, <code>iTo</code>, <code>iType</code> (centerline/splay), <code>iVisibility</code>. Vertex z is world elevation. Trip identity survives only as <code>VertexRange</code>s held by <code>cwLinePlotManager</code>; cave, date, station names are flattened away in <code>cwLinePlotGeometry::generate</code>.</td>
+<td><code>setRangeVisible(start,count)</code> writes a per-vertex byte mask that becomes the <code>iVisibility</code> attribute (<code>cwRenderLinePlot.cpp:116-164</code>, <code>cwRHILinePlot.cpp:141-176</code>). Same shape works for a per-vertex value.</td></tr>
+<tr><td>Scraps + LiDAR meshes (<code>cwRenderTexturedItems</code>)</td>
+<td><code>scrap.frag</code>: texture sample only; transparent texels become white. No tint, no lighting.</td>
+<td>One draw per item. Vertices are world-space Position+TexCoord0, so z is world elevation. Item knows nothing about its scrap; <code>cwScrapManager::m_scrapToRenderId</code> holds the mapping.</td>
+<td><code>Item::uniformBlock</code> + <code>setUniformBlock(id, QByteArray)</code> already flow through the coalesced queue and into a per-draw UBO when <code>perDrawUniformBinding &gt;= 0</code> (<code>cwRhiTexturedItems.cpp:1101-1112</code>). Scraps just set -1 today. A dead <code>elevationColor</code> stub sits at the top of <code>scrap.frag</code>.</td></tr>
+<tr><td>Point cloud</td><td>Constant white/gray.</td><td>Per-point position only.</td><td><code>PerCloudBlock</code> UBO + appearance slots.</td></tr>
+<tr><td>Keywords</td><td colspan="3">All string <code>{key,value}</code>. Keys: Type, Cave, Trip, Year, Date (yyyy-MM-dd), Caver, File Name, Object id, Name. Trips, scraps, LiDAR notes, leads, labels and LAZ layers are registered as <code>cwKeywordItem</code>s whose <code>object</code> is a visibility proxy. <code>cwKeywordGroupByKeyModel</code> already groups items by any key. Depth and loop data are <b>not</b> keywords. No per-shot loop error exists anywhere (cavern's <code>.err</code> is kept as raw text).</td></tr>
+<tr><td>UI</td><td colspan="3">View page side panel = TabBar <b>View</b> (camera) / <b>Layers</b> (<code>KeywordTab</code> only) / <b>Tools</b>. Tools arm an interaction and capture the mouse; view settings are always-on tabs or FileMenu checkables. No legend or colorbar component exists.</td></tr>
+</table>
+
+<h2>2. The two "pipelines" collapse into one GPU mechanism</h2>
+<p>Categorical (cave, trip, caver) and numeric (depth, date, error) differ only in <em>how the value is produced</em> and <em>how the ramp is built</em>. On the GPU both are the same thing:</p>
+<pre><code>color = texture(ramp, (value - rangeMin) / (rangeMax - rangeMin))</code></pre>
+<ul>
+<li><b>Numeric:</b> value = world z (or days since epoch, or error ratio); ramp = 256-texel sequential gradient, linear filter.</li>
+<li><b>Categorical:</b> value = palette slot index; range = [0, N); ramp = the fixed categorical palette baked into 256 texels in bands, nearest filter.</li>
+</ul>
+<p>So every participating renderer needs exactly: one per-element <code>float value</code>, one shared 256×1 RGBA8 ramp texture, and a small UBO. That keeps shader branching to a single <code>mode</code> switch and gives categorical and numeric modes identical legends, identical plumbing and identical tests.</p>
+
+<div class="fig">
+<svg viewBox="0 0 900 250" width="100%">
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#9aa4b2"/></marker></defs>
+  <rect x="10" y="20" width="200" height="70" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="110" y="48" fill="#e6e9ee" font-size="14" text-anchor="middle">cwKeywordGroupByKeyModel</text>
+  <text x="110" y="70" fill="#9aa4b2" font-size="12" text-anchor="middle">values of chosen key → slot index</text>
+  <rect x="10" y="150" width="200" height="70" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="110" y="178" fill="#e6e9ee" font-size="14" text-anchor="middle">numeric source</text>
+  <text x="110" y="200" fill="#9aa4b2" font-size="12" text-anchor="middle">z, date ordinal, loop error</text>
+  <rect x="300" y="85" width="220" height="80" rx="8" fill="#23272e" stroke="#5aa9e6"/>
+  <text x="410" y="112" fill="#e6e9ee" font-size="14" text-anchor="middle">cwColorBy (scene state)</text>
+  <text x="410" y="134" fill="#9aa4b2" font-size="12" text-anchor="middle">mode · key · ramp · min/max · strength</text>
+  <text x="410" y="152" fill="#9aa4b2" font-size="12" text-anchor="middle">+ legend model</text>
+  <rect x="620" y="20" width="270" height="56" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="755" y="42" fill="#e6e9ee" font-size="13" text-anchor="middle">Line plot: per-vertex float value</text>
+  <text x="755" y="62" fill="#9aa4b2" font-size="12" text-anchor="middle">setRangeValue(start,count,v), like the mask</text>
+  <rect x="620" y="97" width="270" height="56" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="755" y="119" fill="#e6e9ee" font-size="13" text-anchor="middle">Scraps: per-item value in per-draw UBO</text>
+  <text x="755" y="139" fill="#9aa4b2" font-size="12" text-anchor="middle">depth mode reads vVertex.z in-shader</text>
+  <rect x="620" y="174" width="270" height="56" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="755" y="196" fill="#e6e9ee" font-size="13" text-anchor="middle">Shared: ramp texture + ColorByBlock UBO</text>
+  <text x="755" y="216" fill="#9aa4b2" font-size="12" text-anchor="middle">bound by each participating renderer</text>
+  <path d="M210,55 L300,110" stroke="#9aa4b2" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <path d="M210,185 L300,140" stroke="#9aa4b2" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <path d="M520,110 L620,50" stroke="#9aa4b2" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <path d="M520,125 L620,125" stroke="#9aa4b2" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <path d="M520,140 L620,200" stroke="#9aa4b2" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+</svg>
+<div class="figcap">One state object feeds two renderers through the same ramp texture.</div>
+</div>
+
+<h2>3. Centerline</h2>
+<ul>
+<li><b>New per-instance buffer</b> (binding 3): <code>float iValue</code>, or two floats <code>iValueFrom</code>/<code>iValueTo</code> so a long shot grades smoothly in depth mode. Rebuilt exactly like the visibility mask: a copy-on-write <code>QVector&lt;float&gt;</code> on <code>cwRenderLinePlot</code>, uploaded on version change.</li>
+<li><b>Depth mode:</b> fill the value vector from vertex z in <code>setGeometry</code>; <code>minZValue</code>/<code>maxZValue</code> already exist and become the default range.</li>
+<li><b>Categorical mode:</b> <code>cwLinePlotTripVisibility</code> grows into a trip <em>appearance</em> proxy with <code>setColorValue(float)</code> calling <code>setRangeValue(start,count,v)</code>. The range re-target after every solve (<code>cwLinePlotManager.cpp:307-320</code>) already handles geometry churn.</li>
+<li><b>Fragment stage:</b> new <code>ColorByBlock</code> UBO at binding 1 and the ramp sampler at binding 2. <code>mode == 0</code> keeps today's constants so the default look is byte-identical. Splays: multiply the ramp color toward white the way the pink does today, so they stay visually secondary.</li>
+<li>The pipeline key gains the texture/UBO bindings; the SRB rebuild path at <code>cwRHILinePlot.cpp:293-324</code> already tolerates that.</li>
+</ul>
+
+<h2>4. Scraps: tint, shade, or glow?</h2>
+<p>Scraps are mostly white paper with dark ink, so the blend choice matters more than the palette.</p>
+<table>
+<tr><th>Option</th><th>Math</th><th>Verdict</th></tr>
+<tr><td><b>Luminance recolor</b> (recommended)</td><td><code>lum = dot(tex.rgb, vec3(.299,.587,.114));<br>rgb = mix(tex.rgb, ramp * lum, strength)</code></td><td>Paper takes the color, ink stays dark and readable. Works for any strength. Same trick colorizes a gray LiDAR mesh. Default strength ≈ 0.6.</td></tr>
+<tr><td>Multiply</td><td><code>tex.rgb * ramp</code></td><td>Same as above at strength 1 but no dial; dark ramp steps crush detail.</td></tr>
+<tr><td>Flat overlay</td><td><code>mix(tex.rgb, ramp, k)</code></td><td>Washes out ink at any useful k. Reject.</td></tr>
+<tr><td>Glow / halo</td><td>Screen-space pass: write value to an aux target, blur, composite behind scene</td><td>Needs a post pass; the only one today (EDL) runs only when a cloud is visible, and tiles in capture would need it too. Halos pile up where plan scraps overlap. Defer; luminance recolor at strength 1 already reads as "painted".</td></tr>
+</table>
+<ul>
+<li>Apply the tint <em>after</em> the transparent-texel-to-white step so the whole paper area recolors.</li>
+<li>Set <code>perDrawUniformBinding</code> for the scrap material and give the item block <code>{ float value; }</code>. In depth mode the shader ignores it and uses <code>vVertex.z</code> (pass world position to the fragment stage), because a single value per scrap is wrong for a scrap that spans tens of meters vertically.</li>
+<li>Categorical: <code>cwRenderTexturedItemVisibility</code> grows <code>setColorValue</code> → <code>setUniformBlock</code>. One UBO write per scrap when the key changes; nothing per frame.</li>
+<li>No pipeline or blend change: scraps stay opaque, so draw order and picking are untouched. Map export tiles pick the tint up for free; the 2D centerline overlay in export would need its own pen color later.</li>
+</ul>
+
+<h2>5. Sane color, by construction</h2>
+<div class="callout ok">Rule: sequential = one hue or an ordered perceptual ramp, light→dark. Categorical = a fixed palette in fixed order, color follows the entity. Diverging = two hues with a neutral middle, only for signed data. Rainbow exists as a named opt-in, never the default.</div>
+<h3>Ramp construction</h3>
+<p>Add <code>cwColorRamp</code>: a list of stops interpolated in <b>OKLab</b> (or OKLCH for hue sweeps), baked to 256 RGBA8 texels. Interpolating in OKLab is what makes two-stop gradients look even instead of muddy in the middle; it's a dozen lines of math. Ship presets as stop lists, plus viridis/cividis/turbo as 256-entry tables.</p>
+<table>
+<tr><th>Use</th><th>Default</th><th>Alternates</th></tr>
+<tr><td>Depth</td><td><b>Diverging, white at the pivot (0 m by default).</b> Depth runs +100 m to −500 m; the pivot is white and color steps are equal in meters on both sides (<code>t = 0.5 + 0.5·(v−pivot)/max(max−pivot, pivot−min)</code>), so +100 is a faint warm tint and −500 the full navy.<div class="ramp" style="background:linear-gradient(90deg,#1e1b4b,#2563eb,#ffffff,#d9a066,#7c3a0b)"></div></td><td>Cividis, Viridis, "Rainbow (classic)" for aven refugees<div class="ramp" style="background:linear-gradient(90deg,#440154,#3b528b,#21918c,#5ec962,#fde725)"></div></td></tr>
+<tr><td>Date</td><td>Warm sequential, old = pale, new = dark<div class="ramp" style="background:linear-gradient(90deg,#fef3c7,#f59e0b,#b45309,#451a03)"></div></td><td>Same list</td></tr>
+<tr><td>Loop error</td><td>Sequential gray → red (magnitude, unsigned)<div class="ramp" style="background:linear-gradient(90deg,#d4d4d8,#f87171,#991b1b)"></div></td><td>Threshold mode: under/over a tolerance</td></tr>
+<tr><td>Categorical (cave, trip, caver, year, loop/dead-end)</td><td>Okabe–Ito, 8 colors, CVD-safe:<br>
+<span class="sw" style="background:#E69F00"></span><span class="sw" style="background:#56B4E9"></span><span class="sw" style="background:#009E73"></span><span class="sw" style="background:#F0E442"></span><span class="sw" style="background:#0072B2"></span><span class="sw" style="background:#D55E00"></span><span class="sw" style="background:#CC79A7"></span><span class="sw" style="background:#999999"></span></td>
+<td>Tableau 10. Past the palette size, repeat with a lightness step, or fold the tail into gray "Other" when there are many trips.</td></tr>
+</table>
+<ul>
+<li><b>Stable assignment:</b> slot = position of the value in the sorted set of <em>all</em> values in the unfiltered item model, so hiding trips in the Layers filter never repaints the survivors.</li>
+<li><b>Dark mode:</b> ramp endpoints that sit on white paper read differently on an inverted sketch. Keep light/dark endpoint pairs in <code>Theme.qml</code>-style tokens from day one (same lesson as the sketch stroke colors).</li>
+<li>Centerline and scraps share the ramp so a legend entry means one thing.</li>
+</ul>
+
+<h2>6. Where the UI lives</h2>
+<p>Agreed: it is a view setting, not a tool. It never captures the mouse and it is always-on state, the same category as the keyword filter. Proposal:</p>
+<ul>
+<li><b>Decided: everything in the 3D view.</b> A "Color by: None" chip sits bottom-left (opposite scale bar and compass) when color-by is off and becomes the colorbar legend when on. A single click or right-click on it opens a popup with the controls: source <code>ComboBox</code> [None · Depth · Cave · Trip · Date · Year · Caver · Loop closure], ramp <code>ComboBox</code>, pivot, scrap tint slider. The key list is the same <code>pipelineModel.possibleKeys</code> the filter uses, with the numeric sources prepended. The Layers tab is untouched; no new tab.</li>
+<li><b>Legend in the viewport:</b> bottom-left overlay at <code>zOverlay</code>, mirroring the ScaleBar/Compass row at bottom-right. Numeric: a vertical colorbar with min/max labels and a drag-to-narrow range. Categorical: swatch + value list, scrollable past ~12 entries. Hidden when mode is None. The ramp bitmap comes through a <code>QQuickImageProvider</code> (<code>image://colorRamp/&lt;id&gt;</code>) so no Canvas/Shapes.</li>
+<li>Optionally mirror the mode in FileMenu next to "Scraps Visible" for keyboard discoverability. Persist in <code>QSettings</code> as a view preference, not in the project file.</li>
+</ul>
+
+<div class="fig">
+<svg viewBox="0 0 900 300" width="100%">
+  <rect x="10" y="10" width="620" height="280" rx="8" fill="#0f1216" stroke="#3a414b"/>
+  <text x="320" y="30" fill="#9aa4b2" font-size="12" text-anchor="middle">GLTerrainRenderer</text>
+  <rect x="24" y="150" width="20" height="120" rx="3" fill="url(#g)"/>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dbeafe"/><stop offset=".5" stop-color="#1d4ed8"/><stop offset="1" stop-color="#1e1b4b"/></linearGradient></defs>
+  <text x="50" y="158" fill="#e6e9ee" font-size="11">0 m</text>
+  <text x="50" y="272" fill="#e6e9ee" font-size="11">-412 m</text>
+  <text x="24" y="140" fill="#9aa4b2" font-size="11">Depth</text>
+  <rect x="470" y="255" width="80" height="6" fill="#e6e9ee"/><text x="510" y="250" fill="#9aa4b2" font-size="10" text-anchor="middle">100 m</text>
+  <circle cx="595" cy="250" r="18" fill="none" stroke="#9aa4b2"/><text x="595" y="254" fill="#e6e9ee" font-size="11" text-anchor="middle">N</text>
+  <rect x="650" y="10" width="240" height="280" rx="8" fill="#23272e" stroke="#3a414b"/>
+  <text x="690" y="34" fill="#9aa4b2" font-size="12">View</text><text x="740" y="34" fill="#5aa9e6" font-size="12" font-weight="600">Layers</text><text x="800" y="34" fill="#9aa4b2" font-size="12">Tools</text>
+  <line x1="650" y1="42" x2="890" y2="42" stroke="#3a414b"/>
+  <text x="664" y="66" fill="#e6e9ee" font-size="12">Color by</text>
+  <rect x="664" y="74" width="212" height="24" rx="4" fill="#2b3038" stroke="#3a414b"/><text x="672" y="91" fill="#e6e9ee" font-size="12">Depth ▾</text>
+  <rect x="664" y="104" width="130" height="24" rx="4" fill="#2b3038" stroke="#3a414b"/><text x="672" y="121" fill="#e6e9ee" font-size="12">Blue ▾</text>
+  <rect x="802" y="104" width="74" height="24" rx="4" fill="url(#h)"/><defs><linearGradient id="h"><stop offset="0" stop-color="#dbeafe"/><stop offset="1" stop-color="#1e1b4b"/></linearGradient></defs>
+  <text x="664" y="150" fill="#9aa4b2" font-size="11">Scrap tint</text><line x1="730" y1="146" x2="876" y2="146" stroke="#3a414b" stroke-width="3"/><circle cx="818" cy="146" r="6" fill="#5aa9e6"/>
+  <line x1="650" y1="168" x2="890" y2="168" stroke="#3a414b"/>
+  <text x="664" y="190" fill="#9aa4b2" font-size="12">Filter (existing KeywordTab)</text>
+  <rect x="664" y="200" width="212" height="24" rx="4" fill="#2b3038" stroke="#3a414b"/><text x="672" y="217" fill="#e6e9ee" font-size="12">Type ▾</text>
+  <text x="672" y="245" fill="#e6e9ee" font-size="12">☑ Line Plot (14)</text>
+  <text x="672" y="265" fill="#e6e9ee" font-size="12">☑ Plan (37)</text>
+</svg>
+<div class="figcap">Superseded sketch: the side-panel section shown here moved into a popup opened from the legend. The legend placement (bottom-left, opposite scale bar and compass) stands.</div>
+</div>
+
+<h2>7. Data sources beyond depth</h2>
+<table>
+<tr><th>Source</th><th>Kind</th><th>Where the value comes from</th><th>Effort</th></tr>
+<tr><td>Depth</td><td>numeric</td><td>Vertex z; already on the GPU.</td><td>small</td></tr>
+<tr><td>Cave, Trip, Caver, Year, Type</td><td>categorical</td><td>Existing keyword models through <code>cwKeywordGroupByKeyModel</code>.</td><td>small once the proxies exist</td></tr>
+<tr><td>Date</td><td>numeric (timeline) <em>and</em> categorical</td><td>Parse the <code>yyyy-MM-dd</code> keyword to a day ordinal per trip. Default to the timeline ramp; "Year" covers the categorical want.</td><td>small</td></tr>
+<tr><td>Loop / dead-end</td><td>categorical</td><td>Bridge-finding DFS over <code>cwSurveyNetwork</code>: an edge on a cycle is "in loop". Per-shot, so it needs a per-segment value, which the per-vertex buffer already gives.</td><td>medium</td></tr>
+<tr><td>Loop closure error</td><td>numeric</td><td>Survex 3d v8 emits <code>img_ERROR_INFO</code> after each traverse (<code>img-&gt;E/H/V</code>, <code>n_legs</code>, <code>length</code>). <code>cwSurvex3DFileReader</code> drops it today. Keep a (from,to)→error map and look it up per shot in <code>cwLinePlotGeometry::generate</code>, which still has station names.</td><td>medium</td></tr>
+<tr><td>Point cloud elevation</td><td>numeric</td><td>Same ramp texture, value = world z in <code>PointCloud.frag</code>.</td><td>small, later</td></tr>
+</table>
+<div class="callout warn">Per-shot sources (loop, error) need the value computed before trip ranges are flattened. The place is <code>cwLinePlotGeometry::generate</code>, which should emit a parallel <code>QVector&lt;float&gt;</code> of per-vertex values alongside <code>points</code>. Categorical keyword sources do not need this; they work on trip ranges after the fact.</div>
+
+<h2>8. Suggested phases</h2>
+<ol>
+<li><b>Depth on the centerline + legend.</b> <code>cwColorRamp</code>, <code>cwColorBy</code> state on <code>cwRegionSceneManager</code>, per-vertex value buffer, ColorByBlock + ramp texture in <code>cwRHILinePlot</code>, the Layers "Color by" row and the colorbar overlay. Offscreen PNG test for eyeballing. The default stays pixel-identical.</li>
+<li><b>Scrap tint.</b> Per-draw UBO on the scrap material, luminance recolor in <code>scrap.frag</code>, strength slider. Depth works immediately because it reads <code>vVertex.z</code>.</li>
+<li><b>Categorical by keyword.</b> Generalize the two visibility proxies to appearance proxies; a <code>cwKeywordColorBy</code> assigner (sibling of <code>cwKeywordVisibility</code>) that maps group-by rows to slots; swatch legend; Okabe–Ito palette.</li>
+<li><b>Date timeline, loop membership, loop error, point clouds.</b> Each is just a new value producer.</li>
+</ol>
+
+<h2>9. Open questions</h2>
+<ul>
+<li>Should station labels and lead markers (billboards) follow the color? Probably not for labels; leads maybe.</li>
+<li>Range control for depth: full cave extent by default, or the visible subset after filtering?</li>
+<li>Does the map export's 2D centerline overlay (<code>cwCaptureCenterline</code>) need the same coloring in phase 1, or can it wait?</li>
+<li>Persist the mode per project or per app? Proposed: app-level <code>QSettings</code>.</li>
+</ul>
+</div></body></html>

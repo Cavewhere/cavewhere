@@ -27,6 +27,11 @@
  * cwFixStationDiagnosticsModel role answers with its empty value, so a
  * delegate's required properties are defined on an attached row too.
  *
+ * A row whose coordinate reads as a grid position (cwAttachedFix::gridPosition)
+ * answers the easting, northing and elevation roles with its numbers (the
+ * horizontals in its system's units, the elevation in meters), so the page formats it in the project's units; a lat/long row or one whose
+ * text does not parse answers NaN and shows its text.
+ *
  * The rows come from the attach scan and the file is their source of truth, so
  * flags() leaves out Qt::ItemIsEditable and setData() refuses every edit.
  */
@@ -89,6 +94,12 @@ signals:
 
 private:
     QList<cwAttachedFix> m_fixes;
+    //! cwAttachedFix::gridPosition() of each row, NaN where it has none, read
+    //! once per setAttachedFixes: a coordinate sort asks for the numbers on
+    //! every comparison.
+    QList<cwGeoPoint> m_gridPositions;
+
+    void readGridPositions();
 };
 
 #endif // CWATTACHEDFIXMODEL_H

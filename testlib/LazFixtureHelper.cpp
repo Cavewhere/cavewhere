@@ -1,5 +1,6 @@
 #include "LazFixtureHelper.h"
 
+#include <QAbstractItemModel>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -16,9 +17,11 @@
 
 #include <LASlib/lasreader.hpp>
 #include <LASlib/laswriter.hpp>
+#include <LASlib/laswriter_las.hpp>
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace {
 
@@ -26,6 +29,8 @@ namespace {
 constexpr int kSignalWaitMs = 100;
 constexpr int kSpinSliceMs = 50;
 constexpr int kSleepSliceMs = 5;
+
+constexpr U16 kOgcWktRecordId = 2112;
 
 /**
  * Center the header's offsets on @a points.
@@ -46,10 +51,10 @@ void centerHeaderOffsets(LASheader* header, const PointRange& points, Getter get
     double maxX = 0.0, maxY = 0.0, maxZ = 0.0;
     bool first = true;
     for (const auto& point : points) {
-        const QVector3D position = get(point);
-        const double x = double(position.x());
-        const double y = double(position.y());
-        const double z = double(position.z());
+        const cwGeoPoint position = get(point);
+        const double x = position.x;
+        const double y = position.y;
+        const double z = position.z;
         if (first) {
             minX = maxX = x;
             minY = maxY = y;
@@ -72,9 +77,35 @@ void centerHeaderOffsets(LASheader* header, const PointRange& points, Getter get
 
 } // namespace
 
+void setUnterminatedOgcWkt(LASheader& header, const QByteArray& wkt)
+{
+    // add_vlr takes ownership of the new[] buffer; LASheader::clean frees it.
+    auto* data = new CHAR[wkt.size()];
+    std::memcpy(data, wkt.constData(), size_t(wkt.size()));
+    header.vlr_geo_ogc_wkt = data;
+    header.add_vlr("LASF_Projection", kOgcWktRecordId, U16(wkt.size()),
+                   reinterpret_cast<U8*>(data));
+}
+
 bool writeSyntheticLazFile(const QString& outPath,
                            const QVector<QVector3D>& points,
-                           const QString& wktCS)
+                           const QString& wktCS,
+                           LazCompression compression,
+                           WktTermination wktTermination)
+{
+    QVector<cwGeoPoint> geoPoints;
+    geoPoints.reserve(points.size());
+    for (const QVector3D& p : points) {
+        geoPoints.append(cwGeoPoint::fromSceneLocal(p));
+    }
+    return writeSyntheticGeoLazFile(outPath, geoPoints, wktCS, compression, wktTermination);
+}
+
+bool writeSyntheticGeoLazFile(const QString& outPath,
+                              const QVector<cwGeoPoint>& points,
+                              const QString& wktCS,
+                              LazCompression compression,
+                              WktTermination wktTermination)
 {
     LASheader header;
     header.clean_las_header();
@@ -83,14 +114,18 @@ bool writeSyntheticLazFile(const QString& outPath,
     header.z_scale_factor = 0.001;
     header.point_data_format = 0;
     header.point_data_record_length = 20;
-    centerHeaderOffsets(&header, points, [](const QVector3D& p) { return p; });
+    centerHeaderOffsets(&header, points, [](const cwGeoPoint& p) { return p; });
 
     QByteArray wktBytes;
     if (!wktCS.isEmpty()) {
         wktBytes = wktCS.toLatin1();
-        // LASheader copies the string into its own buffer; length excludes
-        // the implicit null terminator (matches set_geo_ogc_wkt's convention).
-        header.set_geo_ogc_wkt(wktBytes.size(), wktBytes.constData());
+        if (wktTermination == WktTermination::Unterminated) {
+            setUnterminatedOgcWkt(header, wktBytes);
+        } else {
+            // LASheader copies the string into its own buffer; length excludes
+            // the implicit null terminator (matches set_geo_ogc_wkt's convention).
+            header.set_geo_ogc_wkt(wktBytes.size(), wktBytes.constData());
+        }
     }
 
     LASpoint pointTemplate;
@@ -98,17 +133,31 @@ bool writeSyntheticLazFile(const QString& outPath,
                        header.point_data_record_length, &header);
 
     const QByteArray pathBytes = outPath.toUtf8();
-    LASwriteOpener opener;
-    opener.set_file_name(pathBytes.constData());
-    LASwriter* writer = opener.open(&header);
+
+    // LASwriteOpener has no compressor argument, so the point-wise fixture
+    // opens the LAS writer itself.
+    LASwriter* writer = nullptr;
+    if (compression == LazCompression::PointWise) {
+        auto* lasWriter = new LASwriterLAS();
+        if (lasWriter->open(pathBytes.constData(), &header, LASZIP_COMPRESSOR_POINTWISE)) {
+            writer = lasWriter;
+        } else {
+            delete lasWriter;
+        }
+    } else {
+        LASwriteOpener opener;
+        opener.set_file_name(pathBytes.constData());
+        writer = opener.open(&header);
+    }
+
     if (writer == nullptr) {
         return false;
     }
 
-    for (const QVector3D& p : points) {
-        pointTemplate.set_x(double(p.x()));
-        pointTemplate.set_y(double(p.y()));
-        pointTemplate.set_z(double(p.z()));
+    for (const cwGeoPoint& p : points) {
+        pointTemplate.set_x(p.x);
+        pointTemplate.set_y(p.y);
+        pointTemplate.set_z(p.z);
         writer->write_point(&pointTemplate);
         writer->update_inventory(&pointTemplate);
     }
@@ -143,7 +192,9 @@ bool writeAttributedLazFile(const QString& outPath,
     header.point_data_format = pointDataFormat;
     header.point_data_record_length = recordLength;
     centerHeaderOffsets(&header, points,
-                        [](const LazAttributePoint& p) { return p.position; });
+                        [](const LazAttributePoint& p) {
+                            return cwGeoPoint::fromSceneLocal(p.position);
+                        });
     // Formats 6+ are LAS 1.4 only; a 1.2 header can't store their point count.
     if (pointDataFormat >= 6) {
         header.version_minor = 4;
@@ -210,6 +261,7 @@ LazFileContents readLazFile(const QString& path)
     }
 
     contents.pointDataFormat = reader->header.point_data_format;
+    contents.headerPointCount = qint64(reader->npoints);
     contents.headerBboxMin = QVector3D(float(reader->header.min_x),
                                        float(reader->header.min_y),
                                        float(reader->header.min_z));
@@ -241,6 +293,31 @@ QString tempLazPath(QTemporaryDir& dir, const QString& tag)
     return dir.filePath(QStringLiteral("%1-%2.laz")
                             .arg(tag)
                             .arg(QCoreApplication::applicationPid()));
+}
+
+QString kentuckyFtUsCompoundWkt()
+{
+    return QStringLiteral(
+        "COMPD_CS[\"NAD83 / Kentucky Single Zone (ftUS) + NAVD88 height (ftUS) - Geoid12B (ftUS)\","
+        "PROJCS[\"NAD83 / Kentucky Single Zone (ftUS)\",GEOGCS[\"NAD83\","
+        "DATUM[\"North_American_Datum_1983\",SPHEROID[\"GRS 1980\",6378137,298.257222101,"
+        "AUTHORITY[\"EPSG\",\"7019\"]],TOWGS84[0,0,0,0,0,0,0],AUTHORITY[\"EPSG\",\"6269\"]],"
+        "PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],"
+        "UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],"
+        "AUTHORITY[\"EPSG\",\"4269\"]],"
+        "PROJECTION[\"Lambert_Conformal_Conic_2SP\"],"
+        "PARAMETER[\"standard_parallel_1\",37.0833333333333],"
+        "PARAMETER[\"standard_parallel_2\",38.6666666666667],"
+        "PARAMETER[\"latitude_of_origin\",36.3333333333333],"
+        "PARAMETER[\"central_meridian\",-85.75],"
+        "PARAMETER[\"false_easting\",4921250],"
+        "PARAMETER[\"false_northing\",3280833.333],"
+        "UNIT[\"US survey foot\",0.304800609601219,AUTHORITY[\"EPSG\",\"9003\"]],"
+        "AXIS[\"X\",EAST],AXIS[\"Y\",NORTH],AUTHORITY[\"EPSG\",\"3089\"]],"
+        "VERT_CS[\"NAVD88 height (ftUS)\","
+        "VERT_DATUM[\"North American Vertical Datum 1988\",2005,AUTHORITY[\"EPSG\",\"5103\"]],"
+        "UNIT[\"US survey foot\",0.304800609601219,AUTHORITY[\"EPSG\",\"9003\"]],"
+        "AXIS[\"Gravity-related height\",UP],AUTHORITY[\"EPSG\",\"6360\"]]]");
 }
 
 QString utmZoneWkt(int zone, int centralMeridian)
@@ -326,6 +403,36 @@ bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs)
         spinEventLoopSlice();
     }
     return !settling();
+}
+
+LazJobRecorder::LazJobRecorder(cwFutureManagerModel* manager)
+{
+    m_connection = QObject::connect(manager, &QAbstractItemModel::rowsInserted, manager,
+        [this, manager](const QModelIndex&, int first, int last) {
+            for (int row = first; row <= last; ++row) {
+                m_names.append(manager->index(row, 0)
+                                   .data(cwFutureManagerModel::NameRole)
+                                   .toString());
+            }
+        });
+}
+
+LazJobRecorder::~LazJobRecorder()
+{
+    QObject::disconnect(m_connection);
+}
+
+bool LazJobRecorder::waitForName(const QString& name, int timeoutMs)
+{
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (elapsed.elapsed() < timeoutMs) {
+        if (m_names.contains(name)) {
+            return true;
+        }
+        spinEventLoopSlice();
+    }
+    return m_names.contains(name);
 }
 
 bool addLazAndWait(cwRootData* root, const QStringList& externalPaths)

@@ -79,6 +79,19 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
     connect(m_fixStationTable, &QAbstractItemModel::modelReset,
             this, &cwSurveyNode::fixStationCountChanged);
 
+    connect(this, &cwSurveyNode::fixStationCountChanged,
+            this, &cwSurveyNode::updateSubtreeFixStationCount);
+    connect(this, &cwSurveyNode::attachedFixesChanged,
+            this, &cwSurveyNode::updateSubtreeFixStationCount);
+    connect(this, &cwSurveyNode::insertedTrips,
+            this, &cwSurveyNode::updateSubtreeFixStationCount);
+    connect(this, &cwSurveyNode::removedTrips,
+            this, &cwSurveyNode::updateSubtreeFixStationCount);
+    connect(this, &cwSurveyNode::insertedNodes,
+            this, &cwSurveyNode::updateSubtreeFixStationCount);
+    connect(this, &cwSurveyNode::removedNodes,
+            this, &cwSurveyNode::updateSubtreeFixStationCount);
+
     connect(m_fixStations, &cwFixStationModel::countChanged,
             this, &cwSurveyNode::recomputeGridConvergence);
     connect(m_fixStations, &QAbstractItemModel::modelReset,
@@ -118,6 +131,23 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
 
 cwSurveyNode::~cwSurveyNode() {
     Q_ASSERT(thread() == QThread::currentThread() || thread() == nullptr);
+}
+
+void cwSurveyNode::updateSubtreeFixStationCount()
+{
+    int count = fixStationCount();
+    for(const cwTrip* trip : std::as_const(m_trips)) {
+        count += trip->attachedFixes()->count();
+    }
+    for(const cwSurveyNode* child : std::as_const(m_childNodes)) {
+        count += child->m_subtreeFixStationCount;
+    }
+
+    if(m_subtreeFixStationCount == count) {
+        return;
+    }
+    m_subtreeFixStationCount = count;
+    emit subtreeFixStationCountChanged();
 }
 
 void cwSurveyNode::wireScopeLabelAggregate()
@@ -652,6 +682,8 @@ void cwSurveyNode::connectNode(cwSurveyNode* node)
             this, &cwSurveyNode::subtreeChanged, Qt::UniqueConnection);
     connect(node, &cwSurveyNode::subtreeAttachedFixesChanged,
             this, &cwSurveyNode::subtreeAttachedFixesChanged, Qt::UniqueConnection);
+    connect(node, &cwSurveyNode::subtreeFixStationCountChanged,
+            this, &cwSurveyNode::updateSubtreeFixStationCount, Qt::UniqueConnection);
     connect(node, &cwSurveyNode::scopeLabelsChanged,
             this, &cwSurveyNode::scopeLabelsChanged, Qt::UniqueConnection);
     connect(node, &cwSurveyNode::tripsDeleted,
@@ -687,6 +719,8 @@ void cwSurveyNode::disconnectNode(cwSurveyNode* node)
                this, &cwSurveyNode::subtreeChanged);
     disconnect(node, &cwSurveyNode::subtreeAttachedFixesChanged,
                this, &cwSurveyNode::subtreeAttachedFixesChanged);
+    disconnect(node, &cwSurveyNode::subtreeFixStationCountChanged,
+               this, &cwSurveyNode::updateSubtreeFixStationCount);
     disconnect(node, &cwSurveyNode::scopeLabelsChanged,
                this, &cwSurveyNode::scopeLabelsChanged);
     disconnect(node, &cwSurveyNode::tripsDeleted,
@@ -733,6 +767,19 @@ QList<cwSurveyNode*> cwSurveyNode::allNodes() const
         nodes.append(child->allNodes());
     }
     return nodes;
+}
+
+bool cwSurveyNode::isSelfOrDescendantOf(const cwSurveyNode* node) const
+{
+    for(const cwSurveyNode* current = this; current != nullptr; current = current->parentNode()) {
+        if(current == node) {
+            return true;
+        }
+        if(!current->isListedByParent()) {
+            return false;
+        }
+    }
+    return false;
 }
 
 QList<const cwSurveyNode*> cwSurveyNode::ancestorsOrSelf() const

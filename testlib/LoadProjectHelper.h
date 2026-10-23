@@ -292,6 +292,15 @@ public:
                                      const QString& compass,
                                      const QString& clino) const;
     /**
+     * Appends a new chunk to \a chunk's trip that repeats shot \a shotIndex
+     * with its tape lengthened by \a distanceOffset (in the trip's units). The
+     * repeat closes a loop with the original leg, so cavern writes a small,
+     * nonzero misclosure for it — for projects whose loops close exactly.
+     */
+    Q_INVOKABLE void addRepeatShot(cwSurveyChunk* chunk,
+                                   int shotIndex,
+                                   double distanceOffset) const;
+    /**
      * The ground-truth a4 splay readings from SplayFixtureHelper.h, as
      * {distance, compass, clino} maps, so a QML test seeds and asserts against
      * the same copy of the numbers the C++ tests use.

@@ -13,6 +13,8 @@
 //Our includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwExternalCenterline.h"
+#include "cwFixStation.h"
 #include "cwFutureManagerModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
@@ -69,6 +71,24 @@ inline cwTrip* addTrip(cwCave* node, const QString& name, const QString& station
     trip->setName(name);
     addShot(trip, station + QStringLiteral("1"), station + QStringLiteral("2"));
     return trip;
+}
+
+inline cwFixStation fixAt(const QString& stationName)
+{
+    cwFixStation fix;
+    fix.setStationName(stationName);
+    return fix;
+}
+
+//! \a count bare fixes a file lists, named <prefix>1, <prefix>2, ….
+inline QList<cwAttachedFix> attachedFixes(const QString& prefix, int count)
+{
+    QList<cwAttachedFix> fixes;
+    for(int i = 1; i <= count; ++i) {
+        fixes.append({prefix + QString::number(i), QStringLiteral("0 0 0"), QString(),
+                      QStringLiteral("attached.svx")});
+    }
+    return fixes;
 }
 
 //! Waits until every queued save has reached disk.

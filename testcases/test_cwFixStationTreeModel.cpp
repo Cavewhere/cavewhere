@@ -109,6 +109,9 @@ const QString kSt1 = QStringLiteral("st1");
 const QString kSt2 = QStringLiteral("st2");
 const QString kSt3 = QStringLiteral("st3");
 const QString kSt10 = QStringLiteral("st10");
+constexpr double kSt10Easting = 100.0;
+constexpr double kSt10Northing = 10.0;
+constexpr double kSt10Elevation = 1.0;
 const QString kNorthN9 = QStringLiteral("north.n9");
 const QString kNorthN10 = QStringLiteral("north.n10");
 constexpr int kSortFilterFixCount = 5;
@@ -596,6 +599,39 @@ TEST_CASE("The region root's fix station tree counts every fix in the project",
           == nativeFixes + kFixtureFixCount);
 }
 
+TEST_CASE("The region root's stored fix count is the row count the tree lists",
+          "[FixStationTreeModel]")
+{
+    auto fixture = makeProject(QStringLiteral("fix-tree-project-parity"));
+    cwSurveyNode* regionRoot = fixture->project->cavingRegion()->rootNode();
+    cwCave* north = addChildNode(regionRoot, kNativeFolderName, cwSurveyNode::Kind::Folder);
+    cwCave* pit = addChildNode(north, kNativeCaveName, cwSurveyNode::Kind::Cave);
+    addNativeFix(pit, kNativeStation, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
+                 kNativeFixElevation);
+    cwCave* sourceRoot = attachSubtreeFixture(fixture.get());
+    const int nativeFixes = nativeFixCount(regionRoot);
+    REQUIRE(nativeFixes == 1);
+
+    cwFixStationTreeModel model;
+    model.setRootNode(regionRoot);
+
+    CHECK(regionRoot->subtreeFixStationCount()
+          == nativeFixes + kFixtureFixCount);
+    CHECK(regionRoot->subtreeFixStationCount() == model.fixRowCount());
+    CHECK(sourceRoot->subtreeFixStationCount() == kFixtureFixCount);
+    CHECK(north->subtreeFixStationCount() == nativeFixes);
+
+    //Deleting the source takes every attached fix with it.
+    auto future = managerOf(fixture.get())->deleteSourceRoot(sourceRoot);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    INFO("delete: " << future.result().errorMessage().toStdString());
+    REQUIRE_FALSE(future.result().hasError());
+    drainPipelines(fixture.get());
+
+    CHECK(regionRoot->subtreeFixStationCount() == nativeFixes);
+    CHECK(regionRoot->subtreeFixStationCount() == model.fixRowCount());
+}
+
 TEST_CASE("A native fix on the owner leaves its system out of its file's include",
           "[FixStationTreeModel][BareFixCS][BareFixOrigin]")
 {
@@ -654,7 +690,7 @@ TEST_CASE("A descending sort keeps node rows after their sibling fixes",
           == QStringList({kSt10, kSt2, kSt1, kNodeLabel.arg(kSortFilterNorthName)}));
 }
 
-TEST_CASE("A coordinate sort orders numbered rows first, then attached rows by their text",
+TEST_CASE("A coordinate sort orders file and native fixes by their numbers",
           "[FixStationTreeModel][FixStationTreeFilterModel]")
 {
     SortFilterFixture fixture(QStringLiteral("fix-tree-sort-coordinate"));
@@ -664,11 +700,26 @@ TEST_CASE("A coordinate sort orders numbered rows first, then attached rows by t
     CHECK(childLabels(fixture.proxy, fixture.rootRow())
           == QStringList({kSt10, kSt2, kSt1, kNodeLabel.arg(kSortFilterNorthName)}));
 
+    // st3's easting (500010) is past every file fix's, so it sorts after them.
     addNativeFix(fixture.root, kSt3, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
                  kNativeFixElevation);
     drainPipelines(fixture.project.get());
     CHECK(childLabels(fixture.proxy, fixture.rootRow())
-          == QStringList({kSt3, kSt10, kSt2, kSt1, kNodeLabel.arg(kSortFilterNorthName)}));
+          == QStringList({kSt10, kSt2, kSt1, kSt3, kNodeLabel.arg(kSortFilterNorthName)}));
+}
+
+TEST_CASE("A file fix row reads its coordinate's numbers through the tree",
+          "[FixStationTreeModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-attached-components"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    const QModelIndex st10 = fixRow(fixture.treeModel, fixture.treeModel.index(0, 0), kSt10);
+    REQUIRE(st10.isValid());
+    CHECK(st10.data(cwFixStationModel::CoordinateTextRole).toString() == QStringLiteral("100 10 1"));
+    CHECK(st10.data(cwFixStationModel::EastingRole).toDouble() == kSt10Easting);
+    CHECK(st10.data(cwFixStationModel::NorthingRole).toDouble() == kSt10Northing);
+    CHECK(st10.data(cwFixStationModel::ElevationRole).toDouble() == kSt10Elevation);
 }
 
 TEST_CASE("A fix added while sorted takes its place by name",
@@ -731,6 +782,151 @@ TEST_CASE("A filter nothing matches keeps the page's own row, and clearing it re
           == QStringList({kSt2, kSt1, kSt10, kNodeLabel.arg(kSortFilterNorthName)}));
     REQUIRE(fixture.northRow().isValid());
     CHECK(childLabels(fixture.proxy, fixture.northRow()) == QStringList({kNorthN10, kNorthN9}));
+}
+
+namespace {
+
+const QByteArray kVisibleFixCountRoleName = QByteArrayLiteral("visibleFixCount");
+const QString kNoMatchFilter = QStringLiteral("zzz");
+constexpr int kSortFilterRootFixCount = 3;
+constexpr int kSortFilterNorthFixCount = 2;
+// "st1" matches st1 and st10; "n9" matches north.n9 alone.
+constexpr int kSt1MatchCount = 2;
+constexpr int kN9MatchCount = 1;
+
+//! \a row's count of the fix rows under it that the filter shows.
+int visibleFixCount(const QAbstractItemModel& model, const QModelIndex& row)
+{
+    return row.data(roleId(model, kVisibleFixCountRoleName)).toInt();
+}
+
+} // namespace
+
+TEST_CASE("While filtering, a node row counts the fix rows the filter shows under it",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-counts"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    fixture.proxy.setFilterText(kSt1);
+
+    const QModelIndex rootRow = fixture.rootRow();
+    REQUIRE(rootRow.isValid());
+    CHECK(childLabels(fixture.proxy, rootRow) == QStringList({kSt1, kSt10}));
+    CHECK(rootRow.data(cwFixStationTreeModel::OwnFixCountRole).toInt() == kSortFilterRootFixCount);
+    CHECK(visibleFixCount(fixture.proxy, rootRow) == kSt1MatchCount);
+    CHECK_FALSE(fixture.northRow().isValid());
+    CHECK(fixture.proxy.visibleFixRowCount() == kSt1MatchCount);
+}
+
+TEST_CASE("While filtering, a trip row counts its fix rows the filter shows",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-trip-counts"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    fixture.proxy.setFilterText(QStringLiteral("n9"));
+
+    const QModelIndex rootRow = fixture.rootRow();
+    REQUIRE(rootRow.isValid());
+    CHECK(rootRow.data(cwFixStationTreeModel::OwnFixCountRole).toInt() == kSortFilterRootFixCount);
+    CHECK(visibleFixCount(fixture.proxy, rootRow) == 0);
+    const QModelIndex north = fixture.northRow();
+    REQUIRE(north.isValid());
+    CHECK(north.data(cwFixStationTreeModel::OwnFixCountRole).toInt() == kSortFilterNorthFixCount);
+    CHECK(visibleFixCount(fixture.proxy, north) == kN9MatchCount);
+    CHECK(fixture.proxy.visibleFixRowCount() == kN9MatchCount);
+}
+
+TEST_CASE("A filter nothing matches shows no fix rows, and clearing it counts every one again",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-count-none"));
+    INFO("tree:\n" << describeTree(fixture.root));
+    CHECK(fixture.proxy.visibleFixRowCount() == kSortFilterFixCount);
+
+    fixture.proxy.setFilterText(kNoMatchFilter);
+    CHECK(fixture.proxy.visibleFixRowCount() == 0);
+    CHECK(visibleFixCount(fixture.proxy, fixture.rootRow()) == 0);
+
+    fixture.proxy.setFilterText(QString());
+    CHECK(fixture.proxy.visibleFixRowCount() == kSortFilterFixCount);
+    CHECK(visibleFixCount(fixture.proxy, fixture.rootRow()) == kSortFilterRootFixCount);
+    REQUIRE(fixture.northRow().isValid());
+    CHECK(visibleFixCount(fixture.proxy, fixture.northRow()) == kSortFilterNorthFixCount);
+}
+
+TEST_CASE("The visible fix count announces itself once per filter change",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-count-signal"));
+    QSignalSpy changed(&fixture.proxy, &cwFixStationTreeFilterModel::visibleFixRowCountChanged);
+
+    fixture.proxy.setFilterText(kSt1);
+    CHECK(changed.count() == 1);
+
+    fixture.proxy.setFilterText(kNoMatchFilter);
+    CHECK(changed.count() == 2);
+
+    fixture.proxy.setFilterText(QString());
+    CHECK(changed.count() == 3);
+}
+
+TEST_CASE("A fix added while filtering joins the counts when it matches",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-count-live"));
+    INFO("tree:\n" << describeTree(fixture.root));
+    // "st" matches the root's st2, st1 and st10, and neither of north's fixes.
+    constexpr int kStMatchCount = 3;
+
+    fixture.proxy.setFilterText(QStringLiteral("st"));
+    REQUIRE(fixture.proxy.visibleFixRowCount() == kStMatchCount);
+
+    addNativeFix(fixture.root, kSt3, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
+                 kNativeFixElevation);
+    drainPipelines(fixture.project.get());
+
+    CHECK(fixture.proxy.visibleFixRowCount() == kStMatchCount + 1);
+    CHECK(visibleFixCount(fixture.proxy, fixture.rootRow()) == kStMatchCount + 1);
+}
+
+TEST_CASE("The bare-fix system set through a filtered row lands on that row's node",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    auto fixture = makeProject(QStringLiteral("fix-tree-filter-set-data"));
+    cwSurveyNode* regionRoot = fixture->project->cavingRegion()->rootNode();
+    cwCave* north = addChildNode(regionRoot, kNativeFolderName, cwSurveyNode::Kind::Folder);
+    cwCave* pit = addChildNode(north, kNativeCaveName, cwSurveyNode::Kind::Cave);
+    addNativeFix(pit, kNativeStation, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
+                 kNativeFixElevation);
+    cwCave* attached = attachAndWaitForFixes(fixture.get(), kSortFilterFixture, kSortFilterFixCount);
+    INFO("tree:\n" << describeTree(regionRoot));
+
+    cwFixStationTreeModel treeModel;
+    treeModel.setRootNode(regionRoot);
+    cwFixStationTreeFilterModel proxy;
+    proxy.setSourceModel(&treeModel);
+
+    const QModelIndex sourceNorth = nodeRow(treeModel, kNativeFolderName);
+    const QModelIndex sourceAttached = nodeRow(treeModel, attached->name());
+    REQUIRE(sourceNorth.isValid());
+    REQUIRE(sourceAttached.isValid());
+    REQUIRE(sourceNorth.parent() == sourceAttached.parent());
+    REQUIRE(sourceNorth.row() < sourceAttached.row());
+
+    proxy.setFilterText(QStringLiteral("st"));
+    CHECK_FALSE(nodeRow(proxy, kNativeFolderName).isValid());
+    const QModelIndex proxyAttached = nodeRow(proxy, attached->name());
+    REQUIRE(proxyAttached.isValid());
+    REQUIRE(proxyAttached.row() != sourceAttached.row());
+
+    CHECK(proxy.setData(proxyAttached, kUtm48N, cwFixStationTreeModel::FixCoordinateSystemRole));
+    CHECK(attached->externalCenterline().fixCoordinateSystem() == kUtm48N);
+    CHECK(sourceAttached.data(cwFixStationTreeModel::FixCoordinateSystemRole).toString() == kUtm48N);
+    CHECK(sourceNorth.data(cwFixStationTreeModel::FixCoordinateSystemRole).toString().isEmpty());
+    CHECK(north->externalCenterline().fixCoordinateSystem().isEmpty());
+    drainPipelines(fixture.get());
 }
 
 namespace {
@@ -915,4 +1111,482 @@ TEST_CASE("Warning 603 opens the bare fix a derived trip holds, at its page row"
     REQUIRE(target.isValid());
     CHECK(target.data(roleId(model, QByteArrayLiteral("stationName"))).toString() == kOrderBareFix);
     CHECK(rowKind(target.parent()) == cwFixStationTreeModel::TripRow);
+}
+
+namespace {
+
+const QString kAheadNodeName = QStringLiteral("Ahead");
+const QString kBehindNodeName = QStringLiteral("Behind");
+const QString kAheadFirstFix = QStringLiteral("a0");
+const QString kAheadSecondFix = QStringLiteral("a1");
+const QString kBehindFirstFix = QStringLiteral("b0");
+const QString kBehindSecondFix = QStringLiteral("b1");
+constexpr int kLeavingFixRow = -1;
+
+//! Each fix row a FixRowRole dataChanged named, by station, with the page row
+//! it read while the announcement was being emitted, in emission order.
+struct FixRowAnnouncements
+{
+    QList<std::pair<QString, int>> rows;
+    QObject context;
+
+    explicit FixRowAnnouncements(const QAbstractItemModel& model)
+    {
+        const int stationRole = roleId(model, QByteArrayLiteral("stationName"));
+        QObject::connect(&model, &QAbstractItemModel::dataChanged, &context,
+                         [this, stationRole](const QModelIndex& topLeft,
+                                             const QModelIndex& bottomRight,
+                                             const QList<int>& roles) {
+            if (!roles.contains(cwFixStationTreeModel::FixRowRole)) {
+                return;
+            }
+            for (int row = topLeft.row(); row <= bottomRight.row(); ++row) {
+                const QModelIndex index = topLeft.siblingAtRow(row);
+                rows.append({index.data(stationRole).toString(),
+                             index.data(cwFixStationTreeModel::FixRowRole).toInt()});
+            }
+        });
+    }
+
+    //! The page rows \a station was announced with, in emission order.
+    QList<int> announcedRows(const QString& station) const
+    {
+        QList<int> announced;
+        for (const auto& [name, fixRow] : rows) {
+            if (name == station) {
+                announced.append(fixRow);
+            }
+        }
+        return announced;
+    }
+};
+
+//! Two sibling nodes under the region's root: Ahead fixes a0, Behind fixes
+//! b0 and b1, so Behind's fix rows follow Ahead's on the page.
+struct TwoNodeFixes
+{
+    std::unique_ptr<SavedProjectFixture> project;
+    cwSurveyNode* regionRoot = nullptr;
+    cwCave* ahead = nullptr;
+    cwCave* behind = nullptr;
+    cwFixStationTreeModel model;
+
+    explicit TwoNodeFixes(const QString& projectFileBase, const QStringList& behindFixes) :
+        project(makeProject(projectFileBase))
+    {
+        regionRoot = project->project->cavingRegion()->rootNode();
+        ahead = addChildNode(regionRoot, kAheadNodeName, cwSurveyNode::Kind::Cave);
+        behind = addChildNode(regionRoot, kBehindNodeName, cwSurveyNode::Kind::Cave);
+        REQUIRE(ahead->fixStations()->addFixStation(kAheadFirstFix) >= 0);
+        for (const QString& station : behindFixes) {
+            REQUIRE(behind->fixStations()->addFixStation(station) >= 0);
+        }
+        model.setRootNode(regionRoot);
+    }
+
+    int pageRowOf(const QString& nodeName, const QString& station) const
+    {
+        return fixRow(model, nodeRow(model, nodeName), station)
+            .data(cwFixStationTreeModel::FixRowRole)
+            .toInt();
+    }
+};
+
+} // namespace
+
+TEST_CASE("A fix added ahead of other nodes' fixes announces their new page rows",
+          "[FixStationTreeModel]")
+{
+    TwoNodeFixes fixes(QStringLiteral("fix-tree-row-added"), {kBehindFirstFix, kBehindSecondFix});
+    REQUIRE(fixes.pageRowOf(kBehindNodeName, kBehindFirstFix) == 1);
+    REQUIRE(fixes.pageRowOf(kBehindNodeName, kBehindSecondFix) == 2);
+
+    FixRowAnnouncements announcements(fixes.model);
+    REQUIRE(fixes.ahead->fixStations()->addFixStation(kAheadSecondFix) >= 0);
+
+    CHECK(announcements.announcedRows(kBehindFirstFix) == QList<int>({2}));
+    CHECK(announcements.announcedRows(kBehindSecondFix) == QList<int>({3}));
+    CHECK(fixes.pageRowOf(kBehindNodeName, kBehindFirstFix) == 2);
+    CHECK(fixes.pageRowOf(kBehindNodeName, kBehindSecondFix) == 3);
+}
+
+TEST_CASE("A fix row on its way out reads page row -1 while its removal is announced",
+          "[FixStationTreeModel]")
+{
+    TwoNodeFixes fixes(QStringLiteral("fix-tree-row-leaving"), {kBehindFirstFix, kBehindSecondFix});
+
+    FixRowAnnouncements announcements(fixes.model);
+    fixes.ahead->fixStations()->removeAt(0);
+
+    CHECK(announcements.announcedRows(kAheadFirstFix) == QList<int>({kLeavingFixRow}));
+    CHECK(announcements.announcedRows(kBehindFirstFix) == QList<int>({0}));
+    CHECK(announcements.announcedRows(kBehindSecondFix) == QList<int>({1}));
+}
+
+TEST_CASE("Removing a node announces the page rows of the fixes after it",
+          "[FixStationTreeModel]")
+{
+    TwoNodeFixes fixes(QStringLiteral("fix-tree-node-removed"), {kBehindFirstFix});
+    REQUIRE(fixes.pageRowOf(kBehindNodeName, kBehindFirstFix) == 1);
+
+    FixRowAnnouncements announcements(fixes.model);
+    fixes.regionRoot->removeNode(fixes.regionRoot->indexOfNode(fixes.ahead));
+
+    CHECK_FALSE(nodeRow(fixes.model, kAheadNodeName).isValid());
+    CHECK(announcements.announcedRows(kBehindFirstFix) == QList<int>({0}));
+    CHECK(fixes.pageRowOf(kBehindNodeName, kBehindFirstFix) == 0);
+}
+
+namespace {
+
+const QByteArray kBareFixOwnerTripsRoleName = QByteArrayLiteral("bareFixOwnerTrips");
+const QString kSyntheticEntryFile = QStringLiteral("synthetic.svx");
+const QString kTripName = QStringLiteral("t%1");
+constexpr int kOwnerFixtureTripCount = 40;
+constexpr int kFirstBareOwner = 3;
+constexpr int kSecondBareOwner = 17;
+//! Its attachment's only fix names its own system.
+constexpr int kSystemOwner = 25;
+//! Holds fixes of its own, so it has a trip row, and attaches nothing.
+constexpr int kTripRowTrip = 30;
+
+//! A fix \a owner's attachment lists at \a line, in \a system (bare when empty).
+cwAttachedFix ownerFix(const cwTrip* owner, int line, const QString& system = QString())
+{
+    cwAttachedFix fix;
+    fix.station = QStringLiteral("s%1").arg(line);
+    fix.coordinate = QStringLiteral("0 0 0");
+    fix.coordinateSystem = system;
+    fix.fileName = kSyntheticEntryFile;
+    fix.filePath = kSyntheticEntryFile;
+    fix.line = line;
+    fix.ownerId = owner->id();
+    return fix;
+}
+
+//! The trips \a index's bareFixOwnerTrips role lists, in order.
+QList<cwTrip*> ownerTrips(const QModelIndex& index, int role)
+{
+    return index.data(role).value<QList<cwTrip*>>();
+}
+
+//! The names of the trips \a index's bareFixOwnerTrips role lists, in order.
+QStringList ownerTripNames(const QModelIndex& index, int role)
+{
+    QStringList names;
+    for (const cwTrip* trip : ownerTrips(index, role)) {
+        names.append(trip->name());
+    }
+    return names;
+}
+
+//! The dataChanged emissions \a spy caught that cover \a row and announce \a role.
+int roleAnnouncements(const QSignalSpy& spy, const QModelIndex& row, int role)
+{
+    int count = 0;
+    for (const QList<QVariant>& emission : spy) {
+        const QModelIndex topLeft = emission.at(0).toModelIndex();
+        const QModelIndex bottomRight = emission.at(1).toModelIndex();
+        const QList<int> roles = emission.at(2).value<QList<int>>();
+        const bool coversRow = topLeft.parent() == row.parent()
+                               && topLeft.row() <= row.row() && row.row() <= bottomRight.row();
+        if (coversRow && (roles.isEmpty() || roles.contains(role))) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+//! A standalone node, outside any project so no scan replaces its attached
+//! fixes, with kOwnerFixtureTripCount trips named t0, t1, …. Trips
+//! kFirstBareOwner and kSecondBareOwner attach a file holding a bare fix,
+//! kSystemOwner one whose fix names its system; the node lists those fixes.
+struct BareFixOwnerFixture
+{
+    cwCave node;
+    cwFixStationTreeModel model;
+
+    BareFixOwnerFixture()
+    {
+        for (int i = 0; i < kOwnerFixtureTripCount; ++i) {
+            node.addTrip();
+            node.trip(i)->setName(kTripName.arg(i));
+        }
+        for (const int owner : {kFirstBareOwner, kSecondBareOwner, kSystemOwner}) {
+            node.trip(owner)->setExternalCenterline(cwExternalCenterline(kSyntheticEntryFile));
+        }
+        node.setAttachedFixes({ownerFix(trip(kFirstBareOwner), 1),
+                               ownerFix(trip(kSecondBareOwner), 2),
+                               ownerFix(trip(kSystemOwner), 3, kUtm48N)});
+        model.setRootNode(&node);
+    }
+
+    cwTrip* trip(int i) const { return node.trip(i); }
+    QModelIndex rootRow() const { return model.index(0, 0); }
+    int role() const { return roleId(model, kBareFixOwnerTripsRoleName); }
+    QStringList ownerNames() const { return ownerTripNames(rootRow(), role()); }
+};
+
+} // namespace
+
+TEST_CASE("A node row lists the trips whose attachment holds a fix with no coordinate system",
+          "[FixStationTreeModel]")
+{
+    BareFixOwnerFixture fixture;
+    fixture.trip(kTripRowTrip)->setAttachedFixes({ownerFix(fixture.trip(kTripRowTrip), 4)});
+    const int role = fixture.role();
+
+    CHECK(fixture.ownerNames()
+          == QStringList({kTripName.arg(kFirstBareOwner), kTripName.arg(kSecondBareOwner)}));
+
+    const QModelIndex root = fixture.rootRow();
+    int tripRows = 0;
+    for (int row = 0; row < fixture.model.rowCount(root); ++row) {
+        const QModelIndex child = fixture.model.index(row, 0, root);
+        if (rowKind(child) == cwFixStationTreeModel::TripRow) {
+            ++tripRows;
+        }
+        INFO("row " << row << " kind " << rowKind(child));
+        CHECK(ownerTripNames(child, role).isEmpty());
+    }
+    CHECK(tripRows == 1);
+}
+
+TEST_CASE("A node row announces its bare-fix owner trips only when the list changes",
+          "[FixStationTreeModel]")
+{
+    BareFixOwnerFixture fixture;
+    const int role = fixture.role();
+    QSignalSpy spy(&fixture.model, &QAbstractItemModel::dataChanged);
+
+    // Committing a system: the rescan moves only what the fixes read in.
+    QList<cwAttachedFix> readIn = fixture.node.attachedFixes()->attachedFixes();
+    for (cwAttachedFix& fix : readIn) {
+        fix.readInSystem = kUtm48N;
+    }
+    fixture.node.setAttachedFixes(readIn);
+    cwExternalCenterline chosen = fixture.trip(kFirstBareOwner)->externalCenterline();
+    chosen.setFixCoordinateSystem(kUtm48N);
+    fixture.trip(kFirstBareOwner)->setExternalCenterline(chosen);
+    CHECK(roleAnnouncements(spy, fixture.rootRow(), role) == 0);
+    CHECK(fixture.ownerNames()
+          == QStringList({kTripName.arg(kFirstBareOwner), kTripName.arg(kSecondBareOwner)}));
+
+    spy.clear();
+    QList<cwAttachedFix> withThirdOwner = readIn;
+    withThirdOwner.append(ownerFix(fixture.trip(kSystemOwner), 5));
+    fixture.node.setAttachedFixes(withThirdOwner);
+    CHECK(roleAnnouncements(spy, fixture.rootRow(), role) == 1);
+    CHECK(fixture.ownerNames()
+          == QStringList({kTripName.arg(kFirstBareOwner), kTripName.arg(kSecondBareOwner),
+                          kTripName.arg(kSystemOwner)}));
+
+    spy.clear();
+    fixture.trip(kSecondBareOwner)->setExternalCenterline(cwExternalCenterline());
+    CHECK(roleAnnouncements(spy, fixture.rootRow(), role) == 1);
+    CHECK(fixture.ownerNames()
+          == QStringList({kTripName.arg(kFirstBareOwner), kTripName.arg(kSystemOwner)}));
+}
+
+TEST_CASE("A node row announces its subtree fix count when a trip with attached fixes arrives or leaves",
+          "[FixStationTreeModel]")
+{
+    cwCave node;
+    cwFixStationTreeModel model;
+    model.setRootNode(&node);
+    const QModelIndex rootRow = model.index(0, 0);
+    QSignalSpy spy(&model, &QAbstractItemModel::dataChanged);
+
+    auto* arriving = new cwTrip();
+    arriving->setAttachedFixes({ownerFix(arriving, 1), ownerFix(arriving, 2)});
+    node.addTrip(arriving);
+    CHECK(rootRow.data(cwFixStationTreeModel::SubtreeFixCountRole).toInt() == 2);
+    CHECK(roleAnnouncements(spy, rootRow, cwFixStationTreeModel::SubtreeFixCountRole) >= 1);
+
+    spy.clear();
+    node.removeTrip(0);
+    CHECK(rootRow.data(cwFixStationTreeModel::SubtreeFixCountRole).toInt() == 0);
+    CHECK(roleAnnouncements(spy, rootRow, cwFixStationTreeModel::SubtreeFixCountRole) >= 1);
+}
+
+TEST_CASE("A trip removed from its node leaves the node row's bare-fix owners before it is deleted",
+          "[FixStationTreeModel]")
+{
+    BareFixOwnerFixture fixture;
+    const int role = fixture.role();
+    cwTrip* const leaving = fixture.trip(kFirstBareOwner);
+
+    QList<cwTrip*> ownersAfterRemoval;
+    QObject::connect(&fixture.node, &cwSurveyNode::removedTrips, &fixture.model, [&]() {
+        ownersAfterRemoval = ownerTrips(fixture.rootRow(), role);
+    });
+    fixture.node.removeTrip(kFirstBareOwner);
+
+    CHECK_FALSE(ownersAfterRemoval.contains(leaving));
+    CHECK(ownersAfterRemoval.size() == 1);
+    CHECK(fixture.ownerNames() == QStringList({kTripName.arg(kSecondBareOwner)}));
+}
+
+namespace {
+
+const QByteArray kDelegateKindRoleName = QByteArrayLiteral("delegateKind");
+const QString kKindEntryFile = QStringLiteral("kinds.svx");
+const QString kKindTripName = QStringLiteral("held");
+// Named so a sort by station interleaves the node's own fixes with its
+// attached ones.
+const QString kOwnFirst = QStringLiteral("k1");
+const QString kAttachedSecond = QStringLiteral("k2");
+const QString kOwnThird = QStringLiteral("k3");
+const QString kAttachedFourth = QStringLiteral("k4");
+const QString kTripHeldFix = QStringLiteral("k5");
+constexpr int kAttachedSecondLine = 1;
+constexpr int kAttachedFourthLine = 2;
+constexpr int kTripHeldFixLine = 3;
+
+//! A fix \a ownerId's attachment lists at \a line, as \a station.
+cwAttachedFix kindFix(const QString& station, const QUuid& ownerId, int line)
+{
+    cwAttachedFix fix;
+    fix.station = station;
+    fix.coordinate = QStringLiteral("0 0 0");
+    fix.fileName = kKindEntryFile;
+    fix.filePath = kKindEntryFile;
+    fix.line = line;
+    fix.ownerId = ownerId;
+    return fix;
+}
+
+int delegateKind(const QModelIndex& index)
+{
+    return index.data(cwFixStationTreeModel::DelegateKindRole).toInt();
+}
+
+//! A standalone node, outside any project so no scan replaces its attached
+//! fixes: two fixes of its own, two its attachment lists, and one trip whose
+//! attachment lists one more, so the trip has a row.
+struct DelegateKindFixture
+{
+    cwCave node;
+    cwFixStationTreeModel model;
+    cwFixStationTreeFilterModel proxy;
+
+    DelegateKindFixture()
+    {
+        node.addTrip();
+        cwTrip* trip = node.trip(0);
+        trip->setName(kKindTripName);
+        node.fixStations()->addFixStation(kOwnFirst);
+        node.fixStations()->addFixStation(kOwnThird);
+        node.setAttachedFixes({kindFix(kAttachedSecond, node.id(), kAttachedSecondLine),
+                               kindFix(kAttachedFourth, node.id(), kAttachedFourthLine)});
+        trip->setAttachedFixes({kindFix(kTripHeldFix, trip->id(), kTripHeldFixLine)});
+        model.setRootNode(&node);
+        proxy.setSourceModel(&model);
+    }
+};
+
+//! The delegate kind each fix station of DelegateKindFixture's rows answers.
+QHash<QString, int> expectedFixKinds()
+{
+    return {
+        {kOwnFirst, cwFixStationTreeModel::EditableFix},
+        {kOwnThird, cwFixStationTreeModel::EditableFix},
+        {kAttachedSecond, cwFixStationTreeModel::ReadOnlyFix},
+        {kAttachedFourth, cwFixStationTreeModel::ReadOnlyFix},
+        {kTripHeldFix, cwFixStationTreeModel::ReadOnlyFix}
+    };
+}
+
+//! Checks every row of \a model: a node row answers NodeDelegate, a trip row
+//! TripDelegate, and a fix row the kind \a expected names for its station,
+//! with RowKindRole still FixRow. Returns the stations of the fix rows seen.
+QStringList checkDelegateKinds(const QAbstractItemModel& model, const QModelIndex& parent,
+                               const QHash<QString, int>& expected)
+{
+    const int stationRole = roleId(model, QByteArrayLiteral("stationName"));
+    QStringList stations;
+    for (int row = 0; row < model.rowCount(parent); ++row) {
+        const QModelIndex child = model.index(row, 0, parent);
+        const int kind = rowKind(child);
+        INFO("row " << row << " rowKind " << kind);
+        switch (kind) {
+        case cwFixStationTreeModel::NodeRow:
+            CHECK(delegateKind(child) == cwFixStationTreeModel::NodeDelegate);
+            break;
+        case cwFixStationTreeModel::TripRow:
+            CHECK(delegateKind(child) == cwFixStationTreeModel::TripDelegate);
+            break;
+        case cwFixStationTreeModel::FixRow: {
+            const QString station = child.data(stationRole).toString();
+            INFO("station " << station.toStdString());
+            REQUIRE(expected.contains(station));
+            CHECK(delegateKind(child) == expected.value(station));
+            stations.append(station);
+            break;
+        }
+        default:
+            FAIL("A row answers no RowKind");
+        }
+        stations.append(checkDelegateKinds(model, child, expected));
+    }
+    return stations;
+}
+
+} // namespace
+
+TEST_CASE("Own fix rows and attached fix rows answer separate delegate kinds",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    DelegateKindFixture fixture;
+    const QHash<QString, int> expected = expectedFixKinds();
+    QStringList allStations = expected.keys();
+    allStations.sort();
+
+    SECTION("through the tree model")
+    {
+        CHECK(roleId(fixture.model, kDelegateKindRoleName) == cwFixStationTreeModel::DelegateKindRole);
+        const QModelIndex root = fixture.model.index(0, 0);
+        CHECK(rowKind(root) == cwFixStationTreeModel::NodeRow);
+        CHECK(delegateKind(root) == cwFixStationTreeModel::NodeDelegate);
+
+        const QModelIndex trip = tripRow(fixture.model, kKindTripName);
+        REQUIRE(trip.isValid());
+        CHECK(delegateKind(trip) == cwFixStationTreeModel::TripDelegate);
+        const QModelIndex tripFix = fixRow(fixture.model, trip, kTripHeldFix);
+        REQUIRE(tripFix.isValid());
+        CHECK(rowKind(tripFix) == cwFixStationTreeModel::FixRow);
+        CHECK(delegateKind(tripFix) == cwFixStationTreeModel::ReadOnlyFix);
+
+        const QModelIndex own = fixRow(fixture.model, root, kOwnFirst);
+        const QModelIndex attached = fixRow(fixture.model, root, kAttachedSecond);
+        REQUIRE(own.isValid());
+        REQUIRE(attached.isValid());
+        CHECK(rowKind(own) == cwFixStationTreeModel::FixRow);
+        CHECK(rowKind(attached) == cwFixStationTreeModel::FixRow);
+        CHECK(delegateKind(own) == cwFixStationTreeModel::EditableFix);
+        CHECK(delegateKind(attached) == cwFixStationTreeModel::ReadOnlyFix);
+
+        QStringList seen = checkDelegateKinds(fixture.model, QModelIndex(), expected);
+        seen.sort();
+        CHECK(seen == allStations);
+    }
+
+    SECTION("through the filter proxy, unsorted and sorted by station")
+    {
+        CHECK(roleId(fixture.proxy, kDelegateKindRoleName) == cwFixStationTreeModel::DelegateKindRole);
+        QStringList seen = checkDelegateKinds(fixture.proxy, QModelIndex(), expected);
+        seen.sort();
+        CHECK(seen == allStations);
+
+        sortBy(fixture.proxy, roleId(fixture.proxy, QByteArrayLiteral("stationName")),
+               Qt::AscendingOrder);
+        const QModelIndex root = fixture.proxy.index(0, 0);
+        const QStringList rootLabels = childLabels(fixture.proxy, root);
+        INFO("root rows " << rootLabels.join(QStringLiteral(", ")).toStdString());
+        REQUIRE(rootLabels.mid(0, 4)
+                == QStringList({kOwnFirst, kAttachedSecond, kOwnThird, kAttachedFourth}));
+        seen = checkDelegateKinds(fixture.proxy, QModelIndex(), expected);
+        seen.sort();
+        CHECK(seen == allStations);
+    }
 }

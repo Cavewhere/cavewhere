@@ -118,6 +118,10 @@ signals:
     void cameraChanged();
     void needsRendering();
 
+    // visibleFramingBounds() may have moved: visibility changed or geometry
+    // was added or replaced.
+    void visibleBoundsChanged();
+
 private:
     // What synchroize() must do with a render object on the next sync. Recording the
     // transition — rather than inferring it from which queue an object sits in — is

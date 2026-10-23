@@ -244,7 +244,7 @@ int OffscreenRenderTester::visiblePointCloudCount(QObject* sceneManager) const
 }
 
 bool OffscreenRenderTester::buildFramedCloudParameters(QQuickItem* viewer, QObject* sceneManager,
-                                                       QSize size, double worldRadiusOverride,
+                                                       QSize size, double coverageOverride,
                                                        cwScene*& sceneOut,
                                                        cwOffscreenRenderParameters& parametersOut)
 {
@@ -266,15 +266,11 @@ bool OffscreenRenderTester::buildFramedCloudParameters(QQuickItem* viewer, QObje
     }
     cwRenderPointCloud* cloud = clouds.first();
 
-    // Frame the cloud's scene-space bounds head-on. The distance must satisfy two
-    // things at once: (a) the whole bbox fits the frustum, and (b) the LIVE
-    // world-radius renders well below the shader's maxPointSizePx clamp — a frame
-    // too tight saturates the live sprites at the clamp, where a larger override
-    // radius can't grow them and the difference vanishes (an earlier bounds-only
-    // version did exactly this and the test could not tell the radii apart). So take
-    // the farther of two distances: bounds-fit, and the distance at which the live
-    // radius projects to ~kTargetLivePx (mirrors the size formula in PointCloud.vert,
-    // dpr 1, point near the view axis so w ≈ distance).
+    // Frame the cloud's scene-space bounds head-on, far enough out that the whole
+    // bbox fits the frustum. Sprite size no longer sets the distance: the shader
+    // sizes from spacingCoverage times the refine threshold in pixels, which is
+    // the same size at every depth, so a bounds-fit frame cannot saturate the
+    // maxPointSizePx clamp and hide the difference between two coverages.
     const QVector3D bboxMin = cloud->bboxMin();
     const QVector3D bboxMax = cloud->bboxMax();
     const QVector3D center = (bboxMin + bboxMax) * 0.5f;
@@ -282,14 +278,8 @@ bool OffscreenRenderTester::buildFramedCloudParameters(QQuickItem* viewer, QObje
 
     constexpr float kFovDeg = 45.0f;
     constexpr float kFrameMargin = 1.5f;
-    constexpr float kTargetLivePx = 4.0f;
     const float halfFov = qDegreesToRadians(kFovDeg * 0.5f);
-    const float liveRadius = cloud->worldRadius();
-    const float distanceForBounds = boundsRadius / std::sin(halfFov) * kFrameMargin;
-    const float distanceForSprite = (liveRadius > 0.0f)
-        ? liveRadius * (1.0f / std::tan(halfFov)) * (size.height() * 0.5f) / kTargetLivePx
-        : 0.0f;
-    const float distance = qMax(distanceForBounds, distanceForSprite);
+    const float distance = boundsRadius / std::sin(halfFov) * kFrameMargin;
     const QVector3D eye = center + QVector3D(0.0f, 0.0f, distance);
 
     QMatrix4x4 viewMatrix;
@@ -310,9 +300,9 @@ bool OffscreenRenderTester::buildFramedCloudParameters(QQuickItem* viewer, QObje
 
     // Attach the per-job appearance override on the job itself (the on-job payload
     // path), keyed by the cloud's stable render-object id.
-    if (worldRadiusOverride > 0.0) {
+    if (coverageOverride > 0.0) {
         cwPointCloudAppearance appearance;
-        appearance.worldRadius = float(worldRadiusOverride);
+        appearance.spacingCoverage = float(coverageOverride);
         parametersOut.appearanceOverrides.insert(cloud->renderObjectId(),
                                                  cwAppearanceOverride(appearance));
     }
@@ -323,7 +313,7 @@ bool OffscreenRenderTester::buildFramedCloudParameters(QQuickItem* viewer, QObje
 
 void OffscreenRenderTester::renderPointCloudFramed(QQuickItem* viewer, QObject* sceneManager,
                                                    const QString& filePath, QSize size,
-                                                   double worldRadiusOverride)
+                                                   double coverageOverride)
 {
     if (filePath.isEmpty() || !QFileInfo(filePath).absoluteDir().exists()) {
         qWarning() << "renderPointCloudFramed: empty path or missing output directory" << filePath;
@@ -331,7 +321,7 @@ void OffscreenRenderTester::renderPointCloudFramed(QQuickItem* viewer, QObject* 
     }
     cwScene* sceneObject = nullptr;
     cwOffscreenRenderParameters parameters;
-    if (!buildFramedCloudParameters(viewer, sceneManager, size, worldRadiusOverride,
+    if (!buildFramedCloudParameters(viewer, sceneManager, size, coverageOverride,
                                     sceneObject, parameters)) {
         return;
     }
@@ -339,15 +329,15 @@ void OffscreenRenderTester::renderPointCloudFramed(QQuickItem* viewer, QObject* 
 }
 
 int OffscreenRenderTester::renderPointCloudFramedPair(QQuickItem* viewer, QObject* sceneManager,
-                                                      const QString& filePathA, double worldRadiusA,
-                                                      const QString& filePathB, double worldRadiusB,
+                                                      const QString& filePathA, double coverageA,
+                                                      const QString& filePathB, double coverageB,
                                                       QSize size)
 {
     cwScene* sceneObject = nullptr;
     cwOffscreenRenderParameters paramsA;
     cwOffscreenRenderParameters paramsB;
-    if (!buildFramedCloudParameters(viewer, sceneManager, size, worldRadiusA, sceneObject, paramsA)
-        || !buildFramedCloudParameters(viewer, sceneManager, size, worldRadiusB, sceneObject, paramsB)) {
+    if (!buildFramedCloudParameters(viewer, sceneManager, size, coverageA, sceneObject, paramsA)
+        || !buildFramedCloudParameters(viewer, sceneManager, size, coverageB, sceneObject, paramsB)) {
         return 0;
     }
 

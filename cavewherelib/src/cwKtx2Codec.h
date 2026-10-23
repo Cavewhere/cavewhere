@@ -14,10 +14,14 @@
 // Our includes
 #include "CaveWhereLibExport.h"
 #include "cwDiskCacher.h"
+#include "cwProgressNode.h"
 #include "cwStreamedTexture.h"
 
 // Monad includes
 #include "Monad/Result.h"
+
+// Std includes
+#include <functional>
 
 /**
  * A transcoded, GPU-ready texture. Mip levels are ordered level 0 first and
@@ -107,16 +111,6 @@ namespace cw::ktx2 {
     CAVEWHERE_LIB_EXPORT QRhiTexture::Format preferredCompressedFormat(QRhi* rhi);
 
     /**
-     * The compressed format this build targets, for callers that must choose one
-     * without a QRhi in hand — the GUI thread has no QRhi, so scrap and glTF
-     * textures are transcoded before they ever reach the render thread. Desktop
-     * builds target BC7, mobile builds (iOS, Android) ASTC_4x4. Pair it with
-     * supportedCompressedFormat(): compress only while the two agree, because a
-     * compressed texture the backend rejects leaves the item textureless.
-     */
-    CAVEWHERE_LIB_EXPORT QRhiTexture::Format targetCompressedFormat();
-
-    /**
      * What the render backend actually accepts, published by the render thread
      * once it has a QRhi and readable from any thread. UnknownFormat until the
      * first frame, so callers stay on the uncompressed path while the device's
@@ -126,18 +120,42 @@ namespace cw::ktx2 {
     CAVEWHERE_LIB_EXPORT void setSupportedCompressedFormat(QRhiTexture::Format format);
 
     /**
-     * Reads the .ktx2 bytes stored at key and transcodes them to target. When
-     * the entry is missing or damaged, encodes sourceImage, stores it under
-     * key, and transcodes that instead.
-     *
-     * Pass a null sourceImage when the caller cannot afford the encode: a
-     * missing entry is then an error Result and the caller falls back to the
-     * uncompressed image.
+     * The generation of the encode settings. Bump it whenever encoded bytes
+     * change for inputs that hash the same, so entries from the previous
+     * generation stop being served.
      */
-    CAVEWHERE_LIB_EXPORT Monad::Result<cwCompressedTexture> cachedCompressedTexture(cwDiskCacher& cacher,
-                                                                                   const cwDiskCacher::Key& key,
-                                                                                   const QImage& sourceImage,
-                                                                                   QRhiTexture::Format target);
+    constexpr int kEncodeGeneration = 1;
+
+    /**
+     * baseKey with the encode generation appended, for example "note-crop"
+     * becomes "note-crop-uastc1". Every producer builds its cache key id
+     * through this, so one bump invalidates every stale encode at once.
+     */
+    CAVEWHERE_LIB_EXPORT QString cacheKeyId(const QString& baseKey);
+
+    /**
+     * Makes sure the cache holds a readable .ktx2 encode at key: a readable
+     * entry is left alone, and a missing or damaged one is re-encoded from
+     * source(), inserted, and read back to prove the write landed. source() is
+     * called only when the encode is needed, so callers keep an expensive
+     * decode lazy.
+     *
+     * Calls for the same cache file run one at a time across the process: a
+     * second caller waits for the running encode, then reads its entry rather
+     * than encoding again. source() runs inside the claim, so it must stay out
+     * of ensureEncodedEntry: a re-entrant call on the same cache file would wait
+     * on its own claim forever.
+     *
+     * An error Result means the cache has no usable entry at key and the caller
+     * should stay on its uncompressed image; the reason is also warned about.
+     *
+     * `progressParent` gets a "Compressing texture" child only when an encode
+     * runs, so a cache hit leaves it childless. Null leaves the encode untracked.
+     */
+    CAVEWHERE_LIB_EXPORT Monad::ResultBase ensureEncodedEntry(cwDiskCacher& cacher,
+                                                              const cwDiskCacher::Key& key,
+                                                              const std::function<QImage()>& source,
+                                                              const cwProgressNodePtr& progressParent = {});
 }
 
 #endif // CWKTX2CODEC_H

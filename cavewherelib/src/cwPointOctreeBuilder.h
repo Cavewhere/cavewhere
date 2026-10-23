@@ -1,0 +1,128 @@
+// cwPointOctreeBuilder.h
+#pragma once
+
+//Qt includes
+#include <QFuture>
+#include <QString>
+#include <QVector>
+
+//Std includes
+#include <memory>
+#include <optional>
+
+//Our includes
+#include "CaveWhereLibExport.h"
+#include "Monad/Result.h"
+#include "cwPointOctree.h"
+#include "cwPointOctreeManifest.h"
+
+class cwPointOctreePack;
+
+namespace cw::octree {
+
+    //The points per cell the chunk depth aims at, averaged over every cell of
+    //the depth. A flat tile fills only the cells its terrain crosses, so an
+    //occupied chunk holds several times this, at 12 bytes a point in pass B.
+    constexpr qint64 kChunkTargetPoints = 2000000;
+
+    //At most 8^5 chunk cells
+    constexpr int kMaxChunkDepth = 5;
+
+    //The multiple of the chunk target a cell may hold before it is split, so
+    //the cap follows whatever target the request asks for
+    constexpr qint64 kChunkMaxPointsMultiple = 4;
+
+    //Absorbs reprojection curvature before the measured-bounds retry
+    constexpr double kRootPaddingFraction = 0.01;
+
+    //The working set pass B's xy columns of chunks may hold together before a
+    //column waits for a running one to finish
+    constexpr qint64 kDefaultBuildMemoryBudgetBytes = 1536LL * 1024 * 1024;
+
+    /**
+     * What pass B charges its admission budget for one xy column of chunks
+     * (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5, WP16 (B)): the
+     * subtree builds of the chunks whose point counts are @a chunkPointCounts,
+     * and the native spacing index over every point of the column and the
+     * @a haloPoints its neighbors lend it within kLocalSpacingHaloUnits of its
+     * faces. The inFlightPeakBytes the build logs is a sum of these.
+     */
+    CAVEWHERE_LIB_EXPORT qint64 passBColumnBytes(const QVector<qint64>& chunkPointCounts,
+                                                 qint64 haloPoints);
+}
+
+/**
+ * Builds the point octree of a LAZ file without ever holding the cloud: the
+ * file is read once, chunked into temporary files, turned into subtrees by a
+ * fleet of workers, and written into the project's .cw_cache as one pack file
+ * (cw::octree::packPath) holding every node and the manifest.
+ *
+ * Threading: build() runs entirely on cwConcurrent workers. The request is
+ * captured by value; the only shared state is the pack writer, which mutexes
+ * its appends. Cancellation is polled per chunk of points, per chunk, and per node.
+ */
+class CAVEWHERE_LIB_EXPORT cwPointOctreeBuilder
+{
+public:
+    struct Request {
+        QString path;              //!< absolute filesystem path to a .laz / .las file
+        QString sourceCSOverride;  //!< empty → use the LAZ embedded CS (or identity)
+        QString frameCS;           //!< destination CS: the project's local projection
+        QString cacheRootPath;     //!< the project root, where .cw_cache lives
+
+        //!< Points per chunk file, which sets the chunk depth
+        qint64 chunkTargetPoints = cw::octree::kChunkTargetPoints;
+
+        //!< Points a chunk cell may hold before it is split a level deeper.
+        //!< 0 or less asks for kChunkMaxPointsMultiple x chunkTargetPoints. A
+        //!< cell over the cap is split until it is under it or it sits at
+        //!< kMaxChunkDepth, so an uneven cloud's chunks end up at mixed levels.
+        qint64 chunkMaxPoints = 0;
+
+        //!< Workers pass A decodes with, 0 = one per kMinPointsPerDecodeWorker
+        //!< points. Either way the count is held to the pool, and a file whose
+        //!< seek decodes from the start decodes on one worker whatever this asks.
+        int decodeWorkerCount = 0;
+
+        //!< The working set pass B's columns may hold together, 0 = the
+        //!< default. A column bigger than the whole budget runs on its own.
+        qint64 memoryBudgetBytes = cw::octree::kDefaultBuildMemoryBudgetBytes;
+    };
+
+    //Stable codes so a test asserts the failure kind, not the message wording
+    enum ErrorCode : int {
+        OpenFailed = Monad::ResultBase::CustomError,
+        ReadFailed,
+        CacheWriteFailed,
+        TempDirFailed,
+        Cancelled,
+    };
+
+    using Result = Monad::Result<cwPointOctreeManifest>;
+
+    /**
+     * The depth whose cells hold about chunkTargetPoints each:
+     * clamp(ceil(log8(npoints / chunkTargetPoints)), 0, kMaxChunkDepth).
+     */
+    static int chunkDepthFor(qint64 npoints,
+                             qint64 chunkTargetPoints = cw::octree::kChunkTargetPoints);
+
+    /**
+     * The content fingerprint the build writes its entries under. Empty when
+     * the file can't be read.
+     */
+    static QString fingerprintFor(const Request& request);
+
+    /**
+     * The opened pack of request's already-built octree, or nullptr when it
+     * has to be built: the pack is missing, fails to open, or carries another
+     * fingerprint.
+     */
+    static std::shared_ptr<const cwPointOctreePack> cachedPack(const Request& request);
+
+    //! cachedPack()'s manifest, or nullopt when there is no usable pack
+    static std::optional<cwPointOctreeManifest> cachedManifest(const Request& request);
+
+    //Builds the octree and writes it into the cache. Never reads the cache.
+    static QFuture<Result> build(const Request& request);
+};

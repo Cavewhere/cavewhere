@@ -4,6 +4,8 @@
 //Our includes
 #include "cwGltfLoader.h"
 #include "cwGltfBaseColorTexture.h"
+#include "cwCropImageTask.h"
+#include "cwImage.h"
 #include "cwDiskCacher.h"
 #include "cwKtx2Codec.h"
 #include "cwRenderTexturedItems.h"
@@ -21,6 +23,9 @@
 #include <QImage>
 #include <QTemporaryDir>
 #include <QtConcurrent>
+
+//AsyncFuture includes
+#include <asyncfuture.h>
 
 //Std includes
 #include <algorithm>
@@ -269,22 +274,6 @@ QImage compressibleImage(int size = kCompressedTextureSize)
     return image;
 }
 
-bool sameTexture(const cwCompressedTexture& first, const cwCompressedTexture& second)
-{
-    return first.format == second.format
-           && first.size == second.size
-           && first.mipLevels == second.mipLevels;
-}
-
-cwDiskCacher::Key compressedTestKey(const QDir& dataRootDir)
-{
-    return cwDiskCacher::Key {
-        QStringLiteral("gltf-texture-uastc.ktx2"),
-        dataRootDir,
-        QStringLiteral("checksum")
-    };
-}
-
 //A stand-in for a .glb: cwGltfBaseColorTexture only reads the file's bytes to
 //key the cache, so any bytes on disk make a valid source here.
 QString writeGltfFile(const QDir& dataRootDir, const QByteArray& bytes)
@@ -331,11 +320,11 @@ cwDiskCacher::Key textureKey(const QString& gltfPath, int textureIndex)
 {
     const QFileInfo gltfInfo(gltfPath);
     return cwDiskCacher::Key {
-        gltfInfo.fileName()
-            + QStringLiteral("-texture")
-            + QString::number(textureIndex)
-            + QStringLiteral("-uastc.ktx2"),
-        gltfInfo.dir(),
+        cw::ktx2::cacheKeyId(gltfInfo.fileName()
+                             + QStringLiteral("-texture")
+                             + QString::number(textureIndex))
+            + QStringLiteral(".ktx2"),
+        gltfInfo.path(),
         QString()
     };
 }
@@ -350,58 +339,6 @@ QSize streamedLevelZeroSize(const cwStreamedTexture& streamed)
     return levels.value().size;
 }
 
-}
-
-TEST_CASE("cachedCompressedTexture reuses the cached encode", "[Gltf][cwGltfLoader]")
-{
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-
-    const QDir dataRootDir(tempDir.path());
-    cwDiskCacher cacher(dataRootDir);
-    const cwDiskCacher::Key key = compressedTestKey(dataRootDir);
-    const QRhiTexture::Format target = cw::ktx2::targetCompressedFormat();
-
-    const auto first = cw::ktx2::cachedCompressedTexture(cacher, key, compressibleImage(), target);
-    REQUIRE_FALSE(first.hasError());
-    CHECK_FALSE(first.value().isNull());
-    CHECK(first.value().size == QSize(kCompressedTextureSize, kCompressedTextureSize));
-    CHECK(first.value().format == target);
-
-    const QFileInfo cacheFile(cacher.filePath(key));
-    REQUIRE(cacheFile.exists());
-    const QDateTime firstWrite = cacheFile.lastModified();
-
-    const auto second = cw::ktx2::cachedCompressedTexture(cacher, key, compressibleImage(), target);
-    REQUIRE_FALSE(second.hasError());
-    CHECK(sameTexture(first.value(), second.value()));
-    CHECK(QFileInfo(cacher.filePath(key)).lastModified() == firstWrite);
-
-    SECTION("a damaged entry re-encodes instead of failing") {
-        QFile file(cacher.filePath(key));
-        REQUIRE(file.open(QIODevice::ReadOnly));
-        const QByteArray entryBytes = file.readAll();
-        file.close();
-
-        REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        file.write(entryBytes.left(entryBytes.size() / 2));
-        file.close();
-
-        const auto repaired = cw::ktx2::cachedCompressedTexture(cacher, key, compressibleImage(), target);
-        REQUIRE_FALSE(repaired.hasError());
-        CHECK(sameTexture(first.value(), repaired.value()));
-    }
-
-    SECTION("a missing entry without a source image is an error") {
-        const cwDiskCacher::Key missingKey {
-            QStringLiteral("missing-uastc.ktx2"),
-            dataRootDir,
-            QStringLiteral("checksum")
-        };
-
-        const auto missing = cw::ktx2::cachedCompressedTexture(cacher, missingKey, QImage(), target);
-        CHECK(missing.hasError());
-    }
 }
 
 TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
@@ -423,10 +360,10 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
 
         cwRenderTexturedItems::Item first;
         baseColorTexture.setOn(first, scene, material);
-        REQUIRE_FALSE(first.streamedTexture.isNull());
-        CHECK(first.streamedTexture.dataRootPath == dataRootDir.path());
-        CHECK(first.streamedTexture.size == QSize(kCompressedTextureSize, kCompressedTextureSize));
-        CHECK(first.texture.isNull());
+        REQUIRE_FALSE(first.texture.streamed().isNull());
+        CHECK(first.texture.streamed().dataRootPath() == dataRootDir.absolutePath());
+        CHECK(first.texture.streamed().size == QSize(kCompressedTextureSize, kCompressedTextureSize));
+        CHECK(first.texture.image().isNull());
 
         const cwDiskCacher cacher(dataRootDir);
         const cwDiskCacher::Key key = textureKey(gltfPath, 0);
@@ -436,14 +373,14 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
 
         //The descriptor's size is the encoded header's, and it must agree with
         //the level 0 the render side will load
-        CHECK(streamedLevelZeroSize(first.streamedTexture) == first.streamedTexture.size);
+        CHECK(streamedLevelZeroSize(first.texture.streamed()) == first.texture.streamed().size);
     }
 
     SECTION("a warm cache re-encodes nothing and repeats the descriptor") {
         const cwGltfBaseColorTexture cold(dataRootDir.path(), gltfPath);
         cwRenderTexturedItems::Item first;
         cold.setOn(first, scene, material);
-        REQUIRE_FALSE(first.streamedTexture.isNull());
+        REQUIRE_FALSE(first.texture.streamed().isNull());
 
         const cwDiskCacher cacher(dataRootDir);
         const QString cachePath = cacher.filePath(textureKey(gltfPath, 0));
@@ -457,8 +394,8 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
         cwRenderTexturedItems::Item second;
         warm.setOn(second, scene, material);
 
-        CHECK(second.streamedTexture == first.streamedTexture);
-        CHECK(second.texture.isNull());
+        CHECK(second.texture.streamed() == first.texture.streamed());
+        CHECK(second.texture.image().isNull());
         CHECK(QFileInfo(cachePath).lastModified() == firstWrite);
         CHECK(QFileInfo(cachePath).size() == firstSize);
     }
@@ -467,16 +404,16 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
         const cwGltfBaseColorTexture original(dataRootDir.path(), gltfPath);
         cwRenderTexturedItems::Item first;
         original.setOn(first, scene, material);
-        REQUIRE_FALSE(first.streamedTexture.isNull());
+        REQUIRE_FALSE(first.texture.streamed().isNull());
 
         REQUIRE_FALSE(writeGltfFile(dataRootDir, QByteArray("different-glb-bytes")).isEmpty());
 
         const cwGltfBaseColorTexture edited(dataRootDir.path(), gltfPath);
         cwRenderTexturedItems::Item second;
         edited.setOn(second, scene, material);
-        REQUIRE_FALSE(second.streamedTexture.isNull());
-        CHECK(second.streamedTexture.key.checksum != first.streamedTexture.key.checksum);
-        CHECK(streamedLevelZeroSize(second.streamedTexture) == second.streamedTexture.size);
+        REQUIRE_FALSE(second.texture.streamed().isNull());
+        CHECK(second.texture.streamed().key.checksum != first.texture.streamed().key.checksum);
+        CHECK(streamedLevelZeroSize(second.texture.streamed()) == second.texture.streamed().size);
     }
 
     SECTION("a project without a data root keeps the decoded image") {
@@ -484,8 +421,8 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
         cwRenderTexturedItems::Item item;
         baseColorTexture.setOn(item, scene, material);
 
-        CHECK(item.streamedTexture.isNull());
-        CHECK_FALSE(item.texture.isNull());
+        CHECK(item.texture.streamed().isNull());
+        CHECK_FALSE(item.texture.image().isNull());
     }
 
     SECTION("bytes no decoder can read fall back to the image and are tried once") {
@@ -501,8 +438,8 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
 
         cwRenderTexturedItems::Item first;
         baseColorTexture.setOn(first, corruptScene, material);
-        CHECK(first.streamedTexture.isNull());
-        CHECK(first.texture.isNull());
+        CHECK(first.texture.streamed().isNull());
+        CHECK(first.texture.image().isNull());
 
         const cwDiskCacher cacher(dataRootDir);
         CHECK_FALSE(QFileInfo::exists(cacher.filePath(textureKey(gltfPath, 0))));
@@ -510,7 +447,7 @@ TEST_CASE("glTF base color textures reach the renderer as streamed descriptors",
         //The memoized failure is what keeps the second geometry from retrying
         cwRenderTexturedItems::Item second;
         baseColorTexture.setOn(second, corruptScene, material);
-        CHECK(second.streamedTexture.isNull());
+        CHECK(second.texture.streamed().isNull());
         CHECK_FALSE(QFileInfo::exists(cacher.filePath(textureKey(gltfPath, 0))));
     }
 }
@@ -538,7 +475,7 @@ TEST_CASE("glTF base color textures read the cache once per task run", "[Gltf][c
 
     cwRenderTexturedItems::Item first;
     baseColorTexture.setOn(first, scene, firstMaterial);
-    REQUIRE_FALSE(first.streamedTexture.isNull());
+    REQUIRE_FALSE(first.texture.streamed().isNull());
 
     SECTION("a second mesh on the same texture skips the cache file entirely") {
         const QString cachePath = cacher.filePath(textureKey(gltfPath, 0));
@@ -548,8 +485,8 @@ TEST_CASE("glTF base color textures read the cache once per task run", "[Gltf][c
         cwRenderTexturedItems::Item second;
         baseColorTexture.setOn(second, scene, firstMaterial);
 
-        CHECK(second.streamedTexture == first.streamedTexture);
-        CHECK(second.texture.isNull());
+        CHECK(second.texture.streamed() == first.texture.streamed());
+        CHECK(second.texture.image().isNull());
 
         //A re-read would have found the damaged entry and rewritten it.
         CHECK(QFileInfo(cachePath).size() == damagedSize);
@@ -559,11 +496,54 @@ TEST_CASE("glTF base color textures read the cache once per task run", "[Gltf][c
         cwRenderTexturedItems::Item second;
         baseColorTexture.setOn(second, scene, secondMaterial);
 
-        REQUIRE_FALSE(second.streamedTexture.isNull());
-        CHECK(second.streamedTexture.size
+        REQUIRE_FALSE(second.texture.streamed().isNull());
+        CHECK(second.texture.streamed().size
               == QSize(kSecondCompressedTextureSize, kSecondCompressedTextureSize));
         CHECK(QFileInfo(cacher.filePath(textureKey(gltfPath, 1))).exists());
     }
+}
+
+TEST_CASE("Scrap and glTF cache keys share the encode generation", "[Gltf][cwGltfLoader][ScrapCompressedTexture]")
+{
+    constexpr int kCropTimeoutMilliseconds = 30000;
+    constexpr int kNoteDotsPerMeter = 11811;
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir dataRootDir(tempDir.path());
+    const QString gltfPath = writeGltfFile(dataRootDir, QByteArray("glb-bytes"));
+    REQUIRE_FALSE(gltfPath.isEmpty());
+
+    const cwGltfBaseColorTexture baseColorTexture(dataRootDir.path(), gltfPath);
+    cw::gltf::MaterialCPU material;
+    material.baseColorTextureIndex = 0;
+
+    cwRenderTexturedItems::Item item;
+    baseColorTexture.setOn(item, sceneWithBaseColor(compressibleImage()), material);
+    REQUIRE_FALSE(item.texture.streamed().isNull());
+
+    const QString notePath = dataRootDir.filePath(QStringLiteral("note.png"));
+    REQUIRE(compressibleImage().save(notePath));
+
+    cwImage note;
+    note.setPath(notePath);
+    note.setOriginalSize(QSize(kCompressedTextureSize, kCompressedTextureSize));
+    note.setOriginalDotsPerMeter(kNoteDotsPerMeter);
+
+    cwCropImageTask task;
+    task.setDataRootDir(dataRootDir);
+    task.setOriginal(note);
+    task.setRectF(QRectF(0.0, 0.0, 1.0, 1.0));
+
+    auto future = task.crop();
+    REQUIRE(AsyncFuture::waitForFinished(future, kCropTimeoutMilliseconds));
+    const cwCropImageTask::Result crop = future.result();
+    REQUIRE_FALSE(crop.compressedKey.id.isEmpty());
+
+    const QString suffix = cw::ktx2::cacheKeyId(QString());
+    CHECK(item.texture.streamed().key.id.contains(suffix));
+    CHECK(crop.compressedKey.id.contains(suffix));
 }
 
 namespace {
@@ -694,7 +674,7 @@ TEST_CASE("Only an encode grows a compression node", "[cwGltfLoader][Issue671]")
     const cwGltfBaseColorTexture cold(dataRootDir.path(), gltfPath);
     cwRenderTexturedItems::Item first;
     cold.setOn(first, scene, material, cwProgressScope(coldNode));
-    REQUIRE_FALSE(first.streamedTexture.isNull());
+    REQUIRE_FALSE(first.texture.streamed().isNull());
 
     //A node that took a child is a parent for good, so the encode is visible
     //after the fact without anything test-only on the production side
@@ -705,7 +685,7 @@ TEST_CASE("Only an encode grows a compression node", "[cwGltfLoader][Issue671]")
     const cwGltfBaseColorTexture warm(dataRootDir.path(), gltfPath);
     cwRenderTexturedItems::Item second;
     warm.setOn(second, scene, material, cwProgressScope(warmNode));
-    CHECK(second.streamedTexture == first.streamedTexture);
+    CHECK(second.texture.streamed() == first.texture.streamed());
 
     CHECK(warmNode->isLeaf());
 }

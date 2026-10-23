@@ -17,3 +17,10 @@ void cwRenderTexturedItemVisibility::applyVisible(bool visible)
         m_items->setItemVisible(m_itemId, visible);
     }
 }
+
+void cwRenderTexturedItemVisibility::applyColorValue(float value)
+{
+    if(m_items) {
+        m_items->setItemColorValue(m_itemId, value);
+    }
+}

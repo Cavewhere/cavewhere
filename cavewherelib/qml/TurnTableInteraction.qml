@@ -4,21 +4,24 @@ import cavewherelib
 BaseTurnTableInteraction {
     id: interactionId
 
-    // Target whose worldRadius property the hold-P + wheel gesture writes to.
-    // Externally bound so the interaction doesn't depend on scene structure.
-    property LazLayersSceneNode pointCloudWorldRadiusTarget: null
+    // Target whose spacingCoverage property the hold-P + wheel gesture writes
+    // to. Externally bound so the interaction doesn't depend on scene
+    // structure.
+    property LazLayersSceneNode pointCloudSizeTarget: null
 
     // Set true by GLTerrainRenderer while the P key is held. When true, the
-    // wheel re-routes from camera zoom to point-cloud worldRadius tuning.
+    // wheel re-routes from camera zoom to point-cloud size tuning.
     property bool pKeyHeld: false
 
-    // Multiplicative per-tick factor applied to worldRadius. The radius spans
-    // [0.01, 50] m on the scene-node clamp, so a linear delta would feel
-    // either jumpy at small values or sluggish at large ones; exp() keeps
-    // each tick a fixed fraction of the current size. exp(deltaRotation *
-    // 0.1) at a typical mouse tick (~12 deg * rotationScale 0.1 = 1.2 of
-    // deltaRotation) gives ~13% per tick — ~6 ticks to double.
-    readonly property real worldRadiusLogStep: 0.1
+    // Multiplicative per-tick factor applied to spacingCoverage — the fraction
+    // of its own cell a sprite covers, and the only point-size knob. Coverage
+    // spans [0.25, 8] on the scene-node clamp, so a linear delta would feel
+    // either jumpy at small values or sluggish at large ones; exp() keeps each
+    // tick a fixed fraction of the current size. exp(deltaRotation * 0.1) at a
+    // typical mouse tick (~12 deg * rotationScale 0.1 = 1.2 of deltaRotation)
+    // gives ~13% per tick — ~6 ticks to double, so ~30 ticks spans the whole
+    // range.
+    readonly property real pointSizeLogStep: 0.1
 
     QQ.LoggingCategory {
         id: interactLog
@@ -134,13 +137,13 @@ BaseTurnTableInteraction {
                 return
             }
 
-            if(interactionId.pKeyHeld && interactionId.pointCloudWorldRadiusTarget) {
+            if(interactionId.pKeyHeld && interactionId.pointCloudSizeTarget) {
                 // Wheel up (positive delta) grows points; wheel down shrinks.
                 // Multiplicative — keeps the per-tick feel consistent across
                 // the full clamped range.
-                let target = interactionId.pointCloudWorldRadiusTarget
-                target.worldRadius = target.worldRadius
-                    * Math.exp(deltaRotation * interactionId.worldRadiusLogStep)
+                let target = interactionId.pointCloudSizeTarget
+                target.spacingCoverage = target.spacingCoverage
+                    * Math.exp(deltaRotation * interactionId.pointSizeLogStep)
                 lastRotation = rotation
                 return
             }
