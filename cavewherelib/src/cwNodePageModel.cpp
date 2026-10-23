@@ -75,6 +75,9 @@ void cwNodePageModel::rewireTrips()
 
     setTripCount(trips.size());
     updateLastSurvey();
+
+    //A sourced node's count waits on the solve once a trip sits under it.
+    updateStationCount();
 }
 
 void cwNodePageModel::updateLastSurvey()
@@ -141,13 +144,16 @@ void cwNodePageModel::rewireSource()
 
 void cwNodePageModel::updateStationCount()
 {
-    const int count = m_node != nullptr && m_node->isSourced()
+    const std::optional<int> count = m_node != nullptr && m_node->isSourced()
             ? cwSurveyTreeModel::sourcedStationCount(m_node)
-            : 0;
+            : std::optional<int>(0);
 
-    if(m_stationCount == count) {
+    const int stationCount = count.value_or(0);
+    const bool known = count.has_value();
+    if(m_stationCount == stationCount && m_stationCountKnown == known) {
         return;
     }
-    m_stationCount = count;
+    m_stationCount = stationCount;
+    m_stationCountKnown = known;
     emit stationCountChanged();
 }

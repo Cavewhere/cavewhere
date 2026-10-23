@@ -2083,6 +2083,46 @@ MainWindowTest {
                         "an attached trip counts its own stations")
         }
 
+        // --- MT.1: a placeholder count until the first solve lands ---
+
+        // Waits for a cell's value to read the placeholder dash, then checks
+        // it draws in the subtle text color the page gives an unknown value.
+        function tryCellPlaceholder(page, cellObjectName, message) {
+            const value = cellValue(page, cellObjectName)
+            tryCompare(value, "text", "\u2014", 10000, message + ": " + cellObjectName + "->value")
+            verify(Qt.colorEqual(value.color, Theme.textSubtle),
+                   message + ": the placeholder draws in Theme.textSubtle, not " + value.color)
+        }
+
+        // A file cavern never solves leaves its row, and the native cave it
+        // was attached under, on the placeholder: neither shows a partial sum.
+        function test_unsolvedAttachedRowsShowThePlaceholderCount() {
+            RootData.account.name = "Placeholder Test"
+            RootData.account.email = "placeholder.test@example.com"
+            const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            verify(RootData.project.saveAs(tmpPath + "/placeholderCount.cwproj"), "saveAs should succeed")
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+
+            const page = gotoDataMainPage()
+            const host = addCave("Host Cave", 0)
+            RootData.attachSource(host,
+                                  TestHelper.testcasesDatasetSourcePath(
+                                      "external-centerlines/survex_noisy_failure/noisy_failure.svx"))
+            tryVerify(() => host.childNodeCount === 1 && host.childNode(0).tripCount > 0, 10000,
+                      "the attach must build the source root and its trip")
+            RootData.futureManagerModel.waitForFinished()
+            const root = host.childNode(0)
+
+            const tree = surveyTree(page)
+            tree.surveyTree.expandAll()
+            tryVerify(() => viewRowOf(tree, root) >= 0, 10000, "the source root's row is shown")
+
+            tryCellPlaceholder(page, "caveStations" + viewRowOf(tree, root),
+                               "an unsolved source root shows the placeholder")
+            tryCellPlaceholder(page, "caveStations" + viewRowOf(tree, host),
+                               "a native cave over an unsolved source shows the placeholder")
+        }
+
         // --- MP.6: attached trips report their solved length ---
 
         // An attached trip owns no shots, so its row reads the length of the

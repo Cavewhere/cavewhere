@@ -11,7 +11,9 @@
 
 //Qt includes
 #include <QAbstractItemModelTester>
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QDeadlineTimer>
 #include <QSignalSpy>
 #include <QUndoStack>
 #include <QUuid>
@@ -27,8 +29,11 @@
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "cwUnits.h"
+#include "SurveyTreeTestHelper.h"
 
 namespace {
+
+    using SurveyTreeTestHelper::changesCovering;
 
     //! A node with a name and a kind, parented nowhere yet
     cwCave* makeNode(const QString& name, cwSurveyNode::Kind kind)
@@ -67,6 +72,18 @@ namespace {
         }
 
         return false;
+    }
+
+    //! Steps the event loop until \a spy saw the change sawChange() looks for,
+    //! so an aggregate announced by a queued pass gets its turn.
+    bool waitForChange(const QSignalSpy& spy, const QModelIndex& rowIndex, int column, int role)
+    {
+        constexpr int kWaitMilliseconds = 2000;
+        QDeadlineTimer deadline(kWaitMilliseconds);
+        while(!sawChange(spy, rowIndex, column, role) && !deadline.hasExpired()) {
+            QCoreApplication::processEvents();
+        }
+        return sawChange(spy, rowIndex, column, role);
     }
 
     const QDate kTopo1Date(2020, 1, 1);
@@ -334,14 +351,45 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         //The counts the new subtree brought reach every ancestor row
         CHECK(model.data(upperIndex, cwSurveyTreeModel::TripCountRole).toInt() == 4);
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::TripCountRole).toInt() == 5);
-        CHECK(sawChange(dataChanged, upperIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole));
-        CHECK(sawChange(dataChanged, alphaIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole));
+        CHECK(waitForChange(dataChanged, upperIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole));
+        CHECK(waitForChange(dataChanged, alphaIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole));
 
         //A trip added to the new node is announced through the new connections
         QSignalSpy insertedAfter(&model, &QAbstractItemModel::rowsInserted);
         wingChild->addTrip(makeTrip(QStringLiteral("Topo 6"), QDate(2022, 8, 8)));
         CHECK(insertedAfter.count() == 1);
         CHECK(model.rowCount(model.index(0, cwSurveyTreeModel::Name, wingIndex)) == 2);
+    }
+
+    SECTION("trips added in one turn announce each ancestor row's aggregate once, a turn later") {
+        constexpr int kAddedTrips = 50;
+        constexpr int kMaxChangesPerRowPerTurn = 2;
+        const int alphaTripsBefore = model.data(alphaIndex, cwSurveyTreeModel::TripCountRole).toInt();
+        QSignalSpy dataChanged(&model, &QAbstractItemModel::dataChanged);
+
+        for(int i = 0; i < kAddedTrips; i++) {
+            crawlSection->addTrip(makeTrip(QStringLiteral("Added %1").arg(i), kTopo3Date));
+        }
+
+        //The counts read live, while their announcements wait for the queued pass
+        CHECK(model.data(alphaIndex, cwSurveyTreeModel::TripCountRole).toInt()
+              == alphaTripsBefore + kAddedTrips);
+        INFO("insert turn: crawl " << changesCovering(dataChanged, crawlIndex)
+             << ", upper " << changesCovering(dataChanged, upperIndex)
+             << ", alpha " << changesCovering(dataChanged, alphaIndex));
+        CHECK(changesCovering(dataChanged, crawlIndex) <= kMaxChangesPerRowPerTurn);
+        CHECK(changesCovering(dataChanged, upperIndex) <= kMaxChangesPerRowPerTurn);
+        CHECK(changesCovering(dataChanged, alphaIndex) <= kMaxChangesPerRowPerTurn);
+
+        dataChanged.clear();
+        QCoreApplication::processEvents();
+        CHECK(changesCovering(dataChanged, crawlIndex) <= kMaxChangesPerRowPerTurn);
+        CHECK(changesCovering(dataChanged, upperIndex) <= kMaxChangesPerRowPerTurn);
+        CHECK(changesCovering(dataChanged, alphaIndex) <= kMaxChangesPerRowPerTurn);
+        CHECK(sawChange(dataChanged, crawlIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole));
+        CHECK(sawChange(dataChanged, upperIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole));
+        CHECK(sawChange(dataChanged, alphaIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole));
+        CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole) == false);
     }
 
     SECTION("removing a node takes its subtree out in one pair of rows") {
@@ -411,9 +459,9 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::StationCountRole).toInt() == 2);
         CHECK(model.data(betaIndex, cwSurveyTreeModel::StationCountRole).toInt() == 0);
 
-        CHECK(sawChange(dataChanged, crawlIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole));
-        CHECK(sawChange(dataChanged, upperIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole));
-        CHECK(sawChange(dataChanged, alphaIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole));
+        CHECK(waitForChange(dataChanged, crawlIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole));
+        CHECK(waitForChange(dataChanged, upperIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole));
+        CHECK(waitForChange(dataChanged, alphaIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole));
         CHECK(sawChange(dataChanged, betaIndex, cwSurveyTreeModel::Stations, cwSurveyTreeModel::StationCountRole) == false);
 
         //A node row keeps the cwLength object its own solve fills in

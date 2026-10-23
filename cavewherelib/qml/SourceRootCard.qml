@@ -152,6 +152,7 @@ QQ.Item {
             ExternalCenterlineSolveStatus {
                 hasError: root.solveError.length > 0 || root.linePlotManager.hasSolveError
                 stationCount: root.pageModel !== null ? root.pageModel.stationCount : 0
+                stationCountKnown: root.pageModel === null || root.pageModel.stationCountKnown
             }
 
             QQ.Item { Layout.fillWidth: true }

@@ -18,6 +18,9 @@
 //Qt includes
 #include <QList>
 
+//Std includes
+#include <utility>
+
 namespace {
     constexpr int kColumnCount = cwSurveyTreeModel::Decl + 1;
 
@@ -28,7 +31,11 @@ namespace {
     const QList<int> kSourceRoles = {cwSurveyTreeModel::IsSourcedRole,
                                      cwSurveyTreeModel::IsSourceRootRole};
     const QList<int> kAggregateRoles = {cwSurveyTreeModel::TripCountRole,
-                                        cwSurveyTreeModel::StationCountRole};
+                                        cwSurveyTreeModel::StationCountRole,
+                                        cwSurveyTreeModel::StationCountKnownRole};
+    const QList<int> kStationRoles = {cwSurveyTreeModel::StationCountRole,
+                                      cwSurveyTreeModel::StationCountKnownRole,
+                                      cwSurveyTreeModel::UsedStationsRole};
     const QList<int> kSurveyContentRoles = {cwSurveyTreeModel::HasSurveyContentRole};
     const QList<int> kDeclinationRoles = {cwSurveyTreeModel::DeclinationRole,
                                           cwSurveyTreeModel::DeclinationOriginRole};
@@ -71,7 +78,7 @@ void cwSurveyTreeModel::setRegion(cwCavingRegion* region)
     m_connected.clear();
     qDeleteAll(m_tripStats);
     m_tripStats.clear();
-    m_stationCounts.clear();
+    clearCachedRows();
     endResetModel();
 
     if(m_region) {
@@ -81,7 +88,7 @@ void cwSurveyTreeModel::setRegion(cwCavingRegion* region)
             m_connected.clear();
             qDeleteAll(m_tripStats);
             m_tripStats.clear();
-            m_stationCounts.clear();
+            clearCachedRows();
             endResetModel();
         });
 
@@ -127,20 +134,21 @@ QString cwSurveyTreeModel::kindLabel(const cwSurveyNode* node)
     return kindLabel(node->kind());
 }
 
-int cwSurveyTreeModel::sourcedStationCount(const cwSurveyNode* node)
+std::optional<int> cwSurveyTreeModel::sourcedStationCount(const cwSurveyNode* node)
 {
-    const int solved = static_cast<int>(node->scopedPositions().positions().size());
-    if(solved > 0) {
-        return solved;
+    if(!hasSurveyContent(node)) {
+        return 0;
     }
+    if(!isSourceSolved(node)) {
+        return std::nullopt;
+    }
+    return static_cast<int>(node->scopedPositions().positions().size());
+}
 
-    int known = 0;
-    node->walk([&known](const cwSurveyNode* current) {
-        for(int i = 0; i < current->tripCount(); i++) {
-            known += static_cast<int>(current->trip(i)->knownStations().size());
-        }
-    });
-    return known;
+bool cwSurveyTreeModel::isSourceSolved(const cwSurveyNode* node)
+{
+    const cwSurveyNode* root = node->sourceRoot();
+    return root != nullptr && !root->scopedPositions().isEmpty();
 }
 
 QModelIndex cwSurveyTreeModel::index(int row, int column, const QModelIndex& parent) const
@@ -210,6 +218,10 @@ QVariant cwSurveyTreeModel::data(const QModelIndex& index, int role) const
     //and QAbstractItemModelTester read the name where they expect it.
     if(role == Qt::DisplayRole && index.column() != Name) { return QVariant(); }
 
+    const auto rowStationCount = [&]() {
+        return node != nullptr ? subtreeStationCount(node) : tripStationCount(trip);
+    };
+
     switch(role) {
     case Qt::DisplayRole:
     case NameRole:
@@ -229,7 +241,9 @@ QVariant cwSurveyTreeModel::data(const QModelIndex& index, int role) const
     case TripCountRole:
         return node != nullptr ? subtreeTripCount(node) : 0;
     case StationCountRole:
-        return node != nullptr ? subtreeStationCount(node) : tripStationCount(trip);
+        return rowStationCount().value_or(0);
+    case StationCountKnownRole:
+        return rowStationCount().has_value();
     case UsedStationsRole:
         //A node holds the stations of every trip under it, far more than a cell
         //can name, so only a trip row names its own.
@@ -329,7 +343,8 @@ QHash<int, QByteArray> cwSurveyTreeModel::roleNames() const
         {DeclinationOriginRole, "declinationOrigin"},
         {MutedRole, "muted"},
         {NameRole, "name"},
-        {HasSurveyContentRole, "hasSurveyContent"}
+        {HasSurveyContentRole, "hasSurveyContent"},
+        {StationCountKnownRole, "stationCountKnown"}
     };
 }
 
@@ -568,6 +583,7 @@ bool cwSurveyTreeModel::trackObject(QObject* object)
     connect(object, &QObject::destroyed, this, [this](QObject* dead) {
         m_connected.remove(dead);
         m_stationCounts.remove(dead);
+        forgetPendingRow(dead);
         removeTripStats(dead);
     });
 
@@ -618,16 +634,16 @@ void cwSurveyTreeModel::connectNode(cwSurveyNode* node)
     connect(node, &cwSurveyNode::sourceChanged, this, [this, node]() {
         //The Kind chip reads the source as well as the Name cell's badge.
         emitRowDataChanged(indexOfNode(node), Name, Kind, kSourceRoles);
-        emitSurveyContentChanged(node);
+        markSurveyContentChanged(node);
         invalidateStationCounts();
     });
     connect(node, &cwSurveyNode::childNodeCountChanged, this, [this, node]() {
-        emitAggregateChanged(node);
-        emitSurveyContentChanged(node);
+        markAggregateChanged(node);
+        markSurveyContentChanged(node);
     });
     connect(node, &cwSurveyNode::tripCountChanged, this, [this, node]() {
-        emitAggregateChanged(node);
-        emitSurveyContentChanged(node);
+        markAggregateChanged(node);
+        markSurveyContentChanged(node);
     });
     connect(node->length(), &cwUnitValue::valueChanged, this, [this, node]() {
         emitRowDataChanged(indexOfNode(node), Length, Length, {LengthRole});
@@ -668,9 +684,8 @@ void cwSurveyTreeModel::connectTrip(cwTrip* trip)
     connect(trip, &cwTrip::externallyBackedChanged, this, emitLengthChanged);
     connect(trip->calibrations(), &cwTripCalibration::distanceUnitChanged, this, emitLengthChanged);
     connect(stats, &cwTripStatsWatcher::usedStationsChanged, this, [this, trip]() {
-        emitRowDataChanged(indexOfTrip(trip), Stations, Stations,
-                           {StationCountRole, UsedStationsRole});
-        emitAggregateChanged(trip->parentNode());
+        emitRowDataChanged(indexOfTrip(trip), Stations, Stations, kStationRoles);
+        markAggregateChanged(trip->parentNode());
     });
 
     connect(trip, &cwTrip::knownStationsChanged, this, &cwSurveyTreeModel::invalidateStationCounts);
@@ -712,6 +727,7 @@ void cwSurveyTreeModel::disconnectObject(QObject* object)
     if(object == nullptr) { return; }
     m_connected.remove(object);
     m_stationCounts.remove(object);
+    forgetPendingRow(object);
     disconnect(object, nullptr, this, nullptr);
 }
 
@@ -800,53 +816,107 @@ void cwSurveyTreeModel::emitRowDataChanged(const QModelIndex& rowIndex,
     emit dataChanged(rowIndex.siblingAtColumn(first), rowIndex.siblingAtColumn(last), roles);
 }
 
-void cwSurveyTreeModel::emitAggregateChanged(cwSurveyNode* node)
+void cwSurveyTreeModel::markAggregateChanged(cwSurveyNode* node)
 {
-    //A sourced node's count before a solve sums the trips under it.
-    m_stationCounts.clear();
     for(cwSurveyNode* current = node; current != nullptr; current = current->parentNode()) {
-        emitRowDataChanged(indexOfNode(current), Trips, Stations, kAggregateRoles);
+        //A sourced node's count reads whether a trip sits under it.
+        m_stationCounts.remove(current);
+        m_pendingAggregateRows.insert(current);
     }
+    scheduleAggregatePass();
 }
 
 void cwSurveyTreeModel::invalidateStationCounts()
 {
     m_stationCounts.clear();
-
-    if(m_stationCountRefreshPending) { return; }
-    m_stationCountRefreshPending = true;
-    QMetaObject::invokeMethod(this, &cwSurveyTreeModel::refreshStationCounts, Qt::QueuedConnection);
-}
-
-void cwSurveyTreeModel::refreshStationCounts()
-{
-    m_stationCountRefreshPending = false;
-    if(m_region.isNull()) { return; }
-
-    const QList<int> roles = {StationCountRole, UsedStationsRole};
-    const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
-    for(cwSurveyNode* node : nodes) {
-        emitRowDataChanged(indexOfNode(node), Stations, Stations, roles);
-        for(int i = 0; i < node->tripCount(); i++) {
-            cwTrip* trip = node->trip(i);
-            if(trip->externallyBacked()) {
-                emitRowDataChanged(indexOfTrip(trip), Stations, Stations, roles);
-            }
-        }
-    }
+    m_allStationCountsPending = true;
+    scheduleAggregatePass();
 }
 
 //A native node always has survey content, so only \a node and its sourced
 //ancestors can change.
-void cwSurveyTreeModel::emitSurveyContentChanged(cwSurveyNode* node)
+void cwSurveyTreeModel::markSurveyContentChanged(cwSurveyNode* node)
 {
-    emitRowDataChanged(indexOfNode(node), Name, Decl, kSurveyContentRoles);
+    m_pendingSurveyContentRows.insert(node);
     for(cwSurveyNode* current = node->parentNode();
         current != nullptr && current->isSourced();
         current = current->parentNode())
     {
-        emitRowDataChanged(indexOfNode(current), Name, Decl, kSurveyContentRoles);
+        m_pendingSurveyContentRows.insert(current);
     }
+    scheduleAggregatePass();
+}
+
+void cwSurveyTreeModel::scheduleAggregatePass()
+{
+    if(m_aggregatePassPending) { return; }
+    m_aggregatePassPending = true;
+    QMetaObject::invokeMethod(this, &cwSurveyTreeModel::refreshAggregates, Qt::QueuedConnection);
+}
+
+/**
+  \brief Announces each pending row once, over the cells its pending changes reach
+
+  A row pending for more than one reason gets one dataChanged spanning all of
+  them, so a turn that moved a row's counts, its survey content and every
+  station count still announces that row once.
+  */
+void cwSurveyTreeModel::refreshAggregates()
+{
+    m_aggregatePassPending = false;
+    const QSet<QObject*> aggregateRows = std::exchange(m_pendingAggregateRows, {});
+    const QSet<QObject*> contentRows = std::exchange(m_pendingSurveyContentRows, {});
+    const bool allStations = std::exchange(m_allStationCountsPending, false);
+    if(m_region.isNull()) { return; }
+
+    const auto announceNode = [&](cwSurveyNode* node) {
+        const bool content = contentRows.contains(node);
+        const bool aggregate = aggregateRows.contains(node);
+        if(!(content || aggregate || allStations)) { return; }
+
+        QList<int> roles;
+        if(content) { roles += kSurveyContentRoles; }
+        if(aggregate) { roles += kAggregateRoles; }
+        if(allStations) { roles += kStationRoles; }
+
+        const Column first = content ? Name : (aggregate ? Trips : Stations);
+        const Column last = content ? Decl : Stations;
+        emitRowDataChanged(indexOfNode(node), first, last, roles);
+    };
+
+    if(allStations) {
+        const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
+        for(cwSurveyNode* node : nodes) {
+            announceNode(node);
+            for(int i = 0; i < node->tripCount(); i++) {
+                cwTrip* trip = node->trip(i);
+                if(trip->externallyBacked()) {
+                    emitRowDataChanged(indexOfTrip(trip), Stations, Stations, kStationRoles);
+                }
+            }
+        }
+        return;
+    }
+
+    QSet<QObject*> pendingRows = aggregateRows;
+    pendingRows.unite(contentRows);
+    for(QObject* row : std::as_const(pendingRows)) {
+        announceNode(static_cast<cwSurveyNode*>(row));
+    }
+}
+
+void cwSurveyTreeModel::forgetPendingRow(QObject* object)
+{
+    m_pendingAggregateRows.remove(object);
+    m_pendingSurveyContentRows.remove(object);
+}
+
+void cwSurveyTreeModel::clearCachedRows()
+{
+    m_stationCounts.clear();
+    m_pendingAggregateRows.clear();
+    m_pendingSurveyContentRows.clear();
+    m_allStationCountsPending = false;
 }
 
 bool cwSurveyTreeModel::hasSurveyContent(const cwSurveyNode* node)
@@ -863,7 +933,7 @@ int cwSurveyTreeModel::subtreeTripCount(const cwSurveyNode* node)
     return count;
 }
 
-int cwSurveyTreeModel::subtreeStationCount(const cwSurveyNode* node) const
+std::optional<int> cwSurveyTreeModel::subtreeStationCount(const cwSurveyNode* node) const
 {
     if(node->isSourced()) {
         auto cached = m_stationCounts.find(node);
@@ -876,20 +946,31 @@ int cwSurveyTreeModel::subtreeStationCount(const cwSurveyNode* node) const
     //A sourced child takes its own rule, so the fold recurses rather than walks.
     int count = 0;
     for(int i = 0; i < node->tripCount(); i++) {
-        count += tripStationCount(node->trip(i));
+        const std::optional<int> tripCount = tripStationCount(node->trip(i));
+        if(!tripCount.has_value()) { return std::nullopt; }
+        count += tripCount.value();
     }
     for(int i = 0; i < node->childNodeCount(); i++) {
-        count += subtreeStationCount(node->childNode(i));
+        const std::optional<int> childCount = subtreeStationCount(node->childNode(i));
+        if(!childCount.has_value()) { return std::nullopt; }
+        count += childCount.value();
     }
     return count;
 }
 
-int cwSurveyTreeModel::tripStationCount(cwTrip* trip) const
+std::optional<int> cwSurveyTreeModel::tripStationCount(cwTrip* trip) const
 {
     if(trip->externallyBacked()) {
         auto cached = m_stationCounts.find(trip);
         if(cached == m_stationCounts.end()) {
-            cached = m_stationCounts.insert(trip, static_cast<int>(trip->knownStations().size()));
+            const cwSurveyNode* parentNode = trip->parentNode();
+            const bool waitsOnSolve = parentNode != nullptr
+                    && parentNode->isSourced()
+                    && !isSourceSolved(parentNode);
+            const std::optional<int> count = waitsOnSolve
+                    ? std::nullopt
+                    : std::optional<int>(static_cast<int>(trip->knownStations().size()));
+            cached = m_stationCounts.insert(trip, count);
         }
         return cached.value();
     }

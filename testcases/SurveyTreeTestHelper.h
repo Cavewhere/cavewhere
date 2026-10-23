@@ -27,10 +27,12 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
+#include <QModelIndex>
+#include <QSignalSpy>
 #include <QString>
 #include <QStringList>
 
-//! The tree-building and on-disk checks every survey-tree persistence test shares.
+//! The tree-building, on-disk and model-signal checks the survey-tree tests share.
 namespace SurveyTreeTestHelper {
 
 constexpr double kShotDistance = 10.0;
@@ -190,6 +192,22 @@ inline void setScopedNetwork(cwSurveyNode* node, const cwSurveyNetwork& network)
         }
     }
     region->setNetwork(merged);
+}
+
+//! The dataChanged emissions in \a spy whose rows cover \a rowIndex.
+inline int changesCovering(const QSignalSpy& spy, const QModelIndex& rowIndex)
+{
+    int count = 0;
+    for (const QList<QVariant>& arguments : spy) {
+        const QModelIndex topLeft = arguments.at(0).value<QModelIndex>();
+        const QModelIndex bottomRight = arguments.at(1).value<QModelIndex>();
+        if (topLeft.parent() == rowIndex.parent()
+            && topLeft.row() <= rowIndex.row()
+            && bottomRight.row() >= rowIndex.row()) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 }

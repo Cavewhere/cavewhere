@@ -52,6 +52,7 @@ QQ.Item {
     required property bool isSourced
     required property int tripCount
     required property int stationCount
+    required property bool stationCountKnown
     required property string usedStations
     required property var length
     required property UnitValue depthValue
@@ -91,6 +92,11 @@ QQ.Item {
     //A sourced node's name belongs to its file, and a trip is renamed on its
     //own page, so only a native node offers Rename.
     readonly property bool canRename: rowId.isNode && !rowId.isSourced
+
+    //A node and an attached trip count their stations rather than name them,
+    //and that count waits on the first solve of the file under them.
+    readonly property bool countsStations: rowId.isNode || rowId.externallyBacked
+    readonly property bool stationCountPending: rowId.countsStations && !rowId.stationCountKnown
 
     //Move to… is armed somewhere in the tree. Read off moveSubject rather than
     //moveActive, so a second move re-asks every row.
@@ -583,15 +589,21 @@ QQ.Item {
         QC.Label {
             objectName: rowId.cellName("value")
 
+            readonly property bool placeholder: rowId.column === SurveyTreeModel.Stations
+                                                && rowId.stationCountPending
+
             verticalAlignment: QQ.Text.AlignVCenter
             elide: QQ.Text.ElideRight
-            color: rowId.textColor
+            color: placeholder ? Theme.textSubtle : rowId.textColor
             text: {
                 switch(rowId.column) {
                 case SurveyTreeModel.Trips:
                     return rowId.isNode ? rowId.tripCount : "";
                 case SurveyTreeModel.Stations:
-                    return rowId.isNode || rowId.externallyBacked ? rowId.stationCount : rowId.usedStations;
+                    if(rowId.stationCountPending) {
+                        return "—";
+                    }
+                    return rowId.countsStations ? rowId.stationCount : rowId.usedStations;
                 case SurveyTreeModel.Date:
                     return isNaN(rowId.dateValue.getTime())
                          ? ""

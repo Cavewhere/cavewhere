@@ -237,6 +237,37 @@ inline QString writeSurvexTree(const QString& dir, int files, int shots, int chi
     return entry;
 }
 
+//! Writes one Survex file, flat.svx, under \a dir and returns its path. The
+//! file holds \a blocks sibling leaf blocks b0 .. b(blocks-1) of \a shots legs
+//! each and no wrapper block, so every block lists as a trip of the file's
+//! root. Each block's first station equates to the previous block's last, so
+//! the file solves as one network.
+inline QString writeFlatSurvex(const QString& dir, int blocks, int shots)
+{
+    using namespace generatedSurvexTree;
+    const QString blockPrefix = QStringLiteral("b");
+    QString text;
+    QTextStream out(&text);
+    for (int k = 0; k < blocks; ++k) {
+        out << "*begin " << blockPrefix << k << "\n";
+        out << "*data normal from to tape compass clino\n";
+        for (int i = 0; i < shots; ++i) {
+            out << i << " " << (i + 1) << " " << (kTapeBase + (i % kTapeSpread)) << " "
+                << ((i * kBearingStep + k * kFileBearingStep) % kDegreesPerTurn) << " "
+                << ((i % kClinoSpread) - kClinoCenter) << "\n";
+        }
+        out << "*end " << blockPrefix << k << "\n";
+        if (k > 0) {
+            out << "*equate " << blockPrefix << (k - 1) << "." << shots << " "
+                << blockPrefix << k << ".0\n";
+        }
+    }
+    out.flush();
+    const QString entry = QDir(dir).filePath(QStringLiteral("flat.svx"));
+    overwriteFile(entry, text.toUtf8());
+    return entry;
+}
+
 inline QByteArray fileContents(const QString& path)
 {
     QFile file(path);

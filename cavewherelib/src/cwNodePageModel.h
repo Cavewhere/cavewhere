@@ -33,7 +33,8 @@ class cwSurveyNode;
  * A node of a sourced subtree also gets what its source card shows: how many
  * derived trips (units of the survey file) sit at or below it, how many
  * stations it holds (cwSurveyTreeModel::sourcedStationCount(), the count its
- * tree row shows).
+ * tree row shows), and whether that count is known yet: it waits on the
+ * first solve.
  */
 class CAVEWHERE_LIB_EXPORT cwNodePageModel : public QObject
 {
@@ -45,6 +46,7 @@ class CAVEWHERE_LIB_EXPORT cwNodePageModel : public QObject
     Q_PROPERTY(int tripCount READ tripCount NOTIFY tripCountChanged)
     Q_PROPERTY(QDateTime lastSurvey READ lastSurvey NOTIFY lastSurveyChanged)
     Q_PROPERTY(int stationCount READ stationCount NOTIFY stationCountChanged)
+    Q_PROPERTY(bool stationCountKnown READ stationCountKnown NOTIFY stationCountChanged)
 
 public:
     explicit cwNodePageModel(QObject* parent = nullptr);
@@ -61,9 +63,13 @@ public:
     //! there has a date.
     QDateTime lastSurvey() const { return m_lastSurvey; }
 
-    //! The solved stations in a sourced node's scopedPositions(), or its
-    //! trips' harvested stations before a solve; 0 for a native node.
+    //! The solved stations in a sourced node's scopedPositions(); 0 for a
+    //! native node and while stationCountKnown() is false.
     int stationCount() const { return m_stationCount; }
+
+    //! False while a sourced node's file has trips and no solved positions
+    //! yet, so the page shows a placeholder instead of stationCount().
+    bool stationCountKnown() const { return m_stationCountKnown; }
 
 signals:
     void nodeChanged();
@@ -84,6 +90,7 @@ private:
     int m_tripCount = 0;
     QDateTime m_lastSurvey;
     int m_stationCount = 0;
+    bool m_stationCountKnown = true;
 
     void rewireTrips();
     void updateLastSurvey();

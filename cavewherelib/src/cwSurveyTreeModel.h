@@ -24,6 +24,9 @@ class cwTripStatsWatcher;
 #include <QQmlEngine>
 #include <QSet>
 
+//Std includes
+#include <optional>
+
 /**
  * The survey tree as an item model: one row per cwSurveyNode and one row per
  * cwTrip, in eight columns. A node's rows are its child nodes first, then its
@@ -88,7 +91,8 @@ public:
         DeclinationOriginRole, //!< Where a trip row's DeclinationRole comes from, a cwTrip::DeclinationOrigin
         MutedRole,
         NameRole,
-        HasSurveyContentRole //!< False for a sourced node with no trip under it, which draws gray
+        HasSurveyContentRole, //!< False for a sourced node with no trip under it, which draws gray
+        StationCountKnownRole //!< False while StationCountRole waits on the first solve, which draws a placeholder
     };
     Q_ENUM(RoleItem)
 
@@ -107,9 +111,10 @@ public:
     static QString kindLabel(const cwSurveyNode* node);
 
     //! The stations a sourced \a node holds: the solved stations of its
-    //! scopedPositions(), or, before a solve places any, the known stations of
-    //! every trip under it. The one count the tree row and the node page show.
-    static int sourcedStationCount(const cwSurveyNode* node);
+    //! scopedPositions(), zero when no trip sits under it, and nothing while
+    //! its file has no solved positions yet. The one count the tree row and
+    //! the node page show.
+    static std::optional<int> sourcedStationCount(const cwSurveyNode* node);
 
     QModelIndex index(int row, int column, const QModelIndex& parent = QModelIndex()) const override;
     QModelIndex parent(const QModelIndex& index) const override;
@@ -191,10 +196,18 @@ private:
     //! trip, so a node row folds the counts its subtree's trips already hold.
     QHash<QObject*, cwTripStatsWatcher*> m_tripStats;
 
-    //! The station counts of sourced nodes and externally backed trips,
-    //! filled as rows are read, because each one merges every known station.
-    mutable QHash<const QObject*, int> m_stationCounts;
-    bool m_stationCountRefreshPending = false;
+    //! The station counts of sourced nodes and externally backed trips, filled
+    //! as rows are read; an empty entry is a count that waits on the first solve.
+    mutable QHash<const QObject*, std::optional<int>> m_stationCounts;
+
+    //! The rows the next aggregate pass announces: node rows whose trip and
+    //! station counts moved, node rows whose survey content may have moved, and
+    //! whether every Stations cell is announced as well. Keyed by QObject so a
+    //! destroyed node leaves by address; every entry is a live cwSurveyNode.
+    QSet<QObject*> m_pendingAggregateRows;
+    QSet<QObject*> m_pendingSurveyContentRows;
+    bool m_allStationCountsPending = false;
+    bool m_aggregatePassPending = false;
 
     //! The node an index stands for: the region's root for the invalid index,
     //! the node itself for a node row, nullptr for a trip row.
@@ -241,18 +254,32 @@ private:
                             const QList<int>& roles);
 
     //! The trip and station counts of \a node and of every node above it moved,
-    //! because those two fold over a whole subtree.
-    void emitAggregateChanged(cwSurveyNode* node);
+    //! because those two fold over a whole subtree. Their cached counts are
+    //! dropped now and their rows announced by the next aggregate pass, so an
+    //! insert of many trips in one turn announces each row once.
+    void markAggregateChanged(cwSurveyNode* node);
 
     //! Forgets every cached station count and announces the Stations cell of
-    //! every node row and externally backed trip row once, on the next turn of
-    //! the event loop, so a solve that pulses every trip refreshes the column once.
+    //! every node row and externally backed trip row in the next aggregate
+    //! pass, so a solve that pulses every trip refreshes the column once.
     void invalidateStationCounts();
-    void refreshStationCounts();
 
-    //! Whether \a node and every node above it hold survey content may have
-    //! moved, so their whole rows are announced for HasSurveyContentRole.
-    void emitSurveyContentChanged(cwSurveyNode* node);
+    //! Whether \a node and every sourced node above it hold survey content may
+    //! have moved, so the next aggregate pass announces their whole rows for
+    //! HasSurveyContentRole.
+    void markSurveyContentChanged(cwSurveyNode* node);
+
+    //! Queues refreshAggregates() for the next turn of the event loop, once.
+    void scheduleAggregatePass();
+
+    //! Announces every row the pending sets name, one dataChanged per row.
+    void refreshAggregates();
+
+    //! Takes \a object out of the pending sets, before it is forgotten.
+    void forgetPendingRow(QObject* object);
+
+    //! Empties the station-count cache and the pending sets for a reset.
+    void clearCachedRows();
 
     //! A sourced node holds survey content once a trip sits anywhere under it,
     //! which is the scan's own rule for a gray book; a native node always does.
@@ -261,14 +288,20 @@ private:
     //! The number of trips over \a node's subtree, its own trips included.
     static int subtreeTripCount(const cwSurveyNode* node);
 
+    //! True when \a node's source root has solved positions, so the counts
+    //! under it are the solve's. \a node is sourced.
+    static bool isSourceSolved(const cwSurveyNode* node);
+
     //! The number of stations over \a node's subtree: sourcedStationCount() for
-    //! a sourced node, the sum of its trips and child nodes otherwise.
-    int subtreeStationCount(const cwSurveyNode* node) const;
+    //! a sourced node, the sum of its trips and child nodes otherwise. Nothing
+    //! while any part of that sum waits on the first solve, so a row never
+    //! shows a partial sum.
+    std::optional<int> subtreeStationCount(const cwSurveyNode* node) const;
 
     //! The number of stations \a trip names: its known stations when it is
     //! externally backed, its chunk stations otherwise, zero until its watcher
-    //! counts them.
-    int tripStationCount(cwTrip* trip) const;
+    //! counts them. Nothing for a trip of a file that has no solved positions yet.
+    std::optional<int> tripStationCount(cwTrip* trip) const;
 
     //! \a trip's stations as one line of abbreviated ranges, empty until its
     //! watcher names them.
