@@ -158,6 +158,12 @@ Item {
         value: Theme.viewBackground.gridLineColor
     }
 
+    Binding {
+        target: RootData.regionSceneManager.scene.edl
+        property: "outlineColor"
+        value: Theme.viewBackground.edlOutline
+    }
+
     TurnTableInteraction {
         id: turnTableInteractionId
         objectName: "turnTableInteraction"

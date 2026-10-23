@@ -66,6 +66,7 @@
 //Our includes
 #include "cwAppearanceOverride.h"
 #include "cwCoordinateTransform.h"
+#include "cwEDLEffect.h"
 #include "cwFrustum.h"
 #include "cwLazClipOperation.h"
 #include "cwLazLoader.h"
@@ -679,6 +680,13 @@ namespace {
         void setEdlEnabled(bool enabled) { m_edlEnabled = enabled; }
         bool edlEnabled() const { return m_edlEnabled; }
 
+        //! The EDL tuning the following frames composite with, held on the
+        //! frame renderer the way cwRhiScene feeds the live one
+        void setEdlParameters(const EdlParametersData& parameters)
+        {
+            frameRenderer()->setEdlParameters(parameters);
+        }
+
         //! Draws the following frames through perspectiveProjection() instead
         //! of orthoProjection(), at the same world height.
         void setPerspective(bool perspective) { m_perspective = perspective; }
@@ -772,6 +780,8 @@ namespace {
                                                          m_live.renderPassDescriptor.get(),
                                                          sampleCount);
                 REQUIRE(m_edl.valid());
+                static_cast<cwEDLEffect*>(m_edl.effect.get())
+                    ->setParameters(frameRenderer()->edlParameters());
                 edl = &m_edl;
             }
 
@@ -6386,6 +6396,14 @@ namespace {
     //! border's outer neighbors are the clear depth, so each of them darkens it
     //! to the ceiling.
     constexpr double kMinEdlEdgeContrast = 32.0;
+    //! The dark theme's EDL outline (Theme.viewBackground.edlOutline)
+    const QColor kDarkThemeOutline = QColor(0x8a, 0x96, 0xa3);
+    //! A border pixel the black outline darkened below this gray is one EDL
+    //! outlined: more than half its color came from the outline.
+    constexpr int kOutlinedGrayCeiling = 128;
+    //! How much lighter a gray outline leaves an outlined pixel than a black
+    //! one. More than half of ~145 gray mixes in, so the lift clears this.
+    constexpr double kMinOutlineLift = 40.0;
 
     //! True when every pixel within @a radius of @a pixel is lit in @a lit
     bool surroundedByLit(const PixelMask& lit, const QPoint& pixel, int radius)
@@ -6611,6 +6629,84 @@ TEST_CASE("EDL shades the plane's edges and leaves its flat pass as it was",
     fixture.renderFrame();
     CHECK(fixture.compositeImage().isNull());
     CHECK(fixture.frameImage() == flat);
+}
+
+TEST_CASE("EDL draws the plane's outline in the outline color and leaves its shading alone",
+          "[PointCloudStreaming][PointCloudEval][cwEDLEffect]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kTargetDimension);
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kPlaneSweepHighHeight);
+    fixture.setEdlEnabled(true);
+    fixture.renderUntilQuiet();
+
+    const QImage defaultComposite = fixture.compositeImage();
+    REQUIRE_FALSE(defaultComposite.isNull());
+    const PixelMask lit = litMask(fixture);
+    const QVector<QPoint> litPixels = fixture.litPixels();
+    REQUIRE_FALSE(litPixels.isEmpty());
+
+    const auto compositeWithOutline = [&](const QColor& outline) {
+        EdlParametersData parameters;
+        parameters.outlineColor = outline;
+        fixture.setEdlParameters(parameters);
+        fixture.renderFrame();
+        return fixture.compositeImage();
+    };
+
+    //Going gray and back to black restores the default picture
+    const QImage grayComposite = compositeWithOutline(kDarkThemeOutline);
+    const QImage blackComposite = compositeWithOutline(QColor(Qt::black));
+    CHECK(blackComposite == defaultComposite);
+    REQUIRE(grayComposite.size() == blackComposite.size());
+
+    //Off the plane the background passes through untouched
+    int backgroundMismatches = 0;
+    for (int y = 0; y < blackComposite.height(); y++) {
+        for (int x = 0; x < blackComposite.width(); x++) {
+            if (!lit.at(x, y) && grayComposite.pixel(x, y) != blackComposite.pixel(x, y)) {
+                backgroundMismatches++;
+            }
+        }
+    }
+    CHECK(backgroundMismatches == 0);
+
+    int insideMismatches = 0;
+    int darkerEdges = 0;
+    double blackOutlineSum = 0.0;
+    double grayOutlineSum = 0.0;
+    int outlineCount = 0;
+    for (const QPoint& pixel : litPixels) {
+        const QRgb black = blackComposite.pixel(pixel);
+        const QRgb gray = grayComposite.pixel(pixel);
+        if (surroundedByLit(lit, pixel, kEdlNeighborhoodPx)) {
+            //The shape cue has no border neighbor here, so the outline
+            //color has nothing to say
+            if (gray != black) {
+                insideMismatches++;
+            }
+        } else {
+            if (qGray(gray) < qGray(black)) {
+                darkerEdges++;
+            }
+            if (qGray(black) < kOutlinedGrayCeiling) {
+                blackOutlineSum += qGray(black);
+                grayOutlineSum += qGray(gray);
+                outlineCount++;
+            }
+        }
+    }
+    REQUIRE(outlineCount > 0);
+
+    const double blackOutlineMean = blackOutlineSum / outlineCount;
+    const double grayOutlineMean = grayOutlineSum / outlineCount;
+    INFO("black outline mean " << blackOutlineMean << ", gray outline mean "
+         << grayOutlineMean << " over " << outlineCount << " outlined px");
+    CHECK(insideMismatches == 0);
+    CHECK(darkerEdges == 0);
+    CHECK(grayOutlineMean - blackOutlineMean >= kMinOutlineLift);
 }
 
 namespace {
@@ -8000,10 +8096,11 @@ namespace {
         return shaderHash({QStringLiteral(":/shaders/EDL.vert.qsb"),
                            QStringLiteral(":/shaders/EDL.frag.qsb"),
                            QStringLiteral(":/shaders/EDL_MSAA.frag.qsb")})
-               + QStringLiteral(",strength=%1,maxDarken=%2,radiusPx=%3")
+               + QStringLiteral(",strength=%1,maxDarken=%2,radiusPx=%3,outline=%4")
                      .arg(double(parameters.strength), 0, 'g', 9)
                      .arg(double(parameters.maxDarken), 0, 'g', 9)
                      .arg(double(parameters.radiusPx), 0, 'g', 9)
+                     .arg(parameters.outlineColor.name(QColor::HexArgb))
                      .toUtf8();
     }
 

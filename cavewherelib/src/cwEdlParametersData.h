@@ -8,6 +8,9 @@
 #ifndef CWEDLPARAMETERSDATA_H
 #define CWEDLPARAMETERSDATA_H
 
+//Qt includes
+#include <QColor>
+
 // Plain-data bundle of the Eye-Dome Lighting tuning knobs. The member
 // initializers are the single source of truth for the defaults, shared by the
 // QML-facing cwEDLSettings, the render-thread cwTracked relay in cwRhiScene, and
@@ -16,6 +19,9 @@ struct EdlParametersData {
     float strength = 1500.0f;   // baseline slope of the darkening transfer function
     float maxDarken = 3.0f;     // per-neighbor darkening ceiling
     float radiusPx = 1.4f;      // neighbor sample spread, in device pixels
+    // What the cloud's border darkens toward. Black reads on a light background;
+    // a dark background needs a lighter outline to stay visible.
+    QColor outlineColor = QColor(Qt::black);
 
     bool operator==(const EdlParametersData& other) const = default;
 };

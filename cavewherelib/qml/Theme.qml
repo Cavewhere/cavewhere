@@ -448,6 +448,8 @@ QtObject {
         readonly property color gradientInner: dark ? "#1a2a3d" : "#92D7F8"
         readonly property color gradientOuter: dark ? "#0b0e13" : "#F3F8FB"
         readonly property color gridLineColor: dark ? "#585a5e" : "#000000"
+        // Point cloud EDL border; dark mode lightens it so it reads on the dark gradient
+        readonly property color edlOutline: dark ? "#8a96a3" : "#000000"
     }
 
     // Sidebar: a flat panel in the page color with a hairline right edge

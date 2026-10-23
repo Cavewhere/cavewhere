@@ -42,3 +42,13 @@ void cwEDLSettings::setRadius(float radius)
     emit radiusChanged();
     emit changed();
 }
+
+void cwEDLSettings::setOutlineColor(const QColor& outlineColor)
+{
+    if (m_data.outlineColor == outlineColor) {
+        return;
+    }
+    m_data.outlineColor = outlineColor;
+    emit outlineColorChanged();
+    emit changed();
+}
