@@ -769,6 +769,19 @@ QList<cwSurveyNode*> cwSurveyNode::allNodes() const
     return nodes;
 }
 
+bool cwSurveyNode::isSelfOrDescendantOf(const cwSurveyNode* node) const
+{
+    for(const cwSurveyNode* current = this; current != nullptr; current = current->parentNode()) {
+        if(current == node) {
+            return true;
+        }
+        if(!current->isListedByParent()) {
+            return false;
+        }
+    }
+    return false;
+}
+
 QList<const cwSurveyNode*> cwSurveyNode::ancestorsOrSelf() const
 {
     QList<const cwSurveyNode*> chain;

@@ -308,6 +308,11 @@ public:
     //! parentNode(), is what says the node currently hangs in the tree.
     bool isListedByParent() const;
 
+    //! True when \a node is this node or an ancestor reached through parents
+    //! that still list their child, so a node removed for undo is outside its
+    //! old parent.
+    bool isSelfOrDescendantOf(const cwSurveyNode* node) const;
+
     Q_INVOKABLE void addNode(cwSurveyNode* node);
     void addNodes(const QList<cwSurveyNode*>& nodes);
 

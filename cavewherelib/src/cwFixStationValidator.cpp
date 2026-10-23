@@ -124,6 +124,18 @@ cwFixStationValidator::cwFixStationValidator(cwCavingRegion* region) :
     revalidate();
 }
 
+QStringList cwFixStationValidator::fixStationWarningMessagesUnder(cwSurveyNode* node) const
+{
+    QStringList messages;
+    for (int i = 0; i < m_fixStationWarnings.size(); ++i) {
+        const cwSurveyNode* warningNode = m_fixStationWarnings.at(i).node();
+        if (warningNode != nullptr && warningNode->isSelfOrDescendantOf(node)) {
+            messages.append(m_fixStationWarningMessages.at(i));
+        }
+    }
+    return messages;
+}
+
 QList<int> cwFixStationValidator::fixStationErrorTypeIds()
 {
     return {

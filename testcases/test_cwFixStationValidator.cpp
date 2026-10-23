@@ -1461,3 +1461,63 @@ TEST_CASE("a fix on the region root raises no project-wide warning",
 
     CHECK(region.fixStationValidator()->fixStationWarningMessages().isEmpty());
 }
+
+TEST_CASE("a node's fix-station warnings cover the node and its descendants",
+          "[cwFixStationValidator]")
+{
+    DomainBadSubNode project;
+    cwFixStationValidator* validator = project.region.fixStationValidator();
+    REQUIRE(validator != nullptr);
+    cwSurveyNode* sibling =
+        project.region.addNode(nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Aardvark Pit"));
+    REQUIRE(sibling != nullptr);
+
+    const QStringList underCave = validator->fixStationWarningMessagesUnder(project.cave);
+    REQUIRE(underCave.size() == 1);
+    CHECK(underCave.at(0).startsWith(QStringLiteral("Upper Level: ")));
+    CHECK(underCave.at(0).contains(kDomainBadWording));
+
+    CHECK(validator->fixStationWarningMessagesUnder(project.upperLevel) == underCave);
+    CHECK(validator->fixStationWarningMessagesUnder(project.region.rootNode()) == underCave);
+    CHECK(validator->fixStationWarningMessagesUnder(sibling).isEmpty());
+    CHECK(validator->fixStationWarningMessagesUnder(nullptr).isEmpty());
+
+    SECTION("a sibling branch keeps its own warning to itself") {
+        sibling->fixStations()->appendFixStation(
+            makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+
+        const QStringList underSibling = validator->fixStationWarningMessagesUnder(sibling);
+        REQUIRE(underSibling.size() == 1);
+        CHECK(underSibling.at(0).startsWith(QStringLiteral("Aardvark Pit: ")));
+        CHECK(validator->fixStationWarningMessagesUnder(project.cave) == underCave);
+        CHECK(validator->fixStationWarningMessagesUnder(project.region.rootNode()).size() == 2);
+    }
+
+    SECTION("suppressing the sub-node's row takes it off its ancestor's list") {
+        cwErrorListModel* errors = project.upperLevel->errorModel()->errors();
+        errors->setData(errors->index(0), true,
+                        static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+        CHECK(validator->fixStationWarningMessagesUnder(project.cave).isEmpty());
+
+        errors->setData(errors->index(0), false,
+                        static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+        CHECK(validator->fixStationWarningMessagesUnder(project.cave) == underCave);
+    }
+
+    SECTION("a rename follows into the subtree line") {
+        project.upperLevel->setName(QStringLiteral("Lower Level"));
+
+        const QStringList renamed = validator->fixStationWarningMessagesUnder(project.cave);
+        REQUIRE(renamed.size() == 1);
+        CHECK(renamed.at(0).startsWith(QStringLiteral("Lower Level: ")));
+    }
+
+    SECTION("moving the sub-node carries its warning to the new ancestor") {
+        REQUIRE(sibling->moveHere(project.upperLevel));
+
+        CHECK(validator->fixStationWarningMessagesUnder(project.cave).isEmpty());
+        const QStringList underSibling = validator->fixStationWarningMessagesUnder(sibling);
+        REQUIRE(underSibling.size() == 1);
+        CHECK(underSibling.at(0).startsWith(QStringLiteral("Upper Level: ")));
+    }
+}

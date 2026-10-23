@@ -211,7 +211,6 @@ StandardPage {
                 FixStationErrorBadge {
                     objectName: "projectFixStationsBadge"
                     messages: RootData.region.fixStationValidator.fixStationWarningMessages
-                    errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
                 }
 
                 QQ.Item { Layout.fillWidth: true }

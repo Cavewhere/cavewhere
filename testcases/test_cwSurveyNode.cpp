@@ -979,3 +979,41 @@ TEST_CASE("cwCavingRegion addNode names new nodes New <Kind>, unique among sibli
     undoStack.undo();
     CHECK(secondCave->childNodeCount() == 0);
 }
+
+TEST_CASE("cwSurveyNode isSelfOrDescendantOf follows the listed parent chain", "[SurveyNode]")
+{
+    cwCave a;
+    a.setName(QStringLiteral("A"));
+    cwCave* b = makeNode(QStringLiteral("B"));
+    a.addNode(b);
+    cwCave* c = makeNode(QStringLiteral("C"));
+    b->addNode(c);
+    cwCave* sibling = makeNode(QStringLiteral("Sibling"));
+    a.addNode(sibling);
+
+    CHECK(a.isSelfOrDescendantOf(&a));
+    CHECK(b->isSelfOrDescendantOf(&a));
+    CHECK(c->isSelfOrDescendantOf(&a));
+    CHECK(c->isSelfOrDescendantOf(b));
+
+    CHECK_FALSE(sibling->isSelfOrDescendantOf(b));
+    CHECK_FALSE(c->isSelfOrDescendantOf(sibling));
+    CHECK_FALSE(a.isSelfOrDescendantOf(b));
+    CHECK_FALSE(b->isSelfOrDescendantOf(c));
+    CHECK_FALSE(a.isSelfOrDescendantOf(nullptr));
+
+    SECTION("a node removed for undo sits outside its old parent until undone") {
+        QUndoStack undoStack;
+        a.setUndoStack(&undoStack);
+
+        a.removeNode(a.indexOfNode(b));
+        REQUIRE(b->parentNode() == &a);
+        CHECK_FALSE(b->isSelfOrDescendantOf(&a));
+        CHECK_FALSE(c->isSelfOrDescendantOf(&a));
+        CHECK(c->isSelfOrDescendantOf(b));
+
+        undoStack.undo();
+        CHECK(b->isSelfOrDescendantOf(&a));
+        CHECK(c->isSelfOrDescendantOf(&a));
+    }
+}

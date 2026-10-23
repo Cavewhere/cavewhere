@@ -99,15 +99,10 @@ class CAVEWHERE_LIB_EXPORT cwFixStationValidator : public QObject
     Q_PROPERTY(int outlierCount READ outlierCount NOTIFY outlierCountChanged FINAL)
     Q_PROPERTY(cwCave* firstOutlierCave READ firstOutlierCave NOTIFY firstOutlierCaveChanged FINAL)
 
-    //! The stable errorTypeIds this validator pushes onto a cave's errorModel —
-    //! the fix-station warning kinds ({596,597,598}). A fix-station badge binds a
-    //! cave's errorModel to just these so it stays distinct from the all-warnings
-    //! page banner. Constant: the id set is fixed at compile time.
-    Q_PROPERTY(QList<int> fixStationErrorTypeIds READ fixStationErrorTypeIds CONSTANT FINAL)
-
     //! Every unsuppressed fix-station warning in the project, in tree pre-order,
     //! each tagged with its node. fixStationWarningMessages is the same list as
-    //! "<node name>: <message>" lines, for the Data page's badge.
+    //! "<node name>: <message>" lines, for the Data page's badge; a node page's
+    //! badge shows the subset from fixStationWarningMessagesUnder().
     Q_PROPERTY(QList<cwFixStationWarning> fixStationWarnings READ fixStationWarnings NOTIFY fixStationWarningsChanged FINAL)
     Q_PROPERTY(QStringList fixStationWarningMessages READ fixStationWarningMessages NOTIFY fixStationWarningsChanged FINAL)
 
@@ -160,10 +155,16 @@ public:
     int outlierCount() const { return m_outlierCount; }
     cwCave* firstOutlierCave() const { return m_firstOutlierCave; }
 
+    //! The errorTypeIds this validator pushes onto a node's errorModel: the
+    //! fix-station warning kinds.
     static QList<int> fixStationErrorTypeIds();
 
     QList<cwFixStationWarning> fixStationWarnings() const { return m_fixStationWarnings; }
     QStringList fixStationWarningMessages() const { return m_fixStationWarningMessages; }
+
+    //! The fixStationWarningMessages lines whose node is \a node or one of its
+    //! descendants. Changes only alongside fixStationWarningsChanged.
+    Q_INVOKABLE QStringList fixStationWarningMessagesUnder(cwSurveyNode* node) const;
 
 signals:
     void warningMessageChanged();
