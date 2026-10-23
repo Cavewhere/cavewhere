@@ -272,6 +272,7 @@ public:
     Q_INVOKABLE void removeTrip(int i);
     Q_INVOKABLE void clearTrips();
     Q_INVOKABLE void addTrip(cwTrip* trip = nullptr);
+    void addTrips(const QList<cwTrip*>& trips);
     Q_INVOKABLE int indexOf(cwTrip* trip) const;
     Q_INVOKABLE QString uniqueTripName(const QString& proposedName) const;
 

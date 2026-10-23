@@ -22,6 +22,9 @@
 // Tests
 #include "ExternalCenterlineTestHelpers.h"
 
+// AsyncFuture
+#include <asyncfuture.h>
+
 // Qt
 #include <QDir>
 #include <QSignalSpy>
@@ -38,6 +41,10 @@ constexpr int kBinaryTreeChildren = 2;
 constexpr int kTripTreeFiles = 3;
 constexpr int kTripOwners = 2;
 constexpr int kSettleWaitMs = 120000;
+constexpr int kWallsBooks = 10;
+constexpr int kWallsSurveysPerBook = 100;
+constexpr int kWallsShots = 3;
+constexpr int kWallsFixEvery = 25;
 
 const QString kLinePlotJob = QStringLiteral("Line plot");
 const QString kWatchedEvent = QStringLiteral("watchedFilesChanged");
@@ -226,6 +233,36 @@ TEST_CASE("Attaching a source tree solves the region once, after the scan applie
     // The first published driver anchors the source root at the origin.
     REQUIRE_FALSE(log.drivers.isEmpty());
     CHECK(log.drivers.first().contains(originAnchor()));
+}
+
+TEST_CASE("Attaching a Walls project that fills in over several turns solves the region once",
+          "[LinePlotManager][SolveOnce][AttachFill]")
+{
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString entry = writeWallsProject(tempSubdir(sourceDir, QStringLiteral("walls")),
+                                            kWallsBooks, kWallsSurveysPerBook, kWallsShots,
+                                            kWallsFixEvery);
+
+    auto fixture = makeProject(QStringLiteral("solve-once-walls-fill"));
+    QObject context;
+    SolveLog log;
+    recordSolves(&log, fixture->rootData.get(), &context);
+    QSignalSpy published(fixture->rootData->linePlotManager(), &cwLinePlotManager::cavernOutputChanged);
+
+    auto future = managerOf(fixture.get())->attachSource(
+        fixture->project->cavingRegion()->rootNode(), entry);
+    REQUIRE(AsyncFuture::waitForFinished(future, kSettleWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+    settle(fixture->rootData.get());
+
+    INFO(log.describe().toStdString());
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+    CHECK(log.linePlotJobs == 1);
+    CHECK(published.count() == 1);
+    const qsizetype solveNeeded = log.firstIndexOf(kSolveNeededEvent);
+    REQUIRE(solveNeeded >= 0);
+    CHECK(solveNeeded < log.firstIndexOf(kLinePlotJobEvent));
 }
 
 TEST_CASE("Reopening a sourced project solves the region once, after the scan applies",

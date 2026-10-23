@@ -52,6 +52,7 @@
 #include <QAbstractItemModel>
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QDate>
 #include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
@@ -265,6 +266,81 @@ inline QString writeFlatSurvex(const QString& dir, int blocks, int shots)
     out.flush();
     const QString entry = QDir(dir).filePath(QStringLiteral("flat.svx"));
     overwriteFile(entry, text.toUtf8());
+    return entry;
+}
+
+// The names, readings and dates writeWallsProject() generates.
+namespace generatedWallsProject {
+
+inline constexpr double kShotLengthMeters = 10.0;
+inline constexpr double kOriginEast = 1000.0;
+inline constexpr double kOriginNorth = 2000.0;
+inline constexpr double kOriginUp = 100.0;
+
+inline const QString kEntryFileName = QStringLiteral("generated.wpj");
+inline const QDate kFirstSurveyDate = QDate(2001, 1, 1);
+
+//! The display name and .NAME of book \a book.
+inline QString bookTitle(int book) { return QStringLiteral("Book %1").arg(book); }
+inline QString bookName(int book) { return QStringLiteral("B%1").arg(book); }
+
+//! The display name and .NAME (the .SRV file's base name) of survey \a survey,
+//! counted across the whole project.
+inline QString surveyTitle(int survey) { return QStringLiteral("Survey %1").arg(survey); }
+inline QString surveyName(int survey) { return QStringLiteral("S%1").arg(survey); }
+inline QDate surveyDate(int survey) { return kFirstSurveyDate.addDays(survey); }
+
+//! Station \a index of the one chain every survey continues.
+inline QString stationName(int index) { return QStringLiteral("P%1").arg(index); }
+
+} // namespace generatedWallsProject
+
+//! Writes a Walls project under \a dir and returns its entry file,
+//! generated.wpj. One top book wraps \a books books B0 .. B(books-1); book b
+//! lists \a surveysPerBook surveys, numbered across the project, each a .SRV
+//! file beside the .wpj with \a shots legs. Every leg runs 10 m due north, so
+//! the surveys continue one chain of stations P0, P1, ... and survey k starts
+//! where survey k-1 ends. Every \a fixEvery-th survey (survey 0 among them)
+//! fixes its first station where the chain puts it, so the fixes agree.
+inline QString writeWallsProject(const QString& dir, int books, int surveysPerBook, int shots,
+                                 int fixEvery)
+{
+    using namespace generatedWallsProject;
+    QString project;
+    QTextStream wpj(&project);
+    wpj << ";WALLS Project file\n";
+    wpj << ".BOOK\tGenerated Cave\n.NAME\tGEN\n.STATUS\t8\n";
+    for (int book = 0; book < books; ++book) {
+        wpj << ".BOOK\t" << bookTitle(book) << "\n.NAME\t" << bookName(book) << "\n.STATUS\t8\n";
+        for (int k = 0; k < surveysPerBook; ++k) {
+            const int survey = book * surveysPerBook + k;
+            wpj << ".SURVEY\t" << surveyTitle(survey) << "\n.NAME\t" << surveyName(survey)
+                << "\n.STATUS\t8\n";
+
+            const int firstStation = survey * shots;
+            QString text;
+            QTextStream srv(&text);
+            srv << "#DATE " << surveyDate(survey).toString(Qt::ISODate) << "\n";
+            srv << "#UNITS D=Meters A=Degrees V=Degrees DECL=0\n";
+            if (survey % fixEvery == 0) {
+                srv << "#FIX " << stationName(firstStation) << " " << kOriginEast << " "
+                    << (kOriginNorth + firstStation * kShotLengthMeters) << " " << kOriginUp
+                    << "\n";
+            }
+            for (int i = 0; i < shots; ++i) {
+                srv << stationName(firstStation + i) << "\t" << stationName(firstStation + i + 1)
+                    << "\t" << kShotLengthMeters << "\t0\t0\n";
+            }
+            srv.flush();
+            overwriteFile(QDir(dir).filePath(surveyName(survey) + QStringLiteral(".SRV")),
+                          text.toUtf8());
+        }
+        wpj << ".ENDBOOK\n";
+    }
+    wpj << ".ENDBOOK\n";
+    wpj.flush();
+    const QString entry = QDir(dir).filePath(kEntryFileName);
+    overwriteFile(entry, project.toUtf8());
     return entry;
 }
 
@@ -712,6 +788,47 @@ inline qint64 longestMainThreadStall(const std::function<void()>& work)
     clock.start();
     frame.start();
     REQUIRE(tryWait(kStallWaitMs, [&]() { return ticksAfterWork >= kTrailingTicks; }));
+    frame.stop();
+    return longest;
+}
+
+//! The longest gap between two ticks of a 16 ms timer on the main thread from
+//! a queued call to \a start until \a isDone answers true at a tick: how long
+//! the event loop is held while asynchronous work started by \a start lands.
+inline qint64 longestMainThreadStallUntil(const std::function<void()>& start,
+                                          const std::function<bool()>& isDone)
+{
+    using namespace mainThreadStall;
+    QTimer frame;
+    frame.setTimerType(Qt::PreciseTimer);
+    frame.setInterval(kFrameIntervalMs);
+
+    QElapsedTimer clock;
+    qint64 lastTick = 0;
+    qint64 longest = 0;
+    int ticks = 0;
+    bool started = false;
+    bool done = false;
+    QObject::connect(&frame, &QTimer::timeout, [&]() {
+        const qint64 now = clock.elapsed();
+        longest = std::max(longest, now - lastTick);
+        lastTick = now;
+        ++ticks;
+        if (started && isDone()) {
+            done = true;
+        }
+        if (ticks == kLeadInTicks) {
+            longest = 0;
+            QTimer::singleShot(0, [&]() {
+                start();
+                started = true;
+            });
+        }
+    });
+
+    clock.start();
+    frame.start();
+    REQUIRE(tryWait(kStallWaitMs, [&]() { return done; }));
     frame.stop();
     return longest;
 }

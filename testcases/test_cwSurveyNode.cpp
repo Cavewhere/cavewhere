@@ -15,6 +15,7 @@
 #include <QCoreApplication>
 #include <QEvent>
 #include <QPointer>
+#include <QSignalSpy>
 #include <QUndoStack>
 #include <QUuid>
 
@@ -506,6 +507,82 @@ TEST_CASE("cwSurveyNode addNodes raises the parent's fix count once for the whol
 
     CHECK(root.subtreeFixStationCount() == 4);
     CHECK(rootChanged.count() == 1);
+}
+
+namespace {
+    QList<cwTrip*> unparentedTrips(const QStringList& names)
+    {
+        QList<cwTrip*> trips;
+        for(const QString& name : names) {
+            auto* trip = new cwTrip();
+            trip->setName(name);
+            trips.append(trip);
+        }
+        return trips;
+    }
+
+    QStringList tripNamesOf(const cwSurveyNode& node)
+    {
+        QStringList names;
+        for(const cwTrip* trip : node.trips()) {
+            names.append(trip->name());
+        }
+        return names;
+    }
+}
+
+TEST_CASE("cwSurveyNode addTrips appends a batch of trips as one insert and one undo step", "[SurveyNode]")
+{
+    cwCave node;
+    node.setName(QStringLiteral("Node"));
+    QUndoStack undoStack;
+    node.setUndoStack(&undoStack);
+    makeTrip(&node, QStringLiteral("T"));
+    REQUIRE(undoStack.count() == 1);
+
+    SECTION("fresh trips land in one ranged insert, deduped against the node and each other") {
+        const QList<cwTrip*> trips =
+            unparentedTrips({QStringLiteral("T"), QStringLiteral("T"), QStringLiteral("U")});
+
+        QSignalSpy inserted(&node, &cwSurveyNode::insertedTrips);
+        QSignalSpy beginInserted(&node, &cwSurveyNode::beginInsertTrips);
+        QSignalSpy tripCountChanged(&node, &cwSurveyNode::tripCountChanged);
+        QSignalSpy subtreeChanged(&node, &cwSurveyNode::subtreeChanged);
+
+        node.addTrips(trips);
+
+        CHECK(tripNamesOf(node) == QStringList({QStringLiteral("T"), QStringLiteral("T 2"),
+                                                QStringLiteral("T 3"), QStringLiteral("U")}));
+        REQUIRE(inserted.count() == 1);
+        CHECK(inserted.at(0).at(0).toInt() == 1);
+        CHECK(inserted.at(0).at(1).toInt() == 3);
+        CHECK(beginInserted.count() == 1);
+        CHECK(tripCountChanged.count() == 1);
+        CHECK(subtreeChanged.count() == 1);
+        for(const cwTrip* trip : trips) {
+            CHECK(trip->parentNode() == &node);
+        }
+
+        CHECK(undoStack.count() == 2);
+        undoStack.undo();
+        CHECK(tripNamesOf(node) == QStringList({QStringLiteral("T")}));
+        undoStack.redo();
+        CHECK(node.tripCount() == 4);
+    }
+
+    SECTION("a trip another node lists moves here") {
+        cwCave other;
+        other.setName(QStringLiteral("Other"));
+        cwTrip* moving = makeTrip(&other, QStringLiteral("Moving"));
+        const QList<cwTrip*> trips = {moving, unparentedTrips({QStringLiteral("Fresh")}).first()};
+
+        node.addTrips(trips);
+
+        CHECK(other.tripCount() == 0);
+        CHECK(tripNamesOf(node) == QStringList({QStringLiteral("T"), QStringLiteral("Moving"),
+                                                QStringLiteral("Fresh")}));
+        CHECK(moving->parentNode() == &node);
+    }
 }
 
 TEST_CASE("cwSurveyNode fix count survives a destroyed subtree", "[SurveyNode]")

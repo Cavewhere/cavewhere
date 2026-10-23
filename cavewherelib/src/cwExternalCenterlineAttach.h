@@ -22,6 +22,7 @@
 
 //Std includes
 #include <atomic>
+#include <functional>
 #include <memory>
 
 class cwSurveyNode;
@@ -69,6 +70,9 @@ struct AttachReport {
     //! trip attach.
     QPointer<cwSurveyNode> root;
 };
+
+//! Called with a source attach's new root the moment it is in the tree.
+using RootCreated = std::function<void(cwSurveyNode* root)>;
 
 /**
  * Trip-level attach: scan sourceFile -> set the trip's
@@ -120,26 +124,31 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> detach(
  * entry file as its external centerline), copy the closure into
  * saveLoad->externalCenterlineDir(root), write units.json beside the copy, add
  * the root's cwExternalSource row, and build the subtree with
- * reconcileSubtree. A lone .dat, .srv, or .svx is a one-node subtree: a
+ * cwSourceSubtreeFill. A lone .dat, .srv, or .svx is a one-node subtree: a
  * CompassFile, WallsBook, or SurvexFile root holding its units.
  *
- * The root exists only from the moment the scan lands; a copy that fails
- * removes it again. AttachReport::root names it on success. cancelFlag works
- * as for the trip overload.
+ * The root exists only from the moment the scan lands, which is when
+ * rootCreated is called; a copy that fails removes it again. The subtree
+ * fills in over several event-loop turns under an "Attaching <entry file>"
+ * task-list row, and the future settles once the last batch lands, with
+ * AttachReport::root naming the root, or with an error when the root left
+ * its region first. The attach records no undo step.
+ * cancelFlag works as for the trip overload.
  */
 CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> attach(
     cwSurveyNode* target,
     const QString& sourceFile,
     cwSaveLoad* saveLoad,
     cwExternalSourceSettings* externalSourceSettings,
-    std::shared_ptr<std::atomic_bool> cancelFlag = nullptr);
+    std::shared_ptr<std::atomic_bool> cancelFlag = nullptr,
+    RootCreated rootCreated = nullptr);
 
 /**
  * Replace and Reload on a source root: re-copy sourceFile's closure into the
  * root's attachment dir (overwriting the copy and removing what the new
  * closure drops), re-write units.json, and reconcile the subtree against the
- * fresh scan. A node with an external centerline and no source record yet
- * becomes a root here.
+ * fresh scan with cwSourceSubtreeFill, which records no undo step. A node with
+ * an external centerline and no source record yet becomes a root here.
  */
 CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> replace(
     cwSurveyNode* root,
@@ -147,25 +156,6 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> replace(
     cwSaveLoad* saveLoad,
     cwExternalSourceSettings* externalSourceSettings,
     std::shared_ptr<std::atomic_bool> cancelFlag = nullptr);
-
-/**
- * Brings the derived nodes and trips under \a root in line with \a rows, the
- * scan's pre-order tree:
- *  - a node row matches the derived node with its sourcePath, or creates one;
- *  - a unit row matches the derived trip with unitSourcePath(row), or creates
- *    one, its date seeded from the row (a dateless row takes its nearest dated
- *    ancestor's). A node-and-unit row's trip sits under the row's node; a
- *    unit-only row's (a leaf Survex block, a Compass survey, a Walls .srv)
- *    under its parent's node, so a leaf Survex block is one trip;
- *  - a missing file's row is skipped, and every row below it;
- *  - a derived trip no row matches is removed when it holds no native content
- *    (chunks, notes, LiDAR scans, sketches); a derived node no row matches is
- *    removed when its subtree holds none, and otherwise stays and turns native;
- *  - native nodes and trips (no source path) are never touched.
- * New names go through uniqueChildName / uniqueTripName.
- */
-CAVEWHERE_LIB_EXPORT void reconcileSubtree(cwSurveyNode* root,
-                                           const QList<cwScanRow>& rows);
 
 /**
  * The source path a derived trip carries for a unit row: the row's own path

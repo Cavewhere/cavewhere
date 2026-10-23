@@ -650,9 +650,12 @@ private:
     }
 
     // Starts one attach-shaped operation (attach, replace, reload) with the
-    // cancel flag the busy token holds.
+    // cancel flag the busy token holds. A source attach hands the root it
+    // creates to the RootCreated callback, which makes that root busy too
+    // until the operation settles, so the root's own verbs refuse while its
+    // tree is still filling in.
     using AttachStarter = std::function<QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>(
-        std::shared_ptr<std::atomic_bool>)>;
+        std::shared_ptr<std::atomic_bool>, const cwExternalCenterlineAttach::RootCreated&)>;
 
     // The attach-shaped verbs, written once for every owner: the busy
     // refusal, the busy token and cancel seam, the recompute-and-solve

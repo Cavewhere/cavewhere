@@ -1396,11 +1396,22 @@ cwExternalCenterlineManager::runAttachOperation(const QUuid& ownerId,
     auto guard = std::make_shared<OperationGuard>(
         this, ownerId, OperationKind::Attach, cancelFlag,
         &cwExternalCenterlineManager::attachCompleted);
-    auto future = start(std::move(cancelFlag));
+    // Released before the report, so a handler of the report finds the new
+    // root idle.
+    auto rootGuard = std::make_shared<std::unique_ptr<OperationGuard>>();
+    const QPointer<cwExternalCenterlineManager> manager(this);
+    const auto markRootBusy = [manager, rootGuard](cwSurveyNode* root) {
+        if (!manager.isNull()) {
+            *rootGuard = std::make_unique<OperationGuard>(
+                manager.data(), root->id(), OperationKind::Attach, nullptr, nullptr);
+        }
+    };
+    auto future = start(std::move(cancelFlag), markRootBusy);
     // The canceled path (project retired mid-attach, or cancelAttach
     // landing before the scan) must still release the token.
     AsyncFuture::observe(future).context(this,
-            [this, guard, ownerId](const ReportResult& result) {
+            [this, guard, rootGuard, ownerId](const ReportResult& result) {
+        rootGuard->reset();
         if (!result.hasError()) {
             // This is the only recompute after an attach lands — the
             // settings write triggers nothing — and its apply must also
@@ -1418,7 +1429,8 @@ cwExternalCenterlineManager::runAttachOperation(const QUuid& ownerId,
                 ownerId, result.errorMessage()));
         }
     },
-            [guard, ownerId]() {
+            [guard, rootGuard, ownerId]() {
+        rootGuard->reset();
         guard->finish(cwExternalCenterlineReport::wasCanceled(ownerId));
     });
     return future;
@@ -1481,7 +1493,8 @@ cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourc
             QStringLiteral("attach: trip is null"));
     }
     return runAttachOperation(trip->id(), QStringLiteral("trip"),
-                              [this, trip, sourcePath](std::shared_ptr<std::atomic_bool> cancelFlag) {
+                              [this, trip, sourcePath](std::shared_ptr<std::atomic_bool> cancelFlag,
+                                                       const cwExternalCenterlineAttach::RootCreated&) {
         return cwExternalCenterlineAttach::attach(
             trip, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data(),
             std::move(cancelFlag));
@@ -1518,10 +1531,11 @@ cwExternalCenterlineManager::attachSource(cwSurveyNode* target, const QString& s
             QStringLiteral("attach: target node is null"));
     }
     return runAttachOperation(target->id(), QStringLiteral("node"),
-                              [this, target, sourcePath](std::shared_ptr<std::atomic_bool> cancelFlag) {
+                              [this, target, sourcePath](std::shared_ptr<std::atomic_bool> cancelFlag,
+                                                         const cwExternalCenterlineAttach::RootCreated& rootCreated) {
         return cwExternalCenterlineAttach::attach(
             target, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data(),
-            std::move(cancelFlag));
+            std::move(cancelFlag), rootCreated);
     });
 }
 
@@ -1541,7 +1555,8 @@ cwExternalCenterlineManager::replaceSource(cwSurveyNode* root, const QString& so
             QStringLiteral("replace: this node has no attached survey file to replace"));
     }
     return runAttachOperation(root->id(), QStringLiteral("source root"),
-                              [this, root, sourcePath](std::shared_ptr<std::atomic_bool> cancelFlag) {
+                              [this, root, sourcePath](std::shared_ptr<std::atomic_bool> cancelFlag,
+                                                       const cwExternalCenterlineAttach::RootCreated&) {
         return cwExternalCenterlineAttach::replace(
             root, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data(),
             std::move(cancelFlag));

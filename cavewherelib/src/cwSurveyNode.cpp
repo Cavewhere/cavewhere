@@ -360,6 +360,53 @@ void cwSurveyNode::addTrip(cwTrip* trip) {
 }
 
 /**
+  \brief Appends a batch of trips as ONE undo command
+
+  The trip twin of addNodes(): the batch is deduplicated against the existing
+  trips and against itself, and lands as one ranged insert.
+  */
+void cwSurveyNode::addTrips(const QList<cwTrip*>& trips)
+{
+    //A trip another node lists is a move, which insertTrip() takes off its old
+    //node first, so a batch holding one goes trip by trip inside a macro.
+    const bool holdsAMove = std::any_of(trips.begin(), trips.end(),
+                                        [](const cwTrip* trip) {
+        return trip != nullptr && InsertRemoveTrip::isListed(trip);
+    });
+    if(holdsAMove) {
+        beginUndoMacro(QStringLiteral("Add %1 trips").arg(trips.size()));
+        for(cwTrip* trip : trips) {
+            if(trip != nullptr) {
+                insertTrip(m_trips.size(), trip);
+            }
+        }
+        endUndoMacro();
+        return;
+    }
+
+    QList<cwTrip*> inserting;
+    inserting.reserve(trips.size());
+
+    //One running copy dedupes the whole batch, as in addNodes().
+    cwSanitizedNameSet tripNames = m_tripNames;
+    for(cwTrip* trip : trips) {
+        if(trip == nullptr) {
+            continue;
+        }
+        const QString deduped = tripNames.deduplicateName(trip->name());
+        if(deduped != trip->name()) {
+            trip->setName(deduped);
+        }
+        tripNames.insert(trip->name());
+        inserting.append(trip);
+    }
+
+    if(!inserting.isEmpty()) {
+        pushUndo(new InsertTripCommand(this, inserting, m_trips.size()));
+    }
+}
+
+/**
   \brief Insert a survey trip into the node
 
   i - The index where the trip will be inserted
