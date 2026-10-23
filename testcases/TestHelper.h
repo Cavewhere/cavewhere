@@ -23,6 +23,7 @@
 #include <QDir>
 #include <QSet>
 #include <QModelIndex>
+#include <QSignalSpy>
 #include <QMetaEnum>
 #include <QTextStream>
 #include <QVector2D>
@@ -52,6 +53,20 @@ inline bool waitUntil(const std::function<bool()>& condition, int timeoutMs = 50
         QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
     }
     return condition();
+}
+
+// Counts the rowsInserted emissions with an invalid parent. Item models whose
+// rows have children (cwKeywordItemModel's keyword rows) also forward child
+// inserts, which carry a valid parent.
+inline int topLevelRowsInserted(const QSignalSpy& rowsInsertedSpy)
+{
+    int count = 0;
+    for (const QList<QVariant>& arguments : rowsInsertedSpy) {
+        if (!arguments.at(0).value<QModelIndex>().isValid()) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {

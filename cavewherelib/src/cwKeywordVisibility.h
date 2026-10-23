@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QSet>
 
 //Our includes
 #include "cwGlobals.h"
@@ -38,9 +39,16 @@ private:
     QPointer<QAbstractItemModel> mVisibleModel; //!<
     QPointer<QAbstractItemModel> mHideModel; //!<
 
+    // The hide model's objects, rebuilt on the first lookup after any change
+    // to it, so a batch of k lookups costs O(hidden + k) instead of O(hidden * k).
+    mutable QSet<QObject*> mHiddenObjects;
+    mutable bool mHiddenObjectsDirty = true;
+
     void connectModel(QAbstractItemModel* model);
+    void connectHideModelCache();
+    void markHiddenObjectsDirty();
     void resolveVisibility(QObject* object) const;
-    bool isInModel(QAbstractItemModel* model, QObject* object) const;
+    bool isHidden(QObject* object) const;
 
 };
 

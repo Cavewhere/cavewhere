@@ -416,7 +416,13 @@ void cwLinePlotManager::reconcileTripKeywordItems(
         }
     };
 
+    using TripKeywordKey = QPair<cwTrip*, TripKeywordKind>;
+
     QSet<cwTrip*> present;
+    QList<TripKeywordKey> keys;
+    QList<cwLinePlotGeometry::VertexRange> ranges;
+    keys.reserve(2 * tripUuids.size());
+    ranges.reserve(2 * tripUuids.size());
     for (int i = 0; i < tripUuids.size(); ++i) {
         cwTrip* trip = liveByUuid.value(tripUuids.at(i), nullptr);
         if (trip == nullptr) {
@@ -442,26 +448,32 @@ void cwLinePlotManager::reconcileTripKeywordItems(
             });
         }
 
-        cwKeywordItem* centerline = m_keywordRegistry.ensure(
-            {trip, TripKeywordKind::Centerline}, [this, trip]() {
-                return makeTripKeywordItem(trip, trip->linePlotKeywordModel());
-            });
+        keys.append({trip, TripKeywordKind::Centerline});
+        ranges.append(centerlineRange);
 
         // The splays item exists only while the trip has splay geometry, so
         // an empty filter panel stays free of a "Splays" type that matches
         // nothing.
-        cwKeywordItem* splays = nullptr;
         if (splayRange.count > 0) {
-            splays = m_keywordRegistry.ensure(
-                {trip, TripKeywordKind::Splays}, [this, trip]() {
-                    return makeTripKeywordItem(trip, trip->splaysKeywordModel());
-                });
+            keys.append({trip, TripKeywordKind::Splays});
+            ranges.append(splayRange);
         } else {
             m_keywordRegistry.drop({trip, TripKeywordKind::Splays});
         }
+    }
 
-        retarget(centerline, centerlineRange);
-        retarget(splays, splayRange);
+    // One registry call, so a solve's new items land in the model as one insert.
+    const QList<cwKeywordItem*> items = m_keywordRegistry.ensureAll(
+        keys, [this](const TripKeywordKey& key) {
+            cwTrip* trip = key.first;
+            cwKeywordModel* keywordModel = key.second == TripKeywordKind::Splays
+                ? trip->splaysKeywordModel()
+                : trip->linePlotKeywordModel();
+            return makeTripKeywordItem(trip, keywordModel);
+        });
+
+    for (int i = 0; i < items.size(); ++i) {
+        retarget(items.at(i), ranges.at(i));
     }
 
     // Drop items for trips that are no longer in the solved geometry.

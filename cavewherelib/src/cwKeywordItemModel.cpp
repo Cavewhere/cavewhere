@@ -5,6 +5,7 @@
 
 //Qt includes
 #include <QPointer>
+#include <QSet>
 #include <QDebug>
 
 cwKeywordItemModel::cwKeywordItemModel(QObject *parent) :
@@ -15,19 +16,50 @@ cwKeywordItemModel::cwKeywordItemModel(QObject *parent) :
 
 void cwKeywordItemModel::addItem(cwKeywordItem *item)
 {
-    //    auto add = [item, this]() {
-    auto iter = std::lower_bound(Items.begin(), Items.end(), item);
-    int index = static_cast<int>(std::distance(Items.begin(), iter));
+    addItems({item});
+}
 
-    item->setParent(this);
+/**
+ * Appends the items that are not already rows, in the order given, with one
+ * insert over the new range. Nulls and repeats are skipped.
+ */
+void cwKeywordItemModel::addItems(const QList<cwKeywordItem*>& items)
+{
+    QList<cwKeywordItem*> added;
+    added.reserve(items.size());
+    QSet<cwKeywordItem*> seen;
+    for(cwKeywordItem* item : items) {
+        if(item == nullptr || m_rowOfItem.contains(item) || seen.contains(item)) {
+            continue;
+        }
+        seen.insert(item);
+        added.append(item);
+    }
 
-    //Make sure entity doesn't already exist, entity has two cwKeywordComponent, which isn't allowed
-//    Q_ASSERT((*iter)->object() != item->object());
+    if(added.isEmpty()) {
+        return;
+    }
 
-    beginInsertRows(QModelIndex(), index, index);
-    Items.insert(iter, item);
+    for(cwKeywordItem* item : std::as_const(added)) {
+        item->setParent(this);
+    }
+
+    const int first = static_cast<int>(Items.size());
+    beginInsertRows(QModelIndex(), first, first + static_cast<int>(added.size()) - 1);
+    Items.reserve(first + added.size());
+    for(cwKeywordItem* item : std::as_const(added)) {
+        m_rowOfItem.insert(item, static_cast<int>(Items.size()));
+        Items.append(item);
+    }
     endInsertRows();
 
+    for(cwKeywordItem* item : std::as_const(added)) {
+        connectItem(item);
+    }
+}
+
+void cwKeywordItemModel::connectItem(cwKeywordItem* item)
+{
     connect(item->keywordModel(), &cwKeywordModel::rowsAboutToBeInserted,
             this, [item, this](const QModelIndex& parent, int first, int last)
     {
@@ -105,8 +137,9 @@ void cwKeywordItemModel::removeItem(cwKeywordItem *item)
 
 void cwKeywordItemModel::clear()
 {
+    // From the back, so no remaining row is renumbered.
     while(!Items.isEmpty()) {
-        auto item = Items.constFirst();
+        auto item = Items.constLast();
         removeItem(item);
     }
 }
@@ -213,18 +246,11 @@ QModelIndex cwKeywordItemModel::parent(const QModelIndex &index) const
 
 QModelIndex cwKeywordItemModel::indexOf(cwKeywordItem* item) const
 {
-    auto iter = std::lower_bound(Items.begin(), Items.end(), item);
-    int index = static_cast<int>(std::distance(Items.begin(), iter));
-
-    if(index < 0 || index >= Items.size()) {
+    const int row = m_rowOfItem.value(item, -1);
+    if(row < 0) {
         return QModelIndex();
     }
-
-    if(Items.at(index) == item) {
-        return createIndex(index, 0, nullptr);
-    }
-
-    return QModelIndex();
+    return createIndex(row, 0, nullptr);
 }
 
 //QVector<cwEntityAndKeywords> cwKeywordItemModel::entityAndKeywords() const
@@ -251,31 +277,28 @@ void cwKeywordItemModel::remove(cwKeywordItem* item, DisconnectionType type)
 {
     Q_ASSERT(item);
 
-    auto iter = std::lower_bound(Items.begin(), Items.end(), item);
-
-    if(iter == Items.end()) {
-        //Item doesn't exist
+    const int index = m_rowOfItem.value(item, -1);
+    if(index < 0) {
         return;
     }
 
-    Q_ASSERT(*iter == item);
-
-    int index = static_cast<int>(std::distance(Items.begin(), iter));
     beginRemoveRows(QModelIndex(), index, index);
 
     if(type == DisconnectAll) {
         //This assumes that item still exists in memory and hasn't been deleted
-        auto item = *iter;
         disconnect(item->keywordModel(), nullptr, this, nullptr);
     }
 
-    Items.erase(iter);
+    Items.removeAt(index);
+    m_rowOfItem.remove(item);
+    for(int row = index; row < Items.size(); ++row) {
+        m_rowOfItem.insert(Items.at(row), row);
+    }
     endRemoveRows();
 }
 
 int cwKeywordItemModel::indexOf(const QModelIndex &modelIndex) const
 {
     auto item = static_cast<cwKeywordItem*>(modelIndex.internalPointer());
-    auto iter = std::lower_bound(Items.begin(), Items.end(), item);
-    return static_cast<int>(std::distance(Items.begin(), iter));
+    return m_rowOfItem.value(item, -1);
 }

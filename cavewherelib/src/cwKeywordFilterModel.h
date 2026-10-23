@@ -4,6 +4,8 @@
 #include <QtCore/qabstractproxymodel.h>
 #include <QObject>
 #include <QDebug>
+#include <QHash>
+#include <QList>
 
 //Our includes
 #include "cwKeywordItemModel.h"
@@ -27,6 +29,7 @@ public:
 
     //Filter by objects
     void insert(const QModelIndex& sourceIndex);
+    void insert(const QList<QModelIndex>& sourceIndexes);
     void remove(const QModelIndex& sourceIndex);
     void clear();
 
@@ -38,17 +41,17 @@ private:
         QMetaObject::Connection destroyedConnection;
     };
 
-    // Sorted by QObject* for fast lookup
+    // Rows are in insertion order; mRowOfObject is the lookup.
     QVector<Row> mRows;
+    QHash<QObject*, int> mRowOfObject;
 
     QMetaObject::Connection mDataChanged;
     QMetaObject::Connection mRowsAboutToBeRemoved;
+    QMetaObject::Connection mModelAboutToBeReset;
 
-    QVector<Row>::iterator lowerBound(QObject* object);
-    QVector<Row>::const_iterator lowerBound(QObject* object) const;
     void removeByObject(QObject* object);
     void removeBySourceIndex(const QModelIndex& sourceIndex);
-    void eraseRow(QVector<Row>::iterator iter);
+    void eraseRow(int row);
     void disconnectSource();
 
     static QObject* toObject(const QModelIndex& sourceIndex)

@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QDebug>
+#include <QSet>
 
 //Std includes
 #include <algorithm>
@@ -55,42 +56,54 @@ QModelIndex cwKeywordFilterModel::mapFromSource(const QModelIndex &sourceIndex) 
         return QModelIndex();
     }
 
-    auto iter = std::find_if(mRows.cbegin(), mRows.cend(), [&sourceIndex](const Row& row) {
-        return row.sourceIndex == sourceIndex;
-    });
-
-    if(iter == mRows.cend()) {
+    const int row = mRowOfObject.value(toObject(sourceIndex), -1);
+    if(row < 0 || mRows.at(row).sourceIndex != sourceIndex) {
         return QModelIndex();
     }
-
-    int row = static_cast<int>(std::distance(mRows.cbegin(), iter));
     return createIndex(row, 0);
 }
 
 void cwKeywordFilterModel::insert(const QModelIndex& sourceIndex)
 {
-    if(!sourceIndex.isValid()) {
+    insert(QList<QModelIndex>{sourceIndex});
+}
+
+/**
+ * Appends a row for each source index whose object is not already a row, with
+ * one insert over the new range.
+ */
+void cwKeywordFilterModel::insert(const QList<QModelIndex>& sourceIndexes)
+{
+    QVector<Row> added;
+    QSet<QObject*> seen;
+    for(const QModelIndex& sourceIndex : sourceIndexes) {
+        if(!sourceIndex.isValid()) {
+            continue;
+        }
+
+        QObject* object = toObject(sourceIndex);
+        if(!object || mRowOfObject.contains(object) || seen.contains(object)) {
+            continue;
+        }
+        seen.insert(object);
+        added.append(Row{object, QPersistentModelIndex(sourceIndex), {}});
+    }
+
+    if(added.isEmpty()) {
         return;
     }
 
-    QObject* object = toObject(sourceIndex);
-    if(!object) {
-        return;
+    const int first = static_cast<int>(mRows.size());
+    beginInsertRows(QModelIndex(), first, first + static_cast<int>(added.size()) - 1);
+    mRows.reserve(first + added.size());
+    for(Row& row : added) {
+        // Remove automatically if the object goes away
+        row.destroyedConnection = connect(row.object, &QObject::destroyed, this, [this](QObject* destroyed) {
+            removeByObject(destroyed);
+        });
+        mRowOfObject.insert(row.object, static_cast<int>(mRows.size()));
+        mRows.append(row);
     }
-
-    auto iter = lowerBound(object);
-    if(iter != mRows.end() && iter->object == object) {
-        return;
-    }
-
-    // Remove automatically if the object goes away
-    const auto destroyedConnection = connect(object, &QObject::destroyed, this, [this](QObject* destroyed) {
-        removeByObject(destroyed);
-    });
-
-    int row = static_cast<int>(std::distance(mRows.begin(), iter));
-    beginInsertRows(QModelIndex(), row, row);
-    mRows.insert(iter, Row{object, QPersistentModelIndex(sourceIndex), destroyedConnection});
     endInsertRows();
 }
 
@@ -115,16 +128,20 @@ void cwKeywordFilterModel::clear()
             disconnect(row.destroyedConnection);
         }
         mRows.clear();
+        mRowOfObject.clear();
         endRemoveRows();
     }
 }
 
-void cwKeywordFilterModel::eraseRow(QVector<Row>::iterator iter)
+void cwKeywordFilterModel::eraseRow(int row)
 {
-    int row = static_cast<int>(std::distance(mRows.begin(), iter));
-    disconnect(iter->destroyedConnection);
+    disconnect(mRows.at(row).destroyedConnection);
     beginRemoveRows(QModelIndex(), row, row);
-    mRows.erase(iter);
+    mRowOfObject.remove(mRows.at(row).object);
+    mRows.removeAt(row);
+    for(int i = row; i < mRows.size(); ++i) {
+        mRowOfObject.insert(mRows.at(i).object, i);
+    }
     endRemoveRows();
 }
 
@@ -168,42 +185,36 @@ void cwKeywordFilterModel::setSourceModel(QAbstractItemModel *sourceModel)
                 insert(srcIndex);
             }
         });
+
+        // Clear while the source's rows are still readable.
+        mModelAboutToBeReset = connect(sourceModel, &QAbstractItemModel::modelAboutToBeReset,
+                                       this, &cwKeywordFilterModel::clear);
     }
-}
-
-QVector<cwKeywordFilterModel::Row>::iterator cwKeywordFilterModel::lowerBound(QObject *object)
-{
-    return std::lower_bound(mRows.begin(), mRows.end(), object,
-                            [](const Row& row, QObject* o) { return row.object < o; });
-}
-
-QVector<cwKeywordFilterModel::Row>::const_iterator cwKeywordFilterModel::lowerBound(QObject *object) const
-{
-    return std::lower_bound(mRows.cbegin(), mRows.cend(), object,
-                            [](const Row& row, QObject* o) { return row.object < o; });
 }
 
 void cwKeywordFilterModel::removeByObject(QObject *object)
 {
-    auto iter = lowerBound(object);
-    if(iter == mRows.end() || iter->object != object) {
+    const int row = mRowOfObject.value(object, -1);
+    if(row < 0) {
         return;
     }
 
-    eraseRow(iter);
+    eraseRow(row);
 }
 
 void cwKeywordFilterModel::removeBySourceIndex(const QModelIndex &sourceIndex)
 {
-    auto iter = std::find_if(mRows.begin(), mRows.end(), [&sourceIndex](const Row& row) {
+    // Linear: called when the source index's object changed, so the object
+    // lookup no longer finds its row.
+    auto iter = std::find_if(mRows.cbegin(), mRows.cend(), [&sourceIndex](const Row& row) {
         return row.sourceIndex == sourceIndex;
     });
 
-    if(iter == mRows.end()) {
+    if(iter == mRows.cend()) {
         return;
     }
 
-    eraseRow(iter);
+    eraseRow(static_cast<int>(std::distance(mRows.cbegin(), iter)));
 }
 
 void cwKeywordFilterModel::disconnectSource()
@@ -215,5 +226,9 @@ void cwKeywordFilterModel::disconnectSource()
     if(mRowsAboutToBeRemoved) {
         disconnect(mRowsAboutToBeRemoved);
         mRowsAboutToBeRemoved = {};
+    }
+    if(mModelAboutToBeReset) {
+        disconnect(mModelAboutToBeReset);
+        mModelAboutToBeReset = {};
     }
 }

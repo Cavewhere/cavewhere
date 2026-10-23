@@ -5,6 +5,7 @@
 #include <QAbstractItemModel>
 #include <QObject>
 #include <QDebug>
+#include <QHash>
 
 //Our includes
 #include "cwGlobals.h"
@@ -31,6 +32,7 @@ public:
     cwKeywordItemModel(QObject* parent = nullptr);
 
     Q_INVOKABLE void addItem(cwKeywordItem* item);
+    void addItems(const QList<cwKeywordItem*>& items);
     Q_INVOKABLE void removeItem(cwKeywordItem* item);
     Q_INVOKABLE void clear();
     cwKeywordItem* item(int row) const;
@@ -49,7 +51,11 @@ private:
         DisconnectNone
     };
 
+    // Rows are in insertion order; m_rowOfItem is the lookup.
     QVector<cwKeywordItem*> Items;
+    QHash<cwKeywordItem*, int> m_rowOfItem;
+
+    void connectItem(cwKeywordItem* item);
 
     cwKeywordModel* keywordModel(const QModelIndex& index) const;
     void remove(cwKeywordItem* item, DisconnectionType type = DisconnectAll);

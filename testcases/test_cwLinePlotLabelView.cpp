@@ -20,11 +20,13 @@
 
 //Test helpers
 #include "ExternalCenterlineTestHelpers.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
 #include <QHash>
 #include <QQmlComponent>
+#include <QSignalSpy>
 #include <QQmlEngine>
 #include <QMetaObject>
 #include <QStringList>
@@ -412,4 +414,95 @@ TEST_CASE("cwLinePlotLabelView labels a Compass .dat's stations after the scan r
     // The native trip has no shots, so the .dat trip is the only labeled one.
     CHECK(keywordModel.rowCount() == 1);
     CHECK(sortedLabelTexts(keywordModel) == expected);
+}
+
+namespace {
+
+constexpr int kNodeTrips = 20;
+constexpr int kFlatBlocks = 200;
+constexpr int kFlatShotsPerBlock = 3;
+
+// A solve registers the label view's items in one insert and the line plot's
+// in another.
+constexpr int kMaxKeywordInsertsPerSolve = 2;
+
+int labelGroupCount(const cwKeywordItemModel& keywordModel)
+{
+    int count = 0;
+    for (int i = 0; i < keywordModel.rowCount(); ++i) {
+        if (groupForKeywordItem(keywordModel.item(i)) != nullptr) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+} // namespace
+
+TEST_CASE("cwLinePlotLabelView registers a solve's label items in one insert",
+          "[cwLinePlotLabelView][MainThreadBudget]")
+{
+    // The trips hang from a depth-2 node, so the cave and the section both
+    // relay the region's position pulse.
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwCave* section = new cwCave();
+    section->setName(QStringLiteral("Upper"));
+    for (int i = 0; i < kNodeTrips; ++i) {
+        addNativeTripWithShot(section, QStringLiteral("Trip %1").arg(i),
+                              QStringLiteral("a%1").arg(i), QStringLiteral("a%1").arg(i + 1));
+    }
+    cave->addNode(section);
+
+    cwKeywordItemModel keywordModel;
+    auto host = makeLabelViewHost();
+    cwLinePlotLabelView* labelView = host->labelView;
+    labelView->setKeywordItemModel(&keywordModel);
+    labelView->setRegion(&region);
+    REQUIRE(keywordModel.rowCount() == 0);
+
+    QSignalSpy inserted(&keywordModel, &QAbstractItemModel::rowsInserted);
+
+    cwLinePlotManager plotManager;
+    plotManager.setRegion(&region);
+    plotManager.waitToFinish();
+    REQUIRE_FALSE(plotManager.hasSolveError());
+
+    CHECK(keywordModel.rowCount() == kNodeTrips);
+    CHECK(topLevelRowsInserted(inserted) == 1);
+}
+
+TEST_CASE("A solve of a flat Survex source registers its keyword items in at most two inserts",
+          "[LinePlotManager][cwLinePlotLabelView][keyword][MainThreadBudget]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("keyword-bulk"),
+                                    QStringLiteral("NativeCave"),
+                                    QStringLiteral("NativeTrip"));
+    cwCavingRegion* region = fixture->project->cavingRegion();
+    cwKeywordItemModel* keywordModel = fixture->rootData->keywordItemModel();
+    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+
+    // Declared after the fixture so the view, which removes its items from the
+    // root data's model on destruction, goes first.
+    auto host = makeLabelViewHost();
+    host->labelView->setKeywordItemModel(keywordModel);
+    host->labelView->setRegion(region);
+    drainPipelines(fixture.get());
+
+    const QString source = writeFlatSurvex(tempSubdir(fixture->tempDir, QStringLiteral("flat")),
+                                           kFlatBlocks, kFlatShotsPerBlock);
+
+    QSignalSpy inserted(keywordModel, &QAbstractItemModel::rowsInserted);
+    QSignalSpy solves(linePlot, &cwLinePlotManager::stationPositionInTripsChanged);
+
+    attachSourceThroughManager(fixture.get(), region->rootNode(), source);
+    drainPipelines(fixture.get());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+
+    CHECK(labelGroupCount(*keywordModel) == kFlatBlocks);
+    CHECK(keywordModel->rowCount() >= 2 * kFlatBlocks);
+    REQUIRE(solves.count() >= 1);
+    INFO("solves: " << solves.count() << ", keyword item inserts: " << topLevelRowsInserted(inserted));
+    // Only the first solve meets new trips; later solves find every key registered.
+    CHECK(topLevelRowsInserted(inserted) <= kMaxKeywordInsertsPerSolve);
 }

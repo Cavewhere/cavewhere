@@ -50,7 +50,7 @@ private:
     cwCavingRegion* Region; //!<
 
     // One label group per trip. The group is the trip's keyword item's
-    // setVisible() target (see updateKeywordItem), so filtering a trip's line plot
+    // setVisible() target (see updateKeywordItems), so filtering a trip's line plot
     // hides its station labels. The keyword item itself is owned by the registry,
     // registered only while the trip has labels (0<->1).
     QHash<cwTrip*, cwLabel3dGroup*> m_groups;
@@ -59,15 +59,15 @@ private:
     void connectNode(const cwSurveyNode* node);
     void disconnectNode(const cwSurveyNode* node);
 
-    void addNode(const cwSurveyNode* node);
+    void addNodes(const QList<const cwSurveyNode*>& nodes);
     void removeNode(const cwSurveyNode* node);
 
-    void addTrip(cwTrip* trip);
+    void addTrips(const QList<cwTrip*>& trips);
     void removeTrip(cwTrip* trip);
 
     QList<cwLabel3dItem> labels(cwTrip* trip) const;
 
-    void updateKeywordItem(cwTrip* trip);
+    void updateKeywordItems(const QList<cwTrip*>& trips);
 
     void clear();
 

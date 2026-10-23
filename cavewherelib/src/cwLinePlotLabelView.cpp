@@ -33,6 +33,7 @@ Sets region
 void cwLinePlotLabelView::setRegion(cwCavingRegion* region) {
     if(Region != region) {
         if(Region != nullptr) {
+            disconnect(Region, nullptr, this, nullptr);
             Region->rootNode()->walk([this](const cwSurveyNode* node) {
                 disconnectNode(node);
             });
@@ -42,7 +43,11 @@ void cwLinePlotLabelView::setRegion(cwCavingRegion* region) {
         clear();
 
         if(Region != nullptr) {
-            addNode(Region->rootNode());
+            // The region's pulse reaches every node; listening to it once
+            // rebuilds every trip's labels in one pass.
+            connect(Region, &cwCavingRegion::positionsChanged, this, &cwLinePlotLabelView::updateStations);
+            connect(Region, &cwCavingRegion::memberViewsChanged, this, &cwLinePlotLabelView::updateStations);
+            addNodes({Region->rootNode()});
         }
         emit regionChanged();
     }
@@ -60,29 +65,27 @@ void cwLinePlotLabelView::setKeywordItemModel(cwKeywordItemModel* keywordItemMod
     // Tears down items in the old model; re-register every trip that still has
     // labels against the new one.
     m_keywordRegistry.setModel(keywordItemModel);
-
-    for(auto it = m_groups.keyBegin(); it != m_groups.keyEnd(); ++it) {
-        updateKeywordItem(*it);
-    }
+    updateKeywordItems(m_groups.keys());
 
     emit keywordItemModelChanged();
 }
 
 /**
- * @brief cwLinePlotLabelView::addNode
- * @param node - A node that just joined the region, or the region's root
+ * @brief cwLinePlotLabelView::addNodes
+ * @param nodes - Nodes that just joined the region, or the region's root
  *
- * Connects the node and every node below it, and adds a label group for each of
- * their trips.
+ * Connects each node and every node below it, and adds a label group for each
+ * of their trips, registering the trips' keyword items in one insert.
  */
-void cwLinePlotLabelView::addNode(const cwSurveyNode* node) {
-    node->walk([this](const cwSurveyNode* subtreeNode) {
-        connectNode(subtreeNode);
-        const QList<cwTrip*> trips = subtreeNode->trips();
-        for(cwTrip* trip : trips) {
-            addTrip(trip);
-        }
-    });
+void cwLinePlotLabelView::addNodes(const QList<const cwSurveyNode*>& nodes) {
+    QList<cwTrip*> trips;
+    for(const cwSurveyNode* node : nodes) {
+        node->walk([this, &trips](const cwSurveyNode* subtreeNode) {
+            connectNode(subtreeNode);
+            trips.append(subtreeNode->trips());
+        });
+    }
+    addTrips(trips);
 }
 
 /**
@@ -109,9 +112,11 @@ void cwLinePlotLabelView::removeNode(const cwSurveyNode* node)
  */
 void cwLinePlotLabelView::nodesInserted(int begin, int end) {
     const cwSurveyNode* parentNode = static_cast<cwSurveyNode*>(sender());
+    QList<const cwSurveyNode*> nodes;
     for(int i = begin; i <= end; i++) {
-        addNode(parentNode->childNode(i));
+        nodes.append(parentNode->childNode(i));
     }
+    addNodes(nodes);
 }
 
 /**
@@ -134,9 +139,11 @@ void cwLinePlotLabelView::nodesRemoved(int begin, int end) {
  */
 void cwLinePlotLabelView::tripsInserted(int begin, int end) {
     const cwSurveyNode* node = static_cast<cwSurveyNode*>(sender());
+    QList<cwTrip*> trips;
     for(int i = begin; i <= end; i++) {
-        addTrip(node->trip(i));
+        trips.append(node->trip(i));
     }
+    addTrips(trips);
 }
 
 /**
@@ -155,36 +162,35 @@ void cwLinePlotLabelView::tripsRemoved(int begin, int end) {
 /**
  * @brief cwLinePlotLabelView::updateStations
  *
- * A node's station positions changed; rebuild the labels for each of its own
- * trips. Every node gets its own positions, so a child node's trips are rebuilt
- * when the child's signal fires.
+ * The region's station positions or member views changed; rebuild the labels
+ * of every trip in the region.
  */
 void cwLinePlotLabelView::updateStations() {
-    const cwSurveyNode* node = static_cast<cwSurveyNode*>(sender());
-    const QList<cwTrip*> trips = node->trips();
+    const QList<cwTrip*> trips = m_groups.keys();
     for(cwTrip* trip : trips) {
-        auto it = m_groups.find(trip);
-        if(it != m_groups.end()) {
-            it.value()->setLabels(labels(trip));
-            updateKeywordItem(trip);
-        }
+        m_groups.value(trip)->setLabels(labels(trip));
     }
+    updateKeywordItems(trips);
 }
 
 /**
- * @brief cwLinePlotLabelView::addTrip
- * @param trip - The trip to add a label group for
+ * @brief cwLinePlotLabelView::addTrips
+ * @param trips - The trips to add a label group for
  */
-void cwLinePlotLabelView::addTrip(cwTrip* trip) {
-    if(m_groups.contains(trip)) {
-        return;
+void cwLinePlotLabelView::addTrips(const QList<cwTrip*>& trips) {
+    QList<cwTrip*> added;
+    added.reserve(trips.size());
+    for(cwTrip* trip : trips) {
+        if(m_groups.contains(trip)) {
+            continue;
+        }
+
+        cwLabel3dGroup* group = new cwLabel3dGroup(this);
+        group->setLabels(labels(trip));
+        m_groups.insert(trip, group);
+        added.append(trip);
     }
-
-    cwLabel3dGroup* group = new cwLabel3dGroup(this);
-    group->setLabels(labels(trip));
-
-    m_groups.insert(trip, group);
-    updateKeywordItem(trip);
+    updateKeywordItems(added);
 }
 
 /**
@@ -212,7 +218,6 @@ void cwLinePlotLabelView::removeTrip(cwTrip* trip) {
  * @param node
  */
 void cwLinePlotLabelView::connectNode(const cwSurveyNode *node) {
-    connect(node, &cwSurveyNode::scopedPositionsChanged, this, &cwLinePlotLabelView::updateStations);
     connect(node, &cwSurveyNode::insertedTrips, this, &cwLinePlotLabelView::tripsInserted);
     connect(node, &cwSurveyNode::beginRemoveTrips, this, &cwLinePlotLabelView::tripsRemoved);
     connect(node, &cwSurveyNode::insertedNodes, this, &cwLinePlotLabelView::nodesInserted);
@@ -251,33 +256,35 @@ QList<cwLabel3dItem> cwLinePlotLabelView::labels(cwTrip *trip) const
 }
 
 /**
- * @brief cwLinePlotLabelView::updateKeywordItem
+ * @brief cwLinePlotLabelView::updateKeywordItems
  *
- * Registers/unregisters the trip's label keyword item so the filter only carries
- * a row for trips that actually have labels: create it when the count crosses
- * 0->1, drop it when it returns to 0. The item references the trip-owned
+ * Registers/unregisters each trip's label keyword item so the filter only
+ * carries a row for trips that actually have labels: create it when the count
+ * crosses 0->1, drop it when it returns to 0. The new items land in the model
+ * as one insert. Each item references the trip-owned
  * cwTrip::linePlotKeywordModel() (Type="Line Plot" plus the trip's inherited
  * keywords), the same model the line plot geometry uses, and targets the trip's
  * label group directly (a QObject with a setVisible(bool) slot, dispatched by
  * cwKeywordVisibility), so filtering the line plot hides the labels with it.
  */
-void cwLinePlotLabelView::updateKeywordItem(cwTrip* trip) {
-    auto it = m_groups.find(trip);
-    if(it == m_groups.end()) {
-        return;
+void cwLinePlotLabelView::updateKeywordItems(const QList<cwTrip*>& trips) {
+    QList<cwTrip*> labeled;
+    labeled.reserve(trips.size());
+    for(cwTrip* trip : trips) {
+        const cwLabel3dGroup* group = m_groups.value(trip, nullptr);
+        if(group != nullptr && !group->labels().isEmpty()) {
+            labeled.append(trip);
+        } else {
+            m_keywordRegistry.drop(trip);
+        }
     }
 
-    cwLabel3dGroup* group = it.value();
-    if(group == nullptr || group->labels().isEmpty()) {
-        m_keywordRegistry.drop(trip);
-    } else {
-        m_keywordRegistry.ensure(trip, [trip, group]() {
-            auto item = new cwKeywordItem();
-            item->keywordModel()->addExtension(trip->linePlotKeywordModel());
-            item->setObject(group);
-            return item;
-        });
-    }
+    m_keywordRegistry.ensureAll(labeled, [this](cwTrip* trip) {
+        auto item = new cwKeywordItem();
+        item->keywordModel()->addExtension(trip->linePlotKeywordModel());
+        item->setObject(m_groups.value(trip));
+        return item;
+    });
 }
 
 /**

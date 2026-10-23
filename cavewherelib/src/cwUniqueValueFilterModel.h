@@ -51,49 +51,31 @@ signals:
 
 private:
     void buildIndex();
-
-    void insertIntoIndex(const QModelIndex& sourceIndex);
+    void rebuildRows();
 
     struct Row {
         QPersistentModelIndex index;
         QVariant value;
     };
 
+    // Rows are in insertion order, one per unique value; mSortedRows holds
+    // their row numbers ordered by mLessThan on the value, for lookup.
     QVector<Row> mUniqueIndex;
+    QVector<int> mSortedRows;
     int mUniqueRole = -1; //!<
     std::function<bool (const QVariant& left, const QVariant& right)> mLessThan;
     bool isConnected = false;
 
-    QVector<Row>::const_iterator findProxyIndex(const QModelIndex& sourceIndex) const;
-    QVector<Row>::iterator findProxyIndex(const QModelIndex& sourceIndex);
-    QVector<Row>::const_iterator findProxyIndex(const QVariant& value) const;
-    QVector<Row>::iterator findProxyIndex(const QVariant& value);
+    QVector<int>::const_iterator lowerBound(const QVariant& value) const;
+    int findRow(const QVariant& value) const;
+    void appendRow(const Row& row);
+    void eraseRow(int row);
+
+    void insertSourceRows(int first, int last);
+    void releaseRow(int row, const QModelIndex& sourceIndex, int skipFirst, int skipLast);
 
     inline QVariant uniqueValue(const QModelIndex& index) const {
         return index.data(mUniqueRole);
-    }
-
-    inline int iteratorToRow(QVector<Row>::const_iterator iter) const{
-        return std::distance(mUniqueIndex.begin(), iter);
-    }
-
-    template<typename R, typename C, typename F>
-    R findRunAction(const QModelIndex& sourceIndex, C predict, F actionFunc) {
-        auto iter = findProxyIndex(sourceIndex);
-        if(predict(iter)) {
-            return actionFunc(iter);
-        }
-        return R();
-    }
-
-    template<typename R, typename C, typename F>
-    R findRunAction(const QModelIndex& sourceIndex, C predict, F actionFunc) const {
-        return const_cast<cwUniqueValueFilterModel*>(this)->findRunAction<R>(sourceIndex, predict, actionFunc);
-    }
-
-    template<typename T>
-    bool contains(T iter, const QModelIndex& sourceIndex) const {
-        return iter != mUniqueIndex.end() && uniqueValue(iter->index) == uniqueValue(sourceIndex);
     }
 
     inline bool isValid() {
@@ -102,11 +84,6 @@ private:
 
     void connectSourceModel();
     void disconnectSourceModel();
-
-    inline Row toRow(const QModelIndex& sourceIndex) {
-        // qDebug() << "toRow:" << this << uniqueValue(sourceIndex);
-        return {sourceIndex, uniqueValue(sourceIndex)};
-    }
 
 };
 

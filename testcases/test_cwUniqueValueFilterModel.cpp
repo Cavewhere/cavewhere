@@ -9,6 +9,7 @@
 #include <QStandardItemModel>
 #include <QVector>
 #include <QStandardItem>
+#include <QSignalSpy>
 
 //Std includes
 #include <utility>
@@ -241,5 +242,54 @@ TEST_CASE("cwUniqueValueFilterModel should filter values correctly", "[cwUniqueV
 
     for(auto obj : std::as_const(objs)) {
         delete obj;
+    }
+}
+
+TEST_CASE("cwUniqueValueFilterModel takes a source range insert as one insert",
+          "[cwUniqueValueFilterModel][MainThreadBudget]")
+{
+    constexpr int kSourceRows = 40;
+    constexpr int kDistinctValues = 8;
+    constexpr int kUniqueRole = Qt::UserRole + 1;
+
+    QObject owner;
+    QVector<QObject*> values;
+    for (int i = 0; i < kDistinctValues; ++i) {
+        values.append(new QObject(&owner));
+    }
+
+    QStandardItemModel model;
+    cwUniqueValueFilterModel filter;
+    filter.setUniqueRole(kUniqueRole);
+    filter.setLessThan([](const QVariant& left, const QVariant& right) {
+        return left.value<QObject*>() < right.value<QObject*>();
+    });
+    filter.setSourceModel(&model);
+    REQUIRE(filter.rowCount() == 0);
+
+    // The model contract: storage changes only after rowsAboutToBeInserted.
+    QList<int> rowCountBeforeInsert;
+    QList<int> firstInsertedRow;
+    QObject::connect(&filter, &QAbstractItemModel::rowsAboutToBeInserted, &filter,
+                     [&](const QModelIndex&, int first, int) {
+        rowCountBeforeInsert.append(filter.rowCount());
+        firstInsertedRow.append(first);
+    });
+    QSignalSpy inserted(&filter, &QAbstractItemModel::rowsInserted);
+
+    QList<QStandardItem*> rows;
+    for (int i = 0; i < kSourceRows; ++i) {
+        auto* row = new QStandardItem();
+        row->setData(QVariant::fromValue(values.at(i % kDistinctValues)), kUniqueRole);
+        rows.append(row);
+    }
+    model.invisibleRootItem()->appendRows(rows);
+
+    CHECK(filter.rowCount() == kDistinctValues);
+    CHECK(inserted.count() == 1);
+    REQUIRE_FALSE(rowCountBeforeInsert.isEmpty());
+    for (int i = 0; i < rowCountBeforeInsert.size(); ++i) {
+        INFO("insert " << i);
+        CHECK(rowCountBeforeInsert.at(i) == firstInsertedRow.at(i));
     }
 }
