@@ -30,6 +30,7 @@
 #include "cwStreamedTexture.h"
 #include "cwMipMath.h"
 #include "cwTask.h"
+#include "cwThreadCountRestorer.h"
 
 namespace {
     constexpr ktx_uint32_t kSmokeWidth = 4;
@@ -543,27 +544,6 @@ namespace {
     constexpr int kFreeSlotTimeoutMs = 2000;
     constexpr int kLaneOccupiedTimeoutMs = 5000;
     constexpr int kPollSliceMs = 5;
-    constexpr int kSingleThread = 1;
-
-    //! Restores the shared worker pool's thread count on every path out of a test
-    struct ThreadCountRestorer {
-        explicit ThreadCountRestorer(int threadCount) :
-            m_previous(cwTask::threadPool()->maxThreadCount())
-        {
-            cwTask::threadPool()->setMaxThreadCount(threadCount);
-        }
-
-        ~ThreadCountRestorer()
-        {
-            cwTask::threadPool()->setMaxThreadCount(m_previous);
-        }
-
-        ThreadCountRestorer(const ThreadCountRestorer&) = delete;
-        ThreadCountRestorer& operator=(const ThreadCountRestorer&) = delete;
-
-    private:
-        int m_previous;
-    };
 
     //! Spins the event loop until predicate() is true or timeoutMs elapses
     template <typename Predicate>
@@ -656,7 +636,7 @@ TEST_CASE("encodeRgba compresses on the encode lane", "[Ktx2][EncodeLane]") {
 }
 
 TEST_CASE("A worker waiting on the encode lane frees its pool slot", "[Ktx2][EncodeLane]") {
-    ThreadCountRestorer threadCount(kSingleThread);
+    cwThreadCountRestorer threadCount(kSingleThread);
 
     LaneBlocker blocker;
     REQUIRE(blocker.waitUntilOccupied());

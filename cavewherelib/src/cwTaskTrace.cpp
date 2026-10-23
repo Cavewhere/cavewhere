@@ -24,6 +24,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #ifdef Q_OS_APPLE
@@ -111,6 +112,12 @@ cwTaskContext& threadContext()
 {
     thread_local cwTaskContext context = untaggedContext();
     return context;
+}
+
+qint64& threadCharge()
+{
+    thread_local qint64 bytes = 0;
+    return bytes;
 }
 
 struct PoolSample
@@ -289,9 +296,20 @@ cwTaskContext cwTaskContextScope::currentContext()
     return threadContext();
 }
 
+cwTaskChargeScope::cwTaskChargeScope(qint64 bytes) :
+    m_previous(std::exchange(threadCharge(), bytes))
+{
+}
+
+cwTaskChargeScope::~cwTaskChargeScope()
+{
+    threadCharge() = m_previous;
+}
+
 cwTaskSubmission::cwTaskSubmission() :
     m_context(threadContext()),
     m_submitted(std::chrono::steady_clock::now()),
+    m_chargedBytes(std::exchange(threadCharge(), 0)),
     m_pending(true)
 {
     m_context.counters->queued.fetch_add(1, std::memory_order_relaxed);
@@ -300,6 +318,7 @@ cwTaskSubmission::cwTaskSubmission() :
 cwTaskSubmission::cwTaskSubmission(cwTaskSubmission&& other) noexcept :
     m_context(std::move(other.m_context)),
     m_submitted(other.m_submitted),
+    m_chargedBytes(other.m_chargedBytes),
     m_pending(other.m_pending)
 {
     other.m_pending = false;
@@ -318,7 +337,8 @@ cwTaskSubmission::Run::Run(cwTaskSubmission& submission) :
     m_counters(submission.m_context.counters),
     m_interval(QStringLiteral("run"),
                std::chrono::duration_cast<std::chrono::microseconds>(
-                   std::chrono::steady_clock::now() - submission.m_submitted).count())
+                   std::chrono::steady_clock::now() - submission.m_submitted).count(),
+               submission.m_chargedBytes)
 {
     Q_ASSERT(submission.m_pending);
     submission.m_pending = false;
@@ -357,16 +377,24 @@ void cwTaskBatch::finish()
     }
 }
 
-cwTaskInterval::cwTaskInterval(const QString& name, qint64 waitUs) :
+cwTaskInterval::cwTaskInterval(const QString& name, qint64 waitUs, qint64 chargedBytes) :
     m_traced(profiler().enabled())
 {
     if (m_traced) {
-        const cwTaskContext& context = threadContext();
-        m_token = profiler().start(QStringLiteral("ctx=%1 name=%2 wait_us=%3 gen=%4")
-                                       .arg(context.name, name)
-                                       .arg(waitUs)
-                                       .arg(context.generation));
+        m_token = profiler().start(metadata(threadContext(), name, waitUs, chargedBytes));
     }
+}
+
+QString cwTaskInterval::metadata(const cwTaskContext& context, const QString& name, qint64 waitUs, qint64 chargedBytes)
+{
+    QString metadata = QStringLiteral("ctx=%1 name=%2 wait_us=%3 gen=%4")
+                           .arg(context.name, name)
+                           .arg(waitUs)
+                           .arg(context.generation);
+    if (chargedBytes > 0) {
+        metadata += QStringLiteral(" charged_bytes=%1").arg(chargedBytes);
+    }
+    return metadata;
 }
 
 cwTaskInterval::~cwTaskInterval()

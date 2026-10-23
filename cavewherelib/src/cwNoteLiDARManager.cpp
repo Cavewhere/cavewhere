@@ -665,7 +665,8 @@ QFuture<void> cwNoteLiDARManager::runBatch()
             m_futureManagerToken.addJob(cwFuture(progressRoot->future(), kLiDARJobName, progressRoot));
         }
 
-        const auto futures = cwTriangulateLiDARTask::triangulate(inputs, progressRoot);
+        const auto limited = cwTriangulateLiDARTask::triangulate(this, inputs, progressRoot);
+        const auto& futures = limited.items;
         Q_ASSERT(futures.size() == notes.size());
 
         for (int i = 0; i < futures.size(); i++) {

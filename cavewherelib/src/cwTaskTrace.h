@@ -81,15 +81,32 @@ private:
     }
 };
 
+//! RAII charge: the first task submitted through cwConcurrent::run on this thread while the scope is open
+//! carries bytes in its interval, so the runner can set a limiter's weight against measured growth
+class CAVEWHERE_LIB_EXPORT cwTaskChargeScope
+{
+public:
+    explicit cwTaskChargeScope(qint64 bytes);
+    ~cwTaskChargeScope();
+    cwTaskChargeScope(const cwTaskChargeScope&) = delete;
+    cwTaskChargeScope& operator=(const cwTaskChargeScope&) = delete;
+
+private:
+    qint64 m_previous;
+};
+
 //! A task interval for work that bypasses cwConcurrent::run, such as cwTask and direct pool->start() calls
 class CAVEWHERE_LIB_EXPORT cwTaskInterval
 {
 public:
-    //! waitUs is how long the task sat in the queue, when known
-    explicit cwTaskInterval(const QString& name, qint64 waitUs = 0);
+    //! waitUs is how long the task sat in the queue, when known; chargedBytes is the weight a limiter charged it
+    explicit cwTaskInterval(const QString& name, qint64 waitUs = 0, qint64 chargedBytes = 0);
     ~cwTaskInterval();
     cwTaskInterval(const cwTaskInterval&) = delete;
     cwTaskInterval& operator=(const cwTaskInterval&) = delete;
+
+    //! The signpost metadata; charged_bytes appears only for a positive charge
+    static QString metadata(const cwTaskContext& context, const QString& name, qint64 waitUs, qint64 chargedBytes);
 
 private:
     MarkScope::Profiler::Token m_token;
@@ -125,6 +142,7 @@ public:
 private:
     cwTaskContext m_context;
     std::chrono::steady_clock::time_point m_submitted;
+    qint64 m_chargedBytes;
     bool m_pending;
 };
 

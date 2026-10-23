@@ -17,6 +17,9 @@ class CAVEWHERE_LIB_EXPORT cwJobSettings : public QObject
     Q_PROPERTY(int threadCount READ threadCount WRITE setThreadCount NOTIFY threadCountChanged)
     Q_PROPERTY(int idleThreadCount READ idleThreadCount CONSTANT)
     Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+    Q_PROPERTY(int memoryBudgetMb READ memoryBudgetMb WRITE setMemoryBudgetMb NOTIFY memoryBudgetMbChanged)
+    Q_PROPERTY(int resolvedMemoryBudgetMb READ resolvedMemoryBudgetMb NOTIFY memoryBudgetMbChanged)
+    Q_PROPERTY(int totalMemoryMb READ totalMemoryMb CONSTANT)
     Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
 
 public:
@@ -28,6 +31,16 @@ public:
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
 
+    // 0 = automatic: cwMemoryBudget sizes its cap from the platform reader.
+    int memoryBudgetMb() const;
+    void setMemoryBudgetMb(int memoryBudgetMb);
+
+    // The cap cwMemoryBudget uses now, in MiB, for the "Automatic (x GB)" label.
+    int resolvedMemoryBudgetMb() const;
+
+    // The device's physical memory, in MiB: the memory budget setting's upper bound.
+    int totalMemoryMb() const;
+
     bool isAtDefaults() const;
     Q_INVOKABLE void resetToDefaults();
 
@@ -37,6 +50,7 @@ public:
 signals:
     void threadCountChanged();
     void automaticUpdateChanged();
+    void memoryBudgetMbChanged();
     void isAtDefaultsChanged();
 
 private:
@@ -44,10 +58,14 @@ private:
 
     static QString automaticUpdateKey() { return QLatin1String("automaticUpdate"); }
     static QString threadCountKey() { return QLatin1String("threadCount"); }
+    static QString memoryBudgetMbKey() { return QStringLiteral("memoryBudgetMb"); }
 
     bool AutomaticUpdate = true;
+    int m_memoryBudgetMb = 0;
 
     cwJobSettings(QObject* parent = nullptr);
+
+    void applyMemoryBudget();
 
     void setThreadCountPrivate(int count);
     bool isThreadCountValid(int count) const;

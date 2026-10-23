@@ -6,6 +6,8 @@
 #include "cwTriangulateStation.h"
 #include "cwTriangulateTask.h"
 #include "cwRenderTexturedItems.h"
+#include "cwMemoryBudget.h"
+#include "cwRenderBudgets.h"
 #include <QFileInfo>
 #include <QHash>
 #include <QSet>
@@ -23,6 +25,18 @@ constexpr int kNoteSteps = 4;
 //often than a bar can show
 constexpr int kMorphProgressStride = 256;
 
+//The pipeline's share of the memory ledger
+constexpr qint64 kLiDARDecodeBudgetBytes = 512 * cw::budgets::kBytesPerMegabyte;
+
+//The binary buffers decode about one to one and the textures add the rest
+constexpr qint64 kDecodedBytesPerGltfByte = 2;
+
+//A note's decode is its weight
+qint64 lidarWeight(const cwTriangulateLiDARInData& data)
+{
+    return QFileInfo(data.gltfFilename()).size() * kDecodedBytesPerGltfByte;
+}
+
 //How many geometries the meshes hold between them, which is what the morph and
 //the texture loops below each run once for
 qsizetype geometryCount(const QVector<cw::gltf::MeshCPU>& meshes)
@@ -36,8 +50,9 @@ qsizetype geometryCount(const QVector<cw::gltf::MeshCPU>& meshes)
 
 }
 
-QList<QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > > cwTriangulateLiDARTask::triangulate(const QList<cwTriangulateLiDARInData> &liDARs,
-                                                                                                          const cwProgressNodePtr& progressRoot)
+AsyncFuture::Limited<cwTriangulateLiDARTask::Result> cwTriangulateLiDARTask::triangulate(QObject* context,
+                                                                                         const QList<cwTriangulateLiDARInData> &liDARs,
+                                                                                         const cwProgressNodePtr& progressRoot)
 {
     const auto triangulateOne = [progressRoot](const cwTriangulateLiDARInData& data) {
         //The scope names the scan, and hands the note's node back on every
@@ -46,7 +61,7 @@ QList<QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > > cwTriangu
         noteScope.expectChildren(kNoteSteps);
 
         if(data.stationLookup().positions().size() == 0) {
-            return Monad::Result<QVector<cwRenderTexturedItems::Item> >("Station Lookup not set");
+            return Result("Station Lookup not set");
         }
 
         cw::gltf::LoadOptions options = {
@@ -118,17 +133,14 @@ QList<QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > > cwTriangu
             }
         }
 
-        return Monad::Result<QVector<cwRenderTexturedItems::Item> >(renderItems);
+        return Result(renderItems);
     };
 
-    QList<QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > > futures;
-    futures.reserve(liDARs.size());
-    for(const cwTriangulateLiDARInData& liDAR : liDARs) {
-        futures.append(cwConcurrent::run([data = liDAR, triangulateOne]() {
-            return triangulateOne(data);
-        }));
-    }
-    return futures;
+    const auto launch = [triangulateOne](const cwTriangulateLiDARInData& data) {
+        return cwConcurrent::run(triangulateOne, data);
+    };
+
+    return cwMemoryBudget::limitedOnPool<Result>(context, liDARs, launch, lidarWeight, kLiDARDecodeBudgetBytes);
 }
 
 QVector<cwRenderTexturedItems::Item> cwTriangulateLiDARTask::reserveRenderItems(const QVector<cw::gltf::MeshCPU> &meshes)

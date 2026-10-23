@@ -69,6 +69,27 @@ MainWindowTest {
             tryCompare(settings, "automaticUpdate", true)
         }
 
+        function findMemoryBudgetSpinBox() {
+            return findChild(rootId, "memoryBudgetSpinBox")
+        }
+
+        function test_memoryBudgetShowsAutomaticAtDefault() {
+            let spinBox = findMemoryBudgetSpinBox()
+            verify(spinBox !== null, "memoryBudgetSpinBox not found")
+            compare(spinBox.value, 0)
+            verify(spinBox.displayText.startsWith("Automatic ("), spinBox.displayText)
+        }
+
+        function test_memoryBudgetIncreaseSetsTheSetting() {
+            let spinBox = findMemoryBudgetSpinBox()
+            verify(spinBox !== null, "memoryBudgetSpinBox not found")
+            spinBox.increase()
+            spinBox.valueModified()
+            tryCompare(settings, "memoryBudgetMb", spinBox.stepSize)
+            verify(!spinBox.displayText.startsWith("Automatic"), spinBox.displayText)
+            tryVerify(function() { return findResetButton().enabled })
+        }
+
         function test_clickingRestoreDefaultsDisablesButton() {
             settings.automaticUpdate = false
             let btn = findResetButton()

@@ -5,9 +5,11 @@
 #include "cwTaskTrace.h"
 #include "cwConcurrent.h"
 #include "cwTask.h"
+#include "cwThreadCountRestorer.h"
 #include "cwGeometryItersecter.h"
 #include "TestGeometryBuilders.h"
 #include "cwSaveLoad.h"
+#include "cwRenderBudgets.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -26,7 +28,6 @@
 #include <thread>
 
 namespace {
-constexpr int kSingleThread = 1;
 constexpr int kWaitTimeoutMs = 10000;
 constexpr int kPollSliceMs = 1;
 constexpr qint64 kStartMs = 1000;
@@ -40,26 +41,9 @@ constexpr int kWrappedIncrement = 1;
 constexpr int kSecondCall = 2;
 constexpr uint64_t kTriangleObjectId = 1;
 constexpr float kTriangleEdge = 1.0f;
-
-//! Restores the shared worker pool's thread count on every path out of a test
-struct ThreadCountRestorer {
-    explicit ThreadCountRestorer(int threadCount) :
-        m_previous(cwTask::threadPool()->maxThreadCount())
-    {
-        cwTask::threadPool()->setMaxThreadCount(threadCount);
-    }
-
-    ~ThreadCountRestorer()
-    {
-        cwTask::threadPool()->setMaxThreadCount(m_previous);
-    }
-
-    ThreadCountRestorer(const ThreadCountRestorer&) = delete;
-    ThreadCountRestorer& operator=(const ThreadCountRestorer&) = delete;
-
-private:
-    int m_previous;
-};
+constexpr qint64 kChargedBytes = 128 * cw::budgets::kBytesPerMegabyte;
+constexpr qint64 kWaitUs = 5;
+constexpr quint64 kGeneration = 3;
 
 //! Polls without QFuture::waitForFinished, which can steal a queued task and run it on this thread
 bool waitUntil(const std::function<bool()>& condition)
@@ -157,7 +141,7 @@ TEST_CASE("Task context scopes nest and restore the outer context", "[cwTaskTrac
 
 TEST_CASE("Untagged submission reports untagged", "[cwTaskTrace]")
 {
-    ThreadCountRestorer restorer(kSingleThread);
+    cwThreadCountRestorer restorer(kSingleThread);
 
     const QString context = QStringLiteral("trace-before-untagged");
 
@@ -189,7 +173,7 @@ TEST_CASE("Untagged submission reports untagged", "[cwTaskTrace]")
 TEST_CASE("Queued and running counts follow a saturated pool", "[cwTaskTrace]")
 {
     REQUIRE(waitUntil([]() { return cwTask::threadPool()->activeThreadCount() == 0; }));
-    ThreadCountRestorer restorer(kSingleThread);
+    cwThreadCountRestorer restorer(kSingleThread);
 
     const QString context = QStringLiteral("trace-saturated");
     CHECK(countsEqual(context, 0, 0));
@@ -218,7 +202,7 @@ TEST_CASE("Queued and running counts follow a saturated pool", "[cwTaskTrace]")
 TEST_CASE("A task canceled before it runs leaves the queue", "[cwTaskTrace]")
 {
     REQUIRE(waitUntil([]() { return cwTask::threadPool()->activeThreadCount() == 0; }));
-    ThreadCountRestorer restorer(kSingleThread);
+    cwThreadCountRestorer restorer(kSingleThread);
 
     const QString context = QStringLiteral("trace-canceled");
 
@@ -487,7 +471,7 @@ TEST_CASE("Nested wraps keep the inner context", "[cwTaskTrace]")
 TEST_CASE("Geometry intersecter builds count as intersect work", "[cwTaskTrace]")
 {
     REQUIRE(waitUntil([]() { return cwTask::threadPool()->activeThreadCount() == 0; }));
-    ThreadCountRestorer restorer(kSingleThread);
+    cwThreadCountRestorer restorer(kSingleThread);
 
     const QString intersect = QStringLiteral("intersect");
     CHECK(countsEqual(intersect, 0, 0));
@@ -523,7 +507,7 @@ TEST_CASE("Geometry intersecter builds count as intersect work", "[cwTaskTrace]"
 TEST_CASE("Loading a project counts its worker tasks as load work", "[cwTaskTrace]")
 {
     REQUIRE(waitUntil([]() { return cwTask::threadPool()->activeThreadCount() == 0; }));
-    ThreadCountRestorer restorer(kSingleThread);
+    cwThreadCountRestorer restorer(kSingleThread);
 
     const QString load = QStringLiteral("load");
     CHECK(countsEqual(load, 0, 0));
@@ -548,4 +532,19 @@ TEST_CASE("Loading a project counts its worker tasks as load work", "[cwTaskTrac
     CHECK(waitUntil([&]() { return blocker.isFinished(); }));
     CHECK(waitUntilProcessingEvents([&]() { return loaded.isFinished(); }));
     CHECK(waitUntil([&]() { return countsEqual(load, 0, 0); }));
+}
+
+TEST_CASE("A charged interval carries its byte count in the metadata", "[cwTaskTrace]")
+{
+    const cwTaskContext context {QStringLiteral("trace-charged"), kGeneration, nullptr};
+    const QString unchargedMetadata = QStringLiteral("ctx=trace-charged name=run wait_us=%1 gen=%2")
+                                          .arg(kWaitUs)
+                                          .arg(kGeneration);
+
+    CHECK(cwTaskInterval::metadata(context, QStringLiteral("run"), kWaitUs, kChargedBytes)
+          == unchargedMetadata + QStringLiteral(" charged_bytes=%1").arg(kChargedBytes));
+
+    SECTION("An uncharged interval leaves the field out") {
+        CHECK(cwTaskInterval::metadata(context, QStringLiteral("run"), kWaitUs, 0) == unchargedMetadata);
+    }
 }

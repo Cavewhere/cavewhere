@@ -1120,13 +1120,13 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
     runIfStandalone();
 }
 
-QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps(const QList<cwScrap *> &scraps,
-                                                                                 const cwProgressNodePtr& progressRoot) const
+cwScrapManager::TriangulatedScrapRun cwScrapManager::triangulateScraps(const QList<cwScrap *> &scraps,
+                                                                       const cwProgressNodePtr& progressRoot)
 {
-    QList<TriangulatedScrapResult> results;
+    TriangulatedScrapRun run;
 
     if(scraps.isEmpty() || Project == nullptr) {
-        return results;
+        return run;
     }
 
     QList<cwTriangulateInData> scrapData = cw::transform(scraps, [this](cwScrap* scrap) {
@@ -1134,7 +1134,7 @@ QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps
     });
 
     if(scrapData.isEmpty()) {
-        return results;
+        return run;
     }
 
     cwTriangulateTask task;
@@ -1143,23 +1143,20 @@ QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps
     task.setScrapData(scrapData);
     task.setFormatType(cwTextureUploadTask::format());
 
-    auto triangulatedFutures = task.triangulate();
+    const auto limited = task.triangulate(this);
+    run.all = limited.all;
 
-    if(triangulatedFutures.isEmpty()) {
-        return results;
-    }
-
-    const int count = qMin(scraps.size(), triangulatedFutures.size());
-    results.reserve(count);
+    const int count = qMin(scraps.size(), limited.items.size());
+    run.scraps.reserve(count);
 
     for(int i = 0; i < count; i++) {
         TriangulatedScrapResult entry;
         entry.scrap = scraps.at(i);
-        entry.data = triangulatedFutures.at(i);
-        results.append(entry);
+        entry.data = limited.items.at(i);
+        run.scraps.append(entry);
     }
 
-    return results;
+    return run;
 }
 
 /**
@@ -1229,7 +1226,7 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
             m_progressRoot->expectChildren(dirtyScraps.size());
         }
 
-        auto triangulationResults = triangulateScraps(dirtyScraps, m_progressRoot);
+        const auto triangulationResults = triangulateScraps(dirtyScraps, m_progressRoot).scraps;
 
         if(triangulationResults.isEmpty()) {
             finishScrapTask();

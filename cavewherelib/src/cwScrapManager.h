@@ -76,6 +76,13 @@ public:
         QFuture<cwTriangulatedData> data;
     };
 
+    //One run's scraps, plus the run's `all`: it settles when every scrap
+    //settles, and canceling it stops admission and cancels every scrap.
+    struct TriangulatedScrapRun {
+        QList<TriangulatedScrapResult> scraps;
+        QFuture<void> all;
+    };
+
     // Snapshot of data the sketch-scrap derivation pipeline produced for one
     // outline — exposed so the sketch view can overlay it for debugging.
     struct SketchScrapDebugStation {
@@ -117,8 +124,8 @@ public:
 
     QList<cwScrap*> dirtyScraps() const;
 
-    QList<TriangulatedScrapResult> triangulateScraps(const QList<cwScrap*>& scraps,
-                                                     const cwProgressNodePtr& progressRoot = {}) const;
+    TriangulatedScrapRun triangulateScraps(const QList<cwScrap*>& scraps,
+                                           const cwProgressNodePtr& progressRoot = {});
 
     cwTriangulateWarping* warpingSettings() const { return m_warpingSettings; }
 
