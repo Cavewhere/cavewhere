@@ -209,6 +209,10 @@ bool cwMemoryBudget::isPaused() const
 
 bool cwMemoryBudget::tryCharge(qint64 bytes)
 {
+    if(bytes <= 0) {
+        return true;
+    }
+
     if(m_paused.load()) {
         return false;
     }
@@ -225,11 +229,19 @@ bool cwMemoryBudget::tryCharge(qint64 bytes)
 
 void cwMemoryBudget::charge(qint64 bytes)
 {
+    if(bytes <= 0) {
+        return;
+    }
+
     m_inFlightBytes.fetch_add(bytes);
 }
 
 void cwMemoryBudget::release(qint64 bytes)
 {
+    if(bytes <= 0) {
+        return;
+    }
+
     m_inFlightBytes.fetch_sub(bytes);
     emit released();
 }

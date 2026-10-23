@@ -140,7 +140,7 @@ AsyncFuture::Limited<cwTriangulateLiDARTask::Result> cwTriangulateLiDARTask::tri
         return cwConcurrent::run(triangulateOne, data);
     };
 
-    return cwMemoryBudget::limitedOnPool<Result>(context, liDARs, launch, lidarWeight, kLiDARDecodeBudgetBytes);
+    return cwMemoryBudget::limitedOnPool(context, liDARs, launch, lidarWeight, kLiDARDecodeBudgetBytes);
 }
 
 QVector<cwRenderTexturedItems::Item> cwTriangulateLiDARTask::reserveRenderItems(const QVector<cw::gltf::MeshCPU> &meshes)

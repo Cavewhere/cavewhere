@@ -37,7 +37,7 @@ public:
     void setCapOverrideBytes(qint64 bytes);
     qint64 capOverrideBytes() const;
 
-    // The pressure hook's seam: a paused ledger refuses every charge, and unpausing
+    // The pressure hook's seam: a paused ledger refuses every positive charge, and unpausing
     // emits released() so waiting runs retry admission.
     void setPaused(bool paused);
     bool isPaused() const;
@@ -55,12 +55,12 @@ public:
     //! AsyncFuture::limited() as wide as the worker pool, with shareBytes as the pipeline's
     //! share of this ledger. Each launch's first pool task carries its weight in the task trace,
     //! and admissions, which run later from context's callbacks, carry the caller's trace context.
-    template <typename T, typename Input, typename Launch, typename Weight>
-    static AsyncFuture::Limited<T> limitedOnPool(QObject* context,
-                                                 const QList<Input>& inputs,
-                                                 Launch launch,
-                                                 Weight weight,
-                                                 qint64 shareBytes)
+    template <typename Input, typename Launch, typename Weight>
+    static auto limitedOnPool(QObject* context,
+                              const QList<Input>& inputs,
+                              Launch launch,
+                              Weight weight,
+                              qint64 shareBytes)
     {
         auto chargedLaunch = [launch = std::move(launch), weight](const Input& input) {
             const cwTaskChargeScope charge(weight(input));

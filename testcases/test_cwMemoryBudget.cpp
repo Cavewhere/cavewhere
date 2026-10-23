@@ -156,6 +156,10 @@ TEST_CASE("cwMemoryBudget paused ledger refuses charges", "[cwMemoryBudget]") {
     CHECK_FALSE(budget.tryCharge(kOneMiB));
     CHECK(budget.inFlightBytes() == 0);
 
+    // A zero-byte charge fits a paused ledger, matching AsyncFuture::ByteLedger.
+    CHECK(budget.tryCharge(0));
+    CHECK(budget.inFlightBytes() == 0);
+
     budget.setPaused(false);
     CHECK_FALSE(budget.isPaused());
     CHECK(budget.tryCharge(kOneMiB));
@@ -197,5 +201,20 @@ TEST_CASE("cwMemoryBudget unpausing wakes a waiting limited() run", "[cwMemoryBu
         return run.all.isFinished();
     };
     CHECK(QTest::qWaitFor(completeLaunchedUntilAllFinish, kWaitTimeoutMs));
+    CHECK(budget.inFlightBytes() == 0);
+}
+
+TEST_CASE("cwMemoryBudget release of zero bytes emits no released()", "[cwMemoryBudget]") {
+    cwMemoryBudget budget;
+    budget.setCapOverrideBytes(kCapBytes);
+    REQUIRE(budget.tryCharge(kOneMiB));
+
+    QSignalSpy releasedSpy(&budget, &cwMemoryBudget::released);
+    budget.release(0);
+    CHECK(releasedSpy.count() == 0);
+    CHECK(budget.inFlightBytes() == kOneMiB);
+
+    budget.release(kOneMiB);
+    CHECK(releasedSpy.count() == 1);
     CHECK(budget.inFlightBytes() == 0);
 }

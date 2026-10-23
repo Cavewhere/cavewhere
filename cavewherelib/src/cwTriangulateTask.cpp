@@ -175,7 +175,7 @@ AsyncFuture::Limited<cwTriangulatedData> cwTriangulateTask::triangulate(QObject*
         inputs.append({i, Scraps.at(i)});
     }
 
-    return cwMemoryBudget::limitedOnPool<cwTriangulatedData>(
+    return cwMemoryBudget::limitedOnPool(
         context, inputs, std::move(triangulateScrap), scrapWeight, kScrapDecodeBudgetBytes);
 }
 
