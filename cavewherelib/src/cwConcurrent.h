@@ -66,13 +66,15 @@ public:
     }
 
 private:
-    //! The kernel holds the functor until the batch finishes, so its copy of the batch closes the interval then
+    //! The kernel holds the functor until the batch finishes, so its copy of the batch closes the interval then.
+    //! Each item is its own task interval on the worker, so its CPU lands on the context like a run() would
     template <typename Sequence, typename MapFunctor>
     static auto batchFunctor(const QString& name, const Sequence& sequence, MapFunctor &&map)
     {
         auto batch = std::make_shared<const cwTaskBatch>(name, static_cast<qsizetype>(std::size(sequence)));
-        return [batch, context = cwTaskContextScope::currentContext(), map = std::decay_t<MapFunctor>(std::forward<MapFunctor>(map))](auto&& item) mutable -> decltype(auto) {
+        return [batch, name, context = cwTaskContextScope::currentContext(), map = std::decay_t<MapFunctor>(std::forward<MapFunctor>(map))](auto&& item) mutable -> decltype(auto) {
             cwTaskContextScope scope(context);
+            cwTaskInterval interval(name);
             return std::invoke(map, std::forward<decltype(item)>(item));
         };
     }

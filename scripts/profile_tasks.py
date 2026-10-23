@@ -708,6 +708,10 @@ def record(arguments, project, prefix):
             for item in items:
                 output = prefix.with_name("{}-{}-{}.xml".format(prefix.name, name, slug(item)))
                 exported["{}-{}".format(name, item)] = export(trace, xpath.format(item), output)
+        # An Allocations trace records every malloc, which runs to several GB per
+        # recording; the exported tables carry everything the report reads from it
+        if instruments is ALLOCATIONS_INSTRUMENTS and not arguments.keep_traces:
+            shutil.rmtree(trace)
 
     run("A", TIME_PROFILER_INSTRUMENTS, RUN_A_TABLES, [])
     run("B", ALLOCATIONS_INSTRUMENTS, RUN_B_TABLES, RUN_B_DETAILS)
@@ -861,9 +865,10 @@ WHOLE_RUN_ROWS = [
 
 FIRST_TASK_NOTE = ("First scraps and LiDAR task done is the end of the earliest task in that context: "
                    "the first stage of a chain, which can land well before the first mesh is delivered.\n")
-BATCH_NOTE = ("Only `task` intervals are attributed. The items of a `batch` (cwConcurrent::map/mapped, "
-              "such as the octree decode and halo passes) are left out of every context's CPU, "
-              "thread-state and overlap figures and count only toward Total CPU.\n")
+BATCH_NOTE = ("Only `task` intervals are attributed. Each item of a cwConcurrent::map/mapped batch "
+              "(such as the octree decode and halo passes) is a task named `map` or `mapped` on its "
+              "worker, so it counts toward its context like a run() task; the enclosing `batch` interval "
+              "only marks the submission span and is skipped.\n")
 
 
 def project_report(head, timing, timing_details, memory, memory_details, allocations, peak_allocations):
@@ -1004,6 +1009,8 @@ def main(argv=None):
     parser.add_argument("--runs", type=int, default=DEFAULT_RUNS,
                         help="recordings per project and run kind")
     parser.add_argument("--page", default=DEFAULT_PAGE, help="the page to open the app on")
+    parser.add_argument("--keep-traces", action="store_true",
+                        help="keep the Allocations .trace bundles after their tables are exported")
     parser.add_argument("--peak", action="store_true",
                         help="also record B′: run B again, stopped where run B peaked")
     parser.add_argument("--compare", nargs=2, metavar=("BASELINE", "AFTER"),
