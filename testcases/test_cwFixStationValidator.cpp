@@ -1353,3 +1353,111 @@ TEST_CASE("one member-view fan-out revalidates in time linear in the nodes",
     INFO("growth " << growth);
     CHECK(growth <= kMaxRelayStallGrowth);
 }
+
+namespace {
+
+const QString kDomainBadWording =
+    QStringLiteral("Fix station \"B\" has a coordinate outside the valid range for its "
+                   "coordinate system");
+
+//! A cave with one good fix, and below it a Folder whose one fix (B) has a
+//! transposed leading digit: 1478000 easting in UTM 13N.
+struct DomainBadSubNode {
+    cwCavingRegion region;
+    cwSurveyNode* cave = nullptr;
+    cwSurveyNode* upperLevel = nullptr;
+
+    DomainBadSubNode()
+    {
+        cave = region.addNode(nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Deep Hole"));
+        REQUIRE(cave != nullptr);
+        cave->fixStations()->appendFixStation(
+            makeFix(QStringLiteral("G"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+        upperLevel = region.addNode(cave, cwSurveyNode::Kind::Folder, QStringLiteral("Upper Level"));
+        REQUIRE(upperLevel != nullptr);
+        upperLevel->fixStations()->appendFixStation(
+            makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+        REQUIRE(upperLevel->errorModel()->errors()->warningMessages().size() == 1);
+    }
+};
+
+} // namespace
+
+TEST_CASE("the project-wide fix-station warnings name the node each one sits on",
+          "[cwFixStationValidator]")
+{
+    DomainBadSubNode project;
+    cwFixStationValidator* validator = project.region.fixStationValidator();
+    REQUIRE(validator != nullptr);
+
+    const QStringList messages = validator->fixStationWarningMessages();
+    REQUIRE(messages.size() == 1);
+    CHECK(messages.at(0).startsWith(QStringLiteral("Upper Level: ")));
+    CHECK(messages.at(0).contains(kDomainBadWording));
+
+    SECTION("suppressing the row takes it off the list, in one change") {
+        QSignalSpy changed(validator, &cwFixStationValidator::fixStationWarningsChanged);
+        cwErrorListModel* errors = project.upperLevel->errorModel()->errors();
+        errors->setData(errors->index(0), true,
+                        static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+
+        CHECK(validator->fixStationWarningMessages().isEmpty());
+        CHECK(changed.count() == 1);
+
+        errors->setData(errors->index(0), false,
+                        static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+        CHECK(validator->fixStationWarningMessages().size() == 1);
+        CHECK(changed.count() == 2);
+    }
+
+    SECTION("a rename follows into the prefix") {
+        project.upperLevel->setName(QStringLiteral("Lower Level"));
+
+        const QStringList renamed = validator->fixStationWarningMessages();
+        REQUIRE(renamed.size() == 1);
+        CHECK(renamed.at(0).startsWith(QStringLiteral("Lower Level: ")));
+        CHECK(renamed.at(0).contains(kDomainBadWording));
+    }
+
+    SECTION("correcting the fix clears the list") {
+        project.upperLevel->fixStations()->setData(project.upperLevel->fixStations()->index(0),
+                                                   478000.0, cwFixStationModel::EastingRole);
+        CHECK(validator->fixStationWarningMessages().isEmpty());
+    }
+
+    SECTION("a node leaving the region takes its warning with it") {
+        project.cave->removeNode(project.cave->indexOfNode(project.upperLevel));
+        CHECK(validator->fixStationWarningMessages().isEmpty());
+    }
+}
+
+TEST_CASE("the project-wide fix-station warnings list nodes in tree order",
+          "[cwFixStationValidator]")
+{
+    DomainBadSubNode project;
+    cwSurveyNode* otherCave =
+        project.region.addNode(nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Aardvark Pit"));
+    REQUIRE(otherCave != nullptr);
+    otherCave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+
+    //Pre-order, not name order: Deep Hole's section comes before the cave added
+    //after it.
+    const QStringList messages = project.region.fixStationValidator()->fixStationWarningMessages();
+    REQUIRE(messages.size() == 2);
+    CHECK(messages.at(0).startsWith(QStringLiteral("Upper Level: ")));
+    CHECK(messages.at(1).startsWith(QStringLiteral("Aardvark Pit: ")));
+}
+
+TEST_CASE("a fix on the region root raises no project-wide warning",
+          "[cwFixStationValidator]")
+{
+    //Pins today's reach, which is narrower than the Fix Stations page's: the
+    //validator walks rootNode()->allNodes(), which leaves the root out, so a
+    //fix the page lets a user add on the root is never judged.
+    cwCavingRegion region;
+    region.rootNode()->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+
+    CHECK(region.fixStationValidator()->fixStationWarningMessages().isEmpty());
+}

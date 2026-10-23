@@ -290,7 +290,7 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
     case OwnFixCountRole:
         return node->fixStationCount();
     case SubtreeFixCountRole:
-        return subtreeFixCount(node);
+        return node->subtreeFixStationCount();
     case SubtreeBareFixCountRole:
         return subtreeBareFixCount(node);
     case SubtreeUnsetFixCountRole:
@@ -607,6 +607,7 @@ void cwFixStationTreeModel::connectNode(cwSurveyNode* node)
             }
         }
         refreshBareFixOwnerTrips(node);
+        emitCountsChanged(node);
     });
     // The leaving trips drop out of the owners while they still exist.
     connect(node, &cwSurveyNode::beginRemoveTrips, this, [this, node](int begin, int end) {
@@ -618,6 +619,9 @@ void cwFixStationTreeModel::connectNode(cwSurveyNode* node)
             disconnectTrip(trip);
         }
         setBareFixOwnerTrips(node, owners);
+    });
+    connect(node, &cwSurveyNode::removedTrips, this, [this, node]() {
+        emitCountsChanged(node);
     });
 
     connect(node, &cwSurveyNode::nameChanged, this, [this, node]() {
@@ -951,18 +955,6 @@ void cwFixStationTreeModel::emitTripRowChanged(const cwTrip* trip, const QList<i
     if (index.isValid()) {
         emit dataChanged(index, index, roles);
     }
-}
-
-int cwFixStationTreeModel::subtreeFixCount(const cwSurveyNode* node)
-{
-    int count = 0;
-    node->walk([&count](const cwSurveyNode* current) {
-        count += current->fixStationCount();
-        for (const cwTrip* trip : current->trips()) {
-            count += trip->attachedFixes()->count();
-        }
-    });
-    return count;
 }
 
 int cwFixStationTreeModel::subtreeBareFixCount(const cwSurveyNode* node)

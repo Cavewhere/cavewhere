@@ -599,6 +599,39 @@ TEST_CASE("The region root's fix station tree counts every fix in the project",
           == nativeFixes + kFixtureFixCount);
 }
 
+TEST_CASE("The region root's stored fix count is the row count the tree lists",
+          "[FixStationTreeModel]")
+{
+    auto fixture = makeProject(QStringLiteral("fix-tree-project-parity"));
+    cwSurveyNode* regionRoot = fixture->project->cavingRegion()->rootNode();
+    cwCave* north = addChildNode(regionRoot, kNativeFolderName, cwSurveyNode::Kind::Folder);
+    cwCave* pit = addChildNode(north, kNativeCaveName, cwSurveyNode::Kind::Cave);
+    addNativeFix(pit, kNativeStation, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
+                 kNativeFixElevation);
+    cwCave* sourceRoot = attachSubtreeFixture(fixture.get());
+    const int nativeFixes = nativeFixCount(regionRoot);
+    REQUIRE(nativeFixes == 1);
+
+    cwFixStationTreeModel model;
+    model.setRootNode(regionRoot);
+
+    CHECK(regionRoot->subtreeFixStationCount()
+          == nativeFixes + kFixtureFixCount);
+    CHECK(regionRoot->subtreeFixStationCount() == model.fixRowCount());
+    CHECK(sourceRoot->subtreeFixStationCount() == kFixtureFixCount);
+    CHECK(north->subtreeFixStationCount() == nativeFixes);
+
+    //Deleting the source takes every attached fix with it.
+    auto future = managerOf(fixture.get())->deleteSourceRoot(sourceRoot);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    INFO("delete: " << future.result().errorMessage().toStdString());
+    REQUIRE_FALSE(future.result().hasError());
+    drainPipelines(fixture.get());
+
+    CHECK(regionRoot->subtreeFixStationCount() == nativeFixes);
+    CHECK(regionRoot->subtreeFixStationCount() == model.fixRowCount());
+}
+
 TEST_CASE("A native fix on the owner leaves its system out of its file's include",
           "[FixStationTreeModel][BareFixCS][BareFixOrigin]")
 {
@@ -1353,6 +1386,27 @@ TEST_CASE("A node row announces its bare-fix owner trips only when the list chan
     CHECK(roleAnnouncements(spy, fixture.rootRow(), role) == 1);
     CHECK(fixture.ownerNames()
           == QStringList({kTripName.arg(kFirstBareOwner), kTripName.arg(kSystemOwner)}));
+}
+
+TEST_CASE("A node row announces its subtree fix count when a trip with attached fixes arrives or leaves",
+          "[FixStationTreeModel]")
+{
+    cwCave node;
+    cwFixStationTreeModel model;
+    model.setRootNode(&node);
+    const QModelIndex rootRow = model.index(0, 0);
+    QSignalSpy spy(&model, &QAbstractItemModel::dataChanged);
+
+    auto* arriving = new cwTrip();
+    arriving->setAttachedFixes({ownerFix(arriving, 1), ownerFix(arriving, 2)});
+    node.addTrip(arriving);
+    CHECK(rootRow.data(cwFixStationTreeModel::SubtreeFixCountRole).toInt() == 2);
+    CHECK(roleAnnouncements(spy, rootRow, cwFixStationTreeModel::SubtreeFixCountRole) >= 1);
+
+    spy.clear();
+    node.removeTrip(0);
+    CHECK(rootRow.data(cwFixStationTreeModel::SubtreeFixCountRole).toInt() == 0);
+    CHECK(roleAnnouncements(spy, rootRow, cwFixStationTreeModel::SubtreeFixCountRole) >= 1);
 }
 
 TEST_CASE("A trip removed from its node leaves the node row's bare-fix owners before it is deleted",

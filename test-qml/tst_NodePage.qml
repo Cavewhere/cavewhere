@@ -550,6 +550,25 @@ MainWindowTest {
             compare(RootData.pageView.currentPageItem.cave, folder, "the page edits the Folder's fixes")
         }
 
+        // A cave's count spans its subtree: a Section's fixes are the cave's too.
+        function test_aCavesFixStationLinkCountsItsSectionsFixes() {
+            const caves = setupCaveWithSection()
+            const page = gotoNodePage("Source/Data/Node=Side Cave", caves.cave)
+
+            const link = findChild(page, "fixStationsLink")
+            verify(link !== null && link.visible, "a cave page shows its fix stations")
+            compare(link.text, "0")
+
+            caves.section.fixStations.addFixStation()
+            tryCompare(link, "text", "1", 5000, "the section's fix counts on the cave")
+
+            caves.cave.fixStations.addFixStation()
+            tryCompare(link, "text", "2", 5000, "the cave's own fix counts beside it")
+
+            caves.section.fixStations.removeAt(0)
+            tryCompare(link, "text", "1", 5000, "a removed section fix leaves the count")
+        }
+
         function test_headerNamesTheKindAndThePickerRelabels() {
             const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
             const page = gotoNodePage("Source/Data/Node=Side Cave", cave)

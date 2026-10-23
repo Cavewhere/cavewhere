@@ -651,5 +651,129 @@ MainWindowTest {
             verify(!acceptButton(dialog).enabled,
                    "the picker opens with nothing chosen")
         }
+
+        // ── The project's "Fix stations:" row under GIS Sources ──
+
+        // Gives \a node one fix named B whose easting has a transposed leading
+        // digit: 1478000 in UTM 13N, outside the zone's valid range.
+        function addDomainBadFix(node) {
+            node.fixStations.addFixStation()
+            const idx = node.fixStations.index(node.fixStations.count - 1)
+            node.fixStations.setData(idx, "B", FixStationModel.StationNameRole)
+            node.fixStations.setData(idx, "EPSG:32613", FixStationModel.InputCSRole)
+            node.fixStations.setData(idx, 1478000.0, FixStationModel.EastingRole)
+            node.fixStations.setData(idx, 4430000.0, FixStationModel.NorthingRole)
+            node.fixStations.setData(idx, 1655.0, FixStationModel.ElevationRole)
+        }
+
+        function test_theFixStationsRowSitsOutsideTheGroup() {
+            const link = label("projectFixStationsLink")
+            verify(link.visible, "the Data page always shows the project's fix stations")
+            verify(label("projectFixStationsBadge") !== null)
+
+            const group = label("coordinateSystemGroup")
+            verify(findChild(group, "projectFixStationsLink") === null,
+                   "Fix stations is a link to another page, not a projection fact")
+            verify(findChild(group, "projectFixStationsBadge") === null,
+                   "the badge sits beside its link")
+        }
+
+        function test_theFixStationsLinkCountsEveryNodeInTheProject() {
+            const link = label("projectFixStationsLink")
+            compare(link.text, "0")
+
+            const folder = RootData.region.addNode(null, SurveyNodeKind.Folder, "Kentucky")
+            const cave = RootData.region.addNode(folder, SurveyNodeKind.Cave, "Fisher Ridge")
+            cave.fixStations.addFixStation()
+            tryCompare(link, "text", "1", 5000, "a nested cave's fix counts")
+
+            folder.fixStations.addFixStation()
+            tryCompare(link, "text", "2", 5000, "the folder's own fix counts")
+
+            const section = RootData.region.addNode(cave, SurveyNodeKind.Folder, "Upper Level")
+            section.fixStations.addFixStation()
+            section.fixStations.addFixStation()
+            tryCompare(link, "text", "4", 5000, "a section's fixes count")
+
+            cave.fixStations.removeAt(0)
+            tryCompare(link, "text", "3", 5000, "a removed fix leaves the count")
+        }
+
+        function test_theFixStationsLinkOpensTheProjectFixStations() {
+            const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, "Fisher Ridge")
+            cave.fixStations.addFixStation()
+            const link = label("projectFixStationsLink")
+            tryCompare(link, "text", "1", 5000)
+
+            waitForRendering(dataPage())
+            mouseClick(link)
+            tryVerify(() => {
+                          const current = RootData.pageView.currentPageItem
+                          return current !== null && current.objectName === "fixStationPage"
+                      }, 5000, "the link opens the fix-station page")
+            compare(RootData.pageView.currentPageItem.cave, RootData.region.rootNode,
+                    "the page lists every fix in the project")
+        }
+
+        function test_theFixStationsBadgeNamesTheNodeOfAnOutOfRangeFix() {
+            const badge = label("projectFixStationsBadge")
+            verify(!badge.visible, "a project with no fix-station error shows no badge")
+
+            const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, "Deep Hole")
+            const section = RootData.region.addNode(cave, SurveyNodeKind.Folder, "Upper Level")
+            addDomainBadFix(section)
+
+            tryVerify(() => badge.visible, 5000, "a section's out-of-range fix raises the badge")
+            const named = badge.messages.filter(message => message.startsWith("Upper Level: ")
+                                                && message.indexOf("outside the valid range") >= 0)
+            compare(named.length, 1, "the badge names the section: " + badge.messages.join(" | "))
+
+            // Each entry carries its node, so a page can keep just its own subtree.
+            const warnings = RootData.region.fixStationValidator.fixStationWarnings
+            const onSection = warnings.filter(warning => warning.node === section
+                                              && warning.message.indexOf("outside the valid range") >= 0)
+            compare(onSection.length, 1, "the warning is tagged with the section")
+
+            const errors = section.errorModel.errors
+            tryVerify(() => errors.count > 0, 5000)
+            for (let row = 0; row < errors.count; ++row) {
+                errors.setData(errors.index(row, 0), true, ErrorListModel.SuppressedRole)
+            }
+            tryVerify(() => !badge.visible, 5000, "the badge hides once the warnings are suppressed")
+            compare(RootData.region.fixStationValidator.fixStationWarningMessages.length, 0)
+        }
+    }
+
+    ExternalCenterlineTestCase {
+        name: "DataMainPageAttachedFixStations"
+        when: windowShown
+
+        function init() {
+            RootData.project.newProject()
+            RootData.pageSelectionModel.currentPageAddress = "View"
+        }
+
+        function cleanup() {
+            RootData.pageSelectionModel.currentPageAddress = "View"
+            RootData.project.newProject()
+        }
+
+        // survex_blocks.svx fixes one station of its own, which the Data page
+        // counts as a fix of the project.
+        function test_theFixStationsLinkCountsAnAttachedFilesFix() {
+            makeSavedCaveAttach("data-page-attached-fixes",
+                                "external-centerlines/survex_blocks.svx")
+
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "dataMainPage",
+                      5000, "should land on dataMainPage")
+            const link = findChild(RootData.pageView.currentPageItem, "projectFixStationsLink")
+            verify(link !== null, "projectFixStationsLink must exist on dataMainPage")
+            tryCompare(link, "text", "1", 20000, "the scan lists the file's fix")
+
+            RootData.region.rootNode.fixStations.addFixStation()
+            tryCompare(link, "text", "2", 5000, "the root's own fix counts beside it")
+        }
     }
 }

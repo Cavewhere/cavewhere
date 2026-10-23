@@ -87,6 +87,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel, public cwUn
     Q_PROPERTY(cwAttachedFixModel* attachedFixes READ attachedFixes CONSTANT)
     Q_PROPERTY(QAbstractItemModel* fixStationTable READ fixStationTable CONSTANT)
     Q_PROPERTY(int fixStationCount READ fixStationCount NOTIFY fixStationCountChanged)
+    Q_PROPERTY(int subtreeFixStationCount READ subtreeFixStationCount NOTIFY subtreeFixStationCountChanged FINAL)
 
 public:
     enum Roles {
@@ -248,6 +249,11 @@ public:
     /// The number of rows fixStationTable() lists: the node's own fixes plus
     /// the ones its attached files carry.
     int fixStationCount() const { return m_fixStationTable->rowCount(); }
+
+    /// Every fix the Fix Stations tree lists at and below this node: this
+    /// node's fixStationCount(), its trips' attached fixes, and each child's
+    /// subtreeFixStationCount(). Derived, so it is never saved.
+    int subtreeFixStationCount() const { return m_subtreeFixStationCount; }
 
     /// Per-node grid-convergence readout (angle + state + display text).
     /// Recomputed via recomputeGridConvergence() in the region's local
@@ -508,6 +514,8 @@ signals:
     //! fixStationTable()'s row count changed.
     void fixStationCountChanged();
 
+    void subtreeFixStationCountChanged();
+
     //! The region's positions changed, so scopedPositions() may have. Relayed
     //! down from the region one hop per level, and from each node to its trips
     //! as cwTrip::solvedStationsChanged.
@@ -564,8 +572,13 @@ private:
     //! before the event loop turns.
     void scheduleGridConvergence();
 
+    //! Recomputes subtreeFixStationCount() from scratch, so it stays exact
+    //! through any sequence of inserts, resets and undos.
+    void updateSubtreeFixStationCount();
+
     QList<cwTrip*> m_trips;
     QList<cwSurveyNode*> m_childNodes;
+    int m_subtreeFixStationCount = 0;
     QString m_name;
 
     cwLength* m_length;

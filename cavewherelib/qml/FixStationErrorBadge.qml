@@ -9,11 +9,13 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-// A compact warning icon shown next to the "Fix stations:" line on NodePage when
-// a cave carries a fix-station error. Bound to the cave's errorModel but scoped
-// by errorTypeIds to just the fix-station warning kinds, so it stays distinct
-// from the page banner's all-warnings roll-up. Presentation-only: it reflects
-// state, the Fix Stations page is where the error is corrected.
+// A compact warning icon beside a "Fix stations:" line, shown while its messages
+// are non-empty. By default messages come from errorModel (a cave's, on
+// NodePage), scoped by errorTypeIds to just the fix-station warning kinds, so it
+// stays distinct from the page banner's all-warnings roll-up. A caller with a
+// list from elsewhere (the Data page's project-wide warnings) sets messages
+// instead. Presentation-only: it reflects state, the Fix Stations page is where
+// the error is corrected.
 QQ.Item {
     id: badgeId
 
@@ -26,7 +28,7 @@ QQ.Item {
     // warningMessagesChanged (fired on every add/remove/suppress/edit), making
     // the scoped query re-run live. It is load-bearing, not dead code: without
     // it the badge never clears on suppression.
-    readonly property list<string> messages: {
+    property list<string> messages: {
         if (!badgeId.errorModel) {
             return []
         }

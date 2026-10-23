@@ -250,7 +250,6 @@ private:
     static QList<cwTrip*> bareFixOwnerTrips(const cwSurveyNode* node);
     void emitTripRowChanged(const cwTrip* trip, const QList<int>& roles);
 
-    static int subtreeFixCount(const cwSurveyNode* node);
     static int subtreeBareFixCount(const cwSurveyNode* node);
     static int subtreeUnsetFixCount(const cwSurveyNode* node);
     static int attachmentBareFixCount(const cwSurveyNode* owner);
