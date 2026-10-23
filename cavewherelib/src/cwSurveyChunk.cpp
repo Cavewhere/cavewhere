@@ -2059,6 +2059,31 @@ void cwSurveyChunk::clearErrors()
     ErrorModel->errors()->clear();
 }
 
+void cwSurveyChunk::setWarningAccepted(int index, cwSurveyChunk::DataRole role, int errorTypeId, bool accepted)
+{
+    Q_UNUSED(index)
+    Q_UNUSED(role)
+    Q_UNUSED(errorTypeId)
+    Q_UNUSED(accepted)
+}
+
+int cwSurveyChunk::acceptWarnings(const QList<int>& ids)
+{
+    Q_UNUSED(ids)
+    return 0;
+}
+
+int cwSurveyChunk::clearAcceptedWarnings()
+{
+    return 0;
+}
+
+cwSurveyChunkCell cwSurveyChunk::cellIndexForErrorModel(cwErrorModel* errorModel) const
+{
+    Q_UNUSED(errorModel)
+    return {};
+}
+
 /**
   \brief Set's the chunk data based on a role
   */

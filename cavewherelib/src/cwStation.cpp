@@ -8,6 +8,7 @@
 //Our includes
 #include "cwStation.h"
 #include "cwStationValidator.h"
+#include "cwError.h"
 
 //Qt includes
 #include <QDebug>
@@ -112,3 +113,19 @@ bool cwStation::setName(QString name) {
     return false;
 }
 
+
+QSet<int> cwStation::acceptedWarnings() const
+{
+    return {};
+}
+
+void cwStation::setAcceptedWarnings(const QSet<int>& ids)
+{
+    Q_UNUSED(ids)
+}
+
+bool cwStation::isWarningAccepted(cwErrorTypeId id) const
+{
+    Q_UNUSED(id)
+    return false;
+}

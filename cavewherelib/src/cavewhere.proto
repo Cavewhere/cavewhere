@@ -112,6 +112,10 @@ message FixStation {
     // numbers are read back out of this under the axis order inputCS implies.
     // Kept verbatim even when it doesn't parse. Absent means no coordinate.
     optional string coordinate = 9;
+
+    // Held for the fix-station twin of StationShot.acceptedWarnings (#174
+    // follow-up); drop this line when that field lands.
+    reserved 12;
 }
 
 message ExternalCenterline {
@@ -267,6 +271,10 @@ message TripCalibration {
     // Missing field on load → forced false, so legacy stored declination stays
     // the manual value rather than being silently overwritten by auto-IGRF.
     optional bool auto_declination = 15;
+    // Which optional columns this trip records. Absent means true, so files
+    // written before 2026.5 keep every column (#174)
+    optional bool lruds = 16;
+    optional bool splays = 17;
 }
 
 // ChunkCalibration message removed: per-shot calibration overrides were unused
@@ -323,6 +331,8 @@ message StationShot {
 
     //Shared data
     optional string id = 1;
+    // cwErrorTypeId values the user accepted on this station or shot (#174)
+    repeated int32 acceptedWarnings = 2;
 
     //Station data
     optional string name = 100;

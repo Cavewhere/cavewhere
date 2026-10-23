@@ -29,6 +29,8 @@
 #include "ProjectFilenameTestHelper.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
+#include "cwErrorModel.h"
+#include "cwTripCalibration.h"
 #include "cwFutureManagerModel.h"
 #include "cwCavingRegion.h"
 #include "cwScrap.h"
@@ -3835,4 +3837,181 @@ TEST_CASE("validatePathSafeForRecursiveRemoval guards", "[cwSaveLoad][validatePa
         CHECK_FALSE(r.hasError());
         CHECK(r.errorMessage().isEmpty());
     }
+}
+
+namespace {
+
+int acceptedId(cwErrorTypeId id)
+{
+    return static_cast<int>(id);
+}
+
+//! A1 to A2 with every LRUD box empty, so each station carries four missing-LRUD warnings
+cwSurveyChunk* addAcceptedWarningsChunk(cwTrip* trip)
+{
+    auto chunk = new cwSurveyChunk();
+    chunk->appendShot(cwStation(QStringLiteral("A1")),
+                      cwStation(QStringLiteral("A2")),
+                      cwShot(QStringLiteral("10"),
+                             QStringLiteral("10"),
+                             QStringLiteral("190"),
+                             QStringLiteral("0"),
+                             QStringLiteral("0")));
+    trip->addChunk(chunk);
+    return chunk;
+}
+
+QByteArray readFileBytes(const QString& filename)
+{
+    QFile file(filename);
+    REQUIRE(file.open(QIODevice::ReadOnly));
+    return file.readAll();
+}
+
+template<typename ProtoT>
+void writeProtoToJsonFile(const QString& filename, const ProtoT& proto)
+{
+    std::string output;
+    google::protobuf::util::JsonPrintOptions options;
+    options.add_whitespace = true;
+    REQUIRE(google::protobuf::util::MessageToJsonString(proto, &output, options).ok());
+
+    QFile file(filename);
+    REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(file.write(output.data(), static_cast<qint64>(output.size())) == static_cast<qint64>(output.size()));
+}
+
+}
+
+TEST_CASE("Accepted warnings survive a save and reload", "[cwSaveLoad][acceptedWarnings]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    auto chunk = addAcceptedWarningsChunk(trip);
+
+    chunk->setWarningAccepted(0, cwSurveyChunk::StationLeftRole, acceptedId(cwErrorTypeId::SurveyMissingLeft), true);
+    chunk->setWarningAccepted(1, cwSurveyChunk::StationUpRole, acceptedId(cwErrorTypeId::SurveyMissingUp), true);
+    const int warningCount = trip->errorModel()->warningCount();
+    CHECK(trip->calibrations()->hasLruds());
+
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(project->filename());
+    reloaded->waitLoadToFinish();
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    cwTrip* const loadedTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+    REQUIRE(loadedTrip != nullptr);
+    REQUIRE(loadedTrip->chunkCount() == 1);
+    cwSurveyChunk* const loadedChunk = loadedTrip->chunk(0);
+
+    CHECK(loadedChunk->station(0).acceptedWarnings() == QSet<int>({acceptedId(cwErrorTypeId::SurveyMissingLeft)}));
+    CHECK(loadedChunk->station(1).acceptedWarnings() == QSet<int>({acceptedId(cwErrorTypeId::SurveyMissingUp)}));
+
+    const cwErrorModel* left = loadedChunk->errorsAt(0, cwSurveyChunk::StationLeftRole);
+    REQUIRE(left != nullptr);
+    CHECK(left->errors()->first().suppressed());
+    const cwErrorModel* up = loadedChunk->errorsAt(1, cwSurveyChunk::StationUpRole);
+    REQUIRE(up != nullptr);
+    CHECK(up->errors()->first().suppressed());
+
+    CHECK(loadedTrip->errorModel()->warningCount() == warningCount);
+    CHECK(loadedTrip->errorModel()->suppressedWarningCount() == 2);
+    CHECK(loadedTrip->calibrations()->hasLruds());
+}
+
+TEST_CASE("Accepting a warning marks the project modified and saves the trip", "[cwSaveLoad][acceptedWarnings]") {
+    auto root = std::make_unique<cwRootData>();
+    root->account()->setName(QStringLiteral("Test User"));
+    root->account()->setEmail(QStringLiteral("test@example.com"));
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    auto chunk = addAcceptedWarningsChunk(trip);
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    REQUIRE(project->saveAs(saveDir.filePath(QStringLiteral("accepted-warnings-%1.cwproj")
+                                                 .arg(QCoreApplication::applicationPid()))));
+    project->waitSaveToFinish();
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    REQUIRE_FALSE(project->modified());
+
+    const QString tripFile = ProjectFilenameTestHelper::absolutePath(trip);
+    const QByteArray before = readFileBytes(tripFile);
+
+    chunk->setWarningAccepted(0, cwSurveyChunk::StationLeftRole, acceptedId(cwErrorTypeId::SurveyMissingLeft), true);
+    project->waitSaveToFinish();
+
+    CHECK(project->modified());
+    const QByteArray after = readFileBytes(tripFile);
+    CHECK(before != after);
+
+    const auto tripProto = loadProtoFromJsonFile<CavewhereProto::Trip>(tripFile);
+    REQUIRE(tripProto.chunks_size() == 1);
+    REQUIRE(tripProto.chunks(0).leg_size() >= 1);
+    const auto& firstLeg = tripProto.chunks(0).leg(0);
+    REQUIRE(firstLeg.acceptedwarnings_size() == 1);
+    CHECK(firstLeg.acceptedwarnings(0) == acceptedId(cwErrorTypeId::SurveyMissingLeft));
+}
+
+TEST_CASE("A trip written before accepted warnings existed loads with none accepted", "[cwSaveLoad][acceptedWarnings]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    addAcceptedWarningsChunk(trip);
+
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    //Strip the #174 fields, which leaves the trip as 2026.4 wrote it
+    const QString tripFile = ProjectFilenameTestHelper::absolutePath(trip);
+    auto tripProto = loadProtoFromJsonFile<CavewhereProto::Trip>(tripFile);
+    for (auto& protoChunk : *tripProto.mutable_chunks()) {
+        for (auto& leg : *protoChunk.mutable_leg()) {
+            leg.clear_acceptedwarnings();
+        }
+    }
+    tripProto.mutable_tripcalibration()->clear_lruds();
+    tripProto.mutable_tripcalibration()->clear_splays();
+    writeProtoToJsonFile(tripFile, tripProto);
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(project->filename());
+    reloaded->waitLoadToFinish();
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    cwTrip* const loadedTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+    REQUIRE(loadedTrip != nullptr);
+    REQUIRE(loadedTrip->chunkCount() == 1);
+    cwSurveyChunk* const loadedChunk = loadedTrip->chunk(0);
+
+    for (int i = 0; i < loadedChunk->stationCount(); ++i) {
+        CHECK(loadedChunk->station(i).acceptedWarnings().isEmpty());
+    }
+    for (int i = 0; i < loadedChunk->shotCount(); ++i) {
+        CHECK(loadedChunk->shot(i).acceptedWarnings().isEmpty());
+    }
+    CHECK(loadedTrip->calibrations()->hasLruds());
+    CHECK(loadedTrip->calibrations()->hasSplays());
+    CHECK(loadedTrip->errorModel()->warningCount() == 8);
 }

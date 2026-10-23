@@ -60,6 +60,11 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
 
+    // Whether any station in the trip holds LRUD text / any splay. They drive
+    // the Settings section's column checkboxes (#174)
+    Q_PROPERTY(bool hasLrudData READ hasLrudData NOTIFY hasLrudDataChanged)
+    Q_PROPERTY(bool hasSplayData READ hasSplayData NOTIFY hasSplayDataChanged)
+
 public:
     explicit cwTrip(QObject *parent = 0);
 
@@ -128,6 +133,21 @@ public:
     cwTripData data() const;
     void setData(const cwTripData& data);
 
+    // Accepts the trip's survey-chunk warnings whose ids are in errorTypeIds
+    // (empty = all kinds). Returns how many were newly accepted.
+    Q_INVOKABLE int acceptAllWarnings(const QList<int>& errorTypeIds = {});
+
+    // Drops acceptances, every one or only those whose ids are in errorTypeIds.
+    // Returns how many were cleared.
+    Q_INVOKABLE int clearAcceptedWarnings();
+    Q_INVOKABLE int clearAcceptedWarnings(const QList<int>& errorTypeIds);
+
+    // Current unsuppressed warning count for one kind across the trip's chunks
+    Q_INVOKABLE int warningCountForTypeId(int errorTypeId) const;
+
+    bool hasLrudData() const;
+    bool hasSplayData() const;
+
 signals:
     void nameChanged();
     void dateChanged(QDateTime date);
@@ -140,6 +160,8 @@ signals:
     void numberOfChunksChanged();
     void parentCaveChanged();
     void externalCenterlineChanged();
+    void hasLrudDataChanged();
+    void hasSplayDataChanged();
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);

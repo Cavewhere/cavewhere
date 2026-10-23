@@ -1,0 +1,172 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+//Catch includes
+#include <catch2/catch_test_macros.hpp>
+
+//Our includes
+#include "BoulderFixtureHelper.h"
+#include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorModel.h"
+#include "cwShot.h"
+#include "cwStation.h"
+#include "cwSurveyChunk.h"
+#include "cwTrip.h"
+#include "cwTripCalibration.h"
+
+//Test includes
+#include "SplayFixtureHelper.h"
+
+//Qt includes
+#include <QCoreApplication>
+#include <QSignalSpy>
+
+namespace {
+
+int toInt(cwErrorTypeId id)
+{
+    return static_cast<int>(id);
+}
+
+//! A1 to A2 with every LRUD box empty: eight missing-LRUD warnings, two of them Left
+cwSurveyChunk* addLrudOnlyWarningChunk(cwTrip* trip, const QString& prefix)
+{
+    auto chunk = new cwSurveyChunk();
+    chunk->appendShot(cwStation(prefix + QStringLiteral("1")),
+                      cwStation(prefix + QStringLiteral("2")),
+                      cwShot(QStringLiteral("10"),
+                             QStringLiteral("10"),
+                             QStringLiteral("190"),
+                             QStringLiteral("0"),
+                             QStringLiteral("0")));
+    trip->addChunk(chunk);
+    return chunk;
+}
+
+//! Lets the trip's queued recompute of hasLrudData/hasSplayData run
+void runQueuedCalls()
+{
+    QCoreApplication::sendPostedEvents();
+    QCoreApplication::processEvents();
+}
+
+}
+
+TEST_CASE("acceptAllWarnings accepts every chunk warning and leaves the declination warning", "[cwTrip][acceptedWarnings]")
+{
+    auto fixture = buildBoulderFixture();
+    cwTrip* trip = fixture.trip;
+    addLrudOnlyWarningChunk(trip, QStringLiteral("A"));
+    addLrudOnlyWarningChunk(trip, QStringLiteral("B"));
+
+    const double autoValue = fixture.calibration->declination();
+    fixture.calibration->setAutoDeclination(false);
+    fixture.calibration->setDeclinationManual(autoValue + 3.0);
+    REQUIRE_FALSE(fixture.calibration->declinationWarning().isEmpty());
+
+    constexpr int kChunkWarnings = 8;
+    constexpr int kDeclinationWarnings = 1;
+    REQUIRE(trip->errorModel()->warningCount() == 2 * kChunkWarnings + kDeclinationWarnings);
+
+    CHECK(trip->acceptAllWarnings() == 2 * kChunkWarnings);
+    CHECK(trip->errorModel()->warningCount() == kDeclinationWarnings);
+    CHECK(trip->errorModel()->suppressedWarningCount() == 2 * kChunkWarnings);
+}
+
+TEST_CASE("warningCountForTypeId counts one kind across chunks", "[cwTrip][acceptedWarnings]")
+{
+    cwTrip trip;
+    cwSurveyChunk* first = addLrudOnlyWarningChunk(&trip, QStringLiteral("A"));
+    addLrudOnlyWarningChunk(&trip, QStringLiteral("B"));
+
+    const int left = toInt(cwErrorTypeId::SurveyMissingLeft);
+    CHECK(trip.warningCountForTypeId(left) == 4);
+    CHECK(trip.warningCountForTypeId(toInt(cwErrorTypeId::SurveyCompassDisagreement)) == 0);
+
+    first->setWarningAccepted(0, cwSurveyChunk::StationLeftRole, left, true);
+    CHECK(trip.warningCountForTypeId(left) == 3);
+
+    CHECK(trip.acceptAllWarnings({left}) == 3);
+    CHECK(trip.warningCountForTypeId(left) == 0);
+    CHECK(trip.warningCountForTypeId(toInt(cwErrorTypeId::SurveyMissingRight)) == 4);
+}
+
+TEST_CASE("clearAcceptedWarnings restores every count", "[cwTrip][acceptedWarnings]")
+{
+    cwTrip trip;
+    addLrudOnlyWarningChunk(&trip, QStringLiteral("A"));
+    addLrudOnlyWarningChunk(&trip, QStringLiteral("B"));
+
+    const int warningsBefore = trip.errorModel()->warningCount();
+    REQUIRE(warningsBefore == 16);
+
+    CHECK(trip.acceptAllWarnings() == warningsBefore);
+    CHECK(trip.errorModel()->warningCount() == 0);
+
+    SECTION("All of them") {
+        CHECK(trip.clearAcceptedWarnings() == warningsBefore);
+        CHECK(trip.errorModel()->warningCount() == warningsBefore);
+        CHECK(trip.errorModel()->suppressedWarningCount() == 0);
+        CHECK(trip.warningCountForTypeId(toInt(cwErrorTypeId::SurveyMissingLeft)) == 4);
+    }
+
+    SECTION("Only the named kinds") {
+        const QList<int> leftAndRight {toInt(cwErrorTypeId::SurveyMissingLeft),
+                                       toInt(cwErrorTypeId::SurveyMissingRight)};
+        CHECK(trip.clearAcceptedWarnings(leftAndRight) == 8);
+        CHECK(trip.errorModel()->warningCount() == 8);
+        CHECK(trip.errorModel()->suppressedWarningCount() == 8);
+    }
+}
+
+TEST_CASE("hasLrudData and hasSplayData follow the trip's data", "[cwTrip][acceptedWarnings]")
+{
+    cwTrip trip;
+    cwSurveyChunk* chunk = addLrudOnlyWarningChunk(&trip, QStringLiteral("A"));
+    runQueuedCalls();
+
+    QSignalSpy lrudSpy(&trip, &cwTrip::hasLrudDataChanged);
+    QSignalSpy splaySpy(&trip, &cwTrip::hasSplayDataChanged);
+
+    CHECK_FALSE(trip.hasLrudData());
+    CHECK_FALSE(trip.hasSplayData());
+
+    SECTION("LRUD text") {
+        chunk->setData(cwSurveyChunk::StationLeftRole, 0, QStringLiteral("1.5"));
+        runQueuedCalls();
+        CHECK(trip.hasLrudData());
+        CHECK(lrudSpy.size() == 1);
+
+        chunk->setData(cwSurveyChunk::StationLeftRole, 0, QString());
+        runQueuedCalls();
+        CHECK_FALSE(trip.hasLrudData());
+        CHECK(lrudSpy.size() == 2);
+    }
+
+    SECTION("Two LRUDs typed in one turn emit once") {
+        chunk->setData(cwSurveyChunk::StationLeftRole, 0, QStringLiteral("1.5"));
+        chunk->setData(cwSurveyChunk::StationRightRole, 1, QStringLiteral("2.5"));
+        runQueuedCalls();
+        CHECK(trip.hasLrudData());
+        CHECK(lrudSpy.size() == 1);
+    }
+
+    SECTION("Splays") {
+        chunk->appendStationSplay(1, makeSplay(QStringLiteral("5.88"),
+                                               QStringLiteral("124.1"),
+                                               QStringLiteral("4.6")));
+        runQueuedCalls();
+        CHECK(trip.hasSplayData());
+        CHECK(splaySpy.size() == 1);
+
+        chunk->clearStationSplays(1);
+        runQueuedCalls();
+        CHECK_FALSE(trip.hasSplayData());
+        CHECK(splaySpy.size() == 2);
+    }
+}

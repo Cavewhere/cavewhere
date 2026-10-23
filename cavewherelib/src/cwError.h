@@ -31,6 +31,19 @@ enum class cwErrorTypeId : int {
     FixStationOutlier = 596,   //!< issue #596: a fix far from the survey cluster
     FixStationDomain = 597,    //!< issue #596: a fix outside its CS's valid domain
     FixStationReference = 598, //!< issue #596: a fix names a station not in the survey
+
+    // issue #174: survey-editor warnings, one id per (kind x cell) so a
+    // station's or shot's accepted set can name exactly one box
+    SurveyMissingLeft = 1740,
+    SurveyMissingRight = 1741,
+    SurveyMissingUp = 1742,
+    SurveyMissingDown = 1743,
+    SurveyMissingCompass = 1744,      //!< LRUD-only zero-length shot
+    SurveyMissingBackCompass = 1745,
+    SurveyMissingClino = 1746,        //!< LRUD-only zero-length shot
+    SurveyMissingBackClino = 1747,
+    SurveyCompassDisagreement = 1748, //!< on the frontsight compass cell
+    SurveyClinoDisagreement = 1749,   //!< on the frontsight clino cell
 };
 
 /**

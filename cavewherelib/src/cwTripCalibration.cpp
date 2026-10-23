@@ -155,6 +155,16 @@ void cwTripCalibration::setBackSights(bool value)
     }
 }
 
+void cwTripCalibration::setLruds(bool value)
+{
+    Q_UNUSED(value)
+}
+
+void cwTripCalibration::setSplays(bool value)
+{
+    Q_UNUSED(value)
+}
+
 QStringList cwTripCalibration::supportedUnits() const
 {
     QStringList list;
@@ -389,4 +399,30 @@ int cwTripCalibration::mapToSupportUnit(int lengthUnit)
     default:
         return -1;
     }
+}
+
+bool cwTripCalibrationData::hasLruds() const
+{
+    return false;
+}
+
+void cwTripCalibrationData::setLruds(bool value)
+{
+    Q_UNUSED(value)
+}
+
+bool cwTripCalibrationData::hasSplays() const
+{
+    return false;
+}
+
+void cwTripCalibrationData::setSplays(bool value)
+{
+    Q_UNUSED(value)
+}
+
+bool cwTripCalibrationData::operator==(const cwTripCalibrationData& other) const
+{
+    Q_UNUSED(other)
+    return true;
 }

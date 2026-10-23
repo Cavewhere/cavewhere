@@ -11,11 +11,13 @@
 //Qt includes
 #include <QSharedDataPointer>
 #include <QUuid>
+#include <QSet>
 
 //Our includes
 #include "cwGlobals.h"
 #include "cwDistanceReading.h"
 #include "cwShotMeasurement.h"
+enum class cwErrorTypeId : int;
 
 class CAVEWHERE_LIB_EXPORT cwStation {
 
@@ -57,6 +59,11 @@ public:
     void addSplay(const cwShotMeasurement& splay) { Data->m_splays.append(splay); }
     const cwShotMeasurement& splayAt(int index) const { return Data->m_splays.at(index); }
     int splayCount() const { return Data->m_splays.size(); }
+
+    // cwErrorTypeId values the user accepted on this station's cells (#174)
+    QSet<int> acceptedWarnings() const;
+    void setAcceptedWarnings(const QSet<int>& ids);
+    bool isWarningAccepted(cwErrorTypeId id) const;
 
     void setData(QVariant data, DataRoles role);
     QVariant data(DataRoles role) const;

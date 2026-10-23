@@ -173,6 +173,11 @@ int cwErrorModel::warningCount() const {
     return WarningCount;
 }
 
+int cwErrorModel::suppressedWarningCount() const
+{
+    return 0;
+}
+
 /**
 * @brief cwErrorListModel::errors
 * @return

@@ -621,3 +621,36 @@ QList<cwStation> cwTrip::stations() const {
     }
     return stations;
 }
+
+int cwTrip::acceptAllWarnings(const QList<int>& errorTypeIds)
+{
+    Q_UNUSED(errorTypeIds)
+    return 0;
+}
+
+int cwTrip::clearAcceptedWarnings()
+{
+    return 0;
+}
+
+int cwTrip::clearAcceptedWarnings(const QList<int>& errorTypeIds)
+{
+    Q_UNUSED(errorTypeIds)
+    return 0;
+}
+
+int cwTrip::warningCountForTypeId(int errorTypeId) const
+{
+    Q_UNUSED(errorTypeId)
+    return 0;
+}
+
+bool cwTrip::hasLrudData() const
+{
+    return false;
+}
+
+bool cwTrip::hasSplayData() const
+{
+    return false;
+}

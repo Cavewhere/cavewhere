@@ -13,12 +13,14 @@
 #include <QList>
 #include <QString>
 #include <QUuid>
+#include <QSet>
 
 #include "cwGlobals.h"
 #include "cwShotMeasurement.h"
 #include "cwDistanceReading.h"
 #include "cwCompassReading.h"
 #include "cwClinoReading.h"
+enum class cwErrorTypeId : int;
 
 class CAVEWHERE_LIB_EXPORT cwShot {
 public:
@@ -67,6 +69,11 @@ public:
     // Include/exclude in distance sums
     bool isDistanceIncluded() const;
     void setDistanceIncluded(bool include);
+
+    // cwErrorTypeId values the user accepted on this shot's cells (#174)
+    QSet<int> acceptedWarnings() const;
+    void setAcceptedWarnings(const QSet<int>& ids);
+    bool isWarningAccepted(cwErrorTypeId id) const;
 
     // Validity check (delegates to first measurement)
     bool isValid() const;

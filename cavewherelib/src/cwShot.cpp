@@ -133,3 +133,19 @@ bool cwShot::isValid() const {
     return measurementCount() > 0
            && measurements[0].distance.state() == cwDistanceReading::State::Valid;
 }
+
+QSet<int> cwShot::acceptedWarnings() const
+{
+    return {};
+}
+
+void cwShot::setAcceptedWarnings(const QSet<int>& ids)
+{
+    Q_UNUSED(ids)
+}
+
+bool cwShot::isWarningAccepted(cwErrorTypeId id) const
+{
+    Q_UNUSED(id)
+    return false;
+}
