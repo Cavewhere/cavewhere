@@ -261,10 +261,11 @@ cwLinePlotManager::~cwLinePlotManager() {
     //(cwLinePlotTask::Input) and polls for cancel between its phases, so nothing
     //it touches dies with this manager. The result continuation is bound with
     //context(this), so it is dropped here rather than delivered to a
-    //half-destroyed manager. This line finishes the outer future; the cancel the
-    //worker itself sees comes from ~Restarter, which cancels the inner future
-    //synchronously as m_restarter is destroyed.
+    //half-destroyed manager. The first line finishes the outer future; the
+    //second is the cancel the worker itself sees, since the drain's own cancel
+    //forwarding is bound to this manager too.
     m_restarter.future().cancel();
+    m_solveWorker.cancel();
 
     // m_keywordRegistry's destructor tears down the keyword items
     // synchronously.
@@ -275,6 +276,8 @@ cwLinePlotManager::~cwLinePlotManager() {
   */
 void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     Region = region;
+    m_pendingLabels.clear();
+    m_pendingLiveLabels.clear();
 
     // Clear any cached cavern output / solve error from a previous region —
     // CavernOutputPage should start blank for the new project (D-2). Empty
@@ -298,6 +301,8 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     // and a node added anywhere brings fix stations to hook.
     connect(Region->rootNode(), &cwSurveyNode::subtreeChanged,
             this, &cwLinePlotManager::handleSubtreeChanged);
+    connect(Region, &cwCavingRegion::memberViewsChanged,
+            this, &cwLinePlotManager::handleMemberViewsChanged);
 
     // The local projection is what *cs out names, and cavern reports the solved
     // stations in it — so the scene's coordinates are only meaningful in the
@@ -722,39 +727,127 @@ void cwLinePlotManager::startSolveAfterScan()
         const auto externalInputs = m_externalCenterlineManager->solveInputs();
         publishAttachedFixWarnings(externalInputs);
         auto input = cwLinePlotTask::buildInput(Region.data(), externalInputs);
-        auto future = cwLinePlotTask::run(std::move(input));
+        m_memberViewsMovedSinceSnapshot = false;
+        auto worker = cwLinePlotTask::run(std::move(input));
+        m_solveWorker = worker;
 
-        // Receive the worker's result by parameter rather than capturing
-        // the future and calling future.result() — the parameter form
-        // lets AsyncFuture deliver the value directly, no captured-future
-        // ping-pong. publishResults updates CavernOutputPage state
-        // (log/stats/error + per-chunk markers) on every path; updateLinePlot
-        // only runs on the success path so an error doesn't wipe the last
-        // good line plot. Station positions and cave length/depth therefore
-        // keep their last good values while a solve error stands — the
-        // long-standing contract for native trips, which external owners
-        // share.
-        AsyncFuture::observe(future)
-            .context(this, [this](cwLinePlotTask::LinePlotResultData result) {
-                publishResults(result);
-                if (result.hasSolveError()) {
-                    const auto& error = result.solveError();
-                    qWarning() << "Line plot solve failed at step"
-                               << solveErrorStepName(error.step)
-                               << "exit code" << error.exitCode << ":" << error.message;
-                } else {
-                    m_externalCenterlineManager->markSolved(QDateTime::currentDateTime());
-                    updateLinePlot(std::move(result));
-                }
-                // An edit during this solve scheduled the next one, which
-                // ends the run instead.
-                if (!m_solveScheduled) {
-                    finishSolving();
-                }
-            });
+        // The restarter tracks the drain, not the worker, so the job lasts
+        // until the labels are installed. A restart cancels the drain, and the
+        // worker has to hear that to stop cavern early. The drain completes
+        // without a value; the result travels through installSolve().
+        AsyncFuture::Deferred<cwLinePlotTask::LinePlotResultData> drain;
+        AsyncFuture::observe(drain.future())
+            .context(this, []() {}, [worker]() mutable { worker.cancel(); });
+        AsyncFuture::observe(worker)
+            .context(this,
+                     [this, drain](cwLinePlotTask::LinePlotResultData result) {
+                         installSolve(drain, std::move(result));
+                     },
+                     [drain]() mutable { drain.cancel(); });
 
-        return future;
+        return drain.future();
     });
+}
+
+void cwLinePlotManager::installSolve(AsyncFuture::Deferred<cwLinePlotTask::LinePlotResultData> drain,
+                                     cwLinePlotTask::LinePlotResultData result)
+{
+    if (drain.future().isCanceled()) {
+        return;
+    }
+
+    // publishResults updates CavernOutputPage state (log/stats/error +
+    // per-chunk markers) on every path; updateLinePlot only runs on the
+    // success path so an error doesn't wipe the last good line plot. Station
+    // positions and cave length/depth therefore keep their last good values
+    // while a solve error stands — the long-standing contract for native
+    // trips, which external owners share.
+    publishResults(result);
+    if (result.hasSolveError()) {
+        const auto& error = result.solveError();
+        qWarning() << "Line plot solve failed at step"
+                   << solveErrorStepName(error.step)
+                   << "exit code" << error.exitCode << ":" << error.message;
+    } else {
+        m_externalCenterlineManager->markSolved(QDateTime::currentDateTime());
+        updateLinePlot(std::move(result));
+    }
+
+    m_labelDrain = drain;
+    const qsizetype pending = m_pendingLabels.size() + m_pendingLiveLabels.size();
+    const int batches = static_cast<int>((pending + kLabelBatchSize - 1) / kLabelBatchSize);
+    m_labelDrain.setProgressRange(0, batches);
+    if (batches == 0) {
+        completeLabelDrain();
+    } else {
+        queueLabelBatch();
+    }
+}
+
+void cwLinePlotManager::queueLabelBatch()
+{
+    if (m_labelDrainPending) {
+        return;
+    }
+    m_labelDrainPending = true;
+    QMetaObject::invokeMethod(this, &cwLinePlotManager::drainLabelBatch, Qt::QueuedConnection);
+}
+
+void cwLinePlotManager::drainLabelBatch()
+{
+    m_labelDrainPending = false;
+
+    // A restart canceled this solve, and its successor takes the pending
+    // labels; or a solve with nothing to drain already finished the job.
+    if (m_labelDrain.future().isCanceled() || m_labelDrain.future().isFinished()) {
+        return;
+    }
+
+    if (Region.isNull() || (m_pendingLabels.isEmpty() && m_pendingLiveLabels.isEmpty())) {
+        completeLabelDrain();
+        return;
+    }
+
+    cwCavingRegion::TripSolvedStations batch;
+    batch.reserve(kLabelBatchSize);
+    for (auto it = m_pendingLabels.begin();
+         it != m_pendingLabels.end() && batch.size() < kLabelBatchSize;
+         it = m_pendingLabels.erase(it)) {
+        batch.insert(it.key(), std::move(it.value()));
+    }
+    while (batch.size() < kLabelBatchSize && !m_pendingLiveLabels.isEmpty()) {
+        const QPointer<cwTrip> trip = m_pendingLiveLabels.takeLast();
+        if (trip) {
+            batch.insert(trip->id(), trip->solvedStations());
+        }
+    }
+
+    const bool isLastBatch = m_pendingLabels.isEmpty() && m_pendingLiveLabels.isEmpty();
+    Region->publishSolvedStations(batch, isLastBatch);
+    m_labelDrain.setProgressValue(m_labelDrain.future().progressValue() + 1);
+
+    if (isLastBatch) {
+        completeLabelDrain();
+    } else {
+        queueLabelBatch();
+    }
+}
+
+void cwLinePlotManager::completeLabelDrain()
+{
+    m_labelDrain.complete();
+    // An edit during this solve scheduled the next one, which ends the run
+    // instead.
+    if (!m_solveScheduled) {
+        finishSolving();
+    }
+}
+
+void cwLinePlotManager::handleMemberViewsChanged()
+{
+    m_memberViewsMovedSinceSnapshot = true;
+    m_pendingLabels.clear();
+    m_pendingLiveLabels.clear();
 }
 
 void cwLinePlotManager::finishSolving() {
@@ -1076,7 +1169,20 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     //One lookup and one network for the whole region; every node reads its
     //own scoped view of them.
     if(results.hasRegionStationPositionsChanged()) {
-        Region->setStationPositions(results.regionStationPositions());
+        if(m_memberViewsMovedSinceSnapshot) {
+            // The worker's views and labels came from member sets that have
+            // since moved: install the positions alone, so every view
+            // recomputes from the live member sets, and read each trip's
+            // labels from the live tree as its batch drains.
+            Region->setStationPositions(results.regionStationPositions());
+            m_pendingLabels.clear();
+            const QList<cwTrip*> trips = Region->rootNode()->allTrips();
+            m_pendingLiveLabels = QList<QPointer<cwTrip>>(trips.cbegin(), trips.cend());
+        } else {
+            Region->setStationPositions(results.regionStationPositions(), results.NodePositions);
+            m_pendingLabels = std::move(results.TripSolvedStations);
+            m_pendingLiveLabels.clear();
+        }
     }
     if(results.hasRegionNetworkChanged()) {
         Region->setNetwork(results.regionNetwork());

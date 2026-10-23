@@ -70,6 +70,9 @@ public:
     explicit cwLinePlotManager(QObject *parent = 0);
     ~cwLinePlotManager();
 
+    // The most trips whose station labels one event-loop turn installs after a solve.
+    static constexpr int kLabelBatchSize = 64;
+
     bool hasSolveError() const { return m_lastSolveError.has_value(); }
     QString solveErrorMessage() const { return m_lastSolveError ? m_lastSolveError->message : QString(); }
 
@@ -208,6 +211,29 @@ private:
     // True while a connectNodeInputs() pass is queued for this event-loop turn.
     bool m_connectNodeInputsPending = false;
 
+    // The worker of the latest solve, canceled directly on teardown so cavern
+    // stops at its next phase without waiting for an event-loop turn.
+    QFuture<cwLinePlotTask::LinePlotResultData> m_solveWorker;
+
+    // The future the restarter tracks for the latest solve, and so the "Line
+    // plot" job: it finishes after the solve's last label batch, with one
+    // progress step per batch.
+    AsyncFuture::Deferred<cwLinePlotTask::LinePlotResultData> m_labelDrain;
+
+    // Trip stations still to hand to the region, by trip id, and trips whose
+    // stations are read live as they drain, after a solve whose member views
+    // went stale. A canceled drain leaves both for the next solve, which
+    // replaces them only when it moved stations itself.
+    QHash<QUuid, QList<QPair<QString, QVector3D>>> m_pendingLabels;
+    QList<QPointer<cwTrip>> m_pendingLiveLabels;
+
+    // True while a drainLabelBatch() is queued for this event-loop turn.
+    bool m_labelDrainPending = false;
+
+    // True once the region's member views moved after the in-flight solve
+    // took its snapshot, so the views and labels it computed are stale.
+    bool m_memberViewsMovedSinceSnapshot = false;
+
     //! Starts the solve once the external scan in flight, if any, has applied.
     void scheduleSolve();
     void startSolveAfterScan();
@@ -217,6 +243,25 @@ private:
     // aggregate. Finishing the run's future is what releases anyone waiting on
     // the solve, so every completion path has to reach here.
     void finishSolving();
+
+    //! Publishes a finished worker result and starts installing its labels
+    //! under \a drain, unless a restart already canceled \a drain.
+    void installSolve(AsyncFuture::Deferred<cwLinePlotTask::LinePlotResultData> drain,
+                      cwLinePlotTask::LinePlotResultData result);
+
+    void queueLabelBatch();
+
+    //! Hands the region up to kLabelBatchSize trips' stations, advancing the
+    //! job's progress, and queues the next batch or finishes the job.
+    void drainLabelBatch();
+
+    //! Finishes the current solve's job, and the run unless an edit during it
+    //! scheduled the next solve.
+    void completeLabelDrain();
+
+    //! Member sets moved without a solve: the label view relabels every trip
+    //! from the live views, so the pending batches are dropped.
+    void handleMemberViewsChanged();
 
     void rerunIfStale(cwCavingRegion* region);
     void connectFixStations(cwSurveyNode* node);

@@ -206,6 +206,13 @@ public:
         cwStationPositionLookup RegionStationPositions;
         bool RegionStationPositionsChanged = false;
 
+        // Filled only when RegionStationPositions is: each node's
+        // cwSurveyNode::scopedPositions() keyed by node id (the root left
+        // out), and each trip's cwTrip::solvedStations() keyed by trip id, so
+        // the manager installs both without walking the tree.
+        QHash<QUuid, cwStationPositionLookup> NodePositions;
+        QHash<QUuid, QList<QPair<QString, QVector3D>>> TripSolvedStations;
+
         void setSolveError(SolveError error) { LastSolveError = std::move(error); }
         bool hasSolveError() const { return LastSolveError.has_value(); }
         const SolveError& solveError() const { return *LastSolveError; }

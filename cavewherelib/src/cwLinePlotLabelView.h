@@ -12,6 +12,9 @@
 #include <QHash>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QUuid>
+#include <QPair>
+#include <QVector3D>
 
 //Our includes
 #include "cwLabel3dView.h"
@@ -54,6 +57,9 @@ private:
     // hides its station labels. The keyword item itself is owned by the registry,
     // registered only while the trip has labels (0<->1).
     QHash<cwTrip*, cwLabel3dGroup*> m_groups;
+
+    // The trips in m_groups by cwTrip::id(), which is how a solve names them.
+    QHash<QUuid, cwTrip*> m_tripsById;
     cwKeywordItemRegistry<cwTrip*> m_keywordRegistry;
 
     void connectNode(const cwSurveyNode* node);
@@ -66,6 +72,7 @@ private:
     void removeTrip(cwTrip* trip);
 
     QList<cwLabel3dItem> labels(cwTrip* trip) const;
+    static QList<cwLabel3dItem> labels(const QList<QPair<QString, QVector3D>>& stations);
 
     void updateKeywordItems(const QList<cwTrip*>& trips);
 
@@ -77,6 +84,9 @@ private slots:
     void tripsInserted(int begin, int end);
     void tripsRemoved(int begin, int end);
     void updateStations();
+    // The batch is a cwCavingRegion::TripSolvedStations.
+    void installSolvedStations(const QHash<QUuid, QList<QPair<QString, QVector3D>>>& batch,
+                               bool isLastBatch);
 
 };
 

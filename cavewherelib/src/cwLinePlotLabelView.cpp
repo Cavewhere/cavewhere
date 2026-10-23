@@ -43,9 +43,10 @@ void cwLinePlotLabelView::setRegion(cwCavingRegion* region) {
         clear();
 
         if(Region != nullptr) {
-            // The region's pulse reaches every node; listening to it once
-            // rebuilds every trip's labels in one pass.
-            connect(Region, &cwCavingRegion::positionsChanged, this, &cwLinePlotLabelView::updateStations);
+            // A solve hands its labels over in batches after the positions;
+            // member views that move without a solve rebuild every trip at once.
+            connect(Region, &cwCavingRegion::solvedStationsPublished,
+                    this, &cwLinePlotLabelView::installSolvedStations);
             connect(Region, &cwCavingRegion::memberViewsChanged, this, &cwLinePlotLabelView::updateStations);
             addNodes({Region->rootNode()});
         }
@@ -174,6 +175,29 @@ void cwLinePlotLabelView::updateStations() {
 }
 
 /**
+ * @brief cwLinePlotLabelView::installSolvedStations
+ * @param batch - Solved stations for some of the region's trips, by trip id
+ * @param isLastBatch - True when the solve has handed over all of its trips
+ *
+ * Relabels the trips in the batch, then, after the last batch, registers the
+ * keyword items of every trip that gained labels in one insert.
+ */
+void cwLinePlotLabelView::installSolvedStations(const cwCavingRegion::TripSolvedStations& batch,
+                                                bool isLastBatch)
+{
+    for(auto it = batch.constBegin(); it != batch.constEnd(); ++it) {
+        cwTrip* trip = m_tripsById.value(it.key(), nullptr);
+        if(trip != nullptr) {
+            m_groups.value(trip)->setLabels(labels(it.value()));
+        }
+    }
+
+    if(isLastBatch) {
+        updateKeywordItems(m_groups.keys());
+    }
+}
+
+/**
  * @brief cwLinePlotLabelView::addTrips
  * @param trips - The trips to add a label group for
  */
@@ -188,6 +212,7 @@ void cwLinePlotLabelView::addTrips(const QList<cwTrip*>& trips) {
         cwLabel3dGroup* group = new cwLabel3dGroup(this);
         group->setLabels(labels(trip));
         m_groups.insert(trip, group);
+        m_tripsById.insert(trip->id(), trip);
         added.append(trip);
     }
     updateKeywordItems(added);
@@ -211,6 +236,7 @@ void cwLinePlotLabelView::removeTrip(cwTrip* trip) {
         it.value()->deleteLater();
     }
     m_groups.erase(it);
+    m_tripsById.remove(trip->id());
 }
 
 /**
@@ -244,8 +270,11 @@ void cwLinePlotLabelView::disconnectNode(const cwSurveyNode *node)
  */
 QList<cwLabel3dItem> cwLinePlotLabelView::labels(cwTrip *trip) const
 {
-    const QList<QPair<QString, QVector3D>> stations = trip->solvedStations();
+    return labels(trip->solvedStations());
+}
 
+QList<cwLabel3dItem> cwLinePlotLabelView::labels(const QList<QPair<QString, QVector3D>>& stations)
+{
     QList<cwLabel3dItem> labels;
     labels.reserve(stations.size());
     for(const auto& station : stations) {
@@ -300,4 +329,5 @@ void cwLinePlotLabelView::clear() {
         }
     }
     m_groups.clear();
+    m_tripsById.clear();
 }

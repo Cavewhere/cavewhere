@@ -226,6 +226,10 @@ struct cwLinePlotTask::LinePlotWorker {
 
         updateDepthLength(geometry.nodeLengthAndDepths, result);
 
+        if (result.hasRegionStationPositionsChanged()) {
+            computeSolvedViews(stationPositions, result);
+        }
+
         return result;
     }
 
@@ -804,6 +808,58 @@ private:
         }
 
         result.setRegionStationPositions(stationPositions);
+    }
+
+    // setData() leaves out the scan output the live objects carry, which the
+    // station views read: each node's and trip's harvested station names and
+    // cavern label come back from the snapshot here.
+    void restoreHarvestedNames()
+    {
+        walkCaveDataTree(InputData.regionData.caves,
+                         [this](const cwCaveData& nodeData, const QStringList&) {
+            cwSurveyNode* node = InternalNodeById.value(nodeData.id, nullptr);
+            if (node == nullptr) {
+                return;
+            }
+            node->setExternalStations(nodeData.externalStations);
+            node->setCavernLabel(nodeData.cavernLabel);
+
+            QHash<QUuid, cwTrip*> tripsById;
+            for (cwTrip* trip : node->trips()) {
+                tripsById.insert(trip->id(), trip);
+            }
+            for (const cwTripData& tripData : nodeData.trips) {
+                if (cwTrip* trip = tripsById.value(tripData.id, nullptr)) {
+                    trip->setExternalStations(tripData.externalStations);
+                    trip->setCavernLabel(tripData.cavernLabel);
+                }
+            }
+        });
+    }
+
+    // Runs the live side's own readers on the worker's copy of the region, so
+    // each node view and trip station list equals what the live region would
+    // compute from the same solve.
+    void computeSolvedViews(const cwStationPositionLookup& stationPositions,
+                            cwLinePlotTask::LinePlotResultData& result)
+    {
+        restoreHarvestedNames();
+        Region.setStationPositions(stationPositions);
+
+        result.NodePositions.reserve(Nodes.size());
+        for (const cwSurveyNode* node : std::as_const(Nodes)) {
+            result.NodePositions.insert(node->id(), node->scopedPositions());
+        }
+
+        if (IsCanceled()) {
+            return;
+        }
+
+        const QList<cwTrip*> trips = Region.rootNode()->allTrips();
+        result.TripSolvedStations.reserve(trips.size());
+        for (const cwTrip* trip : trips) {
+            result.TripSolvedStations.insert(trip->id(), trip->solvedStations());
+        }
     }
 
     void updateDepthLength(const QHash<QUuid, cwLinePlotGeometry::LengthAndDepth>& lengths,

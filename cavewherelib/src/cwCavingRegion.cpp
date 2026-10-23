@@ -584,7 +584,8 @@ const QHash<QUuid, QString>& cwCavingRegion::caveScopeLabels() const
     return m_root->childScopeLabels();
 }
 
-void cwCavingRegion::setStationPositions(const cwStationPositionLookup& positions)
+void cwCavingRegion::setStationPositions(const cwStationPositionLookup& positions,
+                                         const QHash<QUuid, cwStationPositionLookup>& nodePositions)
 {
     if (m_stationPositions == positions) {
         return;
@@ -592,7 +593,29 @@ void cwCavingRegion::setStationPositions(const cwStationPositionLookup& position
     m_stationPositions = positions;
     m_scopedPositions.clear();
     m_memberPositions.clear();
+
+    // Seeded where cwSurveyNode::scopedPositions() reads: a derived node's
+    // member view, or every other node's prefix view.
+    for (const cwSurveyNode* node : m_root->allNodes()) {
+        const auto view = nodePositions.constFind(node->id());
+        if (view == nodePositions.constEnd()) {
+            continue;
+        }
+        if (!node->isSourceRoot() && node->sourceRoot() != nullptr) {
+            m_memberPositions.insert(node->id(), view.value());
+        } else {
+            const QString prefix = node->scopePrefix();
+            if (!prefix.isEmpty()) {
+                m_scopedPositions.insert(prefix, view.value());
+            }
+        }
+    }
     emit positionsChanged();
+}
+
+void cwCavingRegion::publishSolvedStations(const TripSolvedStations& batch, bool isLastBatch)
+{
+    emit solvedStationsPublished(batch, isLastBatch);
 }
 
 void cwCavingRegion::clearSolve()

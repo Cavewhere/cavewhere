@@ -17,6 +17,9 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
 #include "cwKeyword.h"
+#include "cwFutureManagerModel.h"
+#include "cwRootData.h"
+#include "cwUpdatable.h"
 
 //Test helpers
 #include "ExternalCenterlineTestHelpers.h"
@@ -32,6 +35,9 @@
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QUuid>
+#include <QVector3D>
+#include <algorithm>
+#include <functional>
 #include <memory>
 
 namespace {
@@ -505,4 +511,409 @@ TEST_CASE("A solve of a flat Survex source registers its keyword items in at mos
     INFO("solves: " << solves.count() << ", keyword item inserts: " << topLevelRowsInserted(inserted));
     // Only the first solve meets new trips; later solves find every key registered.
     CHECK(topLevelRowsInserted(inserted) <= kMaxKeywordInsertsPerSolve);
+}
+
+namespace {
+
+constexpr int kBatchedBlocks = 800;
+constexpr int kBatchedShotsPerBlock = 3;
+constexpr int kBatchedSolveWaitMs = 120000;
+constexpr int kSignatureDigits = 9;
+constexpr int kBatchedLabelTurns =
+    (kBatchedBlocks + cwLinePlotManager::kLabelBatchSize - 1) / cwLinePlotManager::kLabelBatchSize;
+
+const QString kLinePlotJobName = QStringLiteral("Line plot");
+
+static_assert(cwLinePlotManager::kLabelBatchSize > 0);
+static_assert(cwLinePlotManager::kLabelBatchSize < kBatchedBlocks,
+              "the fixture must span more than one label batch");
+
+QString labelSignature(const QString& text, const QVector3D& position)
+{
+    return QStringLiteral("%1@%2,%3,%4")
+        .arg(text)
+        .arg(position.x(), 0, 'g', kSignatureDigits)
+        .arg(position.y(), 0, 'g', kSignatureDigits)
+        .arg(position.z(), 0, 'g', kSignatureDigits);
+}
+
+QString groupSignature(const cwLabel3dGroup* group)
+{
+    QStringList labels;
+    for (const cwLabel3dItem& label : group->labels()) {
+        labels.append(labelSignature(label.text(), label.position()));
+    }
+    labels.sort();
+    return labels.join(QLatin1Char(';'));
+}
+
+QString tripSignature(const cwTrip* trip)
+{
+    QStringList labels;
+    for (const auto& station : trip->solvedStations()) {
+        labels.append(labelSignature(station.first, station.second));
+    }
+    labels.sort();
+    return labels.join(QLatin1Char(';'));
+}
+
+QList<cwLabel3dGroup*> labelGroups(const cwLinePlotLabelView* view)
+{
+    return view->findChildren<cwLabel3dGroup*>(Qt::FindDirectChildrenOnly);
+}
+
+//! The view keeps one group per trip and carries no trip pointer on it, so the
+//! oracle compares the multiset of group label sets with the multiset of the
+//! trips' solved station lists, which is what labels(trip) turns into labels.
+QStringList sortedGroupSignatures(const cwLinePlotLabelView* view)
+{
+    QStringList signatures;
+    for (const cwLabel3dGroup* group : labelGroups(view)) {
+        signatures.append(groupSignature(group));
+    }
+    signatures.sort();
+    return signatures;
+}
+
+QStringList sortedTripSignatures(const cwCavingRegion* region)
+{
+    QStringList signatures;
+    for (const cwTrip* trip : region->rootNode()->allTrips()) {
+        signatures.append(tripSignature(trip));
+    }
+    signatures.sort();
+    return signatures;
+}
+
+int labeledGroupCount(const cwLinePlotLabelView* view)
+{
+    int count = 0;
+    for (const cwLabel3dGroup* group : labelGroups(view)) {
+        if (!group->labels().isEmpty()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+//! Runs a callback once per event-loop turn: each call posts the next one, and
+//! a posted event lands in the pass after the one that posted it.
+class TurnTicker
+{
+public:
+    explicit TurnTicker(std::function<void()> onTurn) : m_onTurn(std::move(onTurn)) {}
+
+    void start()
+    {
+        m_running = true;
+        post();
+    }
+
+    void stop() { m_running = false; }
+
+private:
+    void post()
+    {
+        QMetaObject::invokeMethod(&m_context, [this]() { tick(); }, Qt::QueuedConnection);
+    }
+
+    void tick()
+    {
+        if (m_running) {
+            m_onTurn();
+            post();
+        }
+    }
+
+    QObject m_context;
+    std::function<void()> m_onTurn;
+    bool m_running = false;
+};
+
+//! How many label groups changed their label count in each event-loop turn.
+struct LabelTurnLog {
+    QHash<const cwLabel3dGroup*, qsizetype> counts;
+    int maxGroupsChangedInOneTurn = 0;
+    int turnsWithChanges = 0;
+
+    void startFrom(const cwLinePlotLabelView* view)
+    {
+        for (const cwLabel3dGroup* group : labelGroups(view)) {
+            counts.insert(group, group->labels().size());
+        }
+    }
+
+    void record(const cwLinePlotLabelView* view)
+    {
+        int changed = 0;
+        for (const cwLabel3dGroup* group : labelGroups(view)) {
+            const qsizetype count = group->labels().size();
+            if (counts.value(group, 0) != count) {
+                ++changed;
+            }
+            counts.insert(group, count);
+        }
+        if (changed > 0) {
+            ++turnsWithChanges;
+            maxGroupsChangedInOneTurn = std::max(maxGroupsChangedInOneTurn, changed);
+        }
+    }
+};
+
+//! A saved project whose native trip holds n1-n2 and is solved and labeled,
+//! with a label view on the root data's keyword model, and a flat Survex
+//! source of kBatchedBlocks trips written and ready to attach.
+struct BatchedLabelFixture {
+    std::unique_ptr<SavedProjectFixture> project;
+    // Declared after the project so the view, which removes its items from the
+    // root data's keyword model on destruction, goes first.
+    std::unique_ptr<LabelViewHost> host;
+    cwTrip* native = nullptr;
+    QString source;
+
+    cwCavingRegion* region() const { return project->project->cavingRegion(); }
+    cwLinePlotManager* linePlot() const { return project->rootData->linePlotManager(); }
+    cwFutureManagerModel* futures() const { return project->rootData->futureManagerModel(); }
+    cwLinePlotLabelView* labelView() const { return host->labelView; }
+
+    bool idle() const
+    {
+        return linePlot()->updateState() == cwUpdatable::State::Clean && futures()->rowCount() == 0;
+    }
+};
+
+std::unique_ptr<BatchedLabelFixture> makeBatchedLabelFixture(const QString& name)
+{
+    auto fixture = std::make_unique<BatchedLabelFixture>();
+    fixture->project = makeSavedProject(name, QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    fixture->host = makeLabelViewHost();
+    fixture->labelView()->setKeywordItemModel(fixture->project->rootData->keywordItemModel());
+    fixture->labelView()->setRegion(fixture->region());
+
+    fixture->native = addNativeTripWithShot(fixture->project->cave, QStringLiteral("Native"),
+                                            QStringLiteral("n1"), QStringLiteral("n2"));
+    drainPipelines(fixture->project.get());
+    REQUIRE_FALSE(fixture->linePlot()->hasSolveError());
+    REQUIRE(labeledGroupCount(fixture->labelView()) == 1);
+
+    fixture->source = writeFlatSurvex(tempSubdir(fixture->project->tempDir, QStringLiteral("flat")),
+                                      kBatchedBlocks, kBatchedShotsPerBlock);
+    return fixture;
+}
+
+int linePlotRow(const cwFutureManagerModel* futures)
+{
+    for (int row = 0; row < futures->rowCount(); ++row) {
+        if (futures->index(row).data(cwFutureManagerModel::NameRole).toString() == kLinePlotJobName) {
+            return row;
+        }
+    }
+    return -1;
+}
+
+} // namespace
+
+// MT.5: a solve's labels land at most cwLinePlotManager::kLabelBatchSize trips
+// per event-loop turn, and the "Line plot" job counts those batches as its
+// steps and ends only after the last one.
+TEST_CASE("A large solve installs its station labels in batches under the Line plot job",
+          "[cwLinePlotLabelView][LinePlotManager][cwFutureManagerModel][MainThreadBudget][LabelBatches]")
+{
+    auto fixture = makeBatchedLabelFixture(QStringLiteral("label-batches"));
+    cwFutureManagerModel* futures = fixture->futures();
+    const cwLinePlotLabelView* labelView = fixture->labelView();
+
+    LabelTurnLog turns;
+    turns.startFrom(labelView);
+
+    QSignalSpy published(fixture->linePlot(), &cwLinePlotManager::cavernOutputChanged);
+    int maxSteps = 0;
+    int removals = 0;
+    int stepsAtRemoval = -1;
+    int progressAtRemoval = -1;
+    int labeledAtRemoval = -1;
+    QObject context;
+    // Before its scan applies, the attach can start a solve of the native trip
+    // alone, which is canceled or publishes depending on which of it and the
+    // harvest takes cavern first. The job under test is the one that labels
+    // the sourced trips, and a job that ends before them counts as none.
+    QObject::connect(futures, &QAbstractItemModel::rowsAboutToBeRemoved, &context,
+                     [&](const QModelIndex&, int first, int last) {
+        for (int row = first; row <= last; ++row) {
+            const QModelIndex index = futures->index(row);
+            if (labeledGroupCount(labelView) > 1
+                && index.data(cwFutureManagerModel::NameRole).toString() == kLinePlotJobName) {
+                ++removals;
+                stepsAtRemoval = index.data(cwFutureManagerModel::NumberOfStepRole).toInt();
+                progressAtRemoval = index.data(cwFutureManagerModel::ProgressRole).toInt();
+                labeledAtRemoval = labeledGroupCount(labelView);
+            }
+        }
+    });
+
+    TurnTicker ticker([&]() {
+        turns.record(labelView);
+        const int row = linePlotRow(futures);
+        if (published.count() >= 1 && row >= 0) {
+            maxSteps = std::max(maxSteps,
+                                futures->index(row).data(cwFutureManagerModel::NumberOfStepRole).toInt());
+        }
+    });
+    ticker.start();
+
+    attachSourceThroughManager(fixture->project.get(), fixture->region()->rootNode(), fixture->source);
+    REQUIRE(tryWait(kBatchedSolveWaitMs, [&]() {
+        return published.count() >= 1 && fixture->idle()
+               && labeledGroupCount(labelView) > kBatchedBlocks;
+    }));
+    ticker.stop();
+    drainPipelines(fixture->project.get());
+    turns.record(labelView);
+
+    REQUIRE_FALSE(fixture->linePlot()->hasSolveError());
+    const int labeled = labeledGroupCount(labelView);
+    CHECK(labeled == kBatchedBlocks + 1);
+
+    // Today's labels(trip) is the oracle: every group carries its trip's
+    // solved stations, names and positions both.
+    CHECK(sortedGroupSignatures(labelView) == sortedTripSignatures(fixture->region()));
+
+    INFO("turns with label changes: " << turns.turnsWithChanges
+         << ", most groups relabeled in one turn: " << turns.maxGroupsChangedInOneTurn);
+    CHECK(turns.maxGroupsChangedInOneTurn <= cwLinePlotManager::kLabelBatchSize);
+    CHECK(turns.turnsWithChanges >= kBatchedLabelTurns);
+
+    INFO("Line plot steps: " << maxSteps << ", at removal: " << stepsAtRemoval
+         << " steps, progress " << progressAtRemoval << ", labeled groups " << labeledAtRemoval);
+    CHECK(removals == 1);
+    CHECK(maxSteps >= kBatchedLabelTurns);
+    CHECK(stepsAtRemoval >= kBatchedLabelTurns);
+    CHECK(progressAtRemoval == stepsAtRemoval);
+    CHECK(labeledAtRemoval == labeled);
+}
+
+// MT.5 with CP.2b's solve-once invariant: an edit that lands while the labels
+// are still draining restarts the solve inside the same "Line plot" job, runs
+// cavern once more, and leaves the labels of the second solve.
+TEST_CASE("A native edit made while a solve's labels drain solves once more inside the same job",
+          "[LinePlotManager][SolveOnce][cwLinePlotLabelView][MainThreadBudget][LabelBatches]")
+{
+    auto fixture = makeBatchedLabelFixture(QStringLiteral("label-batches-restart"));
+    cwFutureManagerModel* futures = fixture->futures();
+    const cwLinePlotLabelView* labelView = fixture->labelView();
+
+    QSignalSpy published(fixture->linePlot(), &cwLinePlotManager::cavernOutputChanged);
+    bool edited = false;
+    int jobsAfterEdit = 0;
+    QObject context;
+    QObject::connect(futures, &QAbstractItemModel::rowsInserted, &context,
+                     [&](const QModelIndex&, int first, int last) {
+        for (int row = first; row <= last; ++row) {
+            if (edited
+                && futures->index(row).data(cwFutureManagerModel::NameRole).toString() == kLinePlotJobName) {
+                ++jobsAfterEdit;
+            }
+        }
+    });
+
+    // The attach can publish a solve of the native trip alone before its
+    // scan applies, depending on which of that solve and the harvest takes
+    // cavern first, so the edit is keyed to the labels, not a publish count.
+    bool editedMidDrain = false;
+    int labeledAtEdit = -1;
+    qsizetype publishedAtEdit = -1;
+    // Read as the edit's solve publishes, before it installs any label: the
+    // labels the canceled drain handed over by then.
+    int labeledAtSecondPublish = -1;
+    QObject::connect(fixture->linePlot(), &cwLinePlotManager::cavernOutputChanged, &context, [&]() {
+        if (edited && labeledAtSecondPublish < 0) {
+            labeledAtSecondPublish = labeledGroupCount(labelView);
+        }
+    });
+    TurnTicker ticker([&]() {
+        if (edited) {
+            return;
+        }
+        // The native trip was labeled before the attach; the drain is under
+        // way once a sourced trip is labeled, and over once all of them are.
+        const int labeled = labeledGroupCount(labelView);
+        if (labeled > 1) {
+            edited = true;
+            labeledAtEdit = labeled;
+            publishedAtEdit = published.count();
+            editedMidDrain = labeled < kBatchedBlocks + 1;
+            cwShot shot;
+            shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+            shot.setCompass(cwCompassReading(QStringLiteral("90.0")));
+            shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+            fixture->native->chunk(0)->appendShot(cwStation(QStringLiteral("n2")),
+                                                  cwStation(QStringLiteral("n3")), shot);
+        }
+    });
+    ticker.start();
+
+    attachSourceThroughManager(fixture->project.get(), fixture->region()->rootNode(), fixture->source);
+    REQUIRE(tryWait(kBatchedSolveWaitMs, [&]() {
+        return edited && published.count() > publishedAtEdit && fixture->idle();
+    }));
+    ticker.stop();
+    drainPipelines(fixture->project.get());
+    settleEventLoop(kNothingHappensSettleMs);
+
+    REQUIRE_FALSE(fixture->linePlot()->hasSolveError());
+    INFO("labeled groups when the edit landed: " << labeledAtEdit << " of " << kBatchedBlocks + 1
+         << ", Line plot jobs started after the edit: " << jobsAfterEdit
+         << ", cavern runs: " << published.count() << " (" << publishedAtEdit << " at the edit)"
+         << ", labeled groups at the second publish: " << labeledAtSecondPublish);
+    CHECK(editedMidDrain);
+    // The restart stops the superseded drain after the one batch already
+    // queued when the edit landed.
+    CHECK(labeledAtSecondPublish >= labeledAtEdit);
+    CHECK(labeledAtSecondPublish <= labeledAtEdit + cwLinePlotManager::kLabelBatchSize);
+    CHECK(published.count() == publishedAtEdit + 1);
+    // The edit's solve rides the job of the solve whose labels were draining.
+    CHECK(jobsAfterEdit == 0);
+
+    // The labels are the second solve's: n3 exists only there.
+    CHECK(tripSignature(fixture->native).contains(QStringLiteral("n3@")));
+    CHECK(labeledGroupCount(labelView) == kBatchedBlocks + 1);
+    CHECK(sortedGroupSignatures(labelView) == sortedTripSignatures(fixture->region()));
+}
+
+// MT.5: the worker computes the labels of derived nodes' trips from member
+// views on its own copy of the region, which has to match what the live
+// region computes for nested Survex blocks.
+TEST_CASE("A nested Survex source's drained labels match each trip's solved stations",
+          "[cwLinePlotLabelView][LinePlotManager][LabelBatches]")
+{
+    constexpr int kTreeFiles = 7;
+    constexpr int kTreeShots = 6;
+    constexpr int kTreeChildren = 2;
+
+    auto project = makeSavedProject(QStringLiteral("label-batches-tree"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwCavingRegion* region = project->project->cavingRegion();
+    // Declared after the project so the view, which removes its items from the
+    // root data's keyword model on destruction, goes first.
+    auto host = makeLabelViewHost();
+    host->labelView->setKeywordItemModel(project->rootData->keywordItemModel());
+    host->labelView->setRegion(region);
+    drainPipelines(project.get());
+
+    const QString source = writeSurvexTree(tempSubdir(project->tempDir, QStringLiteral("tree")),
+                                           kTreeFiles, kTreeShots, kTreeChildren);
+    attachSourceThroughManager(project.get(), region->rootNode(), source);
+    drainPipelines(project.get());
+    REQUIRE_FALSE(project->rootData->linePlotManager()->hasSolveError());
+
+    int solvedTrips = 0;
+    for (const cwTrip* trip : region->rootNode()->allTrips()) {
+        if (!trip->solvedStations().isEmpty()) {
+            ++solvedTrips;
+        }
+    }
+    // Every file holds its own block and a side block.
+    CHECK(solvedTrips >= 2 * kTreeFiles);
+    CHECK(labeledGroupCount(host->labelView) == solvedTrips);
+    CHECK(sortedGroupSignatures(host->labelView) == sortedTripSignatures(region));
 }

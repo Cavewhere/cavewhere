@@ -20,6 +20,8 @@
 #include <QQmlEngine>
 #include <QObjectBindableProperty>
 #include <QUuid>
+#include <QPair>
+#include <QVector3D>
 
 //Our includes
 class cwCave;
@@ -224,7 +226,19 @@ public:
     //! node label path, then the trip scope, then the station
     //! ("fisher_ridge.upper.a1"). Written by cwLinePlotManager after each solve.
     cwStationPositionLookup stationPositions() const { return m_stationPositions; }
-    void setStationPositions(const cwStationPositionLookup& positions);
+    //! \a nodePositions holds node views already computed, what
+    //! cwSurveyNode::scopedPositions() answers, keyed by node id. A node it
+    //! leaves out computes its view on first read.
+    void setStationPositions(const cwStationPositionLookup& positions,
+                             const QHash<QUuid, cwStationPositionLookup>& nodePositions = {});
+
+    //! A solve's solved stations per trip, as cwTrip::solvedStations() lists
+    //! them, keyed by cwTrip::id().
+    using TripSolvedStations = QHash<QUuid, QList<QPair<QString, QVector3D>>>;
+
+    //! Hands one batch of a solve's trip stations to the views that label
+    //! them; see solvedStationsPublished().
+    void publishSolvedStations(const TripSolvedStations& batch, bool isLastBatch);
 
     //! The last solve's shot topology, keyed like stationPositions().
     cwSurveyNetwork network() const { return m_network; }
@@ -322,6 +336,11 @@ signals:
     //! and cwSurveyNode::scopedNetworkChanged, since a derived node's scoped
     //! views are its member views.
     void memberViewsChanged();
+
+    //! One batch of the latest solve's trip stations. A solve that moves
+    //! stations publishes its trips over several batches after
+    //! positionsChanged(), \a isLastBatch true on the final one.
+    void solvedStationsPublished(const cwCavingRegion::TripSolvedStations& batch, bool isLastBatch);
 
 public slots:
 
