@@ -844,9 +844,9 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
         // as a file that owns its declination.
         for (cwTrip* trip : region->rootNode()->allTrips()) {
             if (trip->isDerived()) {
-                if (trip->fileDeclination().kind == cwFileDeclination::Kind::Auto) {
+                if (trip->fileDeclination().kind == cwFileDeclination::Kind::AutoAtNode) {
                     input.sourceUnitInjectedDeclinations.insert(trip->id(),
-                                                                trip->calibrations()->declination());
+                                                                trip->appliedDeclination());
                 }
                 continue;
             }

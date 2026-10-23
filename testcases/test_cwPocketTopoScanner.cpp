@@ -284,11 +284,10 @@ TEST_CASE("Each PocketTopo unit carries its trip's manual or Auto declination",
     CHECK(first.declination.kind == cwFileDeclination::Kind::Value);
     CHECK(first.declination.degrees == Catch::Approx(kEastDeclinationDegrees));
 
-    // The file names no location for Auto; the driver supplies one.
+    // The file names no location for Auto, so the node's fix station supplies one.
     const cwScanRow second = rowAt(scan, QStringLiteral("#2"));
     REQUIRE(second.isUnit);
-    CHECK(second.declination.kind == cwFileDeclination::Kind::Auto);
-    CHECK(second.declination.autoCoordinateSystem.isEmpty());
+    CHECK(second.declination.kind == cwFileDeclination::Kind::AutoAtNode);
 }
 
 TEST_CASE("A PocketTopo file seeds trip metadata from its first trip", "[Scanner][PocketTopo]")

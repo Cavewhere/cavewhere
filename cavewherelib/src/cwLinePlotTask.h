@@ -83,10 +83,11 @@ public:
         // file-owned or unknown → the driver emits nothing for that trip.
         QHash<QUuid, double> tripInjectedDeclinations;
 
-        // The same resolved declination per derived trip whose unit the file
-        // leaves to auto (cwFileDeclination::Kind::Auto). A PocketTopo
-        // translation writes it into that trip's switch when the node has no
-        // location for `*declination auto`.
+        // The applied declination per derived trip whose file asks for auto
+        // without a location (cwFileDeclination::Kind::AutoAtNode): IGRF at
+        // the node's fix station, or 0 without one. A PocketTopo translation
+        // writes it into that trip's switch when the node has no location
+        // for `*declination auto`.
         QHash<QUuid, double> sourceUnitInjectedDeclinations;
 
         // Caves and trips whose externalCenterline is set but unreadable

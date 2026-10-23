@@ -2190,7 +2190,7 @@ void scanPocketTopoFile(const QString& filePath, ScanState& state)
             state.rootDate = trip.date();
         }
         if (trip.isAutoDeclination()) {
-            stampRowDeclination(state, row, {cwFileDeclination::Kind::Auto});
+            stampRowDeclination(state, row, {cwFileDeclination::Kind::AutoAtNode});
         } else {
             stampRowDeclination(state, row, {cwFileDeclination::Kind::Value,
                                              trip.declinationDegrees()});

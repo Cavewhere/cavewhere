@@ -2723,6 +2723,8 @@ QString describe(const cwFileDeclination& declination)
             .arg(declination.autoLocation.y, 0, 'f', 0)
             .arg(declination.autoLocation.z, 0, 'f', 0)
             .arg(declination.autoCoordinateSystem);
+    case DeclinationKind::AutoAtNode:
+        return QStringLiteral("AutoAtNode");
     }
     return QString();
 }

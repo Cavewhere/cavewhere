@@ -6,6 +6,7 @@
 **************************************************************************/
 
 // Catch
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 // Our
@@ -37,12 +38,14 @@
 
 // Test helpers
 #include "PocketTopoFixtureWriter.h"
+#include "cwSignalSpy.h"
 
 // AsyncFuture
 #include <asyncfuture.h>
 
 // Qt
 #include <QDate>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QString>
@@ -221,7 +224,7 @@ cwTrip* addDerivedTrip(cwCave* cave, const QString& name, const QString& sourceP
     return trip;
 }
 
-DriverSetup addPocketTopoRoot(cwCavingRegion& region)
+DriverSetup addPocketTopoNode(cwSurveyNode* parent)
 {
     DriverSetup setup;
     setup.cave = new cwCave();
@@ -230,17 +233,34 @@ DriverSetup addPocketTopoRoot(cwCavingRegion& region)
     setup.cave->setExternalCenterline(cwExternalCenterline(kFileName));
     setup.cave->setExternalStations({QStringLiteral("1.0"), QStringLiteral("1.1"), QStringLiteral("1.2"),
                                      QStringLiteral("2.0"), QStringLiteral("2.1")});
-    region.addCave(setup.cave);
+    parent->addNode(setup.cave);
 
     cwFileDeclination manual;
     manual.kind = cwFileDeclination::Kind::Value;
     manual.degrees = kEastDeclinationDegrees;
     cwFileDeclination automatic;
-    automatic.kind = cwFileDeclination::Kind::Auto;
+    automatic.kind = cwFileDeclination::Kind::AutoAtNode;
     setup.first = addDerivedTrip(setup.cave, kFirstTripName, QStringLiteral("#1"), manual);
     setup.second = addDerivedTrip(setup.cave, kSecondTripName, QStringLiteral("#2"), automatic);
     return setup;
 }
+
+DriverSetup addPocketTopoRoot(cwCavingRegion& region)
+{
+    return addPocketTopoNode(region.rootNode());
+}
+
+//! A fix on 1.0 at kNodeFix* in UTM 13N.
+cwFixStation nodeFix()
+{
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("1.0"));
+    fix.setInputCS(kUtm13N);
+    fix.setCoordinate(kNodeFixEasting, kNodeFixNorthing, kNodeFixElevation);
+    return fix;
+}
+
+const QDateTime kSecondTripDate = QDateTime(QDate(2026, 3, 14), QTime(0, 0));
 
 QString driverFor(const cwCavingRegion& region, const cwSurvexExporterRegion::Options& options,
                   const QString& globalCS)
@@ -438,17 +458,17 @@ TEST_CASE("The driver gives a located .top node's Auto trips IGRF declination",
                           QStringLiteral("2.0 2.1 ")});
 }
 
-TEST_CASE("buildInput resolves the declination of each derived trip whose file leaves it to auto",
+TEST_CASE("buildInput gives each derived trip whose file leaves it to auto 0 until the node has a fix",
           "[Exporter][PocketTopo]")
 {
     cwCavingRegion region;
     const DriverSetup setup = addPocketTopoRoot(region);
+    // A value typed on the derived trip's calibration never reaches the file's data.
     for (cwTrip* trip : {setup.first, setup.second}) {
         trip->calibrations()->setAutoDeclination(false);
     }
     setup.first->calibrations()->setDeclinationManual(kManualDeclination);
     setup.second->calibrations()->setDeclinationManual(kInjectedDeclination);
-    REQUIRE(setup.second->calibrations()->declination() == kInjectedDeclination);
 
     cwCave* native = new cwCave();
     native->setName(QStringLiteral("Native"));
@@ -464,9 +484,104 @@ TEST_CASE("buildInput resolves the declination of each derived trip whose file l
     const cwLinePlotTask::Input input = cwLinePlotTask::buildInput(&region, external);
 
     // The manual trip's file owns its value, and a native trip has no file.
-    const QHash<QUuid, double> expected = {{setup.second->id(), kInjectedDeclination}};
+    const QHash<QUuid, double> expected = {{setup.second->id(), 0.0}};
     CHECK(input.sourceUnitInjectedDeclinations == expected);
     CHECK(input.tripInjectedDeclinations.isEmpty());
+}
+
+TEST_CASE("A derived trip whose file leaves declination to auto reads it at the node's fix, read-only",
+          "[Exporter][PocketTopo]")
+{
+    cwCavingRegion region;
+    const DriverSetup setup = addPocketTopoRoot(region);
+    setup.second->setDate(kSecondTripDate);
+
+    CHECK(setup.second->declinationOrigin() == cwTrip::DeclinationFileAuto);
+    CHECK(setup.second->appliedDeclination() == 0.0);
+
+    setup.second->calibrations()->setAutoDeclination(false);
+    setup.second->calibrations()->setDeclinationManual(kInjectedDeclination);
+    CHECK(setup.second->declinationOrigin() == cwTrip::DeclinationFileAuto);
+    CHECK(setup.second->appliedDeclination() == 0.0);
+
+    cwSignalSpy appliedSpy(setup.second, &cwTrip::appliedDeclinationChanged);
+    setup.cave->fixStations()->appendFixStation(nodeFix());
+    CHECK(appliedSpy.count() >= 1);
+
+    const std::optional<double> igrf = setup.second->calibrations()->autoDeclinationValue();
+    REQUIRE(igrf.has_value());
+    CHECK(igrf.value() != 0.0);
+    CHECK(setup.second->declinationOrigin() == cwTrip::DeclinationFileAuto);
+    CHECK(setup.second->appliedDeclination() == igrf.value());
+    // The file's own value stays the file's.
+    CHECK(setup.first->appliedDeclination() == Catch::Approx(kEastDeclinationDegrees));
+
+    SECTION("Removing the fix drops it back to 0") {
+        appliedSpy.clear();
+        setup.cave->fixStations()->removeAt(0);
+        CHECK(appliedSpy.count() >= 1);
+        CHECK(setup.second->declinationOrigin() == cwTrip::DeclinationFileAuto);
+        CHECK(setup.second->appliedDeclination() == 0.0);
+    }
+
+    SECTION("Clearing the date leaves it unknown") {
+        setup.second->setDate(QDateTime());
+        CHECK(setup.second->declinationOrigin() == cwTrip::DeclinationUnknown);
+        CHECK(setup.second->appliedDeclination() == 0.0);
+    }
+}
+
+TEST_CASE("A dateless derived trip whose file leaves declination to auto reads it as unknown",
+          "[Exporter][PocketTopo]")
+{
+    cwCavingRegion region;
+    const DriverSetup setup = addPocketTopoRoot(region);
+    setup.cave->fixStations()->appendFixStation(nodeFix());
+    setup.second->setDate(QDateTime());
+    CHECK(setup.second->declinationOrigin() == cwTrip::DeclinationUnknown);
+    CHECK(setup.second->appliedDeclination() == 0.0);
+}
+
+TEST_CASE("A derived auto trip added to a node that already has a fix reads IGRF at once",
+          "[Exporter][PocketTopo]")
+{
+    cwCavingRegion region;
+    const DriverSetup setup = addPocketTopoRoot(region);
+    setup.second->setDate(kSecondTripDate);
+    setup.cave->fixStations()->appendFixStation(nodeFix());
+    const std::optional<double> igrf = setup.second->calibrations()->autoDeclinationValue();
+    REQUIRE(igrf.has_value());
+
+    cwTrip* trip = new cwTrip();
+    trip->setDate(kSecondTripDate);
+    trip->setSourcePath(QStringLiteral("#3"));
+    trip->setFileDeclination({cwFileDeclination::Kind::AutoAtNode});
+    setup.cave->addTrip(trip);
+
+    CHECK(trip->declinationOrigin() == cwTrip::DeclinationFileAuto);
+    CHECK(trip->appliedDeclination() == igrf.value());
+}
+
+TEST_CASE("A derived auto trip on a nested .top node reads IGRF at the nearest located ancestor",
+          "[Exporter][PocketTopo]")
+{
+    cwCavingRegion region;
+    cwCave* folder = addChildNode(region.rootNode(), QStringLiteral("Field seasons"),
+                                  cwSurveyNode::Kind::Folder);
+    cwCave* season = addChildNode(folder, QStringLiteral("2026"), cwSurveyNode::Kind::Folder);
+    const DriverSetup setup = addPocketTopoNode(season);
+    setup.second->setDate(kSecondTripDate);
+    CHECK(setup.second->appliedDeclination() == 0.0);
+
+    cwSignalSpy appliedSpy(setup.second, &cwTrip::appliedDeclinationChanged);
+    folder->fixStations()->appendFixStation(nodeFix());
+    CHECK(appliedSpy.count() >= 1);
+
+    const std::optional<double> igrf = setup.second->calibrations()->autoDeclinationValue();
+    REQUIRE(igrf.has_value());
+    CHECK(igrf.value() != 0.0);
+    CHECK(setup.second->declinationOrigin() == cwTrip::DeclinationFileAuto);
+    CHECK(setup.second->appliedDeclination() == igrf.value());
 }
 
 TEST_CASE("harvest reads a .top's station names through its translation", "[Harvest][PocketTopo]")
@@ -552,7 +667,7 @@ TEST_CASE("Attaching a .top names and dates a trip per PocketTopo trip and solve
     CHECK(solvedNames(second).contains(QStringLiteral("2.1")));
 }
 
-TEST_CASE("An attached .top's Auto trip takes the declination set on its derived trip",
+TEST_CASE("An attached .top's Auto trip solves with 0 declination until the node has a fix",
           "[Attach][PocketTopo]")
 {
     auto fixture = makeProject(QStringLiteral("pockettopo-injected-declination"));
@@ -574,7 +689,7 @@ TEST_CASE("An attached .top's Auto trip takes the declination set on its derived
                                          "*declination 6.78 degrees\n")));
     CHECK(driver.contains(QStringLiteral("; trip #2 : 2026-03-14\n"
                                          "*date 2026.03.14\n"
-                                         "*declination 4.50 degrees\n")));
+                                         "*declination 0.00 degrees\n")));
 }
 
 TEST_CASE("Reloading a grown .top adds the new trip and keeps the earlier trips and their names",

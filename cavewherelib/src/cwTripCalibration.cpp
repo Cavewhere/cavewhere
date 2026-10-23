@@ -1,7 +1,7 @@
 #include "cwTripCalibration.h"
 
 #include "cwTrip.h"
-#include "cwCave.h"
+#include "cwSurveyNode.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwFixStationModel.h"
@@ -216,29 +216,41 @@ void cwTripCalibration::setParentTrip(cwTrip* trip)
     if (m_parentTrip) {
         connect(m_parentTrip, &cwTrip::dateChanged,
                 this, &cwTripCalibration::refreshResolved);
-        connect(m_parentTrip, &cwTrip::parentCaveChanged,
-                this, &cwTripCalibration::rewireCaveSignals);
+        connect(m_parentTrip, &cwTrip::parentNodeChanged,
+                this, &cwTripCalibration::rewireNodeSignals);
     }
 
-    rewireCaveSignals();
+    rewireNodeSignals();
 }
 
-void cwTripCalibration::rewireCaveSignals()
+void cwTripCalibration::rewireNodeSignals()
 {
-    cwCave* newCave = m_parentTrip ? m_parentTrip->parentCave() : nullptr;
-    if (m_wiredCave == newCave) {
+    // The exporter reads auto declination at the trip's node's own fix, or the
+    // nearest ancestor's, so every node up the chain is an input.
+    QList<QPointer<cwSurveyNode>> newNodes;
+    for (cwSurveyNode* node = m_parentTrip ? m_parentTrip->parentNode() : nullptr;
+         node != nullptr;
+         node = node->parentNode()) {
+        newNodes.append(node);
+    }
+    if (m_wiredNodes == newNodes) {
         refreshResolved();
         return;
     }
 
-    if (m_wiredCave && m_wiredCave->fixStations()) {
-        disconnect(m_wiredCave->fixStations(), nullptr, this, nullptr);
+    for (const QPointer<cwSurveyNode>& node : std::as_const(m_wiredNodes)) {
+        if (node) {
+            disconnect(node, nullptr, this, nullptr);
+            disconnect(node->fixStations(), nullptr, this, nullptr);
+        }
     }
 
-    m_wiredCave = newCave;
+    m_wiredNodes = newNodes;
 
-    if (m_wiredCave && m_wiredCave->fixStations()) {
-        auto* fixModel = m_wiredCave->fixStations();
+    for (const QPointer<cwSurveyNode>& node : std::as_const(m_wiredNodes)) {
+        connect(node, &cwSurveyNode::parentNodeChanged,
+                this, &cwTripCalibration::rewireNodeSignals);
+        auto* fixModel = node->fixStations();
         connect(fixModel, &QAbstractItemModel::dataChanged,
                 this, &cwTripCalibration::refreshResolved);
         connect(fixModel, &QAbstractItemModel::rowsInserted,
@@ -254,7 +266,7 @@ void cwTripCalibration::rewireCaveSignals()
 
 Monad::Result<double> cwTripCalibration::resolveAuto() const
 {
-    if (!m_parentTrip || !m_wiredCave || !m_wiredCave->fixStations()) {
+    if (!m_parentTrip) {
         return Monad::Result<double>(QStringLiteral("No fix station available"));
     }
 
@@ -263,15 +275,20 @@ Monad::Result<double> cwTripCalibration::resolveAuto() const
     // before it carries a coordinate, and reading its components anyway would
     // resolve IGRF at (0, 0) — the Gulf of Guinea — and silently rotate every
     // trip in the cave. Only a Valid fix has components at all; the rest read 0.
-    const cwFixStationModel* fixModel = m_wiredCave->fixStations();
-    for (int i = 0; i < fixModel->count(); ++i) {
-        const cwFixStation fix = fixModel->fixStationAt(i);
-        const QString sourceCS = fix.inputCS().trimmed();
-        if (sourceCS.isEmpty() || fix.state() != cwFixStation::Valid) {
+    for (const QPointer<cwSurveyNode>& node : m_wiredNodes) {
+        if (!node) {
             continue;
         }
-        const cwGeoPoint location(fix.easting(), fix.northing(), fix.elevation());
-        return cwDeclination::compute(location, sourceCS, m_parentTrip->date());
+        const cwFixStationModel* fixModel = node->fixStations();
+        for (int i = 0; i < fixModel->count(); ++i) {
+            const cwFixStation fix = fixModel->fixStationAt(i);
+            const QString sourceCS = fix.inputCS().trimmed();
+            if (sourceCS.isEmpty() || fix.state() != cwFixStation::Valid) {
+                continue;
+            }
+            const cwGeoPoint location(fix.easting(), fix.northing(), fix.elevation());
+            return cwDeclination::compute(location, sourceCS, m_parentTrip->date());
+        }
     }
 
     return Monad::Result<double>(QStringLiteral("No fix station available"));
@@ -285,11 +302,17 @@ void cwTripCalibration::refreshResolved()
         ? autoResult.value()
         : m_data.declinationManual();
 
+    const std::optional<double> newAutoValue = newAvailable
+        ? std::optional<double>(autoResult.value())
+        : std::nullopt;
+
     const bool resolvedChanged = (newResolved != m_cachedResolvedDeclination);
     const bool availableChanged = (newAvailable != m_cachedAutoDeclinationAvailable);
+    const bool autoValueChanged = (newAutoValue != m_cachedAutoDeclinationValue);
 
     m_cachedResolvedDeclination = newResolved;
     m_cachedAutoDeclinationAvailable = newAvailable;
+    m_cachedAutoDeclinationValue = newAutoValue;
 
     // External inputs don't dirty stored data, so calibrationsChanged is
     // emitted only by the explicit setters, not here.
@@ -298,6 +321,9 @@ void cwTripCalibration::refreshResolved()
     }
     if (availableChanged) {
         emit autoDeclinationAvailableChanged(newAvailable);
+    }
+    if (autoValueChanged) {
+        emit autoDeclinationValueChanged();
     }
 
     updateWarnings(autoResult);

@@ -509,8 +509,10 @@ protected:
     QString m_cavernLabel;
     cwFileDeclination m_fileDeclination;
     //m_fileDeclination in degrees east on this trip's date: the value, 0 for a
-    //file that sets none, IGRF for an auto. Empty when it is Unknown or
-    //Inherited, or IGRF has no answer for the auto's point and date.
+    //file that sets none, IGRF for an auto, and for an AutoAtNode IGRF at the
+    //node's fix station or 0 without one. Empty when it is Unknown or
+    //Inherited, when IGRF has no answer for the auto's point and date, or when
+    //an AutoAtNode trip has no date.
     std::optional<double> m_fileDeclinationDegrees;
     double m_solvedLength = 0.0;
     cwAttachedFixModel* const m_attachedFixes;

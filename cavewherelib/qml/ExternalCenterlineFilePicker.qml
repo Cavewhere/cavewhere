@@ -104,7 +104,7 @@ ColumnLayout {
         color: Theme.textSubtle
         font.pixelSize: Theme.fontSizeSmall
         text: qsTr("You can open Survex (.svx), Compass (.dat, .mak), "
-                 + "or Walls (.wpj, .srv) files.")
+                 + "Walls (.wpj, .srv), or PocketTopo (.top) files.")
     }
 
     QC.Label {

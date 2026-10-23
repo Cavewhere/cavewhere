@@ -141,12 +141,15 @@ cwTrip::cwTrip(QObject *parent) :
     connect(this, &cwTrip::solvedStationsChanged, this, &cwTrip::knownStationsChanged);
     connect(this, &cwTrip::externalStationsChanged, this, &cwTrip::knownStationsChanged);
 
-    //An auto's IGRF value is read on the trip's date.
-    connect(this, &cwTrip::dateChanged, this, [this]() {
+    //An auto's IGRF value is read on the trip's date, and an AutoAtNode's at
+    //the node's fix station.
+    const auto refreshFileDeclination = [this]() {
         if (refreshFileDeclinationDegrees()) {
             emit fileDeclinationChanged();
         }
-    });
+    };
+    connect(this, &cwTrip::dateChanged, this, refreshFileDeclination);
+    connect(Calibration, &cwTripCalibration::autoDeclinationValueChanged, this, refreshFileDeclination);
 
     connect(Calibration, &cwTripCalibration::declinationChanged, this, &cwTrip::appliedDeclinationChanged);
     connect(Calibration, &cwTripCalibration::autoDeclinationChanged, this, &cwTrip::appliedDeclinationChanged);
@@ -310,6 +313,11 @@ bool cwTrip::refreshFileDeclinationDegrees()
             }
             return igrf.value();
         }
+        case Kind::AutoAtNode:
+            if (date().isValid()) {
+                return Calibration->autoDeclinationValue().value_or(0.0);
+            }
+            return std::nullopt;
         case Kind::Unknown:
         case Kind::Inherited:
             break;
@@ -355,6 +363,7 @@ cwTrip::DeclinationOrigin cwTrip::declinationOrigin() const
     case Kind::None:
         return DeclinationNone;
     case Kind::Auto:
+    case Kind::AutoAtNode:
         return DeclinationFileAuto;
     case Kind::Unknown:
     case Kind::Inherited:

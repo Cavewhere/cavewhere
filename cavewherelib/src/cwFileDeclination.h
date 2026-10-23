@@ -27,6 +27,9 @@
  *   Value     - the file sets degrees, east-positive as cavern applies it
  *   Auto      - the file asks cavern for IGRF at autoLocation, read in
  *               autoCoordinateSystem (the *cs argument as written)
+ *   AutoAtNode - the file asks for IGRF but names no location, so CaveWhere
+ *               reads it at the owning node's fix station: 0 until the node
+ *               has one, and never a value the user types
  */
 struct cwFileDeclination
 {
@@ -35,7 +38,8 @@ struct cwFileDeclination
         Inherited,
         None,
         Value,
-        Auto
+        Auto,
+        AutoAtNode
     };
 
     Kind kind = Kind::Unknown;

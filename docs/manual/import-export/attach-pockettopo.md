@@ -80,11 +80,11 @@ Splay shots come through as splays.
 When the PocketTopo trip has a declination value, the file owns it. The trip
 shows the value read-only, and you change it in PocketTopo.
 
-When PocketTopo has declination set to Auto, the trip behaves like a native trip
-in [Auto](../survey-data/declination.md): CaveWhere computes it when the node
-has a geographic coordinate system. Otherwise the trip uses its own calibration
-value, which starts at 0, and shows the usual warning that auto declination is
-unavailable.
+When PocketTopo has declination set to Auto, the trip shows "file auto" and
+CaveWhere computes the value, as it does for a native trip in
+[Auto](../survey-data/declination.md), once the node or a node above it has a
+fix station with a coordinate system. Until then the trip applies 0. The value stays read-only
+either way, since the file asked for it.
 
 ## Fix stations to coordinates
 

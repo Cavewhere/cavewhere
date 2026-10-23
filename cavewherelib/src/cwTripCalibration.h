@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QList>
 #include <QPointer>
 #include <QStringList>
 #include <QQmlEngine>
@@ -20,8 +21,11 @@
 #include "cwError.h"
 #include "Monad/Result.h"
 
+//Std includes
+#include <optional>
+
 class cwTrip;
-class cwCave;
+class cwSurveyNode;
 
 class cwTripCalibrationData {
 public:
@@ -169,8 +173,9 @@ class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
     Q_PROPERTY(double backCompassCalibration READ backCompassCalibration WRITE setBackCompassCalibration NOTIFY backCompassCalibrationChanged)
     Q_PROPERTY(double backClinoCalibration READ backClinoCalibration WRITE setBackClinoCalibration NOTIFY backClinoCalibrationChanged)
 
-    // Resolved declination: auto-IGRF when autoDeclination is on and the parent
-    // cave has a usable fix station + trip date, else the stored manual value.
+    // Resolved declination: auto-IGRF when autoDeclination is on and the trip's
+    // node (or an ancestor) has a usable fix station + trip date, else the
+    // stored manual value.
     Q_PROPERTY(double declination READ declination NOTIFY declinationChanged)
     Q_PROPERTY(double declinationManual READ declinationManual WRITE setDeclinationManual NOTIFY declinationManualChanged)
     Q_PROPERTY(bool autoDeclination READ autoDeclination WRITE setAutoDeclination NOTIFY autoDeclinationChanged)
@@ -205,6 +210,10 @@ public:
     // resolveAuto() succeeds; manual otherwise.
     double declination() const { return m_cachedResolvedDeclination; }
     bool autoDeclinationAvailable() const { return m_cachedAutoDeclinationAvailable; }
+    //! IGRF on the trip's date at the first valid fix on the trip's node, or on
+    //! its nearest ancestor with one, whether or not autoDeclination is on.
+    //! Empty when there is no such fix or date.
+    std::optional<double> autoDeclinationValue() const { return m_cachedAutoDeclinationValue; }
     QString declinationWarning() const { return m_declinationWarningError.message(); }
 
     // Setters that update the internal data and emit signals if changed:
@@ -236,7 +245,7 @@ public:
     void setData(const cwTripCalibrationData& data);
 
     // Wires the calibration to its owning trip so it can resolve auto
-    // declination from the trip's date + parent cave's fix station. Called by
+    // declination from the trip's date + its node's (or an ancestor's) fix. Called by
     // cwTrip in its constructor.
     void setParentTrip(cwTrip* trip);
 
@@ -261,6 +270,7 @@ signals:
     void declinationManualChanged(double declination);
     void autoDeclinationChanged(bool autoDeclination);
     void autoDeclinationAvailableChanged(bool available);
+    void autoDeclinationValueChanged();
     void declinationWarningChanged(const QString& warning);
 
     void distanceUnitChanged(cwUnits::LengthUnit unit);
@@ -273,19 +283,21 @@ private:
     cwTripCalibrationData m_data;
 
     QPointer<cwTrip> m_parentTrip;
-    QPointer<cwCave> m_wiredCave;
+    //! The trip's node, then each ancestor up to the root.
+    QList<QPointer<cwSurveyNode>> m_wiredNodes;
 
     // Cached so the hot read path (declination(), called from scrap, line
     // plot, and survex export) stays O(1). Refreshed on every input change.
     double m_cachedResolvedDeclination;
     bool m_cachedAutoDeclinationAvailable;
+    std::optional<double> m_cachedAutoDeclinationValue;
 
     // Owned slot in parent trip's errorModel — empty message means inactive.
     cwError m_declinationWarningError;
 
     Monad::Result<double> resolveAuto() const;
     void refreshResolved();
-    void rewireCaveSignals();
+    void rewireNodeSignals();
     void updateWarnings(const Monad::Result<double>& autoResult);
     void clearActiveDeclinationWarning();
 };
