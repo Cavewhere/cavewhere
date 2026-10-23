@@ -28,17 +28,6 @@ QQ.Loader {
 
             parent: RootPopupItem
 
-            function errorImageSource(errorType) {
-                switch(errorType) {
-                case CwError.Fatal:
-                    return "qrc:icons/svg/stopSignError.svg";
-                case CwError.Warning:
-                    return "qrc:icons/svg/warning.svg"
-                default:
-                    return "";
-                }
-            }
-
             pointAtObject: loaderId.errorIcon
             pointAtObjectPosition: Qt.point(loaderId.errorIcon.width * 0.5, loaderId.errorIcon.height)
             // triangleEdge: Qt.TopEdge
@@ -47,43 +36,14 @@ QQ.Loader {
                 QQ.Repeater {
                     id: repeaterId
                     model: loaderId.errors === null ? 0 : loaderId.errors
-                    delegate:
-                        RowLayout {
+                    delegate: ErrorRow {
                         id: delegateId
-                        required property int errorType
-                        required property string message
-                        required property bool suppressed
                         required property int index
 
-                        QQ.Image {
-                            source: errorQuoteBox.errorImageSource(delegateId.errorType)
-                            sourceSize: Qt.size(16, 16)
-                        }
-
-                        CheckBox {
-                            id: checkBoxId
-                            objectName: "suppress"
-                            checked: delegateId.suppressed
-                            onCheckedChanged: {
-                                //SuppressWarning
-                                if(delegateId.suppressed !== checked) {
-                                    delegateId.suppressed = checked
-                                    let index = loaderId.errors.index(delegateId.index, 0)
-                                    loaderId.errors.setData(index, delegateId.suppressed, ErrorListModel.SuppressedRole)
-                                }
-                            }
-                            visible: delegateId.errorType === CwError.Warning
-                        }
-
-                        QC.Label {
-                            objectName: "errorText"
-                            // Error messages quote user-typed names, so they are
-                            // never markup — AutoText would guess otherwise for a
-                            // station named A<b>B. ErrorListView's TextEdit is
-                            // plain by default; this is the same contract.
-                            textFormat: QC.Label.PlainText
-                            text: delegateId.message
-                            font.strikeout: delegateId.suppressed
+                        onAcceptToggled: (accepted) => {
+                            loaderId.errors.setData(loaderId.errors.index(delegateId.index, 0),
+                                                    accepted,
+                                                    ErrorListModel.SuppressedRole)
                         }
                     }
                 }

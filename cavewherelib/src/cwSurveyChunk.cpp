@@ -2342,8 +2342,14 @@ void cwSurveyChunk::updateLrudErrors()
 
 cwSurveyChunkCell cwSurveyChunk::cellIndexForErrorModel(cwErrorModel* errorModel) const
 {
-    Q_UNUSED(errorModel)
-    return {};
+    if(errorModel == nullptr) {
+        return {};
+    }
+    const CellIndex cell = CellErrorModels.key(errorModel);
+    if(cell.index() < 0) {
+        return {};
+    }
+    return cwSurveyChunkCell(cell.index(), static_cast<DataRole>(cell.role()));
 }
 
 /**

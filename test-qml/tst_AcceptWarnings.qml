@@ -106,11 +106,14 @@ MainWindowTest {
             tryCompare(context.trip.errorModel, "warningCount", 0)
             tryCompare(context.trip.errorModel, "suppressedWarningCount", 4)
 
+            // The badge stays up for the trip's errors; the accepted-warnings
+            // section under it says what was accepted
             const badge = findInEditor("surveyErrorOverview")
-            const badgeText = findChild(badge, "overviewText")
-            verify(badgeText !== null, "the badge should carry its text")
-            tryVerify(() => badge.visible && badgeText.text.indexOf("accepted") >= 0, 5000,
-                      "the badge should stay up and say what was accepted: " + badgeText.text)
+            const section = findInEditor("acceptedWarningsSection")
+            const sectionText = findChild(section, "acceptedWarningsHeaderText")
+            verify(sectionText !== null, "the accepted-warnings section should carry its text")
+            tryVerify(() => badge.visible && section.visible && sectionText.text.indexOf("4 accepted") >= 0, 5000,
+                      "the badge should stay up and the section say what was accepted: " + sectionText.text)
             verify(menuButton.visible, "the menu should stay reachable with only accepted warnings")
 
             mouseClick(menuButton)

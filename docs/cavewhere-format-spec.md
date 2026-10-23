@@ -148,6 +148,7 @@ The `leg` array alternates between station rows and shot rows:
 ```protobuf
 message StationShot {
     optional string id = 1;              // UUID
+    repeated int32 acceptedWarnings = 2; // cwErrorTypeId values the user accepted (sorted)
 
     // Station fields (populated on station rows)
     optional string name = 100;          // Station name (e.g., "A1")
@@ -186,8 +187,20 @@ message TripCalibration {
     optional bool correctedClinoFrontsight = 13;
     optional bool frontSights = 10;
     optional bool backSights = 11;
+    optional bool auto_declination = 15;
+    optional bool lruds = 16;            // Trip records LRUDs (absent = true)
+    optional bool splays = 17;           // Trip records splays (absent = true)
 }
 ```
+
+`acceptedWarnings` holds the survey warnings accepted on that station or shot,
+as stable `cwErrorTypeId` numbers: 1740-1743 missing Left/Right/Up/Down,
+1744/1746 missing compass/clino on an LRUD-only shot, 1745/1747 missing back
+compass/clino, 1748/1749 compass/clino frontsight-backsight disagreement (on the
+frontsight cell). The numbers are never reused. Writers sort the list so `.cwproj`
+diffs stay stable; readers ignore ids they don't know. `lruds = false` or
+`splays = false` hides that column and, for LRUDs, stops the missing-LRUD
+warnings. Files without fields 16/17 load with both columns on.
 
 #### Team
 

@@ -180,6 +180,15 @@ small arrow. Click it, or anywhere on the total, and choose
 them all back. When only accepted warnings are left, the total turns gray and
 reads "*n* accepted warnings", so the menu is still there.
 
+**Review what you accepted.** Accept-all on an imported trip can bury a 40°
+backsight disagreement under 300 missing LRUDs. Under the warning total, a gray
+line reads "*n* accepted warnings". Click it and the trip's acceptances open,
+grouped by kind with the rare ones first: Backsight disagreement, Missing
+backsight, Missing reading, then Missing LRUD. Each group starts shut. Open one,
+untick a row to bring that warning back, or click its message to jump to the
+cell and fix the reading. **Un-accept *n*** on a group's header puts the whole
+group back; **Un-accept all** clears every acceptance in the trip.
+
 Accept-all works one trip at a time, on purpose. A button for the whole cave
 would let you bury warnings you've never looked at. It also leaves errors alone,
 and the trip's declination warning, which you fix in
@@ -193,7 +202,7 @@ Renaming a station keeps its acceptances, and so does typing the same value back
 in.
 
 For a trip with no LRUDs or no splays at all, I'd hide the column in the trip's
-Settings section instead. CaveWhere then stops producing those warnings, even
+Settings section instead (see [Hide the LRUD or Splays column](calibration.md#hide-the-lrud-or-splays-column)). CaveWhere then stops producing those warnings, even
 for stations you add later.
 
 ## A warning is not always wrong

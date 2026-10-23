@@ -90,10 +90,18 @@ MainWindowTest {
             return found
         }
 
+        // Opening the section or a group grows the table's header layouts,
+        // which place their children on the next polish; clicking before then
+        // would land on wherever the target sat while collapsed
+        function settledClick(target) {
+            verify(waitForPolish(target.Window.window), "the window should finish laying out")
+            mouseClick(target)
+        }
+
         function tapChild(parentItem, name) {
             const target = findChild(parentItem, name)
             verify(target !== null, parentItem.objectName + " should have " + name)
-            mouseClick(target)
+            settledClick(target)
         }
 
         function groups(sectionItem) {
@@ -109,6 +117,12 @@ MainWindowTest {
 
         function expandedSection() {
             const sectionItem = visibleSection()
+            // Typing the shot left the table scrolled to that row, with the
+            // header that holds the section above the top of the view
+            const view = findChild(surveyTableId.surveyEditor(), "view")
+            verify(view !== null, "the survey editor should have its table view")
+            verify(waitForPolish(view.Window.window), "the header should finish growing first")
+            view.contentY = view.originY
             tapChild(sectionItem, "acceptedWarningsHeader")
             tryVerify(() => sectionItem.expanded, 5000, "tapping the header should open the section")
             tryVerify(() => groups(sectionItem).length === 2, 5000, "the section should list two kinds")
@@ -160,7 +174,7 @@ MainWindowTest {
             const checkbox = findChild(row, "suppress")
             verify(checkbox !== null, "a row should carry its checkbox")
             verify(checkbox.checked)
-            mouseClick(checkbox)
+            settledClick(checkbox)
 
             tryCompare(context.trip.errorModel, "warningCount", 1)
             tryVerify(() => groups(sectionItem).length === 1, 5000,

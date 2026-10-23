@@ -16,11 +16,6 @@ QQ.Item {
     readonly property int horizontalPadding: 20
     readonly property int verticalPadding: 10
 
-    // Stopgap until the accepted-warnings section under the badge carries the count
-    function acceptedSuffix() {
-        return overviewId._numAccepted > 0 ? qsTr(" · %1 accepted").arg(overviewId._numAccepted) : ""
-    }
-
     implicitWidth: borderRectangle.width
     implicitHeight: borderRectangle.height
 
@@ -165,7 +160,7 @@ QQ.Item {
             extend: "hasError"
             QQ.PropertyChanges {
                 errorText {
-                    text: "There are <b>" + overviewId._numErrors + " errors</b>" + overviewId.acceptedSuffix()
+                    text: "There are <b>" + overviewId._numErrors + " errors</b>"
                 }
             }
         },
@@ -177,7 +172,7 @@ QQ.Item {
 
             QQ.PropertyChanges {
                 errorText {
-                    text: "There are " + overviewId._numWarnings + " warnings" + overviewId.acceptedSuffix()
+                    text: "There are " + overviewId._numWarnings + " warnings"
                 }
             }
         },
@@ -190,7 +185,7 @@ QQ.Item {
 
             QQ.PropertyChanges {
                 errorText {
-                    text: "There are <b>" + overviewId._numErrors + " errors</b> and " + overviewId._numWarnings + " warnings" + overviewId.acceptedSuffix()
+                    text: "There are <b>" + overviewId._numErrors + " errors</b> and " + overviewId._numWarnings + " warnings"
                 }
             }
         }

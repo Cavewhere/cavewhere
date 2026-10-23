@@ -237,6 +237,8 @@ downstream can give it shape.
 CaveWhere asks for all 4. Once a station has a name, each empty LRUD beside it
 raises its own warning, so a skipped station carries 4. Fill them in as you go
 down the block; at 4 warnings a station, they bury the one warning that matters.
+If the trip has no LRUDs at all, untick **LRUD** in the trip's Settings instead
+(see [Hide the LRUD or Splays column](calibration.md#hide-the-lrud-or-splays-column)).
 
 A shot with an **explicitly entered zero** distance and no compass or clino is
 special: an **LRUD-only** station, where you recorded passage dimensions without

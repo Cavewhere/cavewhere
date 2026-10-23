@@ -316,8 +316,10 @@ Q_DECLARE_METATYPE(cwSurveyChunk*)
 //! One cell of a chunk: a station or shot index and the role of its box
 class CAVEWHERE_LIB_EXPORT cwSurveyChunkCell {
     Q_GADGET
+    QML_VALUE_TYPE(surveyChunkCell)
     Q_PROPERTY(int index READ index CONSTANT)
     Q_PROPERTY(cwSurveyChunk::DataRole role READ role CONSTANT)
+    Q_PROPERTY(bool valid READ isValid CONSTANT)
 
 public:
     cwSurveyChunkCell() = default;

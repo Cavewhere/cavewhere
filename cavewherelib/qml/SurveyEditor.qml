@@ -293,6 +293,12 @@ QQ.Item {
                         trip: currentTrip
                         Layout.fillWidth: true
                     }
+
+                    AcceptedWarningsSection {
+                        trip: clipArea.currentTrip
+                        surveyEditorModel: editorModel
+                        Layout.fillWidth: true
+                    }
                 }
 
                 BreakLine { }

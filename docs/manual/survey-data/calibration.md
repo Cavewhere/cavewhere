@@ -59,6 +59,24 @@ That check compares the *corrected* numbers, backsight flipped, so a wrong
 calibration raises the same warning as a wrong reading. Worth remembering when
 every shot in a trip complains at once.
 
+## Hide the LRUD or Splays column
+
+Some trips never had LRUDs, or never shot splays. An old Compass file is the
+usual one. The **Settings** section under Calibration has a **Columns:** row
+with 2 checkboxes, **LRUD** and **Splays**. Untick LRUD and the L, R, U and D
+boxes leave the survey table, and CaveWhere stops raising the 4 "Missing"
+warnings on every station, including stations you add later. Untick Splays and
+the splay column goes the same way.
+
+A column hides only while it is empty, so CaveWhere never hides data from you.
+While any box holds text the checkbox stays grayed out, and hovering it says why:
+
+> LRUD can be hidden once every L, R, U and D box in this trip is empty.
+
+Ticking a column back on always works. A warning you accepted before hiding the
+column comes back still accepted; the rest come back as warnings. New trips, and
+files saved before this setting existed, show both columns.
+
 ## Set the distance calibration
 
 The **Distance** box holds one number: what to add to every distance reading in

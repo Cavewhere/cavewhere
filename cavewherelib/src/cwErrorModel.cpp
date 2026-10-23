@@ -66,6 +66,7 @@ void cwErrorModel::addChildModel(cwErrorModel *model)
     connect(model, SIGNAL(warningCountChanged()), this, SLOT(makeWarningDirty()));
 
     makeCountDirty();
+    emit childModelAdded(model);
 }
 
 void cwErrorModel::removeChildModel(cwErrorModel *model)
@@ -78,6 +79,7 @@ void cwErrorModel::removeChildModel(cwErrorModel *model)
     disconnect(model, SIGNAL(warningCountChanged()), this, SLOT(makeWarningDirty()));
 
     makeCountDirty();
+    emit childModelRemoved(model);
 }
 
 void cwErrorModel::makeCountDirty()
