@@ -2,6 +2,7 @@ import QtQuick
 import QtTest
 import cavewherelib
 import cw.TestLib
+import QmlTestRecorder
 
 // Accepting warnings from the trip page (#174): the warning badge's menu
 // accepts or un-accepts every survey warning in the trip, the per-cell popup

@@ -145,6 +145,10 @@ public:
     // Current unsuppressed warning count for one kind across the trip's chunks
     Q_INVOKABLE int warningCountForTypeId(int errorTypeId) const;
 
+    // Current unsuppressed warnings that acceptAllWarnings() can accept; the
+    // trip's own declination warning is excluded
+    Q_INVOKABLE int acceptableWarningCount() const;
+
     bool hasLrudData() const { return m_hasLrudData; }
     bool hasSplayData() const { return m_hasSplayData; }
 

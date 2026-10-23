@@ -657,6 +657,15 @@ int cwTrip::warningCountForTypeId(int errorTypeId) const
     return count;
 }
 
+int cwTrip::acceptableWarningCount() const
+{
+    int count = 0;
+    for(const cwSurveyChunk* chunk : Chunks) {
+        count += chunk->acceptableWarningCount();
+    }
+    return count;
+}
+
 void cwTrip::connectColumnData(cwSurveyChunk* chunk)
 {
     connect(chunk, &cwSurveyChunk::dataChanged, this, [this](cwSurveyChunk::DataRole role, int) {

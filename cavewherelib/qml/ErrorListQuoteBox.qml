@@ -10,6 +10,8 @@ QQ.Loader {
 
     property ErrorListModel errors
     required property QQ.Item errorIcon
+    // Offers "accept all similar" across this trip
+    property Trip trip: null
 
     //This allows qml testcases to work correctly
     property string quoteBoxObjectName
@@ -83,6 +85,35 @@ QQ.Loader {
                             text: delegateId.message
                             font.strikeout: delegateId.suppressed
                         }
+                    }
+                }
+
+                // One link per warning kind. A cell's warnings each carry their
+                // own errorTypeId, so one link per row is one link per kind.
+                QQ.Repeater {
+                    model: loaderId.errors === null || loaderId.trip === null ? 0 : loaderId.errors
+                    delegate: LinkText {
+                        id: acceptSimilarId
+                        objectName: "acceptSimilar"
+
+                        required property int errorType
+                        required property int errorTypeId
+                        required property bool suppressed
+
+                        // warningCountForTypeId has no notify signal; reading the
+                        // trip's counts re-runs this whenever they move
+                        readonly property int similarCount: {
+                            loaderId.trip.errorModel.warningCount
+                            loaderId.trip.errorModel.suppressedWarningCount
+                            return loaderId.trip.warningCountForTypeId(acceptSimilarId.errorTypeId)
+                        }
+
+                        visible: acceptSimilarId.errorType === CwError.Warning
+                                 && !acceptSimilarId.suppressed
+                                 && acceptSimilarId.errorTypeId !== 0
+                        text: qsTr("Accept all similar warnings in this trip (%1)").arg(acceptSimilarId.similarCount)
+
+                        onClicked: loaderId.trip.acceptAllWarnings([acceptSimilarId.errorTypeId])
                     }
                 }
             }

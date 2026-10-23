@@ -72,9 +72,11 @@ TEST_CASE("acceptAllWarnings accepts every chunk warning and leaves the declinat
     constexpr int kChunkWarnings = 8;
     constexpr int kDeclinationWarnings = 1;
     REQUIRE(trip->errorModel()->warningCount() == 2 * kChunkWarnings + kDeclinationWarnings);
+    CHECK(trip->acceptableWarningCount() == 2 * kChunkWarnings);
 
     CHECK(trip->acceptAllWarnings() == 2 * kChunkWarnings);
     CHECK(trip->errorModel()->warningCount() == kDeclinationWarnings);
+    CHECK(trip->acceptableWarningCount() == 0);
     CHECK(trip->errorModel()->suppressedWarningCount() == 2 * kChunkWarnings);
 }
 

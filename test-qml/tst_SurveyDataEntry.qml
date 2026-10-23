@@ -941,11 +941,13 @@ MainWindowTest {
             mouseClick(distanceError)
             waitForRendering(rootId);
 
-            //Since error icon is in a loader, the item is deleted
+            //A cell whose only warning is accepted keeps a muted marker (#174)
             errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.1->coreTextInput->errorIcon")
+            verify(errorIcon_obj1 !== null)
 
             //Make sure the warning message that was shown before is now hidden
-            verify(errorIcon_obj1 === null)
+            tryVerify(() => !errorIcon_obj1.checked)
+            tryVerify(() => ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->errorBoxdataBox.1.1") === null)
 
             //Make sure the error message is correct
             let errorText = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->errorBoxdataBox.2.5->errorText")

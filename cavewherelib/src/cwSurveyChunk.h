@@ -146,6 +146,9 @@ public:
     // Current unsuppressed warning count for one kind in this chunk
     int warningCountForTypeId(int errorTypeId) const;
 
+    // Current unsuppressed warnings in this chunk that acceptWarnings() can accept
+    int acceptableWarningCount() const;
+
     // The cell that owns errorModel, for jumping from a listed warning to its cell
     Q_INVOKABLE cwSurveyChunkCell cellIndexForErrorModel(cwErrorModel* errorModel) const;
 

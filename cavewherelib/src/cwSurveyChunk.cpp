@@ -2301,6 +2301,18 @@ int cwSurveyChunk::warningCountForTypeId(int errorTypeId) const
     return count;
 }
 
+int cwSurveyChunk::acceptableWarningCount() const
+{
+    int count = 0;
+    for(const cwErrorModel* cellModel : CellErrorModels) {
+        const QList<cwError> errors = cellModel->errors()->toList();
+        count += static_cast<int>(std::count_if(errors.cbegin(), errors.cend(), [](const cwError& error) {
+            return isAcceptableWarning(error) && !error.suppressed();
+        }));
+    }
+    return count;
+}
+
 void cwSurveyChunk::connectAcceptanceWriteThrough(cwErrorModel* cellModel, DataRole role, int index)
 {
     cwErrorListModel* list = cellModel->errors();
