@@ -11,11 +11,16 @@ Item {
     property alias distanceWidth: distanceLabelId.width
     property alias compassWidth: compassLabelId.width
     property alias clinoWidth: clinoLabelId.width
-    property alias lWidth: lLabelId.width
-    property alias rWidth: rLabelId.width
-    property alias uWidth: uLabelId.width
-    property alias dWidth: dLabelId.width
-    property alias splaysWidth: splaysLabelId.width
+    //The trip's Columns setting. A hidden column takes no width, so the
+    //columns after it close up
+    required property bool lrudVisible
+    required property bool splaysVisible
+
+    readonly property real lWidth: lrudVisible ? lLabelId.width : 0
+    readonly property real rWidth: lrudVisible ? rLabelId.width : 0
+    readonly property real uWidth: lrudVisible ? uLabelId.width : 0
+    readonly property real dWidth: lrudVisible ? dLabelId.width : 0
+    readonly property real splaysWidth: splaysVisible ? splaysLabelId.width : 0
     property int shotOffset: 0
 
     property real columnOffset: 1
@@ -25,6 +30,9 @@ Item {
     property real compassX: distanceX + distanceWidth - columnOffset
     property real clinoX: compassX + compassWidth - columnOffset
     property real leftX: clinoX + clinoWidth - columnOffset
+    property real splaysX: lrudVisible
+                           ? leftX + lWidth + rWidth + uWidth + dWidth - 4 * columnOffset
+                           : leftX
 
     property real dataRowHeight: 50
     property real dataRowHalfHeight: dataRowHeight * 0.5
@@ -99,30 +107,40 @@ Item {
 
         TitleLabel {
             id: lLabelId
+            objectName: "lTitle"
+            visible: titleId.lrudVisible
             text: "L"
             Layout.fillWidth: true
         }
 
         TitleLabel {
             id: rLabelId
+            objectName: "rTitle"
+            visible: titleId.lrudVisible
             text: "R"
             Layout.fillWidth: true
         }
 
         TitleLabel {
             id: uLabelId
+            objectName: "uTitle"
+            visible: titleId.lrudVisible
             text: "U"
             Layout.fillWidth: true
         }
 
         TitleLabel {
             id: dLabelId
+            objectName: "dTitle"
+            visible: titleId.lrudVisible
             text: "D"
             Layout.fillWidth: true
         }
 
         TitleLabel {
             id: splaysLabelId
+            objectName: "splaysTitle"
+            visible: titleId.splaysVisible
             text: "Splays"
             Layout.fillWidth: true
         }

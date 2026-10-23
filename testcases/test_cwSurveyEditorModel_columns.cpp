@@ -80,18 +80,37 @@ TEST_CASE("With the LRUD column hidden, Tab from the clino lands on the next sta
     ColumnsFixture fixture;
     fixture.trip.calibrations()->setLruds(false);
 
-    constexpr int kShotIndex = 1;
-    const int shotRow = fixture.model.modelRowForCellRole(fixture.chunk, kShotIndex,
-                                                          cwSurveyEditorCellIndex::ShotClinoCell);
-    const int nextStationRow = fixture.model.modelRowForCellRole(fixture.chunk, kShotIndex + 1,
-                                                                 cwSurveyEditorCellIndex::StationNameCell);
-    REQUIRE(shotRow >= 0);
-    REQUIRE(nextStationRow >= 0);
+    auto tabFromClino = [&fixture](int shotIndex) {
+        const int shotRow = fixture.model.modelRowForCellRole(fixture.chunk, shotIndex,
+                                                              cwSurveyEditorCellIndex::ShotClinoCell);
+        REQUIRE(shotRow >= 0);
+        return fixture.model.nextCell(fixture.model.cellIndex(shotRow, cwSurveyEditorCellIndex::ShotClinoCell),
+                                      cwSurveyEditorModel::Tab,
+                                      true,
+                                      false);
+    };
 
-    const auto next = fixture.model.nextCell(fixture.model.cellIndex(shotRow, cwSurveyEditorCellIndex::ShotClinoCell),
-                                             cwSurveyEditorModel::Tab,
-                                             true,
-                                             false);
-    CHECK(next.modelRow() == nextStationRow);
-    CHECK(next.cellRole() == cwSurveyEditorCellIndex::StationNameCell);
+    //Shot i's clino leads into station i + 1's row, where the Splays cell is
+    //the first box still shown
+    constexpr int kLastShotIndex = 1;
+    const int lastStationRow = fixture.model.modelRowForCellRole(fixture.chunk, kLastShotIndex + 1,
+                                                                 cwSurveyEditorCellIndex::StationNameCell);
+    REQUIRE(lastStationRow >= 0);
+
+    SECTION("Splays shown")
+    {
+        const auto next = tabFromClino(kLastShotIndex);
+        CHECK(next.modelRow() == lastStationRow);
+        CHECK(next.cellRole() == cwSurveyEditorCellIndex::StationSplaysCell);
+    }
+
+    SECTION("Splays hidden too")
+    {
+        //With both columns gone the first shot's clino walks past the empty
+        //rows of stations 0 and 1 onto station 2's name
+        fixture.trip.calibrations()->setSplays(false);
+        const auto next = tabFromClino(0);
+        CHECK(next.modelRow() == lastStationRow);
+        CHECK(next.cellRole() == cwSurveyEditorCellIndex::StationNameCell);
+    }
 }

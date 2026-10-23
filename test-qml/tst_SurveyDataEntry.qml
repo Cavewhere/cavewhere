@@ -2888,7 +2888,16 @@ MainWindowTest {
 
             waitForRendering(RootData.pageView.currentPageItem)
 
-            let station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.0")
+            //The trip page's header sections push the first rows to the bottom
+            //edge of the window, so bring the row into the middle before clicking it
+            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
+            surveyView.positionViewAtIndex(1, ListView.Center)
+
+            let station1 = null
+            tryVerify(() => {
+                station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.0")
+                return station1 !== null
+            })
             mouseClick(station1)
 
             waitForRendering(RootData.pageView.currentPageItem)
@@ -2903,7 +2912,6 @@ MainWindowTest {
 
 
             //-- Go the last element and tab forward
-            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             surveyView.currentIndex = surveyView.count - 1;
             surveyView.positionViewAtEnd();
             waitForRendering(RootData.pageView.currentPageItem)

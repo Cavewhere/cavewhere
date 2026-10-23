@@ -95,6 +95,8 @@ Item {
             chunk: itemId.model.chunkForRow(itemId.index)
             dataRowHeight: itemId.columnTemplate.dataRowHeight
             listViewIndex: index
+            lrudVisible: itemId.columnTemplate.lrudVisible
+            splaysVisible: itemId.columnTemplate.splaysVisible
         }
     }
 
@@ -126,6 +128,7 @@ Item {
 
             StationDistanceBox {
                 id: leftBox
+                visible: itemId.columnTemplate.lrudVisible
                 width: itemId.columnTemplate.lWidth
                 height: itemId.columnTemplate.dataRowHeight
                 x: itemId.columnTemplate.leftX
@@ -145,6 +148,7 @@ Item {
 
             StationDistanceBox {
                 id: rightBox
+                visible: itemId.columnTemplate.lrudVisible
                 width: itemId.columnTemplate.rWidth
                 height: itemId.columnTemplate.dataRowHeight
                 anchors.topMargin: 0
@@ -164,6 +168,7 @@ Item {
 
             StationDistanceBox {
                 id: upBox
+                visible: itemId.columnTemplate.lrudVisible
                 width: itemId.columnTemplate.uWidth
                 height: itemId.columnTemplate.dataRowHeight
                 anchors.topMargin: 0
@@ -183,6 +188,7 @@ Item {
 
             StationDistanceBox {
                 id: downBox
+                visible: itemId.columnTemplate.lrudVisible
                 width: itemId.columnTemplate.dWidth
                 height: itemId.columnTemplate.dataRowHeight
                 anchors.topMargin: 0
@@ -202,11 +208,11 @@ Item {
 
             SplaysBox {
                 id: splaysBox
+                visible: itemId.columnTemplate.splaysVisible
                 width: itemId.columnTemplate.splaysWidth
                 height: itemId.columnTemplate.dataRowHeight
+                x: itemId.columnTemplate.splaysX
                 anchors.top: stationBox.top
-                anchors.left: downBox.right
-                anchors.leftMargin: -1
 
                 model: itemId.model
                 rowIndex: itemId.rowIndex

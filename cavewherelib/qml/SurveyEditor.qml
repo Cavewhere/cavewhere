@@ -304,6 +304,13 @@ QQ.Item {
 
                 BreakLine { }
 
+                TripSettingsEditor {
+                    trip: clipArea.currentTrip
+                    Layout.fillWidth: true
+                }
+
+                BreakLine { }
+
                 TeamTable {
                     id: teamTable
                     model: currentTrip !== null ? clipArea.currentTrip.team : null
@@ -438,6 +445,8 @@ QQ.Item {
                 visible: false
                 listViewIndex: -1
                 chunk: null
+                lrudVisible: clipArea.currentCalibration === null || clipArea.currentCalibration.lruds
+                splaysVisible: clipArea.currentCalibration === null || clipArea.currentCalibration.splays
             }
 
 

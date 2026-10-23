@@ -242,6 +242,10 @@ private:
     int splayRowsBefore(const cwSurveyChunk* chunk, int stationIndex) const;
     int splayRowsInChunk(const cwSurveyChunk* chunk) const;
     int firstVirtualRow(cwSurveyChunk* chunk) const;
+    bool lrudsShown() const;
+    bool splaysShown() const;
+    bool isColumnHidden(cwSurveyEditorCellIndex::CellRole role) const;
+    void collapseHiddenSplays();
     void expandSplays(cwSurveyChunk* chunk, int stationIndex);
     void collapseSplays(cwSurveyChunk* chunk, int stationIndex);
     void emitSplayExpansionChanged(cwSurveyChunk* chunk, int stationIndex);
