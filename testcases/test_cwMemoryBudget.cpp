@@ -9,6 +9,7 @@
 //Qt includes
 #include <QSettings>
 #include <QSignalSpy>
+#include <QTest>
 
 namespace {
     using cw::budgets::kBytesPerMegabyte;
@@ -18,6 +19,8 @@ namespace {
     constexpr qint64 kMediumChargeBytes = 16 * kBytesPerMegabyte;
     constexpr qint64 kOneMiB = kBytesPerMegabyte;
     constexpr int kOverrideMb = 7;
+    constexpr int kTwoRunning = 2;
+    constexpr int kWaitTimeoutMs = 1000;
 
     //! Restores the memoryBudgetMb setting, in QSettings and in cwJobSettings, on every path out of a test
     struct MemoryBudgetSettingRestorer {
@@ -157,4 +160,42 @@ TEST_CASE("cwMemoryBudget paused ledger refuses charges", "[cwMemoryBudget]") {
     CHECK_FALSE(budget.isPaused());
     CHECK(budget.tryCharge(kOneMiB));
     CHECK(budget.inFlightBytes() == kOneMiB);
+}
+
+TEST_CASE("cwMemoryBudget unpausing wakes a waiting limited() run", "[cwMemoryBudget]") {
+    cwMemoryBudget budget;
+    budget.setCapOverrideBytes(kCapBytes);
+    budget.setPaused(true);
+
+    QObject context;
+    QList<int> launchedInputs;
+    QList<AsyncFuture::Deferred<int>> launched;
+    auto launch = [&](int input) {
+        AsyncFuture::Deferred<int> deferred;
+        launchedInputs.append(input);
+        launched.append(deferred);
+        return deferred.future();
+    };
+    auto weight = [](int) { return kOneMiB; };
+
+    auto run = AsyncFuture::limited(&context, QList<int>{0, 1}, launch, weight,
+                                    AsyncFuture::Limit{kTwoRunning, 0, &budget});
+
+    REQUIRE(launchedInputs == QList<int>{0});
+    CHECK(budget.inFlightBytes() == kOneMiB);
+
+    budget.setPaused(false);
+    CHECK(QTest::qWaitFor([&]() { return launchedInputs.size() == kTwoRunning; }, kWaitTimeoutMs));
+    CHECK(launchedInputs == QList<int>({0, 1}));
+    CHECK_FALSE(run.items.at(0).isFinished());
+
+    const auto completeLaunchedUntilAllFinish = [&]() {
+        for (int i = 0; i < launched.size(); ++i) {
+            AsyncFuture::Deferred<int> deferred = launched.at(i);
+            deferred.complete(launchedInputs.at(i));
+        }
+        return run.all.isFinished();
+    };
+    CHECK(QTest::qWaitFor(completeLaunchedUntilAllFinish, kWaitTimeoutMs));
+    CHECK(budget.inFlightBytes() == 0);
 }

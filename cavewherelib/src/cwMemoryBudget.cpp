@@ -195,7 +195,11 @@ qint64 cwMemoryBudget::capOverrideBytes() const
 
 void cwMemoryBudget::setPaused(bool paused)
 {
-    m_paused.store(paused);
+    const bool wasPaused = m_paused.exchange(paused);
+    if(wasPaused && !paused) {
+        // Runs refused while paused retry admission.
+        emit released();
+    }
 }
 
 bool cwMemoryBudget::isPaused() const

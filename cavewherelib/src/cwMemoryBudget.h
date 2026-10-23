@@ -37,7 +37,8 @@ public:
     void setCapOverrideBytes(qint64 bytes);
     qint64 capOverrideBytes() const;
 
-    // The pressure hook's seam: a paused ledger refuses every charge.
+    // The pressure hook's seam: a paused ledger refuses every charge, and unpausing
+    // emits released() so waiting runs retry admission.
     void setPaused(bool paused);
     bool isPaused() const;
 
