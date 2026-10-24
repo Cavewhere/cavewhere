@@ -14,30 +14,30 @@
 #include <QDebug>
 
 cwStation::cwStation() :
-    Data(new PrivateData())
+    m_data(new PrivateData())
 
 { }
 
 cwStation::cwStation(const cwStation &station) :
-    Data(station.Data)
+    m_data(station.m_data)
 {
 }
 
 cwStation::cwStation(QString name) :
-    Data(new PrivateData())
+    m_data(new PrivateData())
 {
     setName(name);
 }
 
 cwStation::PrivateData::PrivateData() :
-    id(QUuid::createUuid())
+    m_id(QUuid::createUuid())
 {
 
 }
 
 cwStation::PrivateData::PrivateData(QString name) :
-    id(QUuid::createUuid()),
-    Name(name)
+    m_id(QUuid::createUuid()),
+    m_name(name)
 {
 
 }
@@ -107,7 +107,7 @@ bool cwStation::nameIsValid(QString stationName)
  */
 bool cwStation::setName(QString name) {
     if(nameIsValid(name)) {
-        Data->Name = name;
+        m_data->m_name = name;
         return true;
     }
     return false;
@@ -116,15 +116,15 @@ bool cwStation::setName(QString name) {
 
 QSet<int> cwStation::ignoredWarnings() const
 {
-    return Data->m_ignoredWarnings;
+    return m_data->m_ignoredWarnings;
 }
 
 void cwStation::setIgnoredWarnings(const QSet<int>& ids)
 {
-    Data->m_ignoredWarnings = ids;
+    m_data->m_ignoredWarnings = ids;
 }
 
 bool cwStation::isWarningIgnored(cwErrorTypeId id) const
 {
-    return Data->m_ignoredWarnings.contains(static_cast<int>(id));
+    return m_data->m_ignoredWarnings.contains(static_cast<int>(id));
 }

@@ -80,13 +80,13 @@ public:
 
 private:
     QUuid m_id;
-    QList<cwShotMeasurement> measurements;
-    bool IncludeDistance = true;
+    QList<cwShotMeasurement> m_measurements;
+    bool m_includeDistance = true;
     QSet<int> m_ignoredWarnings;
 };
 
 inline int cwShot::measurementCount() const {
-    return measurements.size();
+    return m_measurements.size();
 }
 
 #endif // CSHOT_H

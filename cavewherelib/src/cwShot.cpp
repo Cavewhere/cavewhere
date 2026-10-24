@@ -23,7 +23,7 @@ cwShot::cwShot(const QString& distance,
     front.compass = cwCompassReading(compass);
     front.clino = cwClinoReading(clino);
     front.direction = cwShotMeasurement::Direction::Front;
-    measurements.append(front);
+    m_measurements.append(front);
 
     // Back measurement
     cwShotMeasurement back;
@@ -31,40 +31,40 @@ cwShot::cwShot(const QString& distance,
     back.compass = cwCompassReading(backCompass);
     back.clino = cwClinoReading(backClino);
     back.direction = cwShotMeasurement::Direction::Back;
-    measurements.append(back);
+    m_measurements.append(back);
 }
 
 // --- Legacy API implementations ---
 
 cwDistanceReading cwShot::distance() const {
     return measurementCount() > 0
-               ? measurements[0].distance
+               ? m_measurements[0].distance
                : cwDistanceReading();
 }
 
 void cwShot::setDistance(const cwDistanceReading& r) {
     if (measurementCount() == 0) {
-        measurements.append(cwShotMeasurement());
+        m_measurements.append(cwShotMeasurement());
     }
-    measurements[0].distance = r;
+    m_measurements[0].distance = r;
 }
 
 cwCompassReading cwShot::compass() const {
     return measurementCount() > 0
-               ? measurements[0].compass
+               ? m_measurements[0].compass
                : cwCompassReading();
 }
 
 void cwShot::setCompass(const cwCompassReading& r) {
     if (measurementCount() == 0) {
-        measurements.append(cwShotMeasurement());
+        m_measurements.append(cwShotMeasurement());
     }
-    measurements[0].compass = r;
+    m_measurements[0].compass = r;
 }
 
 cwCompassReading cwShot::backCompass() const {
     return measurementCount() > 1
-               ? measurements[1].compass
+               ? m_measurements[1].compass
                : cwCompassReading();
 }
 
@@ -72,27 +72,27 @@ void cwShot::setBackCompass(const cwCompassReading& r) {
     if (measurementCount() < 2) {
         cwShotMeasurement back;
         back.direction = cwShotMeasurement::Direction::Back;
-        measurements.append(back);
+        m_measurements.append(back);
     }
-    measurements[1].compass = r;
+    m_measurements[1].compass = r;
 }
 
 cwClinoReading cwShot::clino() const {
     return measurementCount() > 0
-               ? measurements[0].clino
+               ? m_measurements[0].clino
                : cwClinoReading();
 }
 
 void cwShot::setClino(const cwClinoReading& r) {
     if (measurementCount() == 0) {
-        measurements.append(cwShotMeasurement());
+        m_measurements.append(cwShotMeasurement());
     }
-    measurements[0].clino = r;
+    m_measurements[0].clino = r;
 }
 
 cwClinoReading cwShot::backClino() const {
     return measurementCount() > 1
-               ? measurements[1].clino
+               ? m_measurements[1].clino
                : cwClinoReading();
 }
 
@@ -100,38 +100,38 @@ void cwShot::setBackClino(const cwClinoReading& r) {
     if (measurementCount() < 2) {
         cwShotMeasurement back;
         back.direction = cwShotMeasurement::Direction::Back;
-        measurements.append(back);
+        m_measurements.append(back);
     }
-    measurements[1].clino = r;
+    m_measurements[1].clino = r;
 }
 
 // --- Multi-measurement API ---
 
 void cwShot::addMeasurement(const cwShotMeasurement& m) {
-    measurements.append(m);
+    m_measurements.append(m);
 }
 
 void cwShot::removeMeasurementAt(int index) {
-    measurements.removeAt(index);
+    m_measurements.removeAt(index);
 }
 
 const cwShotMeasurement& cwShot::measurementAt(int index) const {
-    return measurements.at(index);
+    return m_measurements.at(index);
 }
 
 // --- Include/exclude & validity ---
 
 bool cwShot::isDistanceIncluded() const {
-    return IncludeDistance;
+    return m_includeDistance;
 }
 
 void cwShot::setDistanceIncluded(bool include) {
-    IncludeDistance = include;
+    m_includeDistance = include;
 }
 
 bool cwShot::isValid() const {
     return measurementCount() > 0
-           && measurements[0].distance.state() == cwDistanceReading::State::Valid;
+           && m_measurements[0].distance.state() == cwDistanceReading::State::Valid;
 }
 
 QSet<int> cwShot::ignoredWarnings() const
