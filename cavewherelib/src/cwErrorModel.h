@@ -55,16 +55,16 @@ signals:
     void childModelRemoved(cwErrorModel* child);
 
 private:
-    mutable int FatalCount; //!< Cached values for FatalCount
-    mutable int WarningCount; //!< Cached values for WaringCount
-    mutable int IgnoredWarningCount; //!< Cached count of ignored warnings
+    mutable int m_fatalCount; //!< Cached count of fatal errors
+    mutable int m_warningCount; //!< Cached count of warnings
+    mutable int m_ignoredWarningCount; //!< Cached count of ignored warnings
 
-    mutable bool FatalWaringCountUptoDate;
+    mutable bool m_countsUpToDate;
 
-    cwErrorListModel* Errors;
-    QList<cwErrorModel*> ChildModels;
+    cwErrorListModel* m_errors;
+    QList<cwErrorModel*> m_childModels;
 
-    QPointer<cwErrorModel> Parent;
+    QPointer<cwErrorModel> m_parent;
 
     void addChildModel(cwErrorModel* model);
     void removeChildModel(cwErrorModel* model);

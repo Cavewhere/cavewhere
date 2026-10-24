@@ -11,15 +11,15 @@
 
 cwErrorModel::cwErrorModel(QObject *parent) :
     QObject(parent),
-    FatalCount(0),
-    WarningCount(0),
-    IgnoredWarningCount(0),
-    FatalWaringCountUptoDate(false),
-    Errors(new cwErrorListModel(this)),
-    Parent(nullptr)
+    m_fatalCount(0),
+    m_warningCount(0),
+    m_ignoredWarningCount(0),
+    m_countsUpToDate(false),
+    m_errors(new cwErrorListModel(this)),
+    m_parent(nullptr)
 {
-    connect(Errors, SIGNAL(countChanged()), this, SLOT(makeCountDirty()));
-    connect(Errors, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)), this, SLOT(checkForCountChanged(QModelIndex,QModelIndex,QVector<int>)));
+    connect(m_errors, SIGNAL(countChanged()), this, SLOT(makeCountDirty()));
+    connect(m_errors, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)), this, SLOT(checkForCountChanged(QModelIndex,QModelIndex,QVector<int>)));
 }
 
 /**
@@ -32,15 +32,15 @@ cwErrorModel::~cwErrorModel()
 
 void cwErrorModel::setParentModel(cwErrorModel *parent)
 {
-    if(Parent != parent) {
-        if(!Parent.isNull()) {
-            Parent->removeChildModel(this);
+    if(m_parent != parent) {
+        if(!m_parent.isNull()) {
+            m_parent->removeChildModel(this);
         }
 
-        Parent = parent;
+        m_parent = parent;
 
-        if(!Parent.isNull()) {
-            Parent->addChildModel(this);
+        if(!m_parent.isNull()) {
+            m_parent->addChildModel(this);
         }
 
         makeCountDirty();
@@ -49,7 +49,7 @@ void cwErrorModel::setParentModel(cwErrorModel *parent)
 
 cwErrorModel *cwErrorModel::parentModel() const
 {
-    return Parent;
+    return m_parent;
 }
 
 /**
@@ -58,9 +58,9 @@ cwErrorModel *cwErrorModel::parentModel() const
  */
 void cwErrorModel::addChildModel(cwErrorModel *model)
 {
-    Q_ASSERT(!ChildModels.contains(model));
+    Q_ASSERT(!m_childModels.contains(model));
 
-    ChildModels.append(model);
+    m_childModels.append(model);
 
     connect(model, SIGNAL(fatalCountChanged()), this, SLOT(makeFatalDirty()));
     connect(model, SIGNAL(warningCountChanged()), this, SLOT(makeWarningDirty()));
@@ -71,9 +71,9 @@ void cwErrorModel::addChildModel(cwErrorModel *model)
 
 void cwErrorModel::removeChildModel(cwErrorModel *model)
 {
-    Q_ASSERT(ChildModels.contains(model));
+    Q_ASSERT(m_childModels.contains(model));
 
-    ChildModels.removeOne(model);
+    m_childModels.removeOne(model);
 
     disconnect(model, SIGNAL(fatalCountChanged()), this, SLOT(makeFatalDirty()));
     disconnect(model, SIGNAL(warningCountChanged()), this, SLOT(makeWarningDirty()));
@@ -91,13 +91,13 @@ void cwErrorModel::makeCountDirty()
 
 void cwErrorModel::makeFatalDirty()
 {
-    FatalWaringCountUptoDate = false;
+    m_countsUpToDate = false;
     emit fatalCountChanged();
 }
 
 void cwErrorModel::makeWarningDirty()
 {
-    FatalWaringCountUptoDate = false;
+    m_countsUpToDate = false;
     emit warningCountChanged();
     //Every change that can move the suppressed count also dirties the warnings
     emit ignoredWarningCountChanged();
@@ -128,21 +128,21 @@ void cwErrorModel::checkForCountChanged(QModelIndex topLeft, QModelIndex bottomR
  */
 void cwErrorModel::updateFatalAndWarningCount() const
 {
-    FatalCount = 0;
-    WarningCount = 0;
-    IgnoredWarningCount = 0;
+    m_fatalCount = 0;
+    m_warningCount = 0;
+    m_ignoredWarningCount = 0;
 
-    for(int i = 0; i < Errors->count(); i++) {
-        cwError error = Errors->at(i);
+    for(int i = 0; i < m_errors->count(); i++) {
+        cwError error = m_errors->at(i);
         switch(error.type()) {
         case cwError::Fatal:
-            FatalCount++;
+            m_fatalCount++;
             break;
         case cwError::Warning:
             if(error.suppressed()) {
-                IgnoredWarningCount++;
+                m_ignoredWarningCount++;
             } else {
-                WarningCount++;
+                m_warningCount++;
             }
             break;
         default:
@@ -150,13 +150,13 @@ void cwErrorModel::updateFatalAndWarningCount() const
         }
     }
 
-    foreach(cwErrorModel* child, ChildModels) {
-        FatalCount += child->fatalCount();
-        WarningCount += child->warningCount();
-        IgnoredWarningCount += child->ignoredWarningCount();
+    foreach(cwErrorModel* child, m_childModels) {
+        m_fatalCount += child->fatalCount();
+        m_warningCount += child->warningCount();
+        m_ignoredWarningCount += child->ignoredWarningCount();
     }
 
-    FatalWaringCountUptoDate = true;
+    m_countsUpToDate = true;
 }
 
 /**
@@ -164,10 +164,10 @@ void cwErrorModel::updateFatalAndWarningCount() const
 * @return
 */
 int cwErrorModel::fatalCount() const {
-    if(!FatalWaringCountUptoDate) {
+    if(!m_countsUpToDate) {
         updateFatalAndWarningCount();
     }
-    return FatalCount;
+    return m_fatalCount;
 }
 
 
@@ -176,18 +176,18 @@ int cwErrorModel::fatalCount() const {
 * @return
 */
 int cwErrorModel::warningCount() const {
-    if(!FatalWaringCountUptoDate) {
+    if(!m_countsUpToDate) {
         updateFatalAndWarningCount();
     }
-    return WarningCount;
+    return m_warningCount;
 }
 
 int cwErrorModel::ignoredWarningCount() const
 {
-    if(!FatalWaringCountUptoDate) {
+    if(!m_countsUpToDate) {
         updateFatalAndWarningCount();
     }
-    return IgnoredWarningCount;
+    return m_ignoredWarningCount;
 }
 
 /**
@@ -195,7 +195,7 @@ int cwErrorModel::ignoredWarningCount() const
 * @return
 */
 cwErrorListModel* cwErrorModel::errors() const {
-    return Errors;
+    return m_errors;
 }
 
 /**
@@ -204,7 +204,7 @@ cwErrorListModel* cwErrorModel::errors() const {
  */
 QList<cwErrorModel *> cwErrorModel::childModels() const
 {
-    return ChildModels;
+    return m_childModels;
 }
 
 /**
@@ -222,7 +222,7 @@ QStringList cwErrorModel::toStringList() const
                                    .arg(error.message()));
     }
 
-    for(auto child : ChildModels) {
+    for(auto child : m_childModels) {
         errorStringList.append(child->toStringList());
     }
     return errorStringList;
