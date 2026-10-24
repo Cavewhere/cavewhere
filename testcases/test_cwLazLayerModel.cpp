@@ -21,17 +21,6 @@
 
 namespace {
 
-// Set up a model bound to a fresh GIS Layers subdir under @a tempDir, so
-// model tests can drop .laz files into the folder and call rescan() to
-// observe model changes without spinning up cwRootData/cwProject.
-QDir makeGisLayersDir(const QTemporaryDir& tempDir)
-{
-    const QString gisLayersPath = QDir(tempDir.path())
-                                      .filePath(cwLazLayerModel::folderName());
-    QDir().mkpath(gisLayersPath);
-    return QDir(gisLayersPath);
-}
-
 QString dropLazIntoDir(const QDir& dir, const QString& tag)
 {
     const QString filePath = dir.filePath(QStringLiteral("%1.laz").arg(tag));

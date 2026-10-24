@@ -11,6 +11,7 @@
 //Qt includes
 #include <QDateTime>
 #include <QObject>
+#include <QPointer>
 #include <QQmlEngine>
 #include <QString>
 #include <QUuid>
@@ -167,6 +168,16 @@ public:
 
     void setFutureManagerToken(const cwFutureManagerToken& token);
 
+    /// The admission window this layer's octree builds wait in, shared with
+    /// the other layers of its model so one build runs at a time. Null builds
+    /// directly, which is what a standalone layer does.
+    void setBuildLimiter(AsyncFuture::Limiter* limiter);
+
+    /// Starts no further octree build; a build already admitted runs to its
+    /// end. Quitting calls this so a build that reaches the window after the
+    /// queue was emptied is refused instead of waited for.
+    void stopStartingBuilds();
+
     /// Where this layer gets the frame its points are loaded into, and when
     /// that frame is final. Every reload asks it again.
     void setLocalProjectionToken(const cwLocalProjectionToken& token);
@@ -255,6 +266,9 @@ private:
     cwKeywordModel* m_keywordModel = nullptr;
     cwFutureManagerToken m_futureManagerToken;
     cwLocalProjectionToken m_localProjectionToken;
+    // Guarded: the restarter may defer a start to the event loop, past the limiter's life.
+    QPointer<AsyncFuture::Limiter> m_buildLimiter;
+    bool m_startsBuilds = true;
 
     // Which reload() run is the current one: a newer one supersedes the frame
     // wait and the cache probe of an older one, which carry an older frame and

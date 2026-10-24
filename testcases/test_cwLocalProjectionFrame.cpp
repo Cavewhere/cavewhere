@@ -53,13 +53,6 @@ QVector<QVector3D> cloudAt(double easting, double northing)
     };
 }
 
-QDir makeGisLayersDir(const QTemporaryDir& tempDir)
-{
-    const QString path = QDir(tempDir.path()).filePath(cwLazLayerModel::folderName());
-    QDir().mkpath(path);
-    return QDir(path);
-}
-
 //! Write a cloud into the scanned folder under \a tag, which is also what the
 //! directory listing sorts on — so the tag decides the model's row order.
 void writeTile(const QDir& dir, const QString& tag,

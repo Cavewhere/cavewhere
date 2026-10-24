@@ -20,12 +20,16 @@
 #include "cwCavingRegion.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
+#include "cwMemoryBudget.h"
 #include "cwProject.h"
 #include "cwSaveLoad.h"
 
 Q_LOGGING_CATEGORY(lcLazModel, "cw.laz.model")
 
 namespace {
+constexpr int kOneBuildAtATime = 1;
+constexpr qint64 kCountOnly = 0;
+
 QString shortId(const cwLazLayer* layer) {
     return layer == nullptr
         ? QStringLiteral("(null)")
@@ -34,11 +38,22 @@ QString shortId(const cwLazLayer* layer) {
 } // namespace
 
 cwLazLayerModel::cwLazLayerModel(QObject* parent) :
-    QAbstractListModel(parent)
+    QAbstractListModel(parent),
+    m_buildLimiter(new AsyncFuture::Limiter(
+        AsyncFuture::Limit {kOneBuildAtATime, kCountOnly, cwMemoryBudget::instance()}, this))
 {
 }
 
 cwLazLayerModel::~cwLazLayerModel() = default;
+
+void cwLazLayerModel::cancelQueuedBuilds()
+{
+    m_startsBuilds = false;
+    for (cwLazLayer* layer : std::as_const(m_layers)) {
+        layer->stopStartingBuilds();
+    }
+    m_buildLimiter->cancelQueued();
+}
 
 int cwLazLayerModel::rowCount(const QModelIndex& parent) const
 {
@@ -546,6 +561,10 @@ cwLazLayer* cwLazLayerModel::createLayer()
     layer->setFutureManagerToken(m_futureManagerToken);
     layer->setLocalProjectionToken(m_localProjectionToken);
     layer->setCacheRootPath(m_cacheRootPath);
+    layer->setBuildLimiter(m_buildLimiter);
+    if (!m_startsBuilds) {
+        layer->stopStartingBuilds();
+    }
     return layer;
 }
 

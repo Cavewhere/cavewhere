@@ -13,12 +13,15 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 
+#include <algorithm>
+
 //Our includes
 #include "cwConcurrent.h"
 #include "cwCoordinateTransform.h"
 #include "cwFuture.h"
 #include "cwKeyword.h"
 #include "cwKeywordModel.h"
+#include "cwMemoryBudget.h"
 
 Q_LOGGING_CATEGORY(lcLazLayer, "cw.laz.layer")
 
@@ -37,8 +40,12 @@ cwGeoPoint midpoint(const cwGeoPoint& a, const cwGeoPoint& b)
 qint64 buildMemoryBudgetBytes()
 {
     const int megabytes = qEnvironmentVariableIntValue(kBuildMemoryBudgetVariable);
-    return megabytes > 0 ? qint64(megabytes) * kBytesPerMebibyte
-                         : cw::octree::kDefaultBuildMemoryBudgetBytes;
+    const qint64 bytes = megabytes > 0 ? qint64(megabytes) * kBytesPerMebibyte
+                                       : cw::octree::kDefaultBuildMemoryBudgetBytes;
+    if (const auto* budget = cwMemoryBudget::instance()) {
+        return std::min(bytes, budget->capBytes());
+    }
+    return bytes;
 }
 
 QFuture<std::shared_ptr<const cwPointOctreePack>> openCachedPack(
@@ -351,6 +358,16 @@ void cwLazLayer::reload()
         });
 }
 
+void cwLazLayer::setBuildLimiter(AsyncFuture::Limiter* limiter)
+{
+    m_buildLimiter = limiter;
+}
+
+void cwLazLayer::stopStartingBuilds()
+{
+    m_startsBuilds = false;
+}
+
 void cwLazLayer::startBuild(const QString& frameCS)
 {
     qCDebug(lcLazLayer) << QFileInfo(m_sourcePath).fileName()
@@ -401,8 +418,16 @@ void cwLazLayer::startBuild(const QString& frameCS)
             }
 
             m_buildGeneration = generation;
-            m_loadRestarter.restart([request]() {
-                return cwPointOctreeBuilder::build(request);
+            // Checked when the run starts: the restarter may defer a first start
+            // to the event loop, past a stopStartingBuilds().
+            m_loadRestarter.restart([this, request, limiter = m_buildLimiter]() {
+                if (!m_startsBuilds) {
+                    auto refused = AsyncFuture::deferred<cwPointOctreeBuilder::Result>();
+                    refused.cancel();
+                    return refused.future();
+                }
+                const auto build = [request]() { return cwPointOctreeBuilder::build(request); };
+                return limiter ? limiter->admit(build, request.memoryBudgetBytes) : build();
             });
         });
 }
