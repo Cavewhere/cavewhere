@@ -27,7 +27,7 @@
 Q_LOGGING_CATEGORY(lcLazModel, "cw.laz.model")
 
 namespace {
-constexpr int kOneBuildAtATime = 1;
+constexpr int kConcurrentBuilds = 2;
 constexpr qint64 kCountOnly = 0;
 
 QString shortId(const cwLazLayer* layer) {
@@ -40,7 +40,7 @@ QString shortId(const cwLazLayer* layer) {
 cwLazLayerModel::cwLazLayerModel(QObject* parent) :
     QAbstractListModel(parent),
     m_buildLimiter(new AsyncFuture::Limiter(
-        AsyncFuture::Limit {kOneBuildAtATime, kCountOnly, cwMemoryBudget::instance()}, this))
+        AsyncFuture::Limit {kConcurrentBuilds, kCountOnly, cwMemoryBudget::instance()}, this))
 {
 }
 

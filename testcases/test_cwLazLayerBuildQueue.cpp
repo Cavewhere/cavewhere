@@ -28,7 +28,7 @@
 #include "cwThreadCountRestorer.h"
 
 namespace {
-constexpr int kOneBuildAtATime = 1;
+constexpr int kOneSlot = 1;
 constexpr int kOneLayer = 1;
 constexpr int kTwoLayers = 2;
 constexpr qint64 kHalf = 2;
@@ -74,6 +74,20 @@ int loadedCount(const cwLazLayerModel& model)
     return int(std::count_if(layers.begin(), layers.end(), [](const cwLazLayer* layer) {
         return layer->loadStatus() == cwLazLayer::LoadStatus::Loaded;
     }));
+}
+
+int windowSize(const AsyncFuture::Limiter* limiter)
+{
+    return limiter->limit().maxRunning;
+}
+
+// Admits one item per slot of the window, each finishing with ahead, so every
+// build admitted meanwhile waits behind them.
+void fillWindow(AsyncFuture::Limiter* limiter, const AsyncFuture::Deferred<void>& ahead)
+{
+    for (int i = 0; i < windowSize(limiter); ++i) {
+        limiter->admit([ahead]() { return ahead.future(); });
+    }
 }
 
 // Occupies every thread of the task pool until it is destroyed, so a build
@@ -145,7 +159,7 @@ qint64 runningBuildCharge(cwLazLayerModel& model, const QTemporaryDir& tempDir)
     const qint64 before = budget->inFlightBytes();
 
     auto ahead = AsyncFuture::deferred<void>();
-    limiter->admit([ahead]() { return ahead.future(); });
+    fillWindow(limiter, ahead);
 
     scanLayers(model, tempDir, kOneLayer);
     REQUIRE(waitUntil([limiter]() { return limiter->queuedCount() == kOneLayer; }));
@@ -159,7 +173,7 @@ qint64 runningBuildCharge(cwLazLayerModel& model, const QTemporaryDir& tempDir)
 
         ahead.complete();
         REQUIRE(waitUntil([limiter]() {
-            return limiter->runningCount() == kOneBuildAtATime && limiter->queuedCount() == 0;
+            return limiter->runningCount() == kOneLayer && limiter->queuedCount() == 0;
         }));
         charge = budget->inFlightBytes() - before;
     }
@@ -179,10 +193,10 @@ TEST_CASE("cwLazLayerBuildQueue: a build waits for the item ahead of it",
     const QString path = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("queued")));
     REQUIRE(!path.isEmpty());
 
-    AsyncFuture::Limiter limiter(AsyncFuture::Limit {kOneBuildAtATime});
+    AsyncFuture::Limiter limiter(AsyncFuture::Limit {kOneSlot});
     auto ahead = AsyncFuture::deferred<void>();
     limiter.admit([ahead]() { return ahead.future(); });
-    REQUIRE(limiter.runningCount() == kOneBuildAtATime);
+    REQUIRE(limiter.runningCount() == kOneSlot);
 
     cwLazLayer layer;
     layer.setBuildLimiter(&limiter);
@@ -204,7 +218,7 @@ TEST_CASE("cwLazLayerBuildQueue: a build waits for the item ahead of it",
     CHECK(waitUntil([&limiter]() { return limiter.runningCount() == 0; }));
 }
 
-TEST_CASE("cwLazLayerBuildQueue: a model's layers build one at a time",
+TEST_CASE("cwLazLayerBuildQueue: a model's layers build within its window",
           "[cwLazLayerBuildQueue]") {
     cwJobSettings::initialize();
 
@@ -214,22 +228,23 @@ TEST_CASE("cwLazLayerBuildQueue: a model's layers build one at a time",
     cwLazLayerModel model;
     AsyncFuture::Limiter* limiter = model.buildLimiter();
     REQUIRE(limiter != nullptr);
+    const int layerCount = windowSize(limiter) + kOneLayer;
 
-    // Held ahead of both layers, so both are seen waiting in the model's window
+    // Held ahead of every layer, so all are seen waiting in the model's window
     auto ahead = AsyncFuture::deferred<void>();
-    limiter->admit([ahead]() { return ahead.future(); });
+    fillWindow(limiter, ahead);
 
-    scanTwoLayers(model, tempDir);
-    REQUIRE(waitUntil([limiter]() { return limiter->queuedCount() == kTwoLayers; }));
+    scanLayers(model, tempDir, layerCount);
+    REQUIRE(waitUntil([&]() { return limiter->queuedCount() == layerCount; }));
 
     ahead.complete();
 
     int peakRunning = 0;
     REQUIRE(waitUntil([&]() {
         peakRunning = std::max(peakRunning, limiter->runningCount());
-        return loadedCount(model) == kTwoLayers;
+        return loadedCount(model) == layerCount;
     }, kWaitTimeoutMs));
-    CHECK(peakRunning <= kOneBuildAtATime);
+    CHECK(peakRunning <= windowSize(limiter));
     CHECK(waitUntil([limiter]() { return limiter->runningCount() == 0; }));
 }
 
@@ -242,7 +257,7 @@ TEST_CASE("cwLazLayerBuildQueue: a layer deleted while queued launches nothing",
     const QString path = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("deleted")));
     REQUIRE(!path.isEmpty());
 
-    AsyncFuture::Limiter limiter(AsyncFuture::Limit {kOneBuildAtATime});
+    AsyncFuture::Limiter limiter(AsyncFuture::Limit {kOneSlot});
     auto ahead = AsyncFuture::deferred<void>();
     limiter.admit([ahead]() { return ahead.future(); });
 
@@ -305,32 +320,35 @@ TEST_CASE("cwLazLayerBuildQueue: cancelQueuedBuilds leaves only the running buil
     AsyncFuture::Limiter* limiter = model.buildLimiter();
     REQUIRE(limiter != nullptr);
 
-    auto ahead = AsyncFuture::deferred<void>();
-    limiter->admit([ahead]() { return ahead.future(); });
+    const int window = windowSize(limiter);
+    const int layerCount = window + kOneLayer;
 
-    scanTwoLayers(model, tempDir);
-    REQUIRE(waitUntil([limiter]() { return limiter->queuedCount() == kTwoLayers; }));
+    auto ahead = AsyncFuture::deferred<void>();
+    fillWindow(limiter, ahead);
+
+    scanLayers(model, tempDir, layerCount);
+    REQUIRE(waitUntil([&]() { return limiter->queuedCount() == layerCount; }));
 
     {
-        // Holds the first build at running while the second waits behind it
+        // Holds a window's worth of builds at running while the last waits behind them
         const PoolBlocker blocker;
         REQUIRE(blocker.isBlocking());
 
         ahead.complete();
-        REQUIRE(waitUntil([limiter]() {
-            return limiter->runningCount() == kOneBuildAtATime
+        REQUIRE(waitUntil([&]() {
+            return limiter->runningCount() == window
                 && limiter->queuedCount() == kOneLayer;
         }));
 
         model.cancelQueuedBuilds();
         CHECK(limiter->queuedCount() == 0);
-        CHECK(limiter->runningCount() == kOneBuildAtATime);
+        CHECK(limiter->runningCount() == window);
     }
 
-    REQUIRE(waitUntil([&]() { return loadedCount(model) == kOneLayer; }, kWaitTimeoutMs));
+    REQUIRE(waitUntil([&]() { return loadedCount(model) == window; }, kWaitTimeoutMs));
     CHECK(waitUntil([limiter]() { return limiter->runningCount() == 0; }));
     CHECK(holdsFor([&]() {
-        return limiter->runningCount() == 0 && loadedCount(model) == kOneLayer;
+        return limiter->runningCount() == 0 && loadedCount(model) == window;
     }, kStillQueuedMs));
 }
 
@@ -345,7 +363,7 @@ TEST_CASE("cwLazLayerBuildQueue: a build that arrives after cancelQueuedBuilds n
     AsyncFuture::Limiter* limiter = model.buildLimiter();
 
     auto ahead = AsyncFuture::deferred<void>();
-    limiter->admit([ahead]() { return ahead.future(); });
+    fillWindow(limiter, ahead);
 
     // Each layer's cache probe is still on the pool here, so its build has
     // yet to reach the window.
@@ -353,7 +371,7 @@ TEST_CASE("cwLazLayerBuildQueue: a build that arrives after cancelQueuedBuilds n
     model.cancelQueuedBuilds();
 
     CHECK(holdsFor([limiter]() {
-        return limiter->queuedCount() == 0 && limiter->runningCount() == kOneBuildAtATime;
+        return limiter->queuedCount() == 0 && limiter->runningCount() == windowSize(limiter);
     }, kStillQueuedMs));
 
     ahead.complete();
