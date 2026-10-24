@@ -149,7 +149,8 @@ Monad::Result<QStringList> namesOf(const Monad::Result<cwExternalStationHarvest:
 }
 
 Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
-                                                      const QStringList& seedStations)
+                                                      const QStringList& seedStations,
+                                                      const std::function<bool()>& isCanceled)
 {
     const QString absoluteEntry = QFileInfo(entryFile).absoluteFilePath();
 
@@ -220,8 +221,8 @@ Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
         }
     }
 
-    const auto cavernResult =
-        cwCavernRunner::run(driverPath, directory.filePath(QStringLiteral("harvest.3d")));
+    const auto cavernResult = cwCavernRunner::run(
+        driverPath, directory.filePath(QStringLiteral("harvest.3d")), isCanceled);
     if(cavernResult.hasError()) {
         return Monad::Result<cwExternalStationHarvest::Stations>(
             withoutDriverNoise(cavernResult.errorMessage(), workingDirectory.path()),
@@ -266,17 +267,19 @@ Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
 
 Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entryFile)
 {
-    return namesOf(run(entryFile, {}));
+    return namesOf(run(entryFile, {}, {}));
 }
 
 Monad::Result<cwExternalStationHarvest::Stations>
-cwExternalStationHarvest::harvestWithFixes(const QString& entryFile)
+cwExternalStationHarvest::harvestWithFixes(const QString& entryFile,
+                                           const std::function<bool()>& isCanceled)
 {
-    return run(entryFile, {});
+    return run(entryFile, {}, isCanceled);
 }
 
 Monad::Result<QStringList> cwExternalStationHarvest::harvestComponents(const QString& entryFile,
-                                                                       const QStringList& seedStations)
+                                                                       const QStringList& seedStations,
+                                                                       const std::function<bool()>& isCanceled)
 {
-    return namesOf(run(entryFile, seedStations));
+    return namesOf(run(entryFile, seedStations, isCanceled));
 }

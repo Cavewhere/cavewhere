@@ -13,6 +13,8 @@
 
 #include <QString>
 
+#include <functional>
+
 /**
  * \brief Runs survex's cavern in-process and writes the .3d output.
  *
@@ -34,8 +36,10 @@
  * can route the diagnostic to a UI surface without rerunning cavern.
  *
  * cavernlib uses global state; run() serializes concurrent callers via an
- * internal QMutex. cavernlib crashes terminate the process — only
- * cleanly-detected errors come back as a Result error.
+ * internal QMutex. Once a caller holds the mutex, run() tests \a isCanceled:
+ * a canceled call returns LinePlotErrorCode::Cancelled and runs no cavern.
+ * cavernlib crashes terminate the process — only cleanly-detected errors come
+ * back as a Result error.
  */
 class CAVEWHERE_LIB_EXPORT cwCavernRunner
 {
@@ -51,7 +55,8 @@ public:
     };
 
     static Monad::Result<Result> run(const QString& svxPath,
-                                     const QString& output3dPath);
+                                     const QString& output3dPath,
+                                     const std::function<bool()>& isCanceled = {});
 
     //! The first trimmed line of a cavern log that reports an error
     //! ("<file>:<line>: error: ..." or "error: ..."), else its first

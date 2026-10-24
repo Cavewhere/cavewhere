@@ -18,6 +18,7 @@
 
 // Cavewhere
 #include "cwAttachedFixModel.h"
+#include "cwCavernRunner.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwError.h"
@@ -69,9 +70,17 @@
 
 // Std
 #include <algorithm>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <thread>
+
+#ifdef Q_OS_UNIX
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 // Watcher events flow through OS notifications and worker scans settle
 // on the next event-loop spins. Tests poll a predicate against this
@@ -832,5 +841,95 @@ inline qint64 longestMainThreadStallUntil(const std::function<void()>& start,
     frame.stop();
     return longest;
 }
+
+//! Holds cwCavernRunner's cavern mutex from construction until release() or
+//! destruction, so a test can tell whether code under test reached cavern:
+//! anything that does blocks until the release. A worker runs cavern over a
+//! driver that *includes a FIFO; cavern takes the mutex and then blocks
+//! reading the FIFO, which stays open and empty until the release closes it.
+//! A cavern run redirects stdout into its log, so a test asserts only once
+//! nothing runs cavern (after release() and the settle behind it). POSIX
+//! only: on other platforms kSupported is false and the holder holds nothing.
+class CavernMutexHolder
+{
+public:
+#ifdef Q_OS_UNIX
+    static constexpr bool kSupported = true;
+#else
+    static constexpr bool kSupported = false;
+#endif
+
+    CavernMutexHolder()
+    {
+#ifdef Q_OS_UNIX
+        if (!m_dir.isValid()) {
+            return;
+        }
+        m_fifoPath = QDir(m_dir.path()).filePath(QStringLiteral("hold.svx"));
+        if (::mkfifo(QFile::encodeName(m_fifoPath).constData(), kFifoMode) != 0) {
+            return;
+        }
+        const QString driver = QDir(m_dir.path()).filePath(QStringLiteral("driver.svx"));
+        overwriteFile(driver, QStringLiteral("*include \"%1\"\n").arg(m_fifoPath).toUtf8());
+        const QString output = QDir(m_dir.path()).filePath(QStringLiteral("hold.3d"));
+        m_worker = std::thread([this, driver, output]() {
+            cwCavernRunner::run(driver, output);
+            m_finished = true;
+        });
+        // The FIFO accepts a nonblocking writer only once cavern has opened
+        // it for reading, and cavern opens it only under the mutex.
+        tryWait(kWatcherWaitMs, [this]() { return openWriter(); });
+#endif
+    }
+
+    ~CavernMutexHolder() { release(); }
+
+    CavernMutexHolder(const CavernMutexHolder&) = delete;
+    CavernMutexHolder& operator=(const CavernMutexHolder&) = delete;
+
+    bool isHolding() const { return m_writer >= 0; }
+
+    //! Lets the held cavern run read an empty file and return, which frees
+    //! the mutex.
+    void release()
+    {
+#ifdef Q_OS_UNIX
+        if (!m_worker.joinable()) {
+            return;
+        }
+        // A worker still queued on the mutex opens the FIFO later; keep
+        // offering a writer until it has, or it never blocks at all.
+        while (!isHolding() && !m_finished) {
+            openWriter();
+            std::this_thread::yield();
+        }
+        if (isHolding()) {
+            ::close(m_writer);
+            m_writer = kNoWriter;
+        }
+        m_worker.join();
+#endif
+    }
+
+private:
+    static constexpr int kNoWriter = -1;
+    static constexpr int kFifoMode = 0600;
+
+    bool openWriter()
+    {
+#ifdef Q_OS_UNIX
+        if (!isHolding()) {
+            m_writer = ::open(QFile::encodeName(m_fifoPath).constData(), O_WRONLY | O_NONBLOCK);
+        }
+#endif
+        return isHolding();
+    }
+
+    QTemporaryDir m_dir;
+    QString m_fifoPath;
+    int m_writer = kNoWriter;
+    std::atomic<bool> m_finished = false;
+    std::thread m_worker;
+};
 
 #endif // EXTERNALCENTERLINETESTHELPERS_H

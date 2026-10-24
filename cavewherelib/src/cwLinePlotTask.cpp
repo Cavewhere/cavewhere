@@ -12,6 +12,7 @@
 #include "cwConcurrent.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwCavernRunner.h"
+#include "cwLinePlotErrorCodes.h"
 #include "cwSurvex3DFileReader.h"
 #include "cwLinePlotGeometry.h"
 #include "cwFindUnconnectedSurveyChunks.h"
@@ -321,7 +322,10 @@ private:
                    cwLinePlotTask::LinePlotResultData& result)
     {
         const Monad::Result<cwCavernRunner::Result> r =
-            cwCavernRunner::run(svxPath, output3dPath);
+            cwCavernRunner::run(svxPath, output3dPath, IsCanceled);
+        if (r.errorCode() == static_cast<int>(LinePlotErrorCode::Cancelled)) {
+            return false;
+        }
         if (r.hasError()) {
             // cavern_run reported failure before the log file could be parsed
             // back into a separate field; for this step the error message IS
@@ -607,7 +611,7 @@ private:
                 continue;
             }
             const auto components =
-                cwExternalStationHarvest::harvestComponents(owner.entryFile, it.value());
+                cwExternalStationHarvest::harvestComponents(owner.entryFile, it.value(), IsCanceled);
             if (components.hasError()) {
                 continue;
             }

@@ -21,13 +21,16 @@ class cwTrip;
 #include "cwExternalSourceAttentionRow.h"
 #include "cwExternalSourceSettings.h"
 #include "cwExternalSourceStatusModel.h"
+#include "cwExternalStationHarvest.h"
 #include "cwExternalUnitManifest.h"
 #include "cwFutureManagerToken.h"
 #include "cwGlobals.h"
 #include "cwLinePlotTask.h"
 
 //Qt includes
+#include <QByteArray>
 #include <QHash>
+#include <QMutex>
 #include <QObject>
 #include <QPointer>
 #include <QPromise>
@@ -41,6 +44,7 @@ class cwTrip;
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 
 QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 
@@ -439,8 +443,41 @@ private:
         // as the owner's AttachedFileReadWarnings row reads them, for owners
         // with any.
         QHash<QUuid, cwError> ownerReadWarnings;
+        // The content key of each owner whose copy exists: its scanned
+        // dependencies (the entry file alone when the scan failed), as
+        // HarvestCache keys them. A key that moved means the copy changed.
+        QHash<QUuid, QByteArray> ownerContentKeys;
         QVector<cwAttachedCenterlinesModel::Row> rows;
     };
+
+    // The successful harvest of each owner's copy, keyed by its content: the
+    // dependencies' paths relative to the attachment dir plus their SHA-256,
+    // so a Save As that only moves the copy keeps the key. Shared with the
+    // scan worker, which stores a harvest as soon as it finishes (a
+    // superseded scan's run still serves the next scan) and can outlive the
+    // manager. Lives in memory for this process only.
+    class HarvestCache
+    {
+    public:
+        std::optional<cwExternalStationHarvest::Stations> lookup(const QUuid& ownerId,
+                                                                 const QByteArray& key) const;
+        void store(const QUuid& ownerId, const QByteArray& key,
+                   const cwExternalStationHarvest::Stations& stations);
+        void clear();
+        //! Drops every owner outside \a ownerIds.
+        void retain(const QSet<QUuid>& ownerIds);
+
+    private:
+        struct Entry {
+            QByteArray key;
+            cwExternalStationHarvest::Stations stations;
+        };
+
+        mutable QMutex m_mutex;
+        QHash<QUuid, Entry> m_entries;
+    };
+
+    std::shared_ptr<HarvestCache> m_harvestCache = std::make_shared<HarvestCache>();
 
     QPointer<cwCavingRegion> m_region;
 
@@ -489,6 +526,12 @@ private:
     // paths that used to do recompute-then-solve synchronously. The
     // apply consumes it after the member swap and emits solveNeeded().
     bool m_solveOnScanApply = false;
+
+    // ExternalScanResult::ownerContentKeys from the last apply. A watcher
+    // event re-solves through a key that moved, so an event that leaves
+    // every copy as it was (a Save As moving the files away from the old
+    // watch set) solves nothing.
+    QHash<QUuid, QByteArray> m_ownerContentKeys;
 
     bool m_scanning = false;
     void setScanning(bool scanning);
@@ -725,13 +768,16 @@ private:
     QVector<OwnerScanInput> collectOwnerSnapshots() const;
 
     // Stage 2, runs on the worker thread: scans each owner's in-project
-    // entry file. Static and pure — touches no member state, only the
-    // filesystem and the promise. It produces one result when it runs to
+    // entry file. Static — touches no member state, only the filesystem,
+    // the promise and the thread-safe `harvestCache`. It advances the
+    // promise's progress by one per owner. It produces one result when it runs to
     // completion, and none when `promise` is canceled partway through: a
     // superseded scan abandons its remaining owners instead of paying for
-    // harvests nothing will read.
+    // harvests nothing will read. An owner whose copy matches its entry in
+    // `harvestCache` reuses that harvest instead of running cavern.
     static void scanOwners(QPromise<ExternalScanResult>& promise,
-                           const QVector<OwnerScanInput>& owners);
+                           const QVector<OwnerScanInput>& owners,
+                           HarvestCache* harvestCache);
 
     // Identity fields of a model row from an owner snapshot (counts and
     // lastSolved are filled by the caller).

@@ -14,6 +14,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 /**
  * \brief Reads the station names out of an external centerline file by solving
  * it on its own.
@@ -82,8 +84,12 @@ struct Stations {
  * as both output and input around the file: the *cs out the file names, else
  * the system of its first fix that names one (made projected), so a fix under
  * a *cs and a bare fix both read cleanly. Every harvest shares this driver.
+ *
+ * \a isCanceled is tested once this harvest holds the cavern mutex; a canceled
+ * harvest returns LinePlotErrorCode::Cancelled without running cavern.
  */
-CAVEWHERE_LIB_EXPORT Monad::Result<Stations> harvestWithFixes(const QString& entryFile);
+CAVEWHERE_LIB_EXPORT Monad::Result<Stations> harvestWithFixes(
+    const QString& entryFile, const std::function<bool()>& isCanceled = {});
 
 /**
  * Returns the station names of every component of \a entryFile that holds one
@@ -93,10 +99,11 @@ CAVEWHERE_LIB_EXPORT Monad::Result<Stations> harvestWithFixes(const QString& ent
  * whether or not anything else ties it in. Seeds are named in the file's own
  * namespace. With a seed in every component it reaches, this reads the names
  * of the surveys a region solve dropped as hanging, which harvest() alone
- * cannot.
+ * cannot. \a isCanceled works as in harvestWithFixes().
  */
-CAVEWHERE_LIB_EXPORT Monad::Result<QStringList> harvestComponents(const QString& entryFile,
-                                                                  const QStringList& seedStations);
+CAVEWHERE_LIB_EXPORT Monad::Result<QStringList> harvestComponents(
+    const QString& entryFile, const QStringList& seedStations,
+    const std::function<bool()>& isCanceled = {});
 
 } // namespace cwExternalStationHarvest
 

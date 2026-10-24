@@ -15,6 +15,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwLinePlotManager.h"
 #include "cwRootData.h"
+#include "cwSaveLoad.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
 #include "cwUpdatable.h"
@@ -27,10 +28,12 @@
 
 // Qt
 #include <QDir>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 
 // Std
+#include <algorithm>
 #include <memory>
 
 namespace {
@@ -45,12 +48,20 @@ constexpr int kWallsBooks = 10;
 constexpr int kWallsSurveysPerBook = 100;
 constexpr int kWallsShots = 3;
 constexpr int kWallsFixEvery = 25;
+constexpr int kCachedOwners = 3;
+//! How long a scan that reads every owner from the harvest cache gets to
+//! finish while cavern is held. Generous for a loaded machine; a scan that
+//! reaches cavern never finishes inside it.
+constexpr int kCachedScanWaitMs = 30000;
 
 const QString kLinePlotJob = QStringLiteral("Line plot");
 const QString kWatchedEvent = QStringLiteral("watchedFilesChanged");
 const QString kSolveNeededEvent = QStringLiteral("solveNeeded");
 const QString kLinePlotJobEvent = QStringLiteral("Line plot job");
 const QString kPublishedEvent = QStringLiteral("cavernOutputChanged");
+const QString kScanJob = QStringLiteral("External centerline scan");
+const QString kTreeEntryName = QStringLiteral("tree.svx");
+const QString kAddedStation = QStringLiteral("added.1");
 
 //! The anchor the driver writes for a source root whose entry file is the
 //! generated tree's: its first file's first station, fixed at the origin.
@@ -130,6 +141,56 @@ void settle(cwRootData* root)
         settleEventLoop(kNothingHappensSettleMs);
         return idle();
     }));
+}
+
+//! Whether \a futures lists the scan job reading \a progress of \a steps.
+bool scanRowReads(const cwFutureManagerModel* futures, int steps, int progress)
+{
+    for (int row = 0; row < futures->rowCount(); ++row) {
+        const QModelIndex index = futures->index(row);
+        if (index.data(cwFutureManagerModel::NameRole).toString() == kScanJob
+            && index.data(cwFutureManagerModel::NumberOfStepRole).toInt() == steps
+            && index.data(cwFutureManagerModel::ProgressRole).toInt() == progress) {
+            return true;
+        }
+    }
+    return false;
+}
+
+//! Records into \a maxSteps the largest step count the scan job's rows show
+//! whenever \a futures inserts or changes a row.
+void recordScanSteps(int* maxSteps, cwFutureManagerModel* futures, QObject* context)
+{
+    const auto readRows = [maxSteps, futures](int first, int last) {
+        for (int row = first; row <= last; ++row) {
+            const QModelIndex index = futures->index(row);
+            if (index.data(cwFutureManagerModel::NameRole).toString() == kScanJob) {
+                *maxSteps = std::max(*maxSteps,
+                                     index.data(cwFutureManagerModel::NumberOfStepRole).toInt());
+            }
+        }
+    };
+    QObject::connect(futures, &QAbstractItemModel::rowsInserted, context,
+                     [readRows](const QModelIndex&, int first, int last) { readRows(first, last); });
+    QObject::connect(futures, &QAbstractItemModel::dataChanged, context,
+                     [readRows](const QModelIndex& topLeft, const QModelIndex& bottomRight) {
+        readRows(topLeft.row(), bottomRight.row());
+    });
+}
+
+//! The generated tree's entry, plus a survey tied to its first file that
+//! adds kAddedStation.
+QByteArray treeEntryWithAddedSurvey()
+{
+    return QStringLiteral("*include \"%1%2.svx\"\n"
+                          "*begin added\n"
+                          "*data normal from to tape compass clino\n"
+                          "0 1 5.0 0 0\n"
+                          "*end added\n"
+                          "*equate %1%2.0 added.0\n")
+        .arg(generatedSurvexTree::kFilePrefix)
+        .arg(0)
+        .toUtf8();
 }
 
 std::unique_ptr<SavedProjectFixture> makeProject(const QString& name)
@@ -431,4 +492,188 @@ TEST_CASE("Emptying the region while its scan is pending starts no solve after i
     for (const QString& driver : std::as_const(log.drivers)) {
         CHECK(driver.isEmpty());
     }
+}
+
+TEST_CASE("A restart while a harvest waits on the cavern mutex applies one harvest and solves once",
+          "[LinePlotManager][SolveOnce][CancelHarvest]")
+{
+    if (!CavernMutexHolder::kSupported) {
+        SKIP("The cavern mutex holder needs a POSIX FIFO");
+    }
+
+    // A pin on the outcome, which holds today too: the restarter drops the
+    // superseded scan's result. That the superseded harvest skips cavern is
+    // pinned in [ExternalStationHarvest][CancelHarvest].
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString entry = writeTree(sourceDir, QStringLiteral("tree"), kTreeFiles);
+
+    auto fixture = makeProject(QStringLiteral("solve-once-restart-harvest"));
+    cwExternalCenterlineManager* external = managerOf(fixture.get());
+    QObject context;
+    SolveLog log;
+    recordSolves(&log, fixture->rootData.get(), &context);
+    QSignalSpy published(fixture->rootData->linePlotManager(), &cwLinePlotManager::cavernOutputChanged);
+
+    CavernMutexHolder holder;
+    REQUIRE(holder.isHolding());
+    cwSurveyNode* sourceRoot =
+        attachSourceThroughManager(fixture.get(), fixture->project->cavingRegion()->rootNode(), entry);
+    const bool scanStarted = tryWait(kSettleWaitMs, [external]() { return external->isScanning(); });
+
+    // Time for the first scan's harvest to queue on the mutex.
+    settleEventLoop(kNothingHappensSettleMs);
+    external->rescanAttachments();
+    holder.release();
+    settle(fixture->rootData.get());
+    REQUIRE(scanStarted);
+
+    INFO(log.describe().toStdString());
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+    CHECK_FALSE(sourceRoot->externalStations().isEmpty());
+    CHECK(log.events.count(kSolveNeededEvent) == 1);
+    CHECK(log.linePlotJobs == 1);
+    CHECK(published.count() == 1);
+}
+
+TEST_CASE("Save As of an unsaved project with an attached source runs no harvest and solves once",
+          "[LinePlotManager][SolveOnce][HarvestCache]")
+{
+    if (!CavernMutexHolder::kSupported) {
+        SKIP("The cavern mutex holder needs a POSIX FIFO");
+    }
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString entry = writeTree(sourceDir, QStringLiteral("tree"), kTreeFiles);
+
+    // Unsaved, so the Save As moves the project root and then renames its
+    // data root: two moves of every copy, with the content unchanged.
+    auto fixture = makeNewProject(QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    settle(fixture->rootData.get());
+    cwExternalCenterlineManager* external = managerOf(fixture.get());
+    cwSurveyNode* sourceRoot =
+        attachSourceThroughManager(fixture.get(), fixture->project->cavingRegion()->rootNode(), entry);
+    settle(fixture->rootData.get());
+    const QStringList stationsBefore = sourceRoot->externalStations();
+    REQUIRE_FALSE(stationsBefore.isEmpty());
+
+    QTemporaryDir destination;
+    REQUIRE(destination.isValid());
+    QObject context;
+    SolveLog log;
+    recordSolves(&log, fixture->rootData.get(), &context);
+    QSignalSpy published(fixture->rootData->linePlotManager(), &cwLinePlotManager::cavernOutputChanged);
+    QSignalSpy scanning(external, &cwExternalCenterlineManager::scanningChanged);
+
+    CavernMutexHolder holder;
+    REQUIRE(holder.isHolding());
+    REQUIRE(fixture->project->saveAs(QDir(destination.path()).filePath(QStringLiteral("copy.cwproj"))));
+
+    // Every scan the Save As starts finishes while cavern is held, so none
+    // of them ran a harvest: the copy's content is unchanged.
+    const bool scansFinishedWhileHeld = tryWait(kCachedScanWaitMs, [&]() {
+        return !scanning.isEmpty() && !external->isScanning();
+    });
+
+    // A later restart (the data-root rename, a save job's path) starts
+    // another scan. It finishes only if it skips cavern, since the mutex is
+    // still held.
+    settleEventLoop(kNothingHappensSettleMs);
+    const bool quietWhileHeld = tryWait(kCachedScanWaitMs, [external]() {
+        return !external->isScanning();
+    });
+
+    // Asserted once nothing runs cavern: a cavern run redirects stdout into
+    // its own log, so a failure reported during one is lost.
+    holder.release();
+    settle(fixture->rootData.get());
+    CHECK(scansFinishedWhileHeld);
+    CHECK(quietWhileHeld);
+
+    INFO(log.describe().toStdString());
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+    CHECK(sourceRoot->externalStations() == stationsBefore);
+    CHECK(log.linePlotJobs == 1);
+    CHECK(published.count() == 1);
+}
+
+TEST_CASE("Editing one copied file re-harvests only that owner",
+          "[LinePlotManager][SolveOnce][HarvestCache]")
+{
+    if (!CavernMutexHolder::kSupported) {
+        SKIP("The cavern mutex holder needs a POSIX FIFO");
+    }
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+
+    auto fixture = makeProject(QStringLiteral("solve-once-edit-copy"));
+    cwExternalCenterlineManager* external = managerOf(fixture.get());
+    QList<cwTrip*> owners;
+    for (int owner = 0; owner < kCachedOwners; ++owner) {
+        const QString name = QStringLiteral("Owner%1").arg(owner);
+        cwTrip* trip = addEmptyTrip(fixture->cave, name);
+        attachThroughManager(fixture.get(), trip, writeTree(sourceDir, name, kTripTreeFiles));
+        owners.append(trip);
+    }
+    settle(fixture->rootData.get());
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+
+    // The last owner the scan reads, so the owners before it are done when
+    // its harvest waits on cavern.
+    cwTrip* edited = owners.last();
+    REQUIRE_FALSE(edited->externalStations().contains(kAddedStation));
+    const QString copyPath =
+        fixture->saveLoad()->externalCenterlineDir(edited).absoluteFilePath(kTreeEntryName);
+    REQUIRE(QFileInfo::exists(copyPath));
+
+    QObject context;
+    SolveLog log;
+    recordSolves(&log, fixture->rootData.get(), &context);
+    QSignalSpy published(fixture->rootData->linePlotManager(), &cwLinePlotManager::cavernOutputChanged);
+
+    CavernMutexHolder holder;
+    REQUIRE(holder.isHolding());
+    overwriteFile(copyPath, treeEntryWithAddedSurvey());
+    external->rescanAttachments();
+
+    // The unchanged owners come from the cache, so the scan job reads one
+    // short of every owner while the edited one waits on cavern.
+    const int ownerCount = static_cast<int>(owners.size());
+    const bool cachedOwnersCounted = tryWait(kCachedScanWaitMs, [&]() {
+        return scanRowReads(fixture->rootData->futureManagerModel(), ownerCount, ownerCount - 1);
+    });
+
+    holder.release();
+    settle(fixture->rootData.get());
+    CHECK(cachedOwnersCounted);
+
+    INFO(log.describe().toStdString());
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+    CHECK(edited->externalStations().contains(kAddedStation));
+    CHECK(log.linePlotJobs == 1);
+    CHECK(published.count() == 1);
+}
+
+TEST_CASE("The external centerline scan job counts its owners",
+          "[LinePlotManager][SolveOnce][cwFutureManagerModel]")
+{
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+
+    auto fixture = makeProject(QStringLiteral("solve-once-scan-steps"));
+    QObject context;
+    int maxSteps = 0;
+    recordScanSteps(&maxSteps, fixture->rootData->futureManagerModel(), &context);
+
+    for (int owner = 0; owner < kCachedOwners; ++owner) {
+        const QString name = QStringLiteral("Owner%1").arg(owner);
+        cwTrip* trip = addEmptyTrip(fixture->cave, name);
+        attachThroughManager(fixture.get(), trip, writeTree(sourceDir, name, kTripTreeFiles));
+    }
+    settle(fixture->rootData.get());
+
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+    CHECK(maxSteps == kCachedOwners);
 }

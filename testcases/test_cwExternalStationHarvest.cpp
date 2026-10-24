@@ -9,15 +9,24 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Our
+#include "cwCavernRunner.h"
 #include "cwExternalStationHarvest.h"
+#include "cwLinePlotErrorCodes.h"
 
 // Test helpers
+#include "ExternalCenterlineTestHelpers.h"
 #include "LoadProjectHelper.h"
 
 // Qt
 #include <QDir>
+#include <QFileInfo>
 #include <QStringList>
 #include <QTemporaryDir>
+
+// Std
+#include <atomic>
+#include <optional>
+#include <thread>
 
 namespace {
 
@@ -267,4 +276,50 @@ TEST_CASE("Harvest reads a block whose fix names its own *cs",
     CHECK(result.value().names
           == QStringList({QStringLiteral("scoped.s1"), QStringLiteral("scoped.s2")}));
     CHECK(result.value().fixedNames == QStringList({QStringLiteral("scoped.s1")}));
+}
+
+TEST_CASE("A cavern run whose cancel check is already true runs no cavern",
+          "[ExternalStationHarvest][CancelHarvest]")
+{
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+    const QString output = QDir(directory.path()).filePath(QStringLiteral("canceled.3d"));
+
+    const auto result = cwCavernRunner::run(externalCenterlinePath(QStringLiteral("survex_simple.svx")),
+                                            output, []() { return true; });
+
+    INFO(result.errorMessage().toStdString());
+    CHECK(result.errorCode() == static_cast<int>(LinePlotErrorCode::Cancelled));
+    CHECK_FALSE(QFileInfo::exists(output));
+}
+
+TEST_CASE("A harvest canceled while it waits on the cavern mutex runs no cavern",
+          "[ExternalStationHarvest][CancelHarvest]")
+{
+    if (!CavernMutexHolder::kSupported) {
+        SKIP("The cavern mutex holder needs a POSIX FIFO");
+    }
+
+    CavernMutexHolder holder;
+    REQUIRE(holder.isHolding());
+
+    std::atomic<bool> canceled = false;
+    std::optional<Monad::Result<cwExternalStationHarvest::Stations>> result;
+    std::thread worker([&]() {
+        result = cwExternalStationHarvest::harvestWithFixes(
+            externalCenterlinePath(QStringLiteral("survex_simple.svx")),
+            [&canceled]() { return canceled.load(); });
+    });
+
+    // Time for the worker to queue on the mutex; a cancel that lands
+    // before it does takes the same path.
+    settleEventLoop(kNothingHappensSettleMs);
+    canceled = true;
+    holder.release();
+    worker.join();
+
+    REQUIRE(result.has_value());
+    INFO(result->errorMessage().toStdString());
+    CHECK(result->errorCode() == static_cast<int>(LinePlotErrorCode::Cancelled));
+    CHECK(result->value().names.isEmpty());
 }

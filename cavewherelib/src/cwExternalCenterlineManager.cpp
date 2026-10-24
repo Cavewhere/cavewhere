@@ -27,12 +27,16 @@
 
 //Qt includes
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QFuture>
 #include <QGuiApplication>
+#include <QMutexLocker>
+#include <QThread>
 #include <QWindow>
 
 //Std includes
@@ -274,6 +278,86 @@ void sortAttachedRows(QVector<cwAttachedCenterlinesModel::Row>& rows)
     });
 }
 
+//! The content key of a copy whose scan listed \a dependencies. Paths count
+//! relative to \a attachmentDir, so moving the copy keeps its key; a file
+//! that cannot be read keys differently from any readable content.
+QByteArray copyContentKey(const QStringList& dependencies, const QString& attachmentDir)
+{
+    // The scan names files canonically, so the folder is too.
+    const QDir dir(QFileInfo(attachmentDir).canonicalFilePath());
+    const cwExternalSourceSettings::SourceFingerprint fingerprint =
+        cwExternalSourceSettings::computeFingerprint(dependencies);
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    for (const auto& file : fingerprint.files) {
+        hash.addData(dir.relativeFilePath(file.path).toUtf8());
+        hash.addData(QByteArrayView("\n"));
+        hash.addData(file.sha256.toLatin1());
+        hash.addData(QByteArrayView("\n"));
+    }
+    return hash.result();
+}
+
+//! Qt's QFutureInterface sends at most this many progress values a second
+//! and drops the rest. Mirrors the private MaxProgressEmitsPerSecond in
+//! Qt's qfutureinterface.cpp; keep the two in step on a Qt upgrade.
+constexpr int kProgressEmitsPerSecond = 25;
+constexpr qint64 kProgressEmitIntervalMs = 1000 / kProgressEmitsPerSecond;
+
+//! Counts a scan's finished owners into its promise's progress, so the task
+//! row reads "n of m". A value the promise drops for coming too soon after
+//! the last one stays unseen until the next one lands, which behind a cavern
+//! run is seconds away; beforeSlowStep() waits out the interval so the count
+//! in force when the run starts reaches the row.
+template<typename Promise>
+class OwnerProgress
+{
+public:
+    OwnerProgress(Promise& promise, int owners) :
+        m_promise(promise),
+        m_owners(owners)
+    {
+        if (m_owners > 0) {
+            m_promise.setProgressRange(0, m_owners);
+        }
+        // Owners that finish within the first interval are sent together.
+        m_clock.start();
+    }
+
+    void ownerDone()
+    {
+        ++m_done;
+        if (m_clock.elapsed() >= kProgressEmitIntervalMs || m_done == m_owners) {
+            send();
+        }
+    }
+
+    void beforeSlowStep()
+    {
+        if (m_done == m_sent) {
+            return;
+        }
+        const qint64 remaining = kProgressEmitIntervalMs - m_clock.elapsed();
+        if (remaining > 0) {
+            QThread::msleep(static_cast<unsigned long>(remaining));
+        }
+        send();
+    }
+
+private:
+    void send()
+    {
+        m_promise.setProgressValue(m_done);
+        m_sent = m_done;
+        m_clock.start();
+    }
+
+    Promise& m_promise;
+    const int m_owners;
+    int m_done = 0;
+    int m_sent = 0;
+    QElapsedTimer m_clock;
+};
+
 } // namespace
 
 cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
@@ -387,6 +471,7 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
                    this, &cwExternalCenterlineManager::clearBreadcrumbsForDeletedOwners);
     }
     m_region = region;
+    m_harvestCache->clear();
     m_signaler->setRegion(region);
     if (!m_region.isNull()) {
         // Cave-list churn (project load, undo/redo) can bring in owners
@@ -493,6 +578,7 @@ void cwExternalCenterlineManager::setSaveLoad(cwSaveLoad* saveLoad)
                    this, &cwExternalCenterlineManager::onOwnerPathReady);
     }
     m_saveLoad = saveLoad;
+    m_harvestCache->clear();
     if (!m_saveLoad.isNull()) {
         connect(m_saveLoad.data(), &cwSaveLoad::objectPathReady,
                 this, &cwExternalCenterlineManager::onOwnerPathReady);
@@ -555,12 +641,13 @@ void cwExternalCenterlineManager::recomputeWatchSet()
         }
         const QVector<OwnerScanInput> owners = collectOwnerSnapshots();
 
-        // Stage 2 (worker thread): the per-owner scans. The scanner is
-        // stateless; `owners` crosses by value. The promise overload is
-        // what lets the worker see the restarter's cancel and abandon a
-        // superseded scan mid-batch.
-        auto future = cwConcurrent::run([owners](QPromise<ExternalScanResult>& promise) {
-            scanOwners(promise, owners);
+        // Stage 2 (worker thread): the per-owner scans. `owners` crosses by
+        // value and the thread-safe harvest cache by shared_ptr. The promise
+        // overload is what lets the worker see the restarter's cancel and
+        // abandon a superseded scan mid-batch.
+        auto future = cwConcurrent::run([owners, harvestCache = m_harvestCache](
+                                            QPromise<ExternalScanResult>& promise) {
+            scanOwners(promise, owners, harvestCache.get());
         });
 
         // Stage 3 (main thread): install the result wholesale. A result
@@ -703,9 +790,11 @@ cwAttachedCenterlinesModel::Row cwExternalCenterlineManager::rowFromOwner(const 
 }
 
 void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promise,
-                                             const QVector<OwnerScanInput>& owners)
+                                             const QVector<OwnerScanInput>& owners,
+                                             HarvestCache* harvestCache)
 {
     ExternalScanResult result;
+    OwnerProgress<QPromise<ExternalScanResult>> progress(promise, static_cast<int>(owners.size()));
 
     // Per-owner scan of the in-project copy — the only file the project
     // reads, and so the only one worth scanning or watching. Each owner
@@ -733,6 +822,11 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
             const QString projectEntry = QDir(owner.attachmentDir).filePath(owner.entryFile);
             if (QFileInfo::exists(projectEntry)) {
                 const auto scan = cwExternalCenterlineScanner::scan(projectEntry);
+                const QByteArray contentKey =
+                    copyContentKey(scan.hasError() ? QStringList { projectEntry }
+                                                   : scan.value().dependencies,
+                                   owner.attachmentDir);
+                result.ownerContentKeys.insert(owner.ownerId, contentKey);
 
                 // Containment is decided before anything reads the file's
                 // dependencies, and a failure keeps the owner out of the
@@ -757,8 +851,28 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     // survey nothing fixes. A cave attachment's names are what its
                     // node's own fix stations are checked against. One cavern run
                     // per owner, cave or trip.
-                    const auto harvest =
-                        cwExternalStationHarvest::harvestWithFixes(projectEntry);
+                    // A failed scan lists no dependencies, so its harvest is
+                    // never cached.
+                    const bool cacheable = !scan.hasError();
+                    const auto cached = cacheable
+                        ? harvestCache->lookup(owner.ownerId, contentKey)
+                        : std::nullopt;
+                    if (!cached.has_value()) {
+                        progress.beforeSlowStep();
+                    }
+                    const auto harvest = cached.has_value()
+                        ? Monad::Result<cwExternalStationHarvest::Stations>(*cached)
+                        : cwExternalStationHarvest::harvestWithFixes(
+                              projectEntry, [&promise]() { return promise.isCanceled(); });
+                    // Stored even by a superseded scan, so the scan replacing
+                    // it reuses the run. Errors are read afresh every time:
+                    // their text names the data root, which a Save As renames.
+                    if (cacheable && !cached.has_value() && !harvest.hasError()) {
+                        harvestCache->store(owner.ownerId, contentKey, harvest.value());
+                    }
+                    if (promise.isCanceled()) {
+                        return;
+                    }
                     if (harvest.hasError()) {
                         const QString harvestError =
                             withProjectRelativePaths(harvest.errorMessage(), owner.dataRootDir);
@@ -852,6 +966,7 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
         }
 
         result.rows.append(row);
+        progress.ownerDone();
     }
 
     // Stable order so equality comparisons against m_watchedFiles are
@@ -867,6 +982,39 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
     sortAttachedRows(result.rows);
 
     promise.addResult(std::move(result));
+}
+
+std::optional<cwExternalStationHarvest::Stations>
+cwExternalCenterlineManager::HarvestCache::lookup(const QUuid& ownerId, const QByteArray& key) const
+{
+    const QMutexLocker locker(&m_mutex);
+    const auto entry = m_entries.constFind(ownerId);
+    if (entry != m_entries.constEnd() && entry->key == key) {
+        return entry->stations;
+    }
+    return std::nullopt;
+}
+
+void cwExternalCenterlineManager::HarvestCache::store(const QUuid& ownerId,
+                                                      const QByteArray& key,
+                                                      const cwExternalStationHarvest::Stations& stations)
+{
+    const QMutexLocker locker(&m_mutex);
+    m_entries.insert(ownerId, Entry { key, stations });
+}
+
+void cwExternalCenterlineManager::HarvestCache::clear()
+{
+    const QMutexLocker locker(&m_mutex);
+    m_entries.clear();
+}
+
+void cwExternalCenterlineManager::HarvestCache::retain(const QSet<QUuid>& ownerIds)
+{
+    const QMutexLocker locker(&m_mutex);
+    m_entries.removeIf([&ownerIds](const QHash<QUuid, Entry>::iterator& entry) {
+        return !ownerIds.contains(entry.key());
+    });
 }
 
 void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
@@ -902,8 +1050,10 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
         || result.ownerOutputSystems != m_ownerOutputSystems
         || result.ownerFixSystems != m_ownerFixSystems
         || result.containmentErrors != m_containmentErrors
+        || result.ownerContentKeys != m_ownerContentKeys
         || missingCopiesChangedNow;
     m_solveOnScanApply = false;
+    m_ownerContentKeys = std::move(result.ownerContentKeys);
     m_fileOwnsDeclination = std::move(result.fileOwnsDeclination);
     m_ownerFixes = std::move(result.ownerFixes);
     indexOwnerFixes();
@@ -921,6 +1071,12 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     // Ahead of the solve request, so the solve that follows snapshots the
     // fresh names rather than the previous scan's.
     applyHarvest(result);
+
+    QSet<QUuid> scannedOwners;
+    for (const cwAttachedCenterlinesModel::Row& row : std::as_const(result.rows)) {
+        scannedOwners.insert(row.ownerId);
+    }
+    m_harvestCache->retain(scannedOwners);
 
     m_lastScanRows = result.rows;
     m_attachedCenterlinesModel->setRows(std::move(result.rows));
@@ -1465,9 +1621,8 @@ void cwExternalCenterlineManager::onWatchedFileChanged(const QString& path)
     }
 
     // Recompute the dep set in case the edit added or removed an *include
-    // that needs to enter/leave the watch set, with the re-solve chained
-    // behind the apply so it sees the fresh declination flags.
-    m_solveOnScanApply = true;
+    // that needs to enter/leave the watch set. The apply re-solves when the
+    // edit moved an owner's content key, behind the fresh declination flags.
     recomputeWatchSet();
 }
 

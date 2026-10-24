@@ -51,11 +51,18 @@ QString readTextFile(const QString& path)
 } // namespace
 
 Monad::Result<cwCavernRunner::Result>
-cwCavernRunner::run(const QString& svxPath, const QString& output3dPath)
+cwCavernRunner::run(const QString& svxPath, const QString& output3dPath,
+                    const std::function<bool()>& isCanceled)
 {
     // cavern_run() uses global state; serialise all callers.
     static QMutex cavernMutex;
     QMutexLocker locker(&cavernMutex);
+
+    // Tested under the lock: a caller superseded while it waited skips its run.
+    if (isCanceled && isCanceled()) {
+        return Monad::Result<Result>(QStringLiteral("The cavern run was canceled"),
+                                     static_cast<int>(LinePlotErrorCode::Cancelled));
+    }
 
     char arg0[] = "cavern";
     char logArg[] = "--log";
