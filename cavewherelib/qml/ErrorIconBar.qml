@@ -10,6 +10,10 @@ QQ.Item {
     implicitHeight: layoutId.height + 2
     implicitWidth: layoutId.width + 2
 
+    // A clean trip or cave shows nothing here, so the name sits flush
+    visible: itemId.errorModel !== null
+             && (itemId.errorModel.fatalCount > 0 || itemId.errorModel.warningCount > 0)
+
     RowLayout {
         id: layoutId
 
@@ -26,13 +30,6 @@ QQ.Item {
             source: "qrc:icons/svg/warning.svg"
             sourceSize: Qt.size(16, 16)
             visible: itemId.errorModel.warningCount > 0
-        }
-
-        QQ.Image {
-            source: "qrc:icons/good.png"
-            sourceSize: Qt.size(16, 16)
-            visible: itemId.errorModel.warningCount === 0 &&
-                     itemId.errorModel.fatalCount === 0
         }
     }
 }
