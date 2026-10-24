@@ -65,7 +65,7 @@ ColumnLayout {
                     value: settingsId.jobSettings.memoryBudgetMb
                     textFromValue: function(value, locale) {
                         if (value === 0) {
-                            return "Automatic (" + settingsId.gigabytesText(settingsId.jobSettings.resolvedMemoryBudgetMb) + ")";
+                            return "Automatic";
                         }
                         return settingsId.gigabytesText(value);
                     }
@@ -73,6 +73,15 @@ ColumnLayout {
                     onValueModified: {
                         settingsId.jobSettings.memoryBudgetMb = value;
                     }
+                }
+
+                QC.Label {
+                    objectName: "memoryBudgetAutomaticLabel"
+
+                    // SpinBox builds textFromValue before valueModified stores the value, so the cap lives in this binding
+                    text: settingsId.jobSettings.memoryBudgetMb === 0
+                          ? "(" + settingsId.gigabytesText(settingsId.jobSettings.resolvedMemoryBudgetMb) + ")"
+                          : ""
                 }
             }
 

@@ -77,7 +77,7 @@ MainWindowTest {
             let spinBox = findMemoryBudgetSpinBox()
             verify(spinBox !== null, "memoryBudgetSpinBox not found")
             compare(spinBox.value, 0)
-            verify(spinBox.displayText.startsWith("Automatic ("), spinBox.displayText)
+            compare(spinBox.displayText, "Automatic")
         }
 
         function test_memoryBudgetIncreaseSetsTheSetting() {
@@ -88,6 +88,31 @@ MainWindowTest {
             tryCompare(settings, "memoryBudgetMb", spinBox.stepSize)
             verify(!spinBox.displayText.startsWith("Automatic"), spinBox.displayText)
             tryVerify(function() { return findResetButton().enabled })
+        }
+
+        function test_memoryBudgetReturningToAutomaticShowsResolvedCap() {
+            let item = findChild(rootId, "jobSettings")
+            let spinBox = findMemoryBudgetSpinBox()
+            let label = findChild(rootId, "memoryBudgetAutomaticLabel")
+            verify(spinBox !== null, "memoryBudgetSpinBox not found")
+            verify(label !== null, "memoryBudgetAutomaticLabel not found")
+            compare(spinBox.value, 0)
+
+            let automaticText = "(" + item.gigabytesText(settings.resolvedMemoryBudgetMb) + ")"
+            tryCompare(label, "text", automaticText)
+
+            spinBox.increase()
+            spinBox.valueModified()
+            tryCompare(settings, "memoryBudgetMb", spinBox.stepSize)
+            verify("(" + item.gigabytesText(spinBox.stepSize) + ")" !== automaticText,
+                   "manual and automatic budgets read the same")
+            tryCompare(label, "text", "")
+
+            spinBox.decrease()
+            spinBox.valueModified()
+            tryCompare(settings, "memoryBudgetMb", 0)
+            compare(spinBox.displayText, "Automatic")
+            tryCompare(label, "text", automaticText)
         }
 
         function test_clickingRestoreDefaultsDisablesButton() {
