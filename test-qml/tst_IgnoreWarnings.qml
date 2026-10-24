@@ -4,15 +4,15 @@ import cavewherelib
 import cw.TestLib
 import QmlTestRecorder
 
-// Accepting warnings from the trip page (#174): the warning badge's menu
-// accepts or un-accepts every survey warning in the trip, the per-cell popup
-// accepts every warning of one kind, and a cell whose warnings are all
-// accepted keeps a muted marker so it can be reopened.
+// Ignoring warnings from the trip page (#174): the warning badge's menu
+// ignores or shows every survey warning in the trip, the per-cell popup
+// ignores every warning of one kind, and a cell whose warnings are all
+// ignored keeps a muted marker so it can be reopened.
 //
 // Phase 3 names the pieces this test reaches for: the badge
 // (SurveyErrorOverview) is surveyErrorOverview with its text in overviewText;
-// tripWarningsMenuButton opens a menu with acceptAllWarnings and
-// unacceptAllWarnings; ErrorListQuoteBox offers an acceptSimilar link; the
+// tripWarningsMenuButton opens a menu with ignoreAllWarnings and
+// showAllWarnings; ErrorListQuoteBox offers an ignoreSimilar link; the
 // errorIcon's image is errorIconImage. The cell's warnings are a Popup, so they
 // are found under the window's content item (rootId.parent), not under rootId.
 MainWindowTest {
@@ -24,7 +24,7 @@ MainWindowTest {
     }
 
     TestCase {
-        name: "AcceptWarnings"
+        name: "IgnoreWarnings"
         when: windowShown
 
         readonly property int missingLeftId: 1740
@@ -40,7 +40,7 @@ MainWindowTest {
         // A1 to A2. A1's four LRUD boxes are empty; A2's are filled when
         // fillA2 is true, which leaves exactly four warnings.
         function gotoSurveyTable(fillA2) {
-            const context = surveyTableId.openSurveyTable(this, "AcceptCave", "AcceptTrip")
+            const context = surveyTableId.openSurveyTable(this, "IgnoreCave", "IgnoreTrip")
             surveyTableId.setStationName(this, context, 0, "A1")
             surveyTableId.setStationName(this, context, 1, "A2")
 
@@ -93,7 +93,7 @@ MainWindowTest {
             return icon
         }
 
-        function test_menuAcceptsAndUnacceptsEveryWarning() {
+        function test_menuIgnoresAndShowsEveryWarning() {
             const context = gotoSurveyTable(true)
 
             // A complete shot leaves the trip with warnings and no errors
@@ -114,34 +114,34 @@ MainWindowTest {
             tryVerify(() => menuButton.visible, 5000, "the badge should offer its menu")
 
             mouseClick(menuButton)
-            const acceptAll = menuItem(menuButton, "acceptAllWarnings")
-            verify(acceptAll.enabled, "Accept all should be on while warnings show")
-            acceptAll.triggered()
+            const ignoreAll = menuItem(menuButton, "ignoreAllWarnings")
+            verify(ignoreAll.enabled, "Ignore all should be on while warnings show")
+            ignoreAll.triggered()
 
             tryCompare(context.trip.errorModel, "warningCount", 0)
-            tryCompare(context.trip.errorModel, "suppressedWarningCount", 4)
+            tryCompare(context.trip.errorModel, "ignoredWarningCount", 4)
 
-            // With every warning accepted the badge steps aside; the section
-            // under it says what was accepted and can put them back
+            // With every warning ignored the badge steps aside; the section
+            // under it says what was ignored and can put them back
             const badge = findInEditor("surveyErrorOverview")
-            const section = findInEditor("acceptedWarningsSection")
-            const sectionText = findChild(section, "acceptedWarningsHeaderText")
-            verify(sectionText !== null, "the accepted-warnings section should carry its text")
-            tryVerify(() => !badge.visible && section.visible && sectionText.text.indexOf("4 accepted") >= 0, 5000,
-                      "the badge should hide and the section say what was accepted: " + sectionText.text)
+            const section = findInEditor("ignoredWarningsSection")
+            const sectionText = findChild(section, "ignoredWarningsHeaderText")
+            verify(sectionText !== null, "the ignored-warnings section should carry its text")
+            tryVerify(() => !badge.visible && section.visible && sectionText.text.indexOf("4 ignored") >= 0, 5000,
+                      "the badge should hide and the section say what was ignored: " + sectionText.text)
             verify(!menuButton.visible, "the menu button should hide with the badge")
 
-            const unacceptAll = findChild(section, "unacceptAllAccepted")
-            verify(unacceptAll !== null, "the section should offer Un-accept all")
-            mouseClick(unacceptAll)
+            const showAll = findChild(section, "showAllIgnored")
+            verify(showAll !== null, "the section should offer Show all")
+            mouseClick(showAll)
 
             tryCompare(context.trip.errorModel, "warningCount", 4)
-            tryCompare(context.trip.errorModel, "suppressedWarningCount", 0)
+            tryCompare(context.trip.errorModel, "ignoredWarningCount", 0)
             tryVerify(() => badge.visible && menuButton.visible, 5000,
                       "the badge and its menu should return with the warnings")
         }
 
-        function test_acceptSimilarAcceptsOnlyThatKind() {
+        function test_ignoreSimilarIgnoresOnlyThatKind() {
             const context = gotoSurveyTable(false)
             compare(context.trip.warningCountForTypeId(missingLeftId), 2)
 
@@ -149,19 +149,19 @@ MainWindowTest {
 
             const row = surveyTableId.stationRow(context, 0)
             const quoteBoxName = "errorBoxdataBox." + row + "." + SurveyEditorCellIndex.StationLeftCell
-            let acceptSimilar = null
+            let ignoreSimilar = null
             tryVerify(() => {
                 const quoteBox = findChild(rootId.parent, quoteBoxName)
-                acceptSimilar = quoteBox === null ? null : findChild(quoteBox, "acceptSimilar")
-                return acceptSimilar !== null && acceptSimilar.visible
-            }, 5000, "the Missing Left popup should offer to accept every similar warning")
-            verify(acceptSimilar.text.indexOf("(2)") >= 0, "the link should count both Left warnings: " + acceptSimilar.text)
+                ignoreSimilar = quoteBox === null ? null : findChild(quoteBox, "ignoreSimilar")
+                return ignoreSimilar !== null && ignoreSimilar.visible
+            }, 5000, "the Missing Left popup should offer to ignore every similar warning")
+            verify(ignoreSimilar.text.indexOf("(2)") >= 0, "the link should count both Left warnings: " + ignoreSimilar.text)
 
-            mouseClick(acceptSimilar)
+            mouseClick(ignoreSimilar)
 
             tryCompare(context.trip.errorModel, "warningCount", 6)
             compare(context.trip.warningCountForTypeId(missingLeftId), 0)
-            compare(context.trip.errorModel.suppressedWarningCount, 2)
+            compare(context.trip.errorModel.ignoredWarningCount, 2)
         }
 
         function test_cellPopupClosesOnPressOutside() {
@@ -199,18 +199,18 @@ MainWindowTest {
             verify(!icon.checked, "the icon should read as closed")
         }
 
-        function test_acceptedCellKeepsAMutedMarker() {
+        function test_ignoredCellKeepsAMutedMarker() {
             const context = gotoSurveyTable(false)
-            context.chunk.setWarningAccepted(0, SurveyChunk.StationLeftRole, missingLeftId, true)
+            context.chunk.setWarningIgnored(0, SurveyChunk.StationLeftRole, missingLeftId, true)
             tryCompare(context.trip.errorModel, "warningCount", 7)
 
             const icon = leftErrorIcon(context)
-            tryVerify(() => icon.visible, 5000, "a cell with only accepted warnings should keep its marker")
+            tryVerify(() => icon.visible, 5000, "a cell with only ignored warnings should keep its marker")
 
             const image = findChild(icon, "errorIconImage")
             verify(image !== null, "the error icon should name its image")
-            tryVerify(() => String(image.source).indexOf("warningAccepted") >= 0, 5000,
-                      "the marker should use the accepted look: " + image.source)
+            tryVerify(() => String(image.source).indexOf("warningIgnored") >= 0, 5000,
+                      "the marker should use the ignored look: " + image.source)
         }
     }
 }

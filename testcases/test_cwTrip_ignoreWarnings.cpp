@@ -57,7 +57,7 @@ void runQueuedCalls()
 
 }
 
-TEST_CASE("acceptAllWarnings accepts every chunk warning and leaves the declination warning", "[cwTrip][acceptedWarnings]")
+TEST_CASE("ignoreAllWarnings ignores every chunk warning and leaves the declination warning", "[cwTrip][ignoredWarnings]")
 {
     auto fixture = buildBoulderFixture();
     cwTrip* trip = fixture.trip;
@@ -72,15 +72,15 @@ TEST_CASE("acceptAllWarnings accepts every chunk warning and leaves the declinat
     constexpr int kChunkWarnings = 8;
     constexpr int kDeclinationWarnings = 1;
     REQUIRE(trip->errorModel()->warningCount() == 2 * kChunkWarnings + kDeclinationWarnings);
-    CHECK(trip->acceptableWarningCount() == 2 * kChunkWarnings);
+    CHECK(trip->ignorableWarningCount() == 2 * kChunkWarnings);
 
-    CHECK(trip->acceptAllWarnings() == 2 * kChunkWarnings);
+    CHECK(trip->ignoreAllWarnings() == 2 * kChunkWarnings);
     CHECK(trip->errorModel()->warningCount() == kDeclinationWarnings);
-    CHECK(trip->acceptableWarningCount() == 0);
-    CHECK(trip->errorModel()->suppressedWarningCount() == 2 * kChunkWarnings);
+    CHECK(trip->ignorableWarningCount() == 0);
+    CHECK(trip->errorModel()->ignoredWarningCount() == 2 * kChunkWarnings);
 }
 
-TEST_CASE("warningCountForTypeId counts one kind across chunks", "[cwTrip][acceptedWarnings]")
+TEST_CASE("warningCountForTypeId counts one kind across chunks", "[cwTrip][ignoredWarnings]")
 {
     cwTrip trip;
     cwSurveyChunk* first = addLrudOnlyWarningChunk(&trip, QStringLiteral("A"));
@@ -90,15 +90,15 @@ TEST_CASE("warningCountForTypeId counts one kind across chunks", "[cwTrip][accep
     CHECK(trip.warningCountForTypeId(left) == 4);
     CHECK(trip.warningCountForTypeId(toInt(cwErrorTypeId::SurveyCompassDisagreement)) == 0);
 
-    first->setWarningAccepted(0, cwSurveyChunk::StationLeftRole, left, true);
+    first->setWarningIgnored(0, cwSurveyChunk::StationLeftRole, left, true);
     CHECK(trip.warningCountForTypeId(left) == 3);
 
-    CHECK(trip.acceptAllWarnings({left}) == 3);
+    CHECK(trip.ignoreAllWarnings({left}) == 3);
     CHECK(trip.warningCountForTypeId(left) == 0);
     CHECK(trip.warningCountForTypeId(toInt(cwErrorTypeId::SurveyMissingRight)) == 4);
 }
 
-TEST_CASE("clearAcceptedWarnings restores every count", "[cwTrip][acceptedWarnings]")
+TEST_CASE("clearIgnoredWarnings restores every count", "[cwTrip][ignoredWarnings]")
 {
     cwTrip trip;
     addLrudOnlyWarningChunk(&trip, QStringLiteral("A"));
@@ -107,26 +107,26 @@ TEST_CASE("clearAcceptedWarnings restores every count", "[cwTrip][acceptedWarnin
     const int warningsBefore = trip.errorModel()->warningCount();
     REQUIRE(warningsBefore == 16);
 
-    CHECK(trip.acceptAllWarnings() == warningsBefore);
+    CHECK(trip.ignoreAllWarnings() == warningsBefore);
     CHECK(trip.errorModel()->warningCount() == 0);
 
     SECTION("All of them") {
-        CHECK(trip.clearAcceptedWarnings() == warningsBefore);
+        CHECK(trip.clearIgnoredWarnings() == warningsBefore);
         CHECK(trip.errorModel()->warningCount() == warningsBefore);
-        CHECK(trip.errorModel()->suppressedWarningCount() == 0);
+        CHECK(trip.errorModel()->ignoredWarningCount() == 0);
         CHECK(trip.warningCountForTypeId(toInt(cwErrorTypeId::SurveyMissingLeft)) == 4);
     }
 
     SECTION("Only the named kinds") {
         const QList<int> leftAndRight {toInt(cwErrorTypeId::SurveyMissingLeft),
                                        toInt(cwErrorTypeId::SurveyMissingRight)};
-        CHECK(trip.clearAcceptedWarnings(leftAndRight) == 8);
+        CHECK(trip.clearIgnoredWarnings(leftAndRight) == 8);
         CHECK(trip.errorModel()->warningCount() == 8);
-        CHECK(trip.errorModel()->suppressedWarningCount() == 8);
+        CHECK(trip.errorModel()->ignoredWarningCount() == 8);
     }
 }
 
-TEST_CASE("hasLrudData and hasSplayData follow the trip's data", "[cwTrip][acceptedWarnings]")
+TEST_CASE("hasLrudData and hasSplayData follow the trip's data", "[cwTrip][ignoredWarnings]")
 {
     cwTrip trip;
     cwSurveyChunk* chunk = addLrudOnlyWarningChunk(&trip, QStringLiteral("A"));

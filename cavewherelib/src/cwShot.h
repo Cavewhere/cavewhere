@@ -70,10 +70,10 @@ public:
     bool isDistanceIncluded() const;
     void setDistanceIncluded(bool include);
 
-    // cwErrorTypeId values the user accepted on this shot's cells (#174)
-    QSet<int> acceptedWarnings() const;
-    void setAcceptedWarnings(const QSet<int>& ids);
-    bool isWarningAccepted(cwErrorTypeId id) const;
+    // cwErrorTypeId values the user ignored on this shot's cells (#174)
+    QSet<int> ignoredWarnings() const;
+    void setIgnoredWarnings(const QSet<int>& ids);
+    bool isWarningIgnored(cwErrorTypeId id) const;
 
     // Validity check (delegates to first measurement)
     bool isValid() const;
@@ -82,7 +82,7 @@ private:
     QUuid m_id;
     QList<cwShotMeasurement> measurements;
     bool IncludeDistance = true;
-    QSet<int> m_acceptedWarnings;
+    QSet<int> m_ignoredWarnings;
 };
 
 inline int cwShot::measurementCount() const {

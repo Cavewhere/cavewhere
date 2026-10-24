@@ -942,7 +942,7 @@ MainWindowTest {
             mouseClick(distanceError)
             waitForRendering(rootId);
 
-            //A cell whose only warning is accepted keeps a muted marker (#174)
+            //A cell whose only warning is ignored keeps a muted marker (#174)
             errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.1->coreTextInput->errorIcon")
             verify(errorIcon_obj1 !== null)
 

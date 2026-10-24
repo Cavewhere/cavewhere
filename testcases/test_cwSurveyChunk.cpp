@@ -135,7 +135,7 @@ void checkNoShotDataError(cwSurveyChunk* chunk, int index, cwSurveyChunk::DataRo
     CHECK(model->errors()->first().message() == QString("Missing \"%1\" from shot \"%2\" ➔ \"%3\"").arg(roleName, fromStation, toStation));
     CHECK(model->errors()->first().type() == type);
 
-    //Only warnings carry a stable id, since only warnings can be accepted
+    //Only warnings carry a stable id, since only warnings can be ignored
     if(type == cwError::Warning) {
         CHECK(model->errors()->first().errorTypeId() == static_cast<int>(warningId));
     }

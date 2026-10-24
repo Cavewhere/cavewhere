@@ -3841,13 +3841,13 @@ TEST_CASE("validatePathSafeForRecursiveRemoval guards", "[cwSaveLoad][validatePa
 
 namespace {
 
-int acceptedId(cwErrorTypeId id)
+int ignoredId(cwErrorTypeId id)
 {
     return static_cast<int>(id);
 }
 
 //! A1 to A2 with every LRUD box empty, so each station carries four missing-LRUD warnings
-cwSurveyChunk* addAcceptedWarningsChunk(cwTrip* trip)
+cwSurveyChunk* addIgnoredWarningsChunk(cwTrip* trip)
 {
     auto chunk = new cwSurveyChunk();
     chunk->appendShot(cwStation(QStringLiteral("A1")),
@@ -3883,7 +3883,7 @@ void writeProtoToJsonFile(const QString& filename, const ProtoT& proto)
 
 }
 
-TEST_CASE("Accepted warnings survive a save and reload", "[cwSaveLoad][acceptedWarnings]") {
+TEST_CASE("Ignored warnings survive a save and reload", "[cwSaveLoad][ignoredWarnings]") {
     auto root = std::make_unique<cwRootData>();
     auto project = root->project();
     auto region = project->cavingRegion();
@@ -3892,10 +3892,10 @@ TEST_CASE("Accepted warnings survive a save and reload", "[cwSaveLoad][acceptedW
     auto cave = region->cave(0);
     cave->addTrip();
     auto trip = cave->trip(0);
-    auto chunk = addAcceptedWarningsChunk(trip);
+    auto chunk = addIgnoredWarningsChunk(trip);
 
-    chunk->setWarningAccepted(0, cwSurveyChunk::StationLeftRole, acceptedId(cwErrorTypeId::SurveyMissingLeft), true);
-    chunk->setWarningAccepted(1, cwSurveyChunk::StationUpRole, acceptedId(cwErrorTypeId::SurveyMissingUp), true);
+    chunk->setWarningIgnored(0, cwSurveyChunk::StationLeftRole, ignoredId(cwErrorTypeId::SurveyMissingLeft), true);
+    chunk->setWarningIgnored(1, cwSurveyChunk::StationUpRole, ignoredId(cwErrorTypeId::SurveyMissingUp), true);
     const int warningCount = trip->errorModel()->warningCount();
     CHECK(trip->calibrations()->hasLruds());
 
@@ -3913,8 +3913,8 @@ TEST_CASE("Accepted warnings survive a save and reload", "[cwSaveLoad][acceptedW
     REQUIRE(loadedTrip->chunkCount() == 1);
     cwSurveyChunk* const loadedChunk = loadedTrip->chunk(0);
 
-    CHECK(loadedChunk->station(0).acceptedWarnings() == QSet<int>({acceptedId(cwErrorTypeId::SurveyMissingLeft)}));
-    CHECK(loadedChunk->station(1).acceptedWarnings() == QSet<int>({acceptedId(cwErrorTypeId::SurveyMissingUp)}));
+    CHECK(loadedChunk->station(0).ignoredWarnings() == QSet<int>({ignoredId(cwErrorTypeId::SurveyMissingLeft)}));
+    CHECK(loadedChunk->station(1).ignoredWarnings() == QSet<int>({ignoredId(cwErrorTypeId::SurveyMissingUp)}));
 
     const cwErrorModel* left = loadedChunk->errorsAt(0, cwSurveyChunk::StationLeftRole);
     REQUIRE(left != nullptr);
@@ -3924,11 +3924,11 @@ TEST_CASE("Accepted warnings survive a save and reload", "[cwSaveLoad][acceptedW
     CHECK(up->errors()->first().suppressed());
 
     CHECK(loadedTrip->errorModel()->warningCount() == warningCount);
-    CHECK(loadedTrip->errorModel()->suppressedWarningCount() == 2);
+    CHECK(loadedTrip->errorModel()->ignoredWarningCount() == 2);
     CHECK(loadedTrip->calibrations()->hasLruds());
 }
 
-TEST_CASE("Accepting a warning marks the project modified and saves the trip", "[cwSaveLoad][acceptedWarnings]") {
+TEST_CASE("Ignoring a warning marks the project modified and saves the trip", "[cwSaveLoad][ignoredWarnings]") {
     auto root = std::make_unique<cwRootData>();
     root->account()->setName(QStringLiteral("Test User"));
     root->account()->setEmail(QStringLiteral("test@example.com"));
@@ -3939,11 +3939,11 @@ TEST_CASE("Accepting a warning marks the project modified and saves the trip", "
     auto cave = region->cave(0);
     cave->addTrip();
     auto trip = cave->trip(0);
-    auto chunk = addAcceptedWarningsChunk(trip);
+    auto chunk = addIgnoredWarningsChunk(trip);
 
     QTemporaryDir saveDir;
     REQUIRE(saveDir.isValid());
-    REQUIRE(project->saveAs(saveDir.filePath(QStringLiteral("accepted-warnings-%1.cwproj")
+    REQUIRE(project->saveAs(saveDir.filePath(QStringLiteral("ignored-warnings-%1.cwproj")
                                                  .arg(QCoreApplication::applicationPid()))));
     project->waitSaveToFinish();
     REQUIRE(project->save());
@@ -3953,7 +3953,7 @@ TEST_CASE("Accepting a warning marks the project modified and saves the trip", "
     const QString tripFile = ProjectFilenameTestHelper::absolutePath(trip);
     const QByteArray before = readFileBytes(tripFile);
 
-    chunk->setWarningAccepted(0, cwSurveyChunk::StationLeftRole, acceptedId(cwErrorTypeId::SurveyMissingLeft), true);
+    chunk->setWarningIgnored(0, cwSurveyChunk::StationLeftRole, ignoredId(cwErrorTypeId::SurveyMissingLeft), true);
     project->waitSaveToFinish();
 
     CHECK(project->modified());
@@ -3964,11 +3964,11 @@ TEST_CASE("Accepting a warning marks the project modified and saves the trip", "
     REQUIRE(tripProto.chunks_size() == 1);
     REQUIRE(tripProto.chunks(0).leg_size() >= 1);
     const auto& firstLeg = tripProto.chunks(0).leg(0);
-    REQUIRE(firstLeg.acceptedwarnings_size() == 1);
-    CHECK(firstLeg.acceptedwarnings(0) == acceptedId(cwErrorTypeId::SurveyMissingLeft));
+    REQUIRE(firstLeg.ignoredwarnings_size() == 1);
+    CHECK(firstLeg.ignoredwarnings(0) == ignoredId(cwErrorTypeId::SurveyMissingLeft));
 }
 
-TEST_CASE("A trip written before accepted warnings existed loads with none accepted", "[cwSaveLoad][acceptedWarnings]") {
+TEST_CASE("A trip written before ignored warnings existed loads with none ignored", "[cwSaveLoad][ignoredWarnings]") {
     auto root = std::make_unique<cwRootData>();
     auto project = root->project();
     auto region = project->cavingRegion();
@@ -3977,7 +3977,7 @@ TEST_CASE("A trip written before accepted warnings existed loads with none accep
     auto cave = region->cave(0);
     cave->addTrip();
     auto trip = cave->trip(0);
-    addAcceptedWarningsChunk(trip);
+    addIgnoredWarningsChunk(trip);
 
     root->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
@@ -3987,7 +3987,7 @@ TEST_CASE("A trip written before accepted warnings existed loads with none accep
     auto tripProto = loadProtoFromJsonFile<CavewhereProto::Trip>(tripFile);
     for (auto& protoChunk : *tripProto.mutable_chunks()) {
         for (auto& leg : *protoChunk.mutable_leg()) {
-            leg.clear_acceptedwarnings();
+            leg.clear_ignoredwarnings();
         }
     }
     tripProto.mutable_tripcalibration()->clear_lruds();
@@ -4006,10 +4006,10 @@ TEST_CASE("A trip written before accepted warnings existed loads with none accep
     cwSurveyChunk* const loadedChunk = loadedTrip->chunk(0);
 
     for (int i = 0; i < loadedChunk->stationCount(); ++i) {
-        CHECK(loadedChunk->station(i).acceptedWarnings().isEmpty());
+        CHECK(loadedChunk->station(i).ignoredWarnings().isEmpty());
     }
     for (int i = 0; i < loadedChunk->shotCount(); ++i) {
-        CHECK(loadedChunk->shot(i).acceptedWarnings().isEmpty());
+        CHECK(loadedChunk->shot(i).ignoredWarnings().isEmpty());
     }
     CHECK(loadedTrip->calibrations()->hasLruds());
     CHECK(loadedTrip->calibrations()->hasSplays());

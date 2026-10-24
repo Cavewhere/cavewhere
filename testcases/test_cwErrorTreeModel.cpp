@@ -156,7 +156,7 @@ TEST_CASE("cwErrorTreeModel flattens the tree and tracks child models live", "[E
     }
 }
 
-TEST_CASE("cwErrorTreeModel filters to accepted warnings and to one kind", "[ErrorModelTest][cwErrorTreeModel]")
+TEST_CASE("cwErrorTreeModel filters to ignored warnings and to one kind", "[ErrorModelTest][cwErrorTreeModel]")
 {
     cwErrorModel root;
     cwErrorModel cell;
@@ -172,7 +172,7 @@ TEST_CASE("cwErrorTreeModel filters to accepted warnings and to one kind", "[Err
     tree.setRoot(&root);
     CHECK(tree.count() == 4);
 
-    tree.setSuppressedOnly(true);
+    tree.setIgnoredOnly(true);
     CHECK(messages(tree) == QStringList({QStringLiteral("compass"), QStringLiteral("left")}));
     CHECK(tree.count() == 2);
 
@@ -180,14 +180,14 @@ TEST_CASE("cwErrorTreeModel filters to accepted warnings and to one kind", "[Err
     CHECK(messages(tree) == QStringList({QStringLiteral("left")}));
     CHECK(tree.index(0, 0).data(kKindRole).toString() == kMissingLrudKind);
 
-    SECTION("accepting a warning in the source brings it in") {
+    SECTION("ignoring a warning in the source brings it in") {
         cwErrorListModel* list = cell.errors();
         list->setData(list->index(1), true, kSuppressedRole);
         CHECK(messages(tree) == QStringList({QStringLiteral("left"), QStringLiteral("up")}));
         CHECK(tree.count() == 2);
     }
 
-    SECTION("un-accepting through the proxy reaches the source and drops the row") {
+    SECTION("showing through the proxy reaches the source and drops the row") {
         QSignalSpy countSpy(&tree, &cwErrorTreeModel::countChanged);
         CHECK(tree.setData(tree.index(0, 0), false, kSuppressedRole));
         CHECK_FALSE(cell.errors()->at(0).suppressed());
@@ -213,7 +213,7 @@ TEST_CASE("cwErrorTreeModel lists the kinds present, rare kinds first, live", "[
     cell.setParentModel(&root);
 
     cwErrorTreeModel tree;
-    tree.setSuppressedOnly(true);
+    tree.setIgnoredOnly(true);
     tree.setRoot(&root);
     CHECK(tree.kinds().isEmpty());
 
@@ -227,7 +227,7 @@ TEST_CASE("cwErrorTreeModel lists the kinds present, rare kinds first, live", "[
     cell.errors()->append(makeWarning(QStringLiteral("clino"), cwErrorTypeId::SurveyMissingClino, true));
     cell.errors()->append(makeWarning(QStringLiteral("back"), cwErrorTypeId::SurveyMissingBackCompass, true));
     cell.errors()->append(makeWarning(QStringLiteral("disagree"), cwErrorTypeId::SurveyClinoDisagreement, true));
-    //Unaccepted warnings are not part of the accepted kinds
+    //Warnings that still show are not part of the ignored kinds
     cell.errors()->append(makeWarning(QStringLiteral("open"), cwErrorTypeId::SurveyCompassDisagreement, false));
 
     CHECK(tree.kinds() == QStringList({kDisagreementKind,
@@ -251,7 +251,7 @@ TEST_CASE("cwErrorTreeModel lists the kinds present, rare kinds first, live", "[
                          static_cast<int>(cwErrorTypeId::SurveyClinoDisagreement)}));
 }
 
-TEST_CASE("cwErrorTreeModel follows a trip's chunk cells and finds their cells", "[ErrorModelTest][cwErrorTreeModel][acceptedWarnings]")
+TEST_CASE("cwErrorTreeModel follows a trip's chunk cells and finds their cells", "[ErrorModelTest][cwErrorTreeModel][ignoredWarnings]")
 {
     auto trip = std::make_unique<cwTrip>();
     auto* chunk = new cwSurveyChunk();
@@ -271,11 +271,11 @@ TEST_CASE("cwErrorTreeModel follows a trip's chunk cells and finds their cells",
     }
 
     cwErrorTreeModel tree;
-    tree.setSuppressedOnly(true);
+    tree.setIgnoredOnly(true);
     tree.setRoot(trip->errorModel());
     CHECK(tree.count() == 0);
 
-    CHECK(trip->acceptAllWarnings() == 5);
+    CHECK(trip->ignoreAllWarnings() == 5);
     CHECK(tree.count() == 5);
     CHECK(tree.kinds() == QStringList({kDisagreementKind, kMissingLrudKind}));
 
@@ -294,8 +294,8 @@ TEST_CASE("cwErrorTreeModel follows a trip's chunk cells and finds their cells",
     chunk->setData(cwSurveyChunk::StationLeftRole, 0, QStringLiteral("1"));
     CHECK(tree.count() == 4);
 
-    //Un-accepting one group through the trip leaves the other
-    CHECK(trip->clearAcceptedWarnings(cwErrorTreeModel::typeIdsForKind(kMissingLrudKind)) == 3);
+    //Showing one group through the trip leaves the other
+    CHECK(trip->clearIgnoredWarnings(cwErrorTreeModel::typeIdsForKind(kMissingLrudKind)) == 3);
     CHECK(tree.count() == 1);
     CHECK(tree.kinds() == QStringList({kDisagreementKind}));
 

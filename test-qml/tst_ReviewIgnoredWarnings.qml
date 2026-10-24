@@ -3,17 +3,17 @@ import QtTest
 import cavewherelib
 import cw.TestLib
 
-// The accepted-warnings section under the trip's warning badge (#174, Phase 4):
-// one collapsed line while anything is accepted, opening to the accepted
-// warnings grouped by kind, rare kinds first. Unticking a row un-accepts it,
-// a group's link un-accepts the whole group, and tapping a row's text focuses
+// The ignored-warnings section under the trip's warning badge (#174, Phase 4):
+// one collapsed line while anything is ignored, opening to the ignored
+// warnings grouped by kind, rare kinds first. Unticking a row shows that warning again,
+// a group's link shows the whole group again, and tapping a row's text focuses
 // its cell in the survey table.
 //
-// Phase 4 names the pieces this test reaches for: acceptedWarningsSection has
-// an expanded property, a tappable acceptedWarningsHeader and its text in
-// acceptedWarningsHeaderText. Each group is acceptedWarningsGroup.<i> (in
+// Phase 4 names the pieces this test reaches for: ignoredWarningsSection has
+// an expanded property, a tappable ignoredWarningsHeader and its text in
+// ignoredWarningsHeaderText. Each group is ignoredWarningsGroup.<i> (in
 // display order) with kind, count and expanded properties, a tappable
-// groupHeader, an unacceptGroup link, and rows acceptedWarningRow.<j> that
+// groupHeader, a showGroup link, and rows ignoredWarningRow.<j> that
 // hold the "suppress" checkbox and the "errorText" label.
 //
 // Written in Phase 0 and red until Phase 4 lands.
@@ -26,7 +26,7 @@ MainWindowTest {
     }
 
     TestCase {
-        name: "ReviewAcceptedWarnings"
+        name: "ReviewIgnoredWarnings"
         when: windowShown
 
         readonly property string disagreementKind: "Backsight disagreement"
@@ -71,14 +71,14 @@ MainWindowTest {
             return context
         }
 
-        function acceptEverything(context) {
-            context.trip.acceptAllWarnings()
-            tryCompare(context.trip.errorModel, "suppressedWarningCount", 5)
+        function ignoreEverything(context) {
+            context.trip.ignoreAllWarnings()
+            tryCompare(context.trip.errorModel, "ignoredWarningCount", 5)
         }
 
         function section() {
             const editor = surveyTableId.surveyEditor()
-            return editor === null ? null : findChild(editor, "acceptedWarningsSection")
+            return editor === null ? null : findChild(editor, "ignoredWarningsSection")
         }
 
         function visibleSection() {
@@ -86,7 +86,7 @@ MainWindowTest {
             tryVerify(() => {
                 found = section()
                 return found !== null && found.visible
-            }, 5000, "the accepted-warnings section should show")
+            }, 5000, "the ignored-warnings section should show")
             return found
         }
 
@@ -107,7 +107,7 @@ MainWindowTest {
         function groups(sectionItem) {
             const found = []
             for (let i = 0; ; i++) {
-                const group = findChild(sectionItem, "acceptedWarningsGroup." + i)
+                const group = findChild(sectionItem, "ignoredWarningsGroup." + i)
                 if (group === null || !group.visible) {
                     return found
                 }
@@ -123,7 +123,7 @@ MainWindowTest {
             verify(view !== null, "the survey editor should have its table view")
             verify(waitForPolish(view.Window.window), "the header should finish growing first")
             view.contentY = view.originY
-            tapChild(sectionItem, "acceptedWarningsHeader")
+            tapChild(sectionItem, "ignoredWarningsHeader")
             tryVerify(() => sectionItem.expanded, 5000, "tapping the header should open the section")
             tryVerify(() => groups(sectionItem).length === 2, 5000, "the section should list two kinds")
             return sectionItem
@@ -139,20 +139,20 @@ MainWindowTest {
             const context = gotoSurveyTable()
             const before = section()
             verify(before === null || !before.visible,
-                   "nothing accepted, so the section should be absent")
+                   "nothing ignored, so the section should be absent")
 
-            acceptEverything(context)
+            ignoreEverything(context)
 
             const sectionItem = visibleSection()
             verify(!sectionItem.expanded, "the section should start collapsed")
-            const headerText = findChild(sectionItem, "acceptedWarningsHeaderText")
+            const headerText = findChild(sectionItem, "ignoredWarningsHeaderText")
             verify(headerText !== null, "the section should carry its header text")
             verify(headerText.text.indexOf("5") >= 0, "the header should count five: " + headerText.text)
         }
 
-        function test_groupsListRareKindsFirstAndUnaccept() {
+        function test_groupsListRareKindsFirstAndShow() {
             const context = gotoSurveyTable()
-            acceptEverything(context)
+            ignoreEverything(context)
             const sectionItem = expandedSection()
 
             const shown = groups(sectionItem)
@@ -166,10 +166,10 @@ MainWindowTest {
 
             let row = null
             tryVerify(() => {
-                row = findChild(disagreement, "acceptedWarningRow.0")
+                row = findChild(disagreement, "ignoredWarningRow.0")
                 return row !== null
             }, 5000, "the disagreement group should list its warning")
-            compare(findChild(disagreement, "acceptedWarningRow.1"), null, "the disagreement group holds one row")
+            compare(findChild(disagreement, "ignoredWarningRow.1"), null, "the disagreement group holds one row")
 
             const checkbox = findChild(row, "suppress")
             verify(checkbox !== null, "a row should carry its checkbox")
@@ -181,17 +181,17 @@ MainWindowTest {
                       "an emptied group should leave the section")
 
             const lrud = groupOfKind(sectionItem, missingLrudKind)
-            tapChild(lrud, "unacceptGroup")
+            tapChild(lrud, "showGroup")
 
             tryCompare(context.trip.errorModel, "warningCount", 5)
-            tryCompare(context.trip.errorModel, "suppressedWarningCount", 0)
+            tryCompare(context.trip.errorModel, "ignoredWarningCount", 0)
             tryVerify(() => section() === null || !section().visible, 5000,
-                      "with nothing accepted the section should go")
+                      "with nothing ignored the section should go")
         }
 
         function test_tappingARowFocusesItsCell() {
             const context = gotoSurveyTable()
-            acceptEverything(context)
+            ignoreEverything(context)
             const sectionItem = expandedSection()
 
             const lrud = groupOfKind(sectionItem, missingLrudKind)
@@ -200,7 +200,7 @@ MainWindowTest {
 
             let row = null
             tryVerify(() => {
-                row = findChild(lrud, "acceptedWarningRow.0")
+                row = findChild(lrud, "ignoredWarningRow.0")
                 return row !== null
             }, 5000, "the LRUD group should list its warnings")
             // Opening the group grows the header past the table's top edge;

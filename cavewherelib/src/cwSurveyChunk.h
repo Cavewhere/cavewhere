@@ -132,22 +132,22 @@ public:
     void setData(const cwSurveyChunkData& data);
 
     // Mark or clear one warning kind on one cell. Writes the station/shot set,
-    // flips the matching cell-model row, emits acceptedWarningsChanged.
-    Q_INVOKABLE void setWarningAccepted(int index, cwSurveyChunk::DataRole role, int errorTypeId, bool accepted);
+    // flips the matching cell-model row, emits ignoredWarningsChanged.
+    Q_INVOKABLE void setWarningIgnored(int index, cwSurveyChunk::DataRole role, int errorTypeId, bool ignored);
 
     // Every current, unsuppressed Warning in this chunk whose id is in `ids`
-    // (empty = all kinds). Returns how many were newly accepted.
-    int acceptWarnings(const QList<int>& ids = {});
+    // (empty = all kinds). Returns how many were newly ignored.
+    int ignoreWarnings(const QList<int>& ids = {});
 
-    // Drops the chunk's acceptances whose ids are in `ids` (empty = all kinds).
+    // Shows again the chunk's ignored warnings whose ids are in `ids` (empty = all kinds).
     // Returns how many were cleared.
-    int clearAcceptedWarnings(const QList<int>& ids = {});
+    int clearIgnoredWarnings(const QList<int>& ids = {});
 
     // Current unsuppressed warning count for one kind in this chunk
     int warningCountForTypeId(int errorTypeId) const;
 
-    // Current unsuppressed warnings in this chunk that acceptWarnings() can accept
-    int acceptableWarningCount() const;
+    // Current unsuppressed warnings in this chunk that ignoreWarnings() can ignore
+    int ignorableWarningCount() const;
 
     // The cell that owns errorModel, for jumping from a listed warning to its cell
     Q_INVOKABLE cwSurveyChunkCell cellIndexForErrorModel(cwErrorModel* errorModel) const;
@@ -170,8 +170,8 @@ signals:
 
     void dataChanged(cwSurveyChunk::DataRole mainRole, int index);
 
-    //! The accepted warnings on one cell changed. Saved, but no recompute follows
-    void acceptedWarningsChanged(cwSurveyChunk::DataRole role, int index);
+    //! The ignored warnings on one cell changed. Saved, but no recompute follows
+    void ignoredWarningsChanged(cwSurveyChunk::DataRole role, int index);
 
     void stationSplaysChanged(int index);
 
@@ -301,7 +301,7 @@ private:
     void updateErrors();
     bool isClinoDownOrUp(cwSurveyChunk::DataRole role, int index) const;
     bool isClinoDownOrUpHelper(cwSurveyChunk::DataRole role, int index) const;
-    void connectAcceptanceWriteThrough(cwErrorModel* cellModel, DataRole role, int index);
+    void connectIgnoredWriteThrough(cwErrorModel* cellModel, DataRole role, int index);
 
 private slots:
     void updateCompassErrors();

@@ -48,18 +48,18 @@ void saveReading(StringFunc getProtoString, const cwReading& reading, State empt
 }
 
 //Sorted, so a .cwproj's Git diff stays stable across saves
-void saveAcceptedWarnings(CavewhereProto::StationShot* proto, const QSet<int>& acceptedWarnings)
+void saveIgnoredWarnings(CavewhereProto::StationShot* proto, const QSet<int>& ignoredWarnings)
 {
-    QList<int> sorted(acceptedWarnings.cbegin(), acceptedWarnings.cend());
+    QList<int> sorted(ignoredWarnings.cbegin(), ignoredWarnings.cend());
     std::sort(sorted.begin(), sorted.end());
     for(int id : std::as_const(sorted)) {
-        proto->add_acceptedwarnings(id);
+        proto->add_ignoredwarnings(id);
     }
 }
 
-QSet<int> fromProtoAcceptedWarnings(const CavewhereProto::StationShot& proto)
+QSet<int> fromProtoIgnoredWarnings(const CavewhereProto::StationShot& proto)
 {
-    return QSet<int>(proto.acceptedwarnings().cbegin(), proto.acceptedwarnings().cend());
+    return QSet<int>(proto.ignoredwarnings().cbegin(), proto.ignoredwarnings().cend());
 }
 
 } // anonymous namespace
@@ -264,7 +264,7 @@ void saveNoteTranformation(CavewhereProto::NoteTransformation* protoNoteTransfor
 void saveStationShot(CavewhereProto::StationShot* protoStation, const cwStation& station)
 {
     saveQUuid(protoStation->mutable_id(), station.id());
-    saveAcceptedWarnings(protoStation, station.acceptedWarnings());
+    saveIgnoredWarnings(protoStation, station.ignoredWarnings());
 
     if(!station.name().isEmpty()) {
         saveString(protoStation->mutable_name(), station.name());
@@ -289,7 +289,7 @@ void saveStationShot(CavewhereProto::StationShot* protoStation, const cwStation&
 void saveStationShot(CavewhereProto::StationShot* protoShot, const cwShot& shot)
 {
     saveQUuid(protoShot->mutable_id(), shot.id());
-    saveAcceptedWarnings(protoShot, shot.acceptedWarnings());
+    saveIgnoredWarnings(protoShot, shot.ignoredWarnings());
 
     if(!shot.isDistanceIncluded()) {
         //By default distance is included, only write it if it's not include
@@ -491,7 +491,7 @@ cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation)
     cwStation station;
 
     station.setId(toUuid(protoStation.id()));
-    station.setAcceptedWarnings(fromProtoAcceptedWarnings(protoStation));
+    station.setIgnoredWarnings(fromProtoIgnoredWarnings(protoStation));
 
     if (protoStation.has_name()) {
         station.setName(QString::fromStdString(protoStation.name()));
@@ -532,7 +532,7 @@ cwShot fromProtoShot(const CavewhereProto::StationShot& protoShot)
     cwShot shot;
 
     shot.setId(toUuid(protoShot.id()));
-    shot.setAcceptedWarnings(fromProtoAcceptedWarnings(protoShot));
+    shot.setIgnoredWarnings(fromProtoIgnoredWarnings(protoShot));
 
     if (protoShot.has_includedistance()) {
         shot.setDistanceIncluded(protoShot.includedistance());

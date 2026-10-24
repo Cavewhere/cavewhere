@@ -29,7 +29,7 @@ enum class Kind {
     Other
 };
 
-//Rare, serious kinds first: a big backsight disagreement is the acceptance a
+//Rare, serious kinds first: a big backsight disagreement is the ignored warning a
 //reviewer most needs to see, missing LRUDs are the bulk
 constexpr std::array<Kind, 5> kKindOrder = {
     Kind::Disagreement,
@@ -152,15 +152,15 @@ void cwErrorTreeModel::setRoot(cwErrorModel* root)
     emit rootChanged();
 }
 
-void cwErrorTreeModel::setSuppressedOnly(bool suppressedOnly)
+void cwErrorTreeModel::setIgnoredOnly(bool ignoredOnly)
 {
-    if (m_suppressedOnly == suppressedOnly) {
+    if (m_ignoredOnly == ignoredOnly) {
         return;
     }
     beginFilterChange();
-    m_suppressedOnly = suppressedOnly;
+    m_ignoredOnly = ignoredOnly;
     endFilterChange(Direction::Rows);
-    emit suppressedOnlyChanged();
+    emit ignoredOnlyChanged();
     refresh();
 }
 
@@ -245,7 +245,7 @@ bool cwErrorTreeModel::filterAcceptsRow(int sourceRow, const QModelIndex& source
 
 bool cwErrorTreeModel::passesSuppressedFilter(const QModelIndex& concatIndex) const
 {
-    if(m_suppressedOnly) {
+    if(m_ignoredOnly) {
         return concatIndex.data(kSuppressedRole).toBool()
                && concatIndex.data(kErrorTypeRole).toInt() == cwError::Warning;
     }

@@ -133,21 +133,21 @@ public:
     cwTripData data() const;
     void setData(const cwTripData& data);
 
-    // Accepts the trip's survey-chunk warnings whose ids are in errorTypeIds
-    // (empty = all kinds). Returns how many were newly accepted.
-    Q_INVOKABLE int acceptAllWarnings(const QList<int>& errorTypeIds = {});
+    // Ignores the trip's survey-chunk warnings whose ids are in errorTypeIds
+    // (empty = all kinds). Returns how many were newly ignored.
+    Q_INVOKABLE int ignoreAllWarnings(const QList<int>& errorTypeIds = {});
 
-    // Drops acceptances, every one or only those whose ids are in errorTypeIds.
+    // Shows again the ignored warnings, every one or only those whose ids are in errorTypeIds.
     // Returns how many were cleared.
-    Q_INVOKABLE int clearAcceptedWarnings();
-    Q_INVOKABLE int clearAcceptedWarnings(const QList<int>& errorTypeIds);
+    Q_INVOKABLE int clearIgnoredWarnings();
+    Q_INVOKABLE int clearIgnoredWarnings(const QList<int>& errorTypeIds);
 
     // Current unsuppressed warning count for one kind across the trip's chunks
     Q_INVOKABLE int warningCountForTypeId(int errorTypeId) const;
 
-    // Current unsuppressed warnings that acceptAllWarnings() can accept; the
+    // Current unsuppressed warnings that ignoreAllWarnings() can ignore; the
     // trip's own declination warning is excluded
-    Q_INVOKABLE int acceptableWarningCount() const;
+    Q_INVOKABLE int ignorableWarningCount() const;
 
     bool hasLrudData() const { return m_hasLrudData; }
     bool hasSplayData() const { return m_hasSplayData; }

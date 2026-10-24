@@ -625,25 +625,25 @@ QList<cwStation> cwTrip::stations() const {
     return stations;
 }
 
-int cwTrip::acceptAllWarnings(const QList<int>& errorTypeIds)
+int cwTrip::ignoreAllWarnings(const QList<int>& errorTypeIds)
 {
-    int accepted = 0;
+    int ignored = 0;
     for(cwSurveyChunk* chunk : std::as_const(Chunks)) {
-        accepted += chunk->acceptWarnings(errorTypeIds);
+        ignored += chunk->ignoreWarnings(errorTypeIds);
     }
-    return accepted;
+    return ignored;
 }
 
-int cwTrip::clearAcceptedWarnings()
+int cwTrip::clearIgnoredWarnings()
 {
-    return clearAcceptedWarnings(QList<int>());
+    return clearIgnoredWarnings(QList<int>());
 }
 
-int cwTrip::clearAcceptedWarnings(const QList<int>& errorTypeIds)
+int cwTrip::clearIgnoredWarnings(const QList<int>& errorTypeIds)
 {
     int cleared = 0;
     for(cwSurveyChunk* chunk : std::as_const(Chunks)) {
-        cleared += chunk->clearAcceptedWarnings(errorTypeIds);
+        cleared += chunk->clearIgnoredWarnings(errorTypeIds);
     }
     return cleared;
 }
@@ -657,11 +657,11 @@ int cwTrip::warningCountForTypeId(int errorTypeId) const
     return count;
 }
 
-int cwTrip::acceptableWarningCount() const
+int cwTrip::ignorableWarningCount() const
 {
     int count = 0;
     for(const cwSurveyChunk* chunk : Chunks) {
-        count += chunk->acceptableWarningCount();
+        count += chunk->ignorableWarningCount();
     }
     return count;
 }

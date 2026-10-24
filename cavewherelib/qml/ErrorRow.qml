@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import cavewherelib
 
 // One error the way a cell's popup lists it: the kind's icon, a checkbox that
-// accepts a warning, and the message, struck through once accepted. The owner
+// ignores a warning, and the message, struck through once ignored. The owner
 // writes the change back to its own model.
 RowLayout {
     id: errorRowId
@@ -13,7 +13,7 @@ RowLayout {
     required property string message
     required property bool suppressed
 
-    signal acceptToggled(bool accepted)
+    signal ignoreToggled(bool ignored)
     signal messageTapped()
 
     function errorImageSource() {
@@ -38,7 +38,7 @@ RowLayout {
         checked: errorRowId.suppressed
         visible: errorRowId.errorType === CwError.Warning
 
-        onToggled: errorRowId.acceptToggled(checked)
+        onToggled: errorRowId.ignoreToggled(checked)
     }
 
     QC.Label {

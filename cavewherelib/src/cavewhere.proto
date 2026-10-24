@@ -113,7 +113,7 @@ message FixStation {
     // Kept verbatim even when it doesn't parse. Absent means no coordinate.
     optional string coordinate = 9;
 
-    // Held for the fix-station twin of StationShot.acceptedWarnings (#174
+    // Held for the fix-station twin of StationShot.ignoredWarnings (#174
     // follow-up); drop this line when that field lands.
     reserved 12;
 }
@@ -331,8 +331,8 @@ message StationShot {
 
     //Shared data
     optional string id = 1;
-    // cwErrorTypeId values the user accepted on this station or shot (#174)
-    repeated int32 acceptedWarnings = 2;
+    // cwErrorTypeId values the user ignored on this station or shot (#174)
+    repeated int32 ignoredWarnings = 2;
 
     //Station data
     optional string name = 100;

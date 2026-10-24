@@ -73,8 +73,8 @@ While any box holds text the checkbox stays grayed out, and hovering it says why
 
 > LRUD can be hidden once every L, R, U and D box in this trip is empty.
 
-Ticking a column back on always works. A warning you accepted before hiding the
-column comes back still accepted; the rest come back as warnings. New trips, and
+Ticking a column back on always works. A warning you ignored before hiding the
+column comes back still ignored; the rest come back as warnings. New trips, and
 files saved before this setting existed, show both columns.
 
 ## Set the distance calibration

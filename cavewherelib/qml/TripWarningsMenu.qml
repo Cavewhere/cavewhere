@@ -2,38 +2,38 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-// The warning badge's menu: accepts or un-accepts every survey warning in the
+// The warning badge's menu: ignores or shows every survey warning in the
 // trip at once (#174).
 QC.Menu {
     id: menuId
 
     required property Trip trip
 
-    // acceptableWarningCount has no notify signal; reading the trip's
+    // ignorableWarningCount has no notify signal; reading the trip's
     // warningCount re-runs this whenever counts move. The trip's declination
-    // warning stays out of it because accept-all leaves that warning alone.
+    // warning stays out of it because ignore-all leaves that warning alone.
     readonly property int warningCount: {
         if (menuId.trip === null) {
             return 0
         }
         menuId.trip.errorModel.warningCount
-        return menuId.trip.acceptableWarningCount()
+        return menuId.trip.ignorableWarningCount()
     }
-    readonly property int acceptedCount: menuId.trip === null ? 0 : menuId.trip.errorModel.suppressedWarningCount
+    readonly property int ignoredCount: menuId.trip === null ? 0 : menuId.trip.errorModel.ignoredWarningCount
 
     QC.MenuItem {
-        objectName: "acceptAllWarnings"
-        text: menuId.warningCount === 1 ? qsTr("Accept 1 warning")
-                                        : qsTr("Accept all %1 warnings").arg(menuId.warningCount)
+        objectName: "ignoreAllWarnings"
+        text: menuId.warningCount === 1 ? qsTr("Ignore 1 warning")
+                                        : qsTr("Ignore all %1 warnings").arg(menuId.warningCount)
         enabled: menuId.warningCount > 0
-        onTriggered: menuId.trip.acceptAllWarnings()
+        onTriggered: menuId.trip.ignoreAllWarnings()
     }
 
     QC.MenuItem {
-        objectName: "unacceptAllWarnings"
-        text: menuId.acceptedCount === 1 ? qsTr("Un-accept 1 warning")
-                                         : qsTr("Un-accept all %1 warnings").arg(menuId.acceptedCount)
-        enabled: menuId.acceptedCount > 0
-        onTriggered: menuId.trip.clearAcceptedWarnings()
+        objectName: "showAllWarnings"
+        text: menuId.ignoredCount === 1 ? qsTr("Show 1 ignored warning")
+                                         : qsTr("Show all %1 ignored warnings").arg(menuId.ignoredCount)
+        enabled: menuId.ignoredCount > 0
+        onTriggered: menuId.trip.clearIgnoredWarnings()
     }
 }

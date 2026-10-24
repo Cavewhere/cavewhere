@@ -134,17 +134,17 @@ bool cwShot::isValid() const {
            && measurements[0].distance.state() == cwDistanceReading::State::Valid;
 }
 
-QSet<int> cwShot::acceptedWarnings() const
+QSet<int> cwShot::ignoredWarnings() const
 {
-    return m_acceptedWarnings;
+    return m_ignoredWarnings;
 }
 
-void cwShot::setAcceptedWarnings(const QSet<int>& ids)
+void cwShot::setIgnoredWarnings(const QSet<int>& ids)
 {
-    m_acceptedWarnings = ids;
+    m_ignoredWarnings = ids;
 }
 
-bool cwShot::isWarningAccepted(cwErrorTypeId id) const
+bool cwShot::isWarningIgnored(cwErrorTypeId id) const
 {
-    return m_acceptedWarnings.contains(static_cast<int>(id));
+    return m_ignoredWarnings.contains(static_cast<int>(id));
 }

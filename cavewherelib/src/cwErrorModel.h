@@ -26,7 +26,7 @@ class CAVEWHERE_LIB_EXPORT cwErrorModel : public QObject
 
     Q_PROPERTY(int fatalCount READ fatalCount NOTIFY fatalCountChanged)
     Q_PROPERTY(int warningCount READ warningCount NOTIFY warningCountChanged)
-    Q_PROPERTY(int suppressedWarningCount READ suppressedWarningCount NOTIFY suppressedWarningCountChanged)
+    Q_PROPERTY(int ignoredWarningCount READ ignoredWarningCount NOTIFY ignoredWarningCountChanged)
     Q_PROPERTY(cwErrorListModel* errors READ errors CONSTANT)
 
 public:
@@ -35,7 +35,7 @@ public:
 
     int fatalCount() const;
     int warningCount() const;
-    int suppressedWarningCount() const;
+    int ignoredWarningCount() const;
 
     void setParentModel(cwErrorModel* parent);
     cwErrorModel *parentModel() const;
@@ -49,7 +49,7 @@ public:
 signals:
     void fatalCountChanged();
     void warningCountChanged();
-    void suppressedWarningCountChanged();
+    void ignoredWarningCountChanged();
 
     void childModelAdded(cwErrorModel* child);
     void childModelRemoved(cwErrorModel* child);
@@ -57,7 +57,7 @@ signals:
 private:
     mutable int FatalCount; //!< Cached values for FatalCount
     mutable int WarningCount; //!< Cached values for WaringCount
-    mutable int SuppressedWarningCount; //!< Cached count of accepted warnings
+    mutable int IgnoredWarningCount; //!< Cached count of ignored warnings
 
     mutable bool FatalWaringCountUptoDate;
 

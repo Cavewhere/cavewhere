@@ -13,7 +13,7 @@ cwErrorModel::cwErrorModel(QObject *parent) :
     QObject(parent),
     FatalCount(0),
     WarningCount(0),
-    SuppressedWarningCount(0),
+    IgnoredWarningCount(0),
     FatalWaringCountUptoDate(false),
     Errors(new cwErrorListModel(this)),
     Parent(nullptr)
@@ -100,7 +100,7 @@ void cwErrorModel::makeWarningDirty()
     FatalWaringCountUptoDate = false;
     emit warningCountChanged();
     //Every change that can move the suppressed count also dirties the warnings
-    emit suppressedWarningCountChanged();
+    emit ignoredWarningCountChanged();
 }
 
 /**
@@ -130,7 +130,7 @@ void cwErrorModel::updateFatalAndWarningCount() const
 {
     FatalCount = 0;
     WarningCount = 0;
-    SuppressedWarningCount = 0;
+    IgnoredWarningCount = 0;
 
     for(int i = 0; i < Errors->count(); i++) {
         cwError error = Errors->at(i);
@@ -140,7 +140,7 @@ void cwErrorModel::updateFatalAndWarningCount() const
             break;
         case cwError::Warning:
             if(error.suppressed()) {
-                SuppressedWarningCount++;
+                IgnoredWarningCount++;
             } else {
                 WarningCount++;
             }
@@ -153,7 +153,7 @@ void cwErrorModel::updateFatalAndWarningCount() const
     foreach(cwErrorModel* child, ChildModels) {
         FatalCount += child->fatalCount();
         WarningCount += child->warningCount();
-        SuppressedWarningCount += child->suppressedWarningCount();
+        IgnoredWarningCount += child->ignoredWarningCount();
     }
 
     FatalWaringCountUptoDate = true;
@@ -182,12 +182,12 @@ int cwErrorModel::warningCount() const {
     return WarningCount;
 }
 
-int cwErrorModel::suppressedWarningCount() const
+int cwErrorModel::ignoredWarningCount() const
 {
     if(!FatalWaringCountUptoDate) {
         updateFatalAndWarningCount();
     }
-    return SuppressedWarningCount;
+    return IgnoredWarningCount;
 }
 
 /**

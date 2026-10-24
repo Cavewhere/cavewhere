@@ -5,15 +5,15 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// The trip's accepted warnings, under the warning badge. One line while
+// The trip's ignored warnings, under the warning badge. One line while
 // collapsed; open, it groups the warnings by kind, rare kinds first, so a big
-// backsight disagreement accepted along with hundreds of missing LRUDs is easy
-// to find. Unticking a row un-accepts it and tapping its text focuses its
+// backsight disagreement ignored along with hundreds of missing LRUDs is easy
+// to find. Unticking a row shows that warning again and tapping its text focuses its
 // cell. Lives in the survey table's header, so it holds no Flickable and only
 // builds rows for the groups that are open.
 ColumnLayout {
     id: sectionId
-    objectName: "acceptedWarningsSection"
+    objectName: "ignoredWarningsSection"
 
     required property Trip trip
     required property SurveyEditorModel surveyEditorModel
@@ -21,7 +21,7 @@ ColumnLayout {
     property bool expanded: false
     property list<string> expandedKinds: []
 
-    readonly property int acceptedCount: trip === null ? 0 : trip.errorModel.suppressedWarningCount
+    readonly property int ignoredCount: trip === null ? 0 : trip.errorModel.ignoredWarningCount
 
     function setKindExpanded(kind: string, open: bool) {
         const others = sectionId.expandedKinds.filter(existing => existing !== kind)
@@ -42,7 +42,7 @@ ColumnLayout {
         }
     }
 
-    visible: acceptedCount > 0
+    visible: ignoredCount > 0
 
     onTripChanged: {
         sectionId.expanded = false
@@ -50,9 +50,9 @@ ColumnLayout {
     }
 
     ErrorTreeModel {
-        id: acceptedModelId
+        id: ignoredModelId
         root: sectionId.trip === null ? null : sectionId.trip.errorModel
-        suppressedOnly: true
+        ignoredOnly: true
     }
 
     QQ.Rectangle {
@@ -72,7 +72,7 @@ ColumnLayout {
                 Layout.fillWidth: true
 
                 RowLayout {
-                    objectName: "acceptedWarningsHeader"
+                    objectName: "ignoredWarningsHeader"
                     Layout.fillWidth: true
 
                     QQ.TapHandler {
@@ -84,17 +84,17 @@ ColumnLayout {
                     }
 
                     QC.Label {
-                        objectName: "acceptedWarningsHeaderText"
+                        objectName: "ignoredWarningsHeaderText"
                         Layout.fillWidth: true
-                        text: sectionId.acceptedCount === 1 ? qsTr("1 accepted warning")
-                                                            : qsTr("%1 accepted warnings").arg(sectionId.acceptedCount)
+                        text: sectionId.ignoredCount === 1 ? qsTr("1 ignored warning")
+                                                            : qsTr("%1 ignored warnings").arg(sectionId.ignoredCount)
                     }
                 }
 
                 LinkText {
-                    objectName: "unacceptAllAccepted"
-                    text: qsTr("Un-accept all")
-                    onClicked: sectionId.trip.clearAcceptedWarnings()
+                    objectName: "showAllIgnored"
+                    text: qsTr("Show all")
+                    onClicked: sectionId.trip.clearIgnoredWarnings()
                 }
             }
 
@@ -104,22 +104,22 @@ ColumnLayout {
                 visible: active
 
                 sourceComponent: ColumnLayout {
-                    // Every kind keeps its group, hidden while empty, so un-accepting
+                    // Every kind keeps its group, hidden while empty, so showing
                     // one group leaves the others and their open state alone
                     QQ.Repeater {
-                        model: acceptedModelId.allKinds
+                        model: ignoredModelId.allKinds
 
                         // One kind of warning: a collapsible header with the
-                        // count and a link that un-accepts the whole group,
+                        // count and a link that shows the whole group,
                         // then its rows once opened
                         delegate: ColumnLayout {
                             id: groupId
-                            objectName: "acceptedWarningsGroup." + displayIndex
+                            objectName: "ignoredWarningsGroup." + displayIndex
 
                             required property string modelData
 
                             readonly property string kind: modelData
-                            readonly property int displayIndex: acceptedModelId.kinds.indexOf(kind)
+                            readonly property int displayIndex: ignoredModelId.kinds.indexOf(kind)
                             readonly property int count: groupModelId.count
                             readonly property bool expanded: sectionId.expandedKinds.indexOf(kind) >= 0
                             readonly property list<int> typeIds: groupModelId.typeIdsForKind(kind)
@@ -129,8 +129,8 @@ ColumnLayout {
 
                             ErrorTreeModel {
                                 id: groupModelId
-                                root: acceptedModelId.root
-                                suppressedOnly: true
+                                root: ignoredModelId.root
+                                ignoredOnly: true
                                 kindFilter: groupId.kind
                             }
 
@@ -156,10 +156,10 @@ ColumnLayout {
                                 }
 
                                 LinkText {
-                                    objectName: "unacceptGroup"
+                                    objectName: "showGroup"
                                     visible: groupId.typeIds.length > 0
-                                    text: qsTr("Un-accept %1").arg(groupId.count)
-                                    onClicked: sectionId.trip.clearAcceptedWarnings(groupId.typeIds)
+                                    text: qsTr("Show %1").arg(groupId.count)
+                                    onClicked: sectionId.trip.clearIgnoredWarnings(groupId.typeIds)
                                 }
                             }
 
@@ -175,16 +175,16 @@ ColumnLayout {
 
                                         delegate: ErrorRow {
                                             id: rowId
-                                            objectName: "acceptedWarningRow." + index
+                                            objectName: "ignoredWarningRow." + index
 
                                             required property int index
                                             required property ErrorModel errorModel
 
                                             Layout.fillWidth: true
 
-                                            onAcceptToggled: (accepted) => {
+                                            onIgnoreToggled: (ignored) => {
                                                 groupModelId.setData(groupModelId.index(rowId.index, 0),
-                                                                     accepted,
+                                                                     ignored,
                                                                      ErrorListModel.SuppressedRole)
                                             }
                                             onMessageTapped: sectionId.focusCellOf(rowId.errorModel)

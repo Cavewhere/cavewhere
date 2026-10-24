@@ -60,10 +60,10 @@ public:
     const cwShotMeasurement& splayAt(int index) const { return Data->m_splays.at(index); }
     int splayCount() const { return Data->m_splays.size(); }
 
-    // cwErrorTypeId values the user accepted on this station's cells (#174)
-    QSet<int> acceptedWarnings() const;
-    void setAcceptedWarnings(const QSet<int>& ids);
-    bool isWarningAccepted(cwErrorTypeId id) const;
+    // cwErrorTypeId values the user ignored on this station's cells (#174)
+    QSet<int> ignoredWarnings() const;
+    void setIgnoredWarnings(const QSet<int>& ids);
+    bool isWarningIgnored(cwErrorTypeId id) const;
 
     void setData(QVariant data, DataRoles role);
     QVariant data(DataRoles role) const;
@@ -97,7 +97,7 @@ private:
 
         QList<cwShotMeasurement> m_splays;
 
-        QSet<int> m_acceptedWarnings;
+        QSet<int> m_ignoredWarnings;
     };
 
     QSharedDataPointer<PrivateData> Data;

@@ -46,8 +46,8 @@ constexpr std::array<std::pair<cwSurveyChunk::DataRole, cwErrorTypeId>, 4> kLrud
  * and the compass cell carries a disagreement warning (backsights are on by
  * default).
  */
-struct AcceptFixture {
-    AcceptFixture()
+struct IgnoreFixture {
+    IgnoreFixture()
         : trip(std::make_unique<cwTrip>()),
           chunk(new cwSurveyChunk())
     {
@@ -102,9 +102,9 @@ struct AcceptFixture {
 
 }
 
-TEST_CASE("Survey warnings carry a stable id per kind and cell", "[cwSurveyChunk][acceptedWarnings]")
+TEST_CASE("Survey warnings carry a stable id per kind and cell", "[cwSurveyChunk][ignoredWarnings]")
 {
-    AcceptFixture fixture;
+    IgnoreFixture fixture;
 
     for(const auto& [role, id] : kLrudIds) {
         INFO("LRUD role " << role);
@@ -117,32 +117,32 @@ TEST_CASE("Survey warnings carry a stable id per kind and cell", "[cwSurveyChunk
     CHECK(fixture.hasWarningWithId(0, cwSurveyChunk::ShotCompassRole, cwErrorTypeId::SurveyCompassDisagreement));
 }
 
-TEST_CASE("Ticking a warning's checkbox accepts it on the station", "[cwSurveyChunk][acceptedWarnings]")
+TEST_CASE("Ticking a warning's checkbox ignores it on the station", "[cwSurveyChunk][ignoredWarnings]")
 {
-    AcceptFixture fixture;
+    IgnoreFixture fixture;
     const int warningsBefore = fixture.trip->errorModel()->warningCount();
 
-    SignalSpyChecker::SignalSpy acceptedSpy(fixture.chunk, &cwSurveyChunk::acceptedWarningsChanged);
+    SignalSpyChecker::SignalSpy ignoredSpy(fixture.chunk, &cwSurveyChunk::ignoredWarningsChanged);
     SignalSpyChecker::SignalSpy dataChangedSpy(fixture.chunk, &cwSurveyChunk::dataChanged);
     SignalSpyChecker::Constant checker {
-        {&acceptedSpy, 0},
+        {&ignoredSpy, 0},
         {&dataChangedSpy, 0}
     };
 
     fixture.tickCheckbox(0, cwSurveyChunk::StationLeftRole, true);
 
-    CHECK(fixture.chunk->station(0).isWarningAccepted(cwErrorTypeId::SurveyMissingLeft));
-    CHECK(fixture.chunk->station(0).acceptedWarnings() == QSet<int>({toInt(cwErrorTypeId::SurveyMissingLeft)}));
+    CHECK(fixture.chunk->station(0).isWarningIgnored(cwErrorTypeId::SurveyMissingLeft));
+    CHECK(fixture.chunk->station(0).ignoredWarnings() == QSet<int>({toInt(cwErrorTypeId::SurveyMissingLeft)}));
 
-    checker[&acceptedSpy] = 1;
+    checker[&ignoredSpy] = 1;
     checker.checkSpies();
 
     CHECK(fixture.trip->errorModel()->warningCount() == warningsBefore - 1);
 }
 
-TEST_CASE("Renaming a station keeps its accepted warnings", "[cwSurveyChunk][acceptedWarnings]")
+TEST_CASE("Renaming a station keeps its ignored warnings", "[cwSurveyChunk][ignoredWarnings]")
 {
-    AcceptFixture fixture;
+    IgnoreFixture fixture;
     fixture.tickCheckbox(0, cwSurveyChunk::StationLeftRole, true);
 
     fixture.chunk->setData(cwSurveyChunk::StationNameRole, 0, QStringLiteral("A9"));
@@ -151,16 +151,16 @@ TEST_CASE("Renaming a station keeps its accepted warnings", "[cwSurveyChunk][acc
     CHECK(left.errorTypeId() == toInt(cwErrorTypeId::SurveyMissingLeft));
     CHECK(left.suppressed());
     CHECK(left.message().contains(QStringLiteral("A9")));
-    CHECK(fixture.chunk->station(0).isWarningAccepted(cwErrorTypeId::SurveyMissingLeft));
+    CHECK(fixture.chunk->station(0).isWarningIgnored(cwErrorTypeId::SurveyMissingLeft));
 }
 
-TEST_CASE("Editing a cell clears its accepted warnings", "[cwSurveyChunk][acceptedWarnings]")
+TEST_CASE("Editing a cell clears its ignored warnings", "[cwSurveyChunk][ignoredWarnings]")
 {
-    AcceptFixture fixture;
+    IgnoreFixture fixture;
     const int left = toInt(cwErrorTypeId::SurveyMissingLeft);
 
-    fixture.chunk->setWarningAccepted(0, cwSurveyChunk::StationLeftRole, left, true);
-    CHECK(fixture.chunk->station(0).isWarningAccepted(cwErrorTypeId::SurveyMissingLeft));
+    fixture.chunk->setWarningIgnored(0, cwSurveyChunk::StationLeftRole, left, true);
+    CHECK(fixture.chunk->station(0).isWarningIgnored(cwErrorTypeId::SurveyMissingLeft));
 
     fixture.chunk->setData(cwSurveyChunk::StationLeftRole, 0, QStringLiteral("2.0"));
     CHECK(fixture.chunk->errorsAt(0, cwSurveyChunk::StationLeftRole) == nullptr);
@@ -169,69 +169,69 @@ TEST_CASE("Editing a cell clears its accepted warnings", "[cwSurveyChunk][accept
     const cwError missingLeft = fixture.warningWithId(0, cwSurveyChunk::StationLeftRole, cwErrorTypeId::SurveyMissingLeft);
     CHECK(missingLeft.errorTypeId() == left);
     CHECK_FALSE(missingLeft.suppressed());
-    CHECK_FALSE(fixture.chunk->station(0).isWarningAccepted(cwErrorTypeId::SurveyMissingLeft));
+    CHECK_FALSE(fixture.chunk->station(0).isWarningIgnored(cwErrorTypeId::SurveyMissingLeft));
 
-    SECTION("Committing the same empty text keeps the acceptance") {
-        fixture.chunk->setWarningAccepted(0, cwSurveyChunk::StationLeftRole, left, true);
+    SECTION("Committing the same empty text keeps it ignored") {
+        fixture.chunk->setWarningIgnored(0, cwSurveyChunk::StationLeftRole, left, true);
         fixture.chunk->setData(cwSurveyChunk::StationLeftRole, 0, QString());
 
-        CHECK(fixture.chunk->station(0).isWarningAccepted(cwErrorTypeId::SurveyMissingLeft));
+        CHECK(fixture.chunk->station(0).isWarningIgnored(cwErrorTypeId::SurveyMissingLeft));
         CHECK(fixture.warningWithId(0, cwSurveyChunk::StationLeftRole, cwErrorTypeId::SurveyMissingLeft).suppressed());
     }
 }
 
-TEST_CASE("Editing a backsight clears the pair's disagreement acceptance", "[cwSurveyChunk][acceptedWarnings]")
+TEST_CASE("Editing a backsight clears the pair's ignored disagreement", "[cwSurveyChunk][ignoredWarnings]")
 {
-    AcceptFixture fixture;
+    IgnoreFixture fixture;
     const int disagreement = toInt(cwErrorTypeId::SurveyCompassDisagreement);
 
-    fixture.chunk->setWarningAccepted(0, cwSurveyChunk::ShotCompassRole, disagreement, true);
+    fixture.chunk->setWarningIgnored(0, cwSurveyChunk::ShotCompassRole, disagreement, true);
     CHECK(fixture.warningWithId(0, cwSurveyChunk::ShotCompassRole, cwErrorTypeId::SurveyCompassDisagreement).suppressed());
 
     //197 still disagrees with a frontsight of 10 (by 7 degrees), so the
-    //warning stays and only its acceptance goes
+    //warning stays and shows again
     fixture.chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, QStringLiteral("197"));
 
     const cwError afterEdit = fixture.warningWithId(0, cwSurveyChunk::ShotCompassRole, cwErrorTypeId::SurveyCompassDisagreement);
     CHECK(afterEdit.errorTypeId() == disagreement);
     CHECK_FALSE(afterEdit.suppressed());
-    CHECK_FALSE(fixture.chunk->shot(0).isWarningAccepted(cwErrorTypeId::SurveyCompassDisagreement));
+    CHECK_FALSE(fixture.chunk->shot(0).isWarningIgnored(cwErrorTypeId::SurveyCompassDisagreement));
 }
 
-TEST_CASE("Committing a shot cell's same text keeps its acceptance", "[cwSurveyChunk][acceptedWarnings]")
+TEST_CASE("Committing a shot cell's same text keeps its warning ignored", "[cwSurveyChunk][ignoredWarnings]")
 {
-    AcceptFixture fixture;
+    IgnoreFixture fixture;
     const int disagreement = toInt(cwErrorTypeId::SurveyCompassDisagreement);
 
-    fixture.chunk->setWarningAccepted(0, cwSurveyChunk::ShotCompassRole, disagreement, true);
+    fixture.chunk->setWarningIgnored(0, cwSurveyChunk::ShotCompassRole, disagreement, true);
 
     fixture.chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, QStringLiteral("195"));
     fixture.chunk->setData(cwSurveyChunk::ShotCompassRole, 0, QStringLiteral("10"));
 
-    CHECK(fixture.chunk->shot(0).isWarningAccepted(cwErrorTypeId::SurveyCompassDisagreement));
+    CHECK(fixture.chunk->shot(0).isWarningIgnored(cwErrorTypeId::SurveyCompassDisagreement));
     CHECK(fixture.warningWithId(0, cwSurveyChunk::ShotCompassRole, cwErrorTypeId::SurveyCompassDisagreement).suppressed());
 
-    SECTION("Clearing the backsight clears the acceptance") {
+    SECTION("Clearing the backsight shows the warning again") {
         fixture.chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, QString());
-        CHECK_FALSE(fixture.chunk->shot(0).isWarningAccepted(cwErrorTypeId::SurveyCompassDisagreement));
+        CHECK_FALSE(fixture.chunk->shot(0).isWarningIgnored(cwErrorTypeId::SurveyCompassDisagreement));
     }
 }
 
-TEST_CASE("Accepted warnings move with the station row", "[cwSurveyChunk][acceptedWarnings]")
+TEST_CASE("Ignored warnings move with the station row", "[cwSurveyChunk][ignoredWarnings]")
 {
-    AcceptFixture fixture;
-    fixture.chunk->setWarningAccepted(1, cwSurveyChunk::StationUpRole, toInt(cwErrorTypeId::SurveyMissingUp), true);
-    CHECK(fixture.chunk->station(1).isWarningAccepted(cwErrorTypeId::SurveyMissingUp));
+    IgnoreFixture fixture;
+    fixture.chunk->setWarningIgnored(1, cwSurveyChunk::StationUpRole, toInt(cwErrorTypeId::SurveyMissingUp), true);
+    CHECK(fixture.chunk->station(1).isWarningIgnored(cwErrorTypeId::SurveyMissingUp));
 
     fixture.chunk->insertStation(1, cwSurveyChunk::Above);
 
     REQUIRE(fixture.chunk->stationCount() == 3);
     CHECK(fixture.chunk->station(2).name() == QStringLiteral("A2"));
-    CHECK(fixture.chunk->station(2).isWarningAccepted(cwErrorTypeId::SurveyMissingUp));
-    CHECK(fixture.chunk->station(1).acceptedWarnings().isEmpty());
+    CHECK(fixture.chunk->station(2).isWarningIgnored(cwErrorTypeId::SurveyMissingUp));
+    CHECK(fixture.chunk->station(1).ignoredWarnings().isEmpty());
 }
 
-TEST_CASE("acceptWarnings and clearAcceptedWarnings sweep the chunk", "[cwSurveyChunk][acceptedWarnings]")
+TEST_CASE("ignoreWarnings and clearIgnoredWarnings sweep the chunk", "[cwSurveyChunk][ignoredWarnings]")
 {
     //A1's four LRUD boxes are empty (4 warnings), the compass pair disagrees
     //(1 warning), and the distance is missing (1 fatal). A2's LRUDs are filled.
@@ -259,28 +259,28 @@ TEST_CASE("acceptWarnings and clearAcceptedWarnings sweep the chunk", "[cwSurvey
     REQUIRE(errors->warningCount() == 5);
     REQUIRE(errors->fatalCount() == 1);
 
-    CHECK(chunk->acceptWarnings() == 5);
+    CHECK(chunk->ignoreWarnings() == 5);
     CHECK(errors->warningCount() == 0);
-    CHECK(errors->suppressedWarningCount() == 5);
+    CHECK(errors->ignoredWarningCount() == 5);
     CHECK(errors->fatalCount() == 1);
 
-    CHECK(chunk->clearAcceptedWarnings() == 5);
+    CHECK(chunk->clearIgnoredWarnings() == 5);
     CHECK(errors->warningCount() == 5);
-    CHECK(errors->suppressedWarningCount() == 0);
+    CHECK(errors->ignoredWarningCount() == 0);
     CHECK(errors->fatalCount() == 1);
 
     cwTrip freshTrip;
     cwSurveyChunk* fresh = makeChunk(&freshTrip);
-    CHECK(fresh->acceptWarnings({toInt(cwErrorTypeId::SurveyMissingLeft)}) == 1);
+    CHECK(fresh->ignoreWarnings({toInt(cwErrorTypeId::SurveyMissingLeft)}) == 1);
     CHECK(fresh->errorModel()->warningCount() == 4);
-    CHECK(fresh->station(0).isWarningAccepted(cwErrorTypeId::SurveyMissingLeft));
-    CHECK_FALSE(fresh->station(0).isWarningAccepted(cwErrorTypeId::SurveyMissingRight));
+    CHECK(fresh->station(0).isWarningIgnored(cwErrorTypeId::SurveyMissingLeft));
+    CHECK_FALSE(fresh->station(0).isWarningIgnored(cwErrorTypeId::SurveyMissingRight));
 }
 
-TEST_CASE("Turning the LRUD column off silences only missing LRUDs", "[cwSurveyChunk][acceptedWarnings]")
+TEST_CASE("Turning the LRUD column off silences only missing LRUDs", "[cwSurveyChunk][ignoredWarnings]")
 {
-    AcceptFixture fixture;
-    fixture.chunk->setWarningAccepted(1, cwSurveyChunk::StationLeftRole, toInt(cwErrorTypeId::SurveyMissingLeft), true);
+    IgnoreFixture fixture;
+    fixture.chunk->setWarningIgnored(1, cwSurveyChunk::StationLeftRole, toInt(cwErrorTypeId::SurveyMissingLeft), true);
     fixture.chunk->setData(cwSurveyChunk::StationRightRole, 0, QStringLiteral("abc"));
 
     fixture.trip->calibrations()->setLruds(false);
@@ -305,7 +305,7 @@ TEST_CASE("Turning the LRUD column off silences only missing LRUDs", "[cwSurveyC
     CHECK(fixture.hasWarningWithId(0, cwSurveyChunk::StationLeftRole, cwErrorTypeId::SurveyMissingLeft));
     CHECK_FALSE(fixture.warningWithId(0, cwSurveyChunk::StationLeftRole, cwErrorTypeId::SurveyMissingLeft).suppressed());
 
-    const cwError acceptedLeft = fixture.warningWithId(1, cwSurveyChunk::StationLeftRole, cwErrorTypeId::SurveyMissingLeft);
-    CHECK(acceptedLeft.errorTypeId() == toInt(cwErrorTypeId::SurveyMissingLeft));
-    CHECK(acceptedLeft.suppressed());
+    const cwError ignoredLeft = fixture.warningWithId(1, cwSurveyChunk::StationLeftRole, cwErrorTypeId::SurveyMissingLeft);
+    CHECK(ignoredLeft.errorTypeId() == toInt(cwErrorTypeId::SurveyMissingLeft));
+    CHECK(ignoredLeft.suppressed());
 }

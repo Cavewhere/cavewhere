@@ -114,17 +114,17 @@ bool cwStation::setName(QString name) {
 }
 
 
-QSet<int> cwStation::acceptedWarnings() const
+QSet<int> cwStation::ignoredWarnings() const
 {
-    return Data->m_acceptedWarnings;
+    return Data->m_ignoredWarnings;
 }
 
-void cwStation::setAcceptedWarnings(const QSet<int>& ids)
+void cwStation::setIgnoredWarnings(const QSet<int>& ids)
 {
-    Data->m_acceptedWarnings = ids;
+    Data->m_ignoredWarnings = ids;
 }
 
-bool cwStation::isWarningAccepted(cwErrorTypeId id) const
+bool cwStation::isWarningIgnored(cwErrorTypeId id) const
 {
-    return Data->m_acceptedWarnings.contains(static_cast<int>(id));
+    return Data->m_ignoredWarnings.contains(static_cast<int>(id));
 }

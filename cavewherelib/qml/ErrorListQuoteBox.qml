@@ -10,7 +10,7 @@ QQ.Loader {
 
     property ErrorListModel errors
     required property RoundButton errorIcon
-    // Offers "accept all similar" across this trip
+    // Offers "ignore all similar" across this trip
     property Trip trip: null
 
     //This allows qml testcases to work correctly
@@ -56,9 +56,9 @@ QQ.Loader {
                                 id: delegateId
                                 required property int index
 
-                                onAcceptToggled: (accepted) => {
+                                onIgnoreToggled: (ignored) => {
                                     loaderId.errors.setData(loaderId.errors.index(delegateId.index, 0),
-                                                            accepted,
+                                                            ignored,
                                                             ErrorListModel.SuppressedRole)
                                 }
                             }
@@ -69,8 +69,8 @@ QQ.Loader {
                         QQ.Repeater {
                             model: loaderId.errors === null || loaderId.trip === null ? 0 : loaderId.errors
                             delegate: LinkText {
-                                id: acceptSimilarId
-                                objectName: "acceptSimilar"
+                                id: ignoreSimilarId
+                                objectName: "ignoreSimilar"
 
                                 required property int errorType
                                 required property int errorTypeId
@@ -80,16 +80,16 @@ QQ.Loader {
                                 // trip's counts re-runs this whenever they move
                                 readonly property int similarCount: {
                                     loaderId.trip.errorModel.warningCount
-                                    loaderId.trip.errorModel.suppressedWarningCount
-                                    return loaderId.trip.warningCountForTypeId(acceptSimilarId.errorTypeId)
+                                    loaderId.trip.errorModel.ignoredWarningCount
+                                    return loaderId.trip.warningCountForTypeId(ignoreSimilarId.errorTypeId)
                                 }
 
-                                visible: acceptSimilarId.errorType === CwError.Warning
-                                         && !acceptSimilarId.suppressed
-                                         && acceptSimilarId.errorTypeId !== 0
-                                text: qsTr("Accept all similar warnings in this trip (%1)").arg(acceptSimilarId.similarCount)
+                                visible: ignoreSimilarId.errorType === CwError.Warning
+                                         && !ignoreSimilarId.suppressed
+                                         && ignoreSimilarId.errorTypeId !== 0
+                                text: qsTr("Ignore all similar warnings in this trip (%1)").arg(ignoreSimilarId.similarCount)
 
-                                onClicked: loaderId.trip.acceptAllWarnings([acceptSimilarId.errorTypeId])
+                                onClicked: loaderId.trip.ignoreAllWarnings([ignoreSimilarId.errorTypeId])
                             }
                         }
                     }

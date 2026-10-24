@@ -22,7 +22,7 @@ class cwErrorModel;
 
 /**
  * Every error under root (trip -> chunks -> cells) as one flat list, live as
- * the chunk creates and deletes cell models. Backs the trip page's accepted
+ * the chunk creates and deletes cell models. Backs the trip page's ignored
  * warnings section (#174).
  *
  * Rows are the source cwErrorListModels' own rows, so setData(SuppressedRole)
@@ -34,7 +34,7 @@ class CAVEWHERE_LIB_EXPORT cwErrorTreeModel : public QSortFilterProxyModel
     QML_NAMED_ELEMENT(ErrorTreeModel)
 
     Q_PROPERTY(cwErrorModel* root READ root WRITE setRoot NOTIFY rootChanged)
-    Q_PROPERTY(bool suppressedOnly READ suppressedOnly WRITE setSuppressedOnly NOTIFY suppressedOnlyChanged)
+    Q_PROPERTY(bool ignoredOnly READ ignoredOnly WRITE setIgnoredOnly NOTIFY ignoredOnlyChanged)
     Q_PROPERTY(QString kindFilter READ kindFilter WRITE setKindFilter NOTIFY kindFilterChanged)
     Q_PROPERTY(QStringList kinds READ kinds NOTIFY kindsChanged)
     Q_PROPERTY(QStringList allKinds READ allKinds CONSTANT)
@@ -54,13 +54,13 @@ public:
     cwErrorModel* root() const { return m_root; }
     void setRoot(cwErrorModel* root);
 
-    bool suppressedOnly() const { return m_suppressedOnly; }
-    void setSuppressedOnly(bool suppressedOnly);
+    bool ignoredOnly() const { return m_ignoredOnly; }
+    void setIgnoredOnly(bool ignoredOnly);
 
     QString kindFilter() const { return m_kindFilter; }
     void setKindFilter(const QString& kindFilter);
 
-    //! Kinds of the rows that pass suppressedOnly, rare and serious kinds first
+    //! Kinds of the rows that pass ignoredOnly, rare and serious kinds first
     QStringList kinds() const { return m_kinds; }
     int count() const { return m_count; }
 
@@ -76,7 +76,7 @@ public:
 
 signals:
     void rootChanged();
-    void suppressedOnlyChanged();
+    void ignoredOnlyChanged();
     void kindFilterChanged();
     void kindsChanged();
     void countChanged();
@@ -87,7 +87,7 @@ protected:
 private:
     QConcatenateTablesProxyModel* m_concat;
     QPointer<cwErrorModel> m_root;
-    bool m_suppressedOnly = false;
+    bool m_ignoredOnly = false;
     QString m_kindFilter;
     QStringList m_kinds;
     int m_count = 0;

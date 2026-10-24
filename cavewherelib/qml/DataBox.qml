@@ -27,7 +27,7 @@ SurveyEditorCell {
                                                && dataBox.model.isChunkCell(dataBox.cellRole)
     readonly property ErrorModel errorModel: dataValue.errorModel
 
-    // A cell whose warnings are all accepted keeps a muted marker so it can be reopened
+    // A cell whose warnings are all ignored keeps a muted marker so it can be reopened
     readonly property int errorAppearance: {
         if(errorModel === null) {
             return DataBox.NoErrorAppearance
@@ -35,8 +35,8 @@ SurveyEditorCell {
             return DataBox.FatalAppearance
         } else if(errorModel.warningCount > 0) {
             return DataBox.WarningAppearance
-        } else if(errorModel.suppressedWarningCount > 0) {
-            return DataBox.AcceptedAppearance
+        } else if(errorModel.ignoredWarningCount > 0) {
+            return DataBox.IgnoredAppearance
         }
         return DataBox.NoErrorAppearance
     }
@@ -60,7 +60,7 @@ SurveyEditorCell {
         NoErrorAppearance,
         FatalAppearance,
         WarningAppearance,
-        AcceptedAppearance
+        IgnoredAppearance
     }
 
     signal enteredPressed();
@@ -86,8 +86,8 @@ SurveyEditorCell {
             return "qrc:icons/svg/stopSignError.svg";
         case DataBox.WarningAppearance:
             return "qrc:icons/svg/warning.svg"
-        case DataBox.AcceptedAppearance:
-            return "qrc:icons/svg/warningAccepted.svg"
+        case DataBox.IgnoredAppearance:
+            return "qrc:icons/svg/warningIgnored.svg"
         default:
             return "";
         }
@@ -100,7 +100,7 @@ SurveyEditorCell {
                 return "#960800";
             case DataBox.WarningAppearance:
                 return "#FF7600"
-            case DataBox.AcceptedAppearance:
+            case DataBox.IgnoredAppearance:
                 return Theme.border
             default:
                 return "black";

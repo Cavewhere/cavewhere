@@ -294,7 +294,7 @@ QQ.Item {
                         Layout.fillWidth: true
                     }
 
-                    AcceptedWarningsSection {
+                    IgnoredWarningsSection {
                         trip: clipArea.currentTrip
                         surveyEditorModel: editorModel
                         Layout.fillWidth: true

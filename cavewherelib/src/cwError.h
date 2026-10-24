@@ -23,7 +23,7 @@ class cwErrorData;
  * survive their message text changing between releases (see cwError::errorTypeId).
  * Allocate every new id here, never as a bare literal at the use site, so two
  * features cannot silently collide on the same value. The survey ids are
- * written to disk in StationShot.acceptedWarnings, so values are never reused
+ * written to disk in StationShot.ignoredWarnings, so values are never reused
  * or renumbered. 0 is the default "no stable identity" for transient errors.
  */
 enum class cwErrorTypeId : int {
@@ -33,7 +33,7 @@ enum class cwErrorTypeId : int {
     FixStationReference = 598, //!< issue #596: a fix names a station not in the survey
 
     // issue #174: survey-editor warnings, one id per (kind x cell) so a
-    // station's or shot's accepted set can name exactly one box
+    // station's or shot's ignored set can name exactly one box
     SurveyMissingLeft = 1740,
     SurveyMissingRight = 1741,
     SurveyMissingUp = 1742,
