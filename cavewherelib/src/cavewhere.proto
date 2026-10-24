@@ -661,3 +661,18 @@ message PointOctreeManifest {
     float mean_spacing_xy = 8;
     repeated PointOctreeNode nodes = 9;
 }
+
+// Where one owner's external source came from on this machine, written to
+// <project root>/.cw_local/external-sources/<owner uuid>.pb. The owner id is
+// the file name.
+message ExternalSourceRecord {
+    message File {
+        string path = 1;            // relative to base_dir
+        int64 size = 2;             // -1 for a file that could not be read
+        int64 last_modified = 3;    // milliseconds since the epoch, UTC
+        string sha256 = 4;          // lowercase hex
+    }
+    string breadcrumb_path = 1;     // absolute path of the entry file
+    string base_dir = 2;            // absolute canonical directory every file sits below
+    repeated File files = 3;
+}

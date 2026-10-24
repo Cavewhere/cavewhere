@@ -1545,11 +1545,8 @@ void cwExternalCenterlineManager::clearBreadcrumbsForDeletedOwners(const QList<Q
         return;
     }
 
-    for (const QUuid& ownerId : ownerIds) {
-        // Silent for an owner that never had one: clearBreadcrumb returns
-        // before it emits when the store holds neither key.
-        m_externalSourceSettings->clearBreadcrumb(ownerId);
-    }
+    // One change for the whole deletion, and none when no owner had a record.
+    m_externalSourceSettings->clearBreadcrumbs(ownerIds);
 }
 
 void cwExternalCenterlineManager::rebuildAttachedRowsFromNames()

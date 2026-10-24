@@ -7,8 +7,8 @@
 
 // The N1 gate (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §5): every copy
 // into the project stamps the breadcrumb entry with the fingerprint of
-// the source's whole *include dependency set, and an entry written
-// before fingerprints existed reads back as "none recorded".
+// the source's whole *include dependency set, and the project's own
+// record carries it to the next session.
 
 // Catch
 #include <catch2/catch_test_macros.hpp>
@@ -37,7 +37,6 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
-#include <QSettings>
 #include <QString>
 #include <QUuid>
 
@@ -145,11 +144,12 @@ TEST_CASE("attach stamps a fingerprint covering every file the source includes",
 
     attachAndDrain(fixture.get(), fixture->trip, sourcePath);
 
-    // A fresh store instance: the fingerprint is on disk, not in memory.
-    const cwExternalSourceSettings stored;
-    checkFingerprintMatchesFiles(stored.fingerprint(fixture->trip->id()),
+    // The project opened again: the fingerprint is on disk, not in memory.
+    const auto reopened = reopenFromDisk(fixture.get());
+    const cwExternalSourceSettings* stored = reopened->externalSourceSettings();
+    checkFingerprintMatchesFiles(stored->fingerprint(fixture->trip->id()),
                                  {sourcePath, includedPath});
-    CHECK(stored.breadcrumbPath(fixture->trip->id())
+    CHECK(stored->breadcrumbPath(fixture->trip->id())
           == QFileInfo(sourcePath).absoluteFilePath());
 }
 
@@ -182,9 +182,10 @@ TEST_CASE("replace and reload re-stamp the fingerprint to the source they copied
         REQUIRE_FALSE(future.result().hasError());
         drainPipelines(fixture.get());
 
-        const cwExternalSourceSettings stored;
-        checkFingerprintMatchesFiles(stored.fingerprint(fixture->trip->id()),
-                                     {secondSource, secondIncluded});
+        const auto reopened = reopenFromDisk(fixture.get());
+        checkFingerprintMatchesFiles(
+            reopened->externalSourceSettings()->fingerprint(fixture->trip->id()),
+            {secondSource, secondIncluded});
     }
 
     SECTION("reload re-stamps the edited source it copied back in")
@@ -209,8 +210,9 @@ TEST_CASE("replace and reload re-stamp the fingerprint to the source they copied
         REQUIRE_FALSE(future.result().hasError());
         drainPipelines(fixture.get());
 
-        const cwExternalSourceSettings stored;
-        const SourceFingerprint afterReload = stored.fingerprint(fixture->trip->id());
+        const auto reopened = reopenFromDisk(fixture.get());
+        const SourceFingerprint afterReload =
+            reopened->externalSourceSettings()->fingerprint(fixture->trip->id());
         checkFingerprintMatchesFiles(afterReload, {firstSource, includedPath});
         CHECK(afterReload != afterAttach);
     }
@@ -236,39 +238,31 @@ TEST_CASE("two owners keep their own fingerprints", "[ExternalSourceFingerprint]
     attachAndDrain(fixture.get(), fixture->trip, firstSource);
     attachAndDrain(fixture.get(), secondTrip, secondSource);
 
-    const cwExternalSourceSettings stored;
-    checkFingerprintMatchesFiles(
-        stored.fingerprint(fixture->trip->id()),
-        {firstSource, QDir(sourceDir).absoluteFilePath(QStringLiteral("one_inner.svx"))});
-    checkFingerprintMatchesFiles(
-        stored.fingerprint(secondTrip->id()),
-        {secondSource, QDir(sourceDir).absoluteFilePath(QStringLiteral("two_inner.svx"))});
+    {
+        const auto reopened = reopenFromDisk(fixture.get());
+        const cwExternalSourceSettings* stored = reopened->externalSourceSettings();
+        checkFingerprintMatchesFiles(
+            stored->fingerprint(fixture->trip->id()),
+            {firstSource, QDir(sourceDir).absoluteFilePath(QStringLiteral("one_inner.svx"))});
+        checkFingerprintMatchesFiles(
+            stored->fingerprint(secondTrip->id()),
+            {secondSource, QDir(sourceDir).absoluteFilePath(QStringLiteral("two_inner.svx"))});
+    }
 
     // Clearing one owner leaves the other's fingerprint alone.
     fixture->settings()->clearBreadcrumb(fixture->trip->id());
-    CHECK(stored.fingerprint(fixture->trip->id()).isEmpty());
-    CHECK_FALSE(stored.fingerprint(secondTrip->id()).isEmpty());
+    const auto reopened = reopenFromDisk(fixture.get());
+    const cwExternalSourceSettings* stored = reopened->externalSourceSettings();
+    CHECK(stored->fingerprint(fixture->trip->id()).isEmpty());
+    CHECK_FALSE(stored->fingerprint(secondTrip->id()).isEmpty());
 }
 
-TEST_CASE("an entry written before fingerprints existed reads back as none recorded",
+TEST_CASE("an owner with no entry reads back an empty fingerprint",
           "[ExternalSourceFingerprint]")
 {
-    const QUuid ownerId = QUuid::createUuid();
-    const QString sourcePath = QStringLiteral("/projects/legacy/entry.svx");
-    {
-        QSettings raw;
-        raw.setValue(QStringLiteral("externalCenterlineSources/")
-                         + ownerId.toString(QUuid::WithoutBraces),
-                     sourcePath);
-    }
-
+    // One "nothing to compare against" state for the checker, whether the
+    // owner has no entry or no id at all.
     const cwExternalSourceSettings settings;
-    CHECK(settings.hasBreadcrumb(ownerId));
-    CHECK(settings.breadcrumbPath(ownerId) == sourcePath);
-    CHECK(settings.fingerprint(ownerId).isEmpty());
-
-    // Same empty answer for an owner with no entry at all, so the
-    // checker sees one "nothing to compare against" state.
     CHECK(settings.fingerprint(QUuid::createUuid()).isEmpty());
     CHECK(settings.fingerprint(QUuid()).isEmpty());
 }

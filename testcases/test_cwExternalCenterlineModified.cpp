@@ -317,10 +317,6 @@ TEST_CASE("A Replace leaves nothing behind to save once it has been saved",
     constexpr int kEchoSettleMs = 1000;
     QTest::qWait(kEchoSettleMs);
     CHECK_FALSE(fixture->project->modified());
-
-    // cwExternalSourceSettings writes through QSettings, which outlives the
-    // fixture — the replace recorded a breadcrumb the next test would read.
-    fixture->rootData->externalSourceSettings()->clearBreadcrumb(fixture->trip->id());
 }
 
 TEST_CASE("Renaming the region keeps the attachment watched once the data root moves",

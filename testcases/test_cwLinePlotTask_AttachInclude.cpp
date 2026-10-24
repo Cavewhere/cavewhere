@@ -956,8 +956,6 @@ TEST_CASE("Project-side scan flag wins over a diverged live-link source",
     const QVector3D b2 = lookup.position(b2Key);
     CHECK(b2.x() == Catch::Approx(10.0).margin(0.01));
     CHECK(b2.y() == Catch::Approx(0.0).margin(0.01));
-
-    settings.clearBreadcrumb(attached->id());
 }
 
 TEST_CASE("File-owned declination wins over the trip's CaveWhere setting",

@@ -192,6 +192,23 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> reconcile(
  */
 CAVEWHERE_LIB_EXPORT bool isContainedIn(const QString& path, const QString& boundaryDir);
 
+/**
+ * Longest common directory prefix of the files in `canonicalPaths`,
+ * compared component by component.
+ *
+ * Precondition: every input is a QFileInfo::canonicalFilePath() result
+ * (which is what the scanner records). Canonical paths carry the case
+ * the filesystem itself stores, so the same directory always spells
+ * itself the same way, and a case-sensitive comparison implements each
+ * platform's case rules by construction — while a case-insensitive one
+ * would merge two genuinely distinct directories on a case-sensitive
+ * volume.
+ *
+ * Returns "/" when the paths share only the root, and an empty string
+ * when even their first components differ (different Windows volumes).
+ */
+CAVEWHERE_LIB_EXPORT QString commonAncestorDir(const QStringList& canonicalPaths);
+
 } // namespace cwExternalCenterlineSync
 
 #endif // CWEXTERNALCENTERLINESYNC_H

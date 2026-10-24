@@ -30,6 +30,8 @@ TEST_CASE("ensureGitExcludeHasLocalEntries writes local sync excludes", "[cwGitI
     //A delete parks a directory in the trash until the undo stack drops it, and
     //git must never carry that to a peer.
     CHECK(contents.contains(".cw_trash/"));
+    //Source breadcrumbs name paths on this machine, so they never reach a peer.
+    CHECK(contents.contains(".cw_local/"));
     CHECK(contents.contains(".DS_Store"));
 }
 

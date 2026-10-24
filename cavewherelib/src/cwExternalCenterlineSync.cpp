@@ -46,50 +46,6 @@ bool relativeEscapesAttachmentDir(const QString& rel)
     return false;
 }
 
-// Longest common directory prefix of the files in `canonicalPaths`,
-// compared component by component.
-//
-// Precondition: every input is a QFileInfo::canonicalFilePath() result
-// (which is what the scanner records). Canonical paths carry the case
-// the filesystem itself stores, so the same directory always spells
-// itself the same way, and a case-sensitive comparison implements each
-// platform's case rules by construction — while a case-insensitive one
-// would merge two genuinely distinct directories on a case-sensitive
-// volume.
-//
-// Returns "/" when the paths share only the root, and an empty string
-// when even their first components differ (different Windows volumes).
-QString commonAncestorDir(const QStringList& canonicalPaths)
-{
-    if (canonicalPaths.isEmpty()) {
-        return QString();
-    }
-
-    QStringList prefix = QFileInfo(canonicalPaths.first()).path().split(QLatin1Char('/'));
-    for (const QString& path : canonicalPaths) {
-        const QStringList components = QFileInfo(path).path().split(QLatin1Char('/'));
-        int shared = 0;
-        while (shared < prefix.size()
-               && shared < components.size()
-               && prefix.at(shared) == components.at(shared)) {
-            ++shared;
-        }
-        prefix = prefix.mid(0, shared);
-        if (prefix.isEmpty()) {
-            return QString();
-        }
-    }
-
-    if (prefix.size() == 1) {
-        // A single component is a root: the empty component of a Unix
-        // path, or a Windows drive stub. Both need the trailing slash -
-        // QDir reads a bare "C:" as relative to that drive's current
-        // directory rather than its root.
-        return prefix.first() + QLatin1Char('/');
-    }
-    return prefix.join(QLatin1Char('/'));
-}
-
 // Number of directory levels `dir` sits below `base`, which must be an
 // ancestor of (or equal to) `dir`.
 int climbFrom(const QString& base, const QString& dir)
@@ -297,6 +253,37 @@ QFuture<Monad::ResultBase> reconcile(
             return Monad::ResultBase();
         })
         .future();
+}
+
+QString commonAncestorDir(const QStringList& canonicalPaths)
+{
+    if (canonicalPaths.isEmpty()) {
+        return QString();
+    }
+
+    QStringList prefix = QFileInfo(canonicalPaths.first()).path().split(QLatin1Char('/'));
+    for (const QString& path : canonicalPaths) {
+        const QStringList components = QFileInfo(path).path().split(QLatin1Char('/'));
+        int shared = 0;
+        while (shared < prefix.size()
+               && shared < components.size()
+               && prefix.at(shared) == components.at(shared)) {
+            ++shared;
+        }
+        prefix = prefix.mid(0, shared);
+        if (prefix.isEmpty()) {
+            return QString();
+        }
+    }
+
+    if (prefix.size() == 1) {
+        // A single component is a root: the empty component of a Unix
+        // path, or a Windows drive stub. Both need the trailing slash -
+        // QDir reads a bare "C:" as relative to that drive's current
+        // directory rather than its root.
+        return prefix.first() + QLatin1Char('/');
+    }
+    return prefix.join(QLatin1Char('/'));
 }
 
 bool isContainedIn(const QString& path, const QString& boundaryDir)

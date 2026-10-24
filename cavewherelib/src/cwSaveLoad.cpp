@@ -1047,7 +1047,17 @@ const QString kTrashDirPattern = QStringLiteral(".cw_trash/");
 const QString kTrashDirEntry = QStringLiteral(".cw_trash");
 const QString kCacheDirPattern = QStringLiteral(".cw_cache/");
 const QString kCacheDirEntry = QStringLiteral(".cw_cache");
+//! Excludes the machine-local store from git; unlike the cache and the trash,
+//! bundles carry it.
+const QString kLocalDirPattern = QStringLiteral(".cw_local/");
+const QString kLocalDirEntry = QStringLiteral(".cw_local");
 const QString kDsStoreEntry = QStringLiteral(".DS_Store");
+
+QDir externalSourceRecordsDir(const QDir& projectRoot)
+{
+    return QDir(projectRoot.filePath(kLocalDirEntry + QLatin1Char('/')
+                                     + cwExternalSourceSettings::recordsDirName()));
+}
 
 QStringList readGitExcludePatterns(const QDir& repoDir)
 {
@@ -1102,6 +1112,7 @@ void cwSaveLoad::ensureGitExcludeHasLocalEntries(const QDir& repoDir)
     const QList<QPair<QString, QStringList>> entries = {
         {kCacheDirPattern, {kCacheDirPattern, kCacheDirEntry}},
         {kTrashDirPattern, {kTrashDirPattern, kTrashDirEntry}},
+        {kLocalDirPattern, {kLocalDirPattern, kLocalDirEntry}},
         {kDsStoreEntry, {kDsStoreEntry}}
     };
 
@@ -1656,7 +1667,21 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                 return AsyncFuture::completed(canceledResult());
             }
 
-            auto projectDataFuture = cwSaveLoad::loadAll(filename);
+            // Only an open reads the records: a sync apply keeps the
+            // in-memory map, since .cw_local never travels through git.
+            auto projectDataFuture = cwConcurrent::run([filename]() {
+                Result<ProjectLoadData> result = loadAllSkipping(filename, {});
+                if (result.hasError()) {
+                    return result;
+                }
+                ProjectLoadData loadData = result.value();
+                loadData.externalSources = cwExternalSourceSettings::readRecords(
+                    externalSourceRecordsDir(projectRootDirForFile(filename)));
+                if (result.errorCode() == ResultBase::Warning) {
+                    return Result<ProjectLoadData>(loadData, result.errorMessage());
+                }
+                return Result<ProjectLoadData>(loadData);
+            });
 
             d->futureToken.addJob(projectDataFuture, QStringLiteral("Loading"));
 
@@ -1688,6 +1713,9 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     d->lastLoadMaxFileVersion = loadData.maxFileVersion;
                     d->saveBlockedWarningEmitted = false;
                     emit dataRootChanged();
+                    //Before the region, so the first scan of its attachments
+                    //already sees where they came from.
+                    emit externalSourceRecordsLoaded(loadData.externalSources);
 
                     d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
@@ -2665,6 +2693,10 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
         const QString workingProjectFile = fileName();
         const QString projectRootPath = QFileInfo(workingProjectFile).absolutePath();
         QStringList excludePatterns = readGitExcludePatterns(QDir(projectRootPath));
+        //Git leaves the machine-local store out, and the bundle carries it so a
+        //bundled project keeps its records across close and reopen.
+        excludePatterns.removeAll(kLocalDirPattern);
+        excludePatterns.removeAll(kLocalDirEntry);
         if (!excludePatterns.contains(kTrashDirPattern)) {
             //A bundle is a copy, and a copy carries none of what a delete took
             //away — including for a project that has no git exclude file yet.
@@ -4808,6 +4840,46 @@ void cwSaveLoad::enqueueExternalCenterlineRemoveTree(const QString& path)
         d->selfWrite.noteWriteCompleted();
     };
     job.oldPath = path;
+    d->addExplicitFileSystemJob(std::move(job), this);
+}
+
+QString cwSaveLoad::externalSourceRecordPath(const QUuid& ownerId) const
+{
+    return externalSourceRecordsDir(projectRootDir())
+        .filePath(cwExternalSourceSettings::recordFileName(ownerId));
+}
+
+// The record is bookkeeping about the copy an attach, Replace or Reload made,
+// and those already dirtied the project, so neither job reports a mutation.
+// Nothing watches .cw_local, so neither notes a self-write either.
+void cwSaveLoad::enqueueExternalSourceRecordWrite(const QUuid& ownerId,
+                                                  const cwExternalSourceSettings::Record& record)
+{
+    if (ownerId.isNull() || d->projectFileName.isEmpty()) {
+        return;
+    }
+
+    const QString path = externalSourceRecordPath(ownerId);
+    cwSaveLoadPrivate::Job job(nullptr,
+                               cwSaveLoadPrivate::Job::Kind::File,
+                               cwSaveLoadPrivate::Job::Action::Custom,
+                               [path, record]() {
+        return cwExternalSourceSettings::writeRecord(path, record);
+    });
+    job.path = path;
+    d->addExplicitFileSystemJob(std::move(job), this);
+}
+
+void cwSaveLoad::enqueueExternalSourceRecordRemove(const QUuid& ownerId)
+{
+    if (ownerId.isNull() || d->projectFileName.isEmpty()) {
+        return;
+    }
+
+    cwSaveLoadPrivate::Job job(nullptr,
+                               cwSaveLoadPrivate::Job::Kind::File,
+                               cwSaveLoadPrivate::Job::Action::Remove);
+    job.oldPath = externalSourceRecordPath(ownerId);
     d->addExplicitFileSystemJob(std::move(job), this);
 }
 

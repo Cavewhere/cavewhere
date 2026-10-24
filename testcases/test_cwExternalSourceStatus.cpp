@@ -265,8 +265,10 @@ TEST_CASE("a touched but identical source stays up to date and refreshes its sto
 
     // The stats now describe the file as it sits, so the next check takes
     // the pure-stat path instead of reading the file again.
-    const cwExternalSourceSettings stored;
-    const auto refreshed = stored.fingerprint(tripId);
+    const auto refreshed = [&fixture, tripId]() {
+        const auto reopened = reopenFromDisk(fixture.get());
+        return reopened->externalSourceSettings()->fingerprint(tripId);
+    }();
     const QFileInfo sourceInfo(sourcePath);
     CHECK(onlyRecord(refreshed).lastModified == sourceInfo.lastModified().toMSecsSinceEpoch());
     CHECK(onlyRecord(refreshed).size == sourceInfo.size());

@@ -240,7 +240,7 @@ public slots:
 
 private:
     cwCavingRegion* Region; //!< Where all the data is stored
-    cwExternalSourceSettings* m_externalSourceSettings; //!< Per-machine breadcrumbs for the Replace file dialog
+    cwExternalSourceSettings* m_externalSourceSettings; //!< Where each external centerline came from, from the project's .cw_local
     cwLinePlotManager* LinePlotManager; //!< For keeping the lineplot updated
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
     cwUpdateCoordinator* UpdateCoordinator; //!< Owns the auto-update policy + staleness aggregate

@@ -108,8 +108,9 @@ cwRootData::cwRootData(QObject *parent) :
     RegionTreeModel = new cwRegionTreeModel(Project);
     RegionTreeModel->setCavingRegion(Region);
 
-    //Per-machine breadcrumbs for the Replace file dialog (QSettings-backed)
+    //Where each external centerline came from, kept in the project's .cw_local
     m_externalSourceSettings = new cwExternalSourceSettings(this);
+    m_externalSourceSettings->setSaveLoad(Project->saveLoad());
 
     //Setup the loop closer
     LinePlotManager = new cwLinePlotManager(Project);
@@ -123,6 +124,7 @@ cwRootData::cwRootData(QObject *parent) :
     // save/load pipeline; newProject() replaces it, so track it.
     LinePlotManager->externalCenterlineManager()->setSaveLoad(Project->saveLoad());
     connect(Project, &cwProject::saveLoadChanged, this, [this]() {
+        m_externalSourceSettings->setSaveLoad(Project->saveLoad());
         LinePlotManager->externalCenterlineManager()->setSaveLoad(Project->saveLoad());
     });
 

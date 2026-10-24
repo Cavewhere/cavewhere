@@ -16,12 +16,13 @@
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwTrip.h"
+#include "ExternalCenterlineTestHelpers.h"
 #include "LoadProjectHelper.h"
 
 // Qt
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
-#include <QSettings>
 #include <QSignalSpy>
 #include <QString>
 #include <QTemporaryDir>
@@ -33,38 +34,40 @@
 
 namespace {
 
-// Wipes the store's QSettings group so counting tests start from a
-// known-empty state. Safe for concurrent CI processes - the test
-// harness gives every process a pid-unique application name, so each
-// process has its own QSettings backing store.
-void clearExternalCenterlineSettings()
+std::unique_ptr<SavedProjectFixture> makeSettingsProject(const QString& projectFileBase)
 {
-    QSettings settings;
-    settings.remove(QStringLiteral("externalCenterlineSources"));
+    return makeSavedProject(projectFileBase, QStringLiteral("SettingsCave"),
+                            QStringLiteral("SettingsTrip"));
 }
 
 } // namespace
 
-TEST_CASE("cwExternalSourceSettings entries persist to a fresh instance via the shared store",
+TEST_CASE("cwExternalSourceSettings entries persist with their project across close and reopen",
           "[ExternalSourceSettings]")
 {
-    // Owners from two unrelated projects share the one per-machine store -
-    // owner UUIDs are globally unique, so there is no per-project namespace.
-    // The same mechanics cover the no-GC contract: nothing prunes entries,
-    // so an owner whose project was deleted long ago resolves identically.
-    const QUuid projectAOwner = QUuid::createUuid();
-    const QUuid projectBOwner = QUuid::createUuid();
-    {
-        cwExternalSourceSettings written;
-        written.setBreadcrumbPath(projectAOwner, QStringLiteral("/projects/a/entry.svx"));
-        written.setBreadcrumbPath(projectBOwner, QStringLiteral("/projects/b/entry.dat"));
-    }
+    // Each project keeps its own records, so closing it leaves the next
+    // project with none, and opening it again brings them back.
+    auto fixture = makeSettingsProject(QStringLiteral("settings-persist"));
+    const QString projectPath = fixture->project->filename();
+    const QUuid firstOwner = QUuid::createUuid();
+    const QUuid secondOwner = QUuid::createUuid();
+    fixture->settings()->setBreadcrumbPath(firstOwner, QStringLiteral("/projects/a/entry.svx"));
+    fixture->settings()->setBreadcrumbPath(secondOwner, QStringLiteral("/projects/b/entry.dat"));
+    drainPipelines(fixture.get());
 
-    const cwExternalSourceSettings fresh;
-    CHECK(fresh.breadcrumbPath(projectAOwner) == QStringLiteral("/projects/a/entry.svx"));
-    CHECK(fresh.breadcrumbPath(projectBOwner) == QStringLiteral("/projects/b/entry.dat"));
-    CHECK(fresh.hasBreadcrumb(projectAOwner));
-    CHECK(fresh.hasBreadcrumb(projectBOwner));
+    fixture->project->newProject();
+    drainPipelines(fixture.get());
+    CHECK_FALSE(fixture->settings()->hasBreadcrumb(firstOwner));
+    CHECK_FALSE(fixture->settings()->hasBreadcrumb(secondOwner));
+
+    clearRetiredBreadcrumbSettings();
+    fixture->project->loadFile(projectPath);
+    fixture->project->waitLoadToFinish();
+    drainPipelines(fixture.get());
+    CHECK(fixture->settings()->breadcrumbPath(firstOwner) == QStringLiteral("/projects/a/entry.svx"));
+    CHECK(fixture->settings()->breadcrumbPath(secondOwner) == QStringLiteral("/projects/b/entry.dat"));
+    CHECK(fixture->settings()->hasBreadcrumb(firstOwner));
+    CHECK(fixture->settings()->hasBreadcrumb(secondOwner));
 }
 
 TEST_CASE("cwExternalSourceSettings returns no entry for an unrecorded owner",
@@ -98,9 +101,8 @@ TEST_CASE("cwExternalSourceSettings keeps a breadcrumb whose file no longer exis
 
     // The store returns the breadcrumb as-is - it is a picker default,
     // and where the dialog lands is the picker's call.
-    const cwExternalSourceSettings fresh;
-    CHECK(fresh.breadcrumbPath(ownerId) == missingSourcePath);
-    CHECK(fresh.hasBreadcrumb(ownerId));
+    CHECK(settings.breadcrumbPath(ownerId) == missingSourcePath);
+    CHECK(settings.hasBreadcrumb(ownerId));
 }
 
 // The commit-4 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
@@ -168,35 +170,9 @@ TEST_CASE("cwExternalSourceSettings::breadcrumbFolder is empty when there is not
     }
 }
 
-// The key format is the on-disk format: a settings file written before
-// the accessors were renamed still resolves through the new API.
-TEST_CASE("cwExternalSourceSettings reads a key written by an older version",
-          "[ExternalSourceSettings]")
-{
-    clearExternalCenterlineSettings();
-
-    const QUuid ownerId = QUuid::createUuid();
-    const QString sourcePath = QStringLiteral("/projects/legacy/entry.svx");
-    {
-        QSettings raw;
-        raw.setValue(QStringLiteral("externalCenterlineSources/")
-                         + ownerId.toString(QUuid::WithoutBraces),
-                     sourcePath);
-    }
-
-    const cwExternalSourceSettings settings;
-    CHECK(settings.breadcrumbPath(ownerId) == sourcePath);
-    CHECK(settings.hasBreadcrumb(ownerId));
-    REQUIRE(settings.breadcrumbs().size() == 1);
-    CHECK(settings.breadcrumbs().first().ownerId == ownerId);
-    CHECK(settings.breadcrumbs().first().path == sourcePath);
-}
-
 TEST_CASE("cwExternalSourceSettings::setBreadcrumbPath upserts existing owner without duplicating",
           "[ExternalSourceSettings]")
 {
-    clearExternalCenterlineSettings();
-
     cwExternalSourceSettings settings;
     const QUuid ownerId = QUuid::createUuid();
 
@@ -210,8 +186,6 @@ TEST_CASE("cwExternalSourceSettings::setBreadcrumbPath upserts existing owner wi
 TEST_CASE("cwExternalSourceSettings::clearBreadcrumb removes only the matching entry",
           "[ExternalSourceSettings]")
 {
-    clearExternalCenterlineSettings();
-
     cwExternalSourceSettings settings;
     const QUuid first = QUuid::createUuid();
     const QUuid second = QUuid::createUuid();
@@ -255,29 +229,35 @@ TEST_CASE("cwExternalSourceSettings emits breadcrumbsChanged only on real mutati
     CHECK(changedSpy.count() == 3);
 }
 
-TEST_CASE("cwExternalSourceSettings listing skips junk keys in the settings group",
+TEST_CASE("cwExternalSourceSettings skips junk files among a project's records",
           "[ExternalSourceSettings]")
 {
-    clearExternalCenterlineSettings();
-
-    cwExternalSourceSettings settings;
+    auto fixture = makeSettingsProject(QStringLiteral("settings-junk"));
+    const QString projectPath = fixture->project->filename();
     const QUuid validOwner = QUuid::createUuid();
     const QString validSource = QStringLiteral("/path/valid.svx");
-    settings.setBreadcrumbPath(validOwner, validSource);
+    fixture->settings()->setBreadcrumbPath(validOwner, validSource);
+    drainPipelines(fixture.get());
+    REQUIRE(QFileInfo::exists(externalSourceRecordPath(fixture->project, validOwner)));
 
-    // Plant a key that isn't an owner UUID - a hand-edited or corrupted
-    // store must not break the listing.
-    {
-        QSettings raw;
-        raw.setValue(QStringLiteral("externalCenterlineSources/not-a-uuid"),
-                     QStringLiteral("/path/junk.svx"));
-    }
+    // A hand-edited or damaged store must not break the listing: a file
+    // whose name is no owner id, and an owner's file that does not parse
+    // (a length-delimited field cut short).
+    const QDir recordsDir(externalSourceRecordsDir(fixture->project));
+    overwriteFile(recordsDir.filePath(QStringLiteral("not-a-uuid.pb")),
+                  QByteArray("\x0a\x05/path"));
+    const QUuid corruptOwner = QUuid::createUuid();
+    overwriteFile(externalSourceRecordPath(fixture->project, corruptOwner),
+                  QByteArray("\x0a\xff"));
 
-    CHECK(settings.breadcrumbs().size() == 1);
-    CHECK(settings.breadcrumbPath(validOwner) == validSource);
+    closeAndOpen(fixture.get(), projectPath);
+    REQUIRE(fixture->settings()->breadcrumbs().size() == 1);
+    CHECK(fixture->settings()->breadcrumbs().first().ownerId == validOwner);
+    CHECK(fixture->settings()->breadcrumbPath(validOwner) == validSource);
+    CHECK_FALSE(fixture->settings()->hasBreadcrumb(corruptOwner));
 }
 
-TEST_CASE("cwExternalSourceSettings entries survive a bundled .cw close and reopen by owner UUID",
+TEST_CASE("cwExternalSourceSettings entries survive a bundled .cw close and reopen inside the bundle",
           "[ExternalSourceSettings]")
 {
     QTemporaryDir tempDir;
@@ -309,15 +289,18 @@ TEST_CASE("cwExternalSourceSettings entries survive a bundled .cw close and reop
         tripId = trip->id();
         REQUIRE_FALSE(tripId.isNull());
 
-        // Record the breadcrumb through the rootData-owned store - it
-        // lands in the machine-global QSettings, never in the bundle's
-        // extraction tree (which is abandoned on close).
+        // The record lands in the project's .cw_local store, which the
+        // next bundle save carries.
         rootData->externalSourceSettings()->setBreadcrumbPath(tripId, sourcePath);
+        REQUIRE(project->save());
+        project->waitSaveToFinish();
+        rootData->futureManagerModel()->waitForFinished();
 
         firstExtractionDir = project->dataRootDir().absolutePath();
     }
 
-    auto reloaded = fileToProject(bundlePath);
+    auto reopened = openInFreshRootData(bundlePath);
+    cwProject* reloaded = reopened->project();
     REQUIRE(reloaded->errorModel()->size() == 0);
     REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
     REQUIRE(reloaded->cavingRegion()->cave(0)->tripCount() == 1);
@@ -325,9 +308,9 @@ TEST_CASE("cwExternalSourceSettings entries survive a bundled .cw close and reop
     REQUIRE(reloadedTrip->id() == tripId);
     REQUIRE(reloaded->dataRootDir().absolutePath() != firstExtractionDir);
 
-    // A fresh extraction path and a fresh store instance, but the owner
-    // UUID still resolves through the machine-global QSettings.
-    const cwExternalSourceSettings settings;
-    CHECK(settings.breadcrumbPath(reloadedTrip->id()) == sourcePath);
-    CHECK(settings.hasBreadcrumb(reloadedTrip->id()));
+    // A fresh extraction path, and the record came along inside the bundle.
+    CHECK(QFileInfo::exists(externalSourceRecordPath(reloaded, tripId)));
+    const cwExternalSourceSettings* settings = reopened->externalSourceSettings();
+    CHECK(settings->breadcrumbPath(reloadedTrip->id()) == sourcePath);
+    CHECK(settings->hasBreadcrumb(reloadedTrip->id()));
 }

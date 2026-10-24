@@ -12,54 +12,53 @@
 #include "cwGlobals.h"
 
 //Qt includes
+#include <QDir>
+#include <QHash>
 #include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QQmlEngine>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
 #include <QUuid>
 
-class QSettings;
+//Monad
+#include <Monad/Result.h>
+
+class cwSaveLoad;
 
 /**
- * Per-user, per-machine breadcrumbs recording the file an external
- * centerline was last attached or replaced from, keyed by owner UUID
- * (cwCave::id() / cwTrip::id()). A breadcrumb is a convenience for the
- * Replace file dialog - it decides which folder that dialog opens in,
- * and nothing else. The in-project copy is the attachment
- * (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html section 5.2), so a
- * breadcrumb naming a file that has moved or been deleted is an
- * ordinary state: the dialog opens at the default location instead.
+ * The open project's record of where each external centerline came from on
+ * this machine, keyed by owner UUID (cwCave::id() / cwTrip::id()): the file
+ * the owner was last attached or replaced from (its breadcrumb), and the
+ * fingerprint of that source as it was copied in. A breadcrumb decides which
+ * folder the Replace file dialog opens in; a breadcrumb naming a file that
+ * has moved or been deleted is an ordinary state, and the dialog opens at
+ * the default location instead. The in-project copy is the attachment
+ * (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html section 5.2).
  *
- * One store serves every project on the machine - owner UUIDs are
- * globally unique, so there is no per-project namespace and entries
- * survive bundled .cw open/close cycles (the extraction dir is a fresh
- * temp path every session). Copies of a project (Git clone, Save As,
- * restored backup) preserve owner UUIDs and therefore share
- * breadcrumbs on this machine. Entries whose owner no longer exists in
- * any project are harmless (a lookup that never matches) and are not
- * GC'd.
+ * The records belong to the project: one binary protobuf
+ * (CavewhereProto::ExternalSourceRecord) per owner at
+ * <project root>/.cw_local/external-sources/<owner uuid>.pb. Git ignores
+ * .cw_local, since the paths are machine-specific, and the bundled .cw
+ * carries it, so the records move, copy and delete with the project. Each
+ * record stores the fingerprint's paths relative to the closure's common
+ * ancestor directory, the same base the attach mirrors the copy from;
+ * readers here see the absolute paths the scanner produced.
  *
- * Backed by QSettings - the same store as the rest of CaveWhere's
- * per-machine state - with one key per owner under the
- * "externalCenterlineSources" group. That group name is the on-disk
- * format and stays as it is, so settings files written by older
- * versions keep resolving. QSettings serializes concurrent writers
- * with a lock file and merges per-key on sync, so two CaveWhere
- * instances upserting different owners both persist; a hand-rolled
- * settings file would be whole-file last-writer-wins. Every read and
- * write goes straight to QSettings (no in-memory copy), so all
- * instances in a process agree. The change signal fires only on the
- * instance that performed the mutation.
+ * This object holds the open project's records in memory. cwSaveLoad reads
+ * them on its load worker and hands them over before the region is set;
+ * every change is written through as a job on cwSaveLoad's file-system queue,
+ * which serializes and writes on its worker, so a save drain, Save As and
+ * bundling all see the record on disk. Without a cwSaveLoad the records live
+ * in memory only.
  *
- * Each entry also carries the fingerprint of the source as it was when
- * it was copied - one size + last-modified + SHA-256 record per file in
- * the source's *include dependency set - so a later check can tell
- * whether the source has moved on since (plans/
- * EXTERNAL_SOURCE_CHANGE_NOTIFY.html section 2). Entries written before
- * fingerprints existed simply record none, and read back as an empty
- * fingerprint.
+ * Each record carries the fingerprint of the source as it was when it was
+ * copied - one size + last-modified + SHA-256 record per file in the
+ * source's *include dependency set - so a later check can tell whether the
+ * source has moved on since (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html
+ * section 2).
  *
  * Owned by cwRootData; the attach orchestrator writes breadcrumbs and
  * the Replace dialog reads them.
@@ -102,9 +101,8 @@ public:
      * One owner's source fingerprint: one record per file in the
      * source's *include dependency set, entry file first, in the
      * scanner's order. An empty fingerprint means no fingerprint was
-     * recorded for that owner - the state of every entry written
-     * before fingerprints existed, and the state a caller must read as
-     * "nothing to compare against" rather than as a change.
+     * recorded for that owner, which a caller must read as "nothing to
+     * compare against" rather than as a change.
      */
     struct SourceFingerprint {
         QList<SourceFileFingerprint> files;
@@ -113,7 +111,28 @@ public:
         bool operator==(const SourceFingerprint& other) const = default;
     };
 
+    /**
+     * One owner's whole record: the breadcrumb path and the fingerprint of
+     * the source it names.
+     */
+    struct Record {
+        QString path;
+        SourceFingerprint fingerprint;
+
+        bool operator==(const Record& other) const = default;
+    };
+
+    //! Every owner's record in one project.
+    using Records = QHash<QUuid, Record>;
+
     explicit cwExternalSourceSettings(QObject* parent = nullptr);
+
+    /**
+     * Follows \a saveLoad's project: drops the records held for the previous
+     * one, takes each project's records as \a saveLoad loads it, and writes
+     * every later change into \a saveLoad's project root.
+     */
+    void setSaveLoad(cwSaveLoad* saveLoad);
 
     /**
      * Returns the path recorded for ownerId, or an empty string when
@@ -137,9 +156,8 @@ public:
     QList<Breadcrumb> breadcrumbs() const;
 
     /**
-     * The fingerprint recorded for ownerId, empty when the entry
-     * records none - either because it predates fingerprints or
-     * because it was written by setBreadcrumbPath.
+     * The fingerprint recorded for ownerId, empty when there is no
+     * entry or the entry was written by setBreadcrumbPath.
      */
     SourceFingerprint fingerprint(const QUuid& ownerId) const;
 
@@ -183,22 +201,42 @@ public:
     /** Removes any breadcrumb recorded for ownerId. */
     Q_INVOKABLE void clearBreadcrumb(const QUuid& ownerId);
 
+    /** Removes the breadcrumbs of every owner in ownerIds, with one change signal. */
+    void clearBreadcrumbs(const QList<QUuid>& ownerIds);
+
+    //! The directory under a project's .cw_local holding the records.
+    static QString recordsDirName();
+
+    //! The file name of ownerId's record in the records directory.
+    static QString recordFileName(const QUuid& ownerId);
+
+    /**
+     * Reads every record in recordsDir, skipping files whose name is no
+     * owner id and files that do not parse. Safe on any thread.
+     */
+    static Records readRecords(const QDir& recordsDir);
+
+    /**
+     * Serializes record and writes it to filePath atomically, creating the
+     * directory as needed. Safe on any thread.
+     */
+    static Monad::ResultBase writeRecord(const QString& filePath, const Record& record);
+
 signals:
     /**
-     * Emitted after this instance changes the store (upsert with a
-     * new value, or removing an existing entry). No-op writes don't
-     * emit. Mutations from other instances or processes don't emit
-     * here - re-read on your own triggers if that matters.
+     * Emitted after the records change: an upsert with a new value, the
+     * removal of an existing entry, or a project's records replacing the
+     * previous ones. No-op writes don't emit.
      */
     void breadcrumbsChanged();
 
 private:
-    static QString breadcrumbKey(const QUuid& ownerId);
-    static QString fingerprintKey(const QUuid& ownerId);
-    static SourceFingerprint readFingerprint(QSettings& settings, const QUuid& ownerId);
-    static void writeFingerprint(QSettings& settings,
-                                 const QUuid& ownerId,
-                                 const SourceFingerprint& fingerprint);
+    void installRecords(const Records& records);
+    void writeThrough(const QUuid& ownerId, const Record& record);
+    void removeThrough(const QUuid& ownerId);
+
+    Records m_records;
+    QPointer<cwSaveLoad> m_saveLoad;
 };
 
 #endif // CWEXTERNALSOURCESETTINGS_H

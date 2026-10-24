@@ -243,22 +243,42 @@ QStringList writeManifest(const QString& attachmentDir, const QList<cwScanRow>& 
 }
 
 /**
- * The attach's last step on every success path: stamps the breadcrumb and
- * settles \a deferred with \a report. Attach, Replace, and Reload all reach
- * this one stamp, so every copy records the fingerprint of the source's whole
- * dependency set alongside the breadcrumb.
+ * The attach's last step on every success path: fingerprints the source on a
+ * worker, then stamps the breadcrumb and settles \a deferred with \a report.
+ * Attach, Replace, and Reload all reach this one stamp, so every copy records
+ * the fingerprint of the source's whole dependency set alongside the
+ * breadcrumb.
  */
 void completeAttach(AsyncFuture::Deferred<Monad::Result<AttachReport>> deferred,
-                    const QUuid& ownerId,
-                    cwExternalSourceSettings* externalSourceSettings,
+                    const OwnerTarget& owner,
+                    const QPointer<cwExternalSourceSettings>& settingsPtr,
+                    cwSaveLoad* saveLoad,
                     const QString& sourceFile,
                     const AttachReport& report)
 {
-    externalSourceSettings->setBreadcrumb(
-        ownerId,
-        QFileInfo(sourceFile).absoluteFilePath(),
-        cwExternalSourceSettings::computeFingerprint(report.scan.dependencies));
-    deferred.complete(Monad::Result<AttachReport>(report));
+    const QStringList dependencies = report.scan.dependencies;
+    auto fingerprintFuture = QtConcurrent::run([dependencies]() {
+        return cwExternalSourceSettings::computeFingerprint(dependencies);
+    });
+
+    AsyncFuture::observe(fingerprintFuture).context(saveLoad,
+            [deferred, owner, settingsPtr, sourceFile, report, fingerprintFuture]() mutable {
+        // An owner that left while the files were read gets no record, which
+        // would otherwise outlive it on disk.
+        if (!owner.isAlive() || settingsPtr.isNull()) {
+            deferred.complete(Monad::Result<AttachReport>(
+                QStringLiteral("attach: owner was deleted mid-attach")));
+            return;
+        }
+        if (!owner.membershipIntact()) {
+            deferred.complete(Monad::Result<AttachReport>(owner.membershipLostError()));
+            return;
+        }
+        settingsPtr->setBreadcrumb(owner.id(),
+                                   QFileInfo(sourceFile).absoluteFilePath(),
+                                   fingerprintFuture.result());
+        deferred.complete(Monad::Result<AttachReport>(report));
+    });
 }
 
 /**
@@ -497,7 +517,8 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
             report.warnings = scan.warnings;
             if (!owner.isNode()) {
                 report.metadata = seedTripMetadata(owner.trip(), scan.seededMetadata);
-                completeAttach(deferred, owner.id(), settingsPtr.data(), sourceFile, report);
+                completeAttach(deferred, owner, settingsPtr, saveLoadPtr.data(), sourceFile,
+                               report);
                 return;
             }
 
@@ -511,7 +532,7 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
             cwSaveLoad* saveLoad = saveLoadPtr.data();
             auto* fill = new cwSourceSubtreeFill(root, saveLoad);
             QObject::connect(fill, &cwSourceSubtreeFill::finished, saveLoad,
-                    [deferred, owner, settingsPtr, sourceFile, report](bool installed) mutable {
+                    [deferred, owner, settingsPtr, saveLoad, sourceFile, report](bool installed) mutable {
                 if (!installed || !owner.isAlive()) {
                     deferred.complete(ReportResult(
                         QStringLiteral("attach: the source root left its region mid-attach")));
@@ -523,7 +544,7 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
                     return;
                 }
                 report.root = owner.node();
-                completeAttach(deferred, owner.id(), settingsPtr.data(), sourceFile, report);
+                completeAttach(deferred, owner, settingsPtr, saveLoad, sourceFile, report);
             });
             fill->start(scan.rows,
                         QStringLiteral("Attaching %1").arg(QFileInfo(sourceFile).fileName()),

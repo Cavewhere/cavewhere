@@ -41,6 +41,7 @@ struct cwSaveLoadPrivate;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
 #include "cwError.h"
+#include "cwExternalSourceSettings.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
 #include "cwResultDir.h"
@@ -153,6 +154,7 @@ public:
         IdentityRepairData identityRepair;
         QList<cwError> errors;
         int maxFileVersion = 0; //!< Highest fileVersion seen across all entities during load
+        cwExternalSourceSettings::Records externalSources; //!< The project's records under .cw_local, filled only when a project is opened
     };
 
     struct SyncReport {
@@ -367,6 +369,13 @@ public:
     void enqueueExternalCenterlineRemoveFile(const QString& path);
     void enqueueExternalCenterlineRemoveTree(const QString& path);
 
+    //! Writes ownerId's source record into the project's .cw_local, on the
+    //! file-system queue's worker.
+    void enqueueExternalSourceRecordWrite(const QUuid& ownerId,
+                                          const cwExternalSourceSettings::Record& record);
+    //! Removes ownerId's source record from the project's .cw_local.
+    void enqueueExternalSourceRecordRemove(const QUuid& ownerId);
+
     // Reports that a file inside the project changed on disk without going
     // through cwSaveLoad — a text editor rewriting an attached .svx, say.
     // Marks the project modified (cwProject::modified()) so the edit is
@@ -446,6 +455,9 @@ signals:
     void discardCompleted();
     void discardFailed(const QString& errorMessage);
     void saveBlockedByVersion(const QString& entityDescription); //!< Emitted when a save is skipped because the project has newer-version entities
+    //! Emitted as a load installs a project, before its region is set, with
+    //! the source records read from its .cw_local.
+    void externalSourceRecordsLoaded(const cwExternalSourceSettings::Records& records);
 
 private:
     // Shared body of the two external-centerline copy entry points.
@@ -501,6 +513,7 @@ private:
     void restampProjectIfVersionChanged();
     std::unique_ptr<CavewhereProto::Project> toProtoProject(const cwCavingRegion* region);
     QDir projectRootDir() const;
+    QString externalSourceRecordPath(const QUuid& ownerId) const;
 
     QString fileNamePrivate(const cwCave* cave) const;
     QString absolutePathPrivate(const cwCave* cave) const;

@@ -162,19 +162,19 @@ TEST_CASE("attach persists the trip centerline through a save/load round trip",
           == QStringLiteral("survex_simple.svx"));
 }
 
-TEST_CASE("attach writes the source entry through the shared per-machine store",
+TEST_CASE("attach writes the source entry into the project's own record",
           "[Attach][Orchestrator]")
 {
-    // Commit 2 proved the store persists; this proves production
-    // writes actually route through it (the first real writer).
     auto fixture = makeSavedProject(QStringLiteral("attach-store"));
 
     const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
     const auto result = runAttach(fixture.get(), source);
     REQUIRE_FALSE(result.hasError());
+    drainPipelines(fixture.get());
+    CHECK(QFileInfo::exists(externalSourceRecordPath(fixture->project, fixture->trip->id())));
 
-    const cwExternalSourceSettings fresh;
-    CHECK(fresh.breadcrumbPath(fixture->trip->id()) == source);
+    const auto reopened = reopenFromDisk(fixture.get());
+    CHECK(reopened->externalSourceSettings()->breadcrumbPath(fixture->trip->id()) == source);
 }
 
 TEST_CASE("attach seeds date, team, and file-owned declination onto a fresh trip",

@@ -61,11 +61,13 @@
 #include <QFile>
 #include <QFileDevice>
 #include <QFileInfo>
+#include <QSettings>
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QTimer>
+#include <QUuid>
 #include <QVariant>
 
 // Std
@@ -432,6 +434,87 @@ inline void drainPipelines(SavedProjectFixture* fixture)
     fixture->rootData->linePlotManager()->waitToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();
+}
+
+// Where a project keeps its source breadcrumbs: one record per owner under
+// the project root, beside .cw_cache and .cw_trash.
+namespace externalSourceStore {
+inline const QString kLocalDirName = QStringLiteral(".cw_local");
+inline const QString kRecordsDirName = QStringLiteral("external-sources");
+inline const QString kRecordSuffix = QStringLiteral(".pb");
+//! The QSettings group that held breadcrumbs before they moved into the project.
+inline const QString kRetiredSettingsGroup = QStringLiteral("externalCenterlineSources");
+} // namespace externalSourceStore
+
+//! The directory holding \a project's .cwproj file, extracted or on disk.
+inline QDir projectRootOf(const cwProject* project)
+{
+    return QFileInfo(project->saveLoad()->fileName()).absoluteDir();
+}
+
+//! The directory holding \a project's source records.
+inline QString externalSourceRecordsDir(const cwProject* project)
+{
+    using namespace externalSourceStore;
+    return projectRootOf(project).filePath(kLocalDirName + QLatin1Char('/') + kRecordsDirName);
+}
+
+//! The file holding \a ownerId's source record in \a project.
+inline QString externalSourceRecordPath(const cwProject* project, const QUuid& ownerId)
+{
+    return QDir(externalSourceRecordsDir(project))
+        .filePath(ownerId.toString(QUuid::WithoutBraces) + externalSourceStore::kRecordSuffix);
+}
+
+//! How many QSettings keys sit under the retired breadcrumb group.
+inline int retiredBreadcrumbSettingsKeyCount()
+{
+    QSettings settings;
+    settings.beginGroup(externalSourceStore::kRetiredSettingsGroup);
+    return static_cast<int>(settings.allKeys().size());
+}
+
+//! Wipes the retired breadcrumb group, so a reopened project can answer only
+//! from its own records.
+inline void clearRetiredBreadcrumbSettings()
+{
+    QSettings settings;
+    settings.remove(externalSourceStore::kRetiredSettingsGroup);
+}
+
+//! Opens \a projectPath in a new cwRootData, with the retired QSettings group
+//! wiped first, and waits for the load and the pipelines behind it.
+inline std::unique_ptr<cwRootData> openInFreshRootData(const QString& projectPath)
+{
+    clearRetiredBreadcrumbSettings();
+    auto rootData = std::make_unique<cwRootData>();
+    rootData->project()->loadFile(projectPath);
+    rootData->project()->waitLoadToFinish();
+    rootData->linePlotManager()->waitToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    return rootData;
+}
+
+//! Opens \a fixture's project a second time from disk once its queued writes
+//! land: what a later session on this machine sees.
+inline std::unique_ptr<cwRootData> reopenFromDisk(SavedProjectFixture* fixture)
+{
+    drainPipelines(fixture);
+    return openInFreshRootData(fixture->project->filename());
+}
+
+//! Closes \a fixture's project and opens \a projectPath in the same
+//! cwRootData, with the retired QSettings group wiped in between.
+inline void closeAndOpen(SavedProjectFixture* fixture, const QString& projectPath)
+{
+    drainPipelines(fixture);
+    fixture->project->newProject();
+    drainPipelines(fixture);
+    clearRetiredBreadcrumbSettings();
+    fixture->project->loadFile(projectPath);
+    fixture->project->waitLoadToFinish();
+    drainPipelines(fixture);
 }
 
 // Waits for the project to take a frame and for the solve in it, then drains
