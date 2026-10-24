@@ -113,8 +113,8 @@ message FixStation {
     // Kept verbatim even when it doesn't parse. Absent means no coordinate.
     optional string coordinate = 9;
 
-    // Held for the fix-station twin of StationShot.ignoredWarnings (#174
-    // follow-up); drop this line when that field lands.
+    // Held for the fix-station twin of StationShot.ignoredWarnings; drop this
+    // line when that field lands.
     reserved 12;
 }
 
@@ -272,7 +272,7 @@ message TripCalibration {
     // the manual value rather than being silently overwritten by auto-IGRF.
     optional bool auto_declination = 15;
     // Which optional columns this trip records. Absent means true, so files
-    // written before 2026.5 keep every column (#174)
+    // written before 2026.5 keep every column
     optional bool lruds = 16;
     optional bool splays = 17;
 }
@@ -331,7 +331,7 @@ message StationShot {
 
     //Shared data
     optional string id = 1;
-    // cwErrorTypeId values the user ignored on this station or shot (#174)
+    // cwErrorTypeId values the user ignored on this station or shot
     repeated int32 ignoredWarnings = 2;
 
     //Station data
