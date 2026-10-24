@@ -35,6 +35,7 @@ RowLayout {
     CheckBox {
         objectName: "suppress"
 
+        text: qsTr("Ignore")
         checked: errorRowId.suppressed
         visible: errorRowId.errorType === CwError.Warning
 
