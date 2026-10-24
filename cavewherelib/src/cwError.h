@@ -21,29 +21,31 @@ class cwErrorData;
 /**
  * Stable, cross-version identifiers for the cwErrors whose user suppression must
  * survive their message text changing between releases (see cwError::errorTypeId).
- * Allocate every new id here, never as a bare literal at the use site, so two
- * features cannot silently collide on the same value. The survey ids are
- * written to disk in StationShot.ignoredWarnings, so values are never reused
- * or renumbered. 0 is the default "no stable identity" for transient errors.
+ * Values are stable once written to disk (the survey ids live in
+ * StationShot.ignoredWarnings), so each value keeps its meaning forever: append
+ * a new id at the end with the next number, and leave existing values as they
+ * are. Allocate every id here rather than as a literal at the use site, so two
+ * features get distinct values. 0 is the default "no stable identity" for
+ * transient errors.
  */
 enum class cwErrorTypeId : int {
     None = 0,
-    FixStationOutlier = 596,   //!< issue #596: a fix far from the survey cluster
-    FixStationDomain = 597,    //!< issue #596: a fix outside its CS's valid domain
-    FixStationReference = 598, //!< issue #596: a fix names a station not in the survey
+    FixStationOutlier = 1,   //!< a fix far from the survey cluster
+    FixStationDomain = 2,    //!< a fix outside its CS's valid domain
+    FixStationReference = 3, //!< a fix names a station not in the survey
 
-    // issue #174: survey-editor warnings, one id per (kind x cell) so a
-    // station's or shot's ignored set can name exactly one box
-    SurveyMissingLeft = 1740,
-    SurveyMissingRight = 1741,
-    SurveyMissingUp = 1742,
-    SurveyMissingDown = 1743,
-    SurveyMissingCompass = 1744,      //!< LRUD-only zero-length shot
-    SurveyMissingBackCompass = 1745,
-    SurveyMissingClino = 1746,        //!< LRUD-only zero-length shot
-    SurveyMissingBackClino = 1747,
-    SurveyCompassDisagreement = 1748, //!< on the frontsight compass cell
-    SurveyClinoDisagreement = 1749,   //!< on the frontsight clino cell
+    // Survey-editor warnings, one id per (kind x cell) so a station's or
+    // shot's ignored set can name exactly one box
+    SurveyMissingLeft = 4,
+    SurveyMissingRight = 5,
+    SurveyMissingUp = 6,
+    SurveyMissingDown = 7,
+    SurveyMissingCompass = 8,       //!< LRUD-only zero-length shot
+    SurveyMissingBackCompass = 9,
+    SurveyMissingClino = 10,        //!< LRUD-only zero-length shot
+    SurveyMissingBackClino = 11,
+    SurveyCompassDisagreement = 12, //!< on the frontsight compass cell
+    SurveyClinoDisagreement = 13,   //!< on the frontsight clino cell
 };
 
 /**

@@ -208,15 +208,19 @@ TEST_CASE("Basic QML Gadget List operations") {
 TEST_CASE("warningMessagesForTypeIds scopes to the requested error type ids") {
     cwErrorListModel model;
 
+    const int outlierId = static_cast<int>(cwErrorTypeId::FixStationOutlier);
+    const int domainId = static_cast<int>(cwErrorTypeId::FixStationDomain);
+    const int referenceId = static_cast<int>(cwErrorTypeId::FixStationReference);
+
     cwError outlier;
     outlier.setMessage("far away");
     outlier.setType(cwError::Warning);
-    outlier.setErrorTypeId(596);
+    outlier.setErrorTypeId(outlierId);
 
     cwError reference;
     reference.setMessage("no such station");
     reference.setType(cwError::Warning);
-    reference.setErrorTypeId(598);
+    reference.setErrorTypeId(referenceId);
 
     cwError other;
     other.setMessage("unrelated");
@@ -226,7 +230,7 @@ TEST_CASE("warningMessagesForTypeIds scopes to the requested error type ids") {
     cwError fatal;
     fatal.setMessage("kaboom");
     fatal.setType(cwError::Fatal);
-    fatal.setErrorTypeId(596);
+    fatal.setErrorTypeId(outlierId);
 
     model.append(outlier);
     model.append(reference);
@@ -234,16 +238,16 @@ TEST_CASE("warningMessagesForTypeIds scopes to the requested error type ids") {
     model.append(fatal);
 
     // Only the non-suppressed Warnings whose id is in the set, in order.
-    CHECK(model.warningMessagesForTypeIds({596, 597, 598})
+    CHECK(model.warningMessagesForTypeIds({outlierId, domainId, referenceId})
           == QStringList({QStringLiteral("far away"), QStringLiteral("no such station")}));
 
     // A fatal of a matching id is excluded (Warnings only).
-    CHECK_FALSE(model.warningMessagesForTypeIds({596}).contains(QStringLiteral("kaboom")));
+    CHECK_FALSE(model.warningMessagesForTypeIds({outlierId}).contains(QStringLiteral("kaboom")));
 
     // Suppressing a matching warning drops it.
     model.setData(model.index(0), true,
                   static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
-    CHECK(model.warningMessagesForTypeIds({596, 597, 598})
+    CHECK(model.warningMessagesForTypeIds({outlierId, domainId, referenceId})
           == QStringList({QStringLiteral("no such station")}));
 
     // An empty id set matches nothing.

@@ -194,10 +194,23 @@ message TripCalibration {
 ```
 
 `ignoredWarnings` holds the survey warnings ignored on that station or shot,
-as stable `cwErrorTypeId` numbers: 1740-1743 missing Left/Right/Up/Down,
-1744/1746 missing compass/clino on an LRUD-only shot, 1745/1747 missing back
-compass/clino, 1748/1749 compass/clino frontsight-backsight disagreement (on the
-frontsight cell). The numbers are never reused. Writers sort the list so `.cwproj`
+as stable `cwErrorTypeId` numbers:
+
+| Id | Warning |
+|----|---------|
+| 4 | Missing Left |
+| 5 | Missing Right |
+| 6 | Missing Up |
+| 7 | Missing Down |
+| 8 | Missing compass on an LRUD-only shot |
+| 9 | Missing back compass |
+| 10 | Missing clino on an LRUD-only shot |
+| 11 | Missing back clino |
+| 12 | Compass frontsight-backsight disagreement (on the frontsight cell) |
+| 13 | Clino frontsight-backsight disagreement (on the frontsight cell) |
+
+Ids 1-3 are fix-station warnings and never appear here. Each number keeps its
+meaning forever; new ids are appended with the next number. Writers sort the list so `.cwproj`
 diffs stay stable; readers ignore ids they don't know. `lruds = false` or
 `splays = false` hides that column and, for LRUDs, stops the missing-LRUD
 warnings. Files without fields 16/17 load with both columns on.

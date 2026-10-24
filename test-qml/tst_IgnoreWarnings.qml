@@ -27,7 +27,8 @@ MainWindowTest {
         name: "IgnoreWarnings"
         when: windowShown
 
-        readonly property int missingLeftId: 1740
+        // cwErrorTypeId::SurveyMissingLeft; the enum is C++-only.
+        readonly property int missingLeftId: 4
 
         function init() {
             surveyTableId.resetToViewPage(this)
