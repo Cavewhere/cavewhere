@@ -246,6 +246,9 @@ Item {
         region: RootData.region
         keywordItemModel: RootData.keywordItemModel
         visible: RootData.stationsVisible
+        font.pixelSize: Theme.fontSizeUI
+        color: Theme.textInverse
+        outlineColor: Theme.text
     }
 
     LeadView {

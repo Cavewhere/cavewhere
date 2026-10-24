@@ -10,7 +10,7 @@
 #include "cwScene.h"
 #include "cwCamera.h"
 #include "cwRenderBillboards.h"
-#include "cwBillboardHandle.h"
+#include "cwRenderTextBillboards.h"
 
 //Qt includes
 #include <QQuickWindow>
@@ -72,6 +72,7 @@ void cwBillboardOverlayItem::setScene(cwScene* scene) {
     // The billboard layer is owned by the scene, so a scene change means a
     // different layer: drop the old reference and (re)fetch from the new scene.
     m_renderBillboards = nullptr;
+    m_renderTextBillboards = nullptr;
     ensureRenderBillboards();
 
     repositionBillboards();
@@ -110,6 +111,9 @@ void cwBillboardOverlayItem::itemChange(ItemChange change, const ItemChangeData&
         } else {
             ensureRenderBillboards();
         }
+        if(m_renderTextBillboards != nullptr) {
+            m_renderTextBillboards->setWindow(value.window);
+        }
         repositionBillboards();
     }
     QQuickItem::itemChange(change, value);
@@ -135,4 +139,34 @@ void cwBillboardOverlayItem::setBillboard(cwBillboardHandle& handle, QQuickItem*
 
     // Adds on first call, updates after; the handle removes it on teardown.
     handle.set(m_renderBillboards, billboard);
+}
+
+cwRenderTextBillboards* cwBillboardOverlayItem::ensureRenderTextBillboards() {
+    if(m_renderTextBillboards != nullptr) {
+        return m_renderTextBillboards;
+    }
+
+    QQuickWindow* quickWindow = window();
+    if(quickWindow == nullptr || m_scene.isNull()) {
+        return nullptr;
+    }
+
+    m_renderTextBillboards = m_scene->textBillboardLayer();
+    m_renderTextBillboards->setWindow(quickWindow);
+    return m_renderTextBillboards;
+}
+
+void cwBillboardOverlayItem::setTextBillboard(cwTextBillboardHandle& handle, const QString& text,
+                                              const QVector3D& worldPosition, float depthBias) {
+    if(m_renderTextBillboards == nullptr) {
+        return;
+    }
+
+    cwRenderTextBillboards::TextBillboard billboard;
+    billboard.text = text;
+    billboard.worldPosition = worldPosition;
+    billboard.depthBias = depthBias;
+
+    // Adds on first call, updates after; the handle removes it on teardown.
+    handle.set(m_renderTextBillboards, billboard);
 }

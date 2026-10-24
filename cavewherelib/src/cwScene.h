@@ -29,6 +29,7 @@
 #include "CaveWhereLibExport.h"
 class cwRenderObject;
 class cwRenderBillboards;
+class cwRenderTextBillboards;
 class cwCamera;
 class cwShaderDebugger;
 class cwSceneCommand;
@@ -73,6 +74,13 @@ public:
     // this layer must live in the same QQuickWindow — they each push setWindow()
     // (last writer wins), which stays a no-op only while they agree.
     cwRenderBillboards* billboardLayer();
+
+    // The one text billboard layer (station labels) shared by every overlay in
+    // this scene, mirroring billboardLayer(). The item layer is registered before
+    // it whichever is requested first, so leads draw before labels in the Overlay
+    // pass: the layer drawn second is clipped by the first layer's quad depth, and
+    // a label behind a lead marker is the right one to lose pixels.
+    cwRenderTextBillboards* textBillboardLayer();
 
     void setCamera(cwCamera* camera);
     cwCamera *camera() const;
@@ -174,6 +182,7 @@ private:
     // The shared billboard overlay layer (see billboardLayer()); a render object
     // parented to the scene, created on first request.
     cwRenderBillboards* m_billboardLayer = nullptr;
+    cwRenderTextBillboards* m_textBillboardLayer = nullptr;
 
     // Offscreen render requests queued from the GUI thread, drained onto the
     // render thread by cwRhiScene::synchroize() (a friend). shared_ptr so the

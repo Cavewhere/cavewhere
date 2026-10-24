@@ -25,6 +25,12 @@ struct CwRhiSceneTestAccess {
         return rhiScene.m_frame.renderObjectForId(id);
     }
 
+    // The registered render objects in gather order (gatherScene walks this list
+    // and bakes the position into each object's sort key).
+    static const QList<cwRHIObject*>& renderObjects(cwRhiScene& rhiScene) {
+        return rhiScene.m_frame.renderObjects();
+    }
+
     // The frame's captured visibility snapshot — the render thread's view of
     // visibility after a synchroize(). This is what gatherScene's object gate
     // and the per-object readers consult; tests assert against it in place of

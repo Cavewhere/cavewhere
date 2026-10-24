@@ -7,15 +7,12 @@
 
 //Our includes
 #include "cwLabel3dView.h"
-#include "cwGlobalDirectory.h"
 #include "cwLabel3dItem.h"
 #include "cwCamera.h"
-#include "cwDebug.h"
 #include "cwLabel3dGroup.h"
+#include "cwRenderTextBillboards.h"
 
 //Qt includes
-#include <QQmlContext>
-#include <QQmlEngine>
 #include <algorithm>
 #include <cmath>
 #include <QRectF>
@@ -41,20 +38,134 @@ QSize declutterCellSize(const QSizeF& averageLabelSize)
     return QSize(int(std::ceil(averageLabelSize.width() * kVisibleMarginFactor)),
                  int(std::ceil(averageLabelSize.height() * kVisibleMarginFactor)));
 }
+
+bool hasArea(const QSizeF& size)
+{
+    return size.width() > 0.0 && size.height() > 0.0;
+}
+
+void releaseAll(std::vector<cwTextBillboardHandle>& handles)
+{
+    for(cwTextBillboardHandle& handle : handles) {
+        handle.reset();
+    }
+}
 }
 cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
-    cwBillboardOverlayItem(parent),
-    m_component(nullptr)
+    cwBillboardOverlayItem(parent)
+{
+    // Text billboards draw in the 3D pass, outside this item's visibility, so a
+    // hidden view drops them. Showing it again re-places them through
+    // repositionBillboards().
+    connect(this, &QQuickItem::visibleChanged, this, [this]() {
+        if(!isVisible()) {
+            releaseBillboards();
+        }
+    });
+}
+
+cwLabel3dView::~cwLabel3dView()
 {
 }
 
-/**
- * @brief cwLabel3dView::~cwLabel3dView
- *
- * Delete all the 3d view data
- */
-cwLabel3dView::~cwLabel3dView()
+QFont cwLabel3dView::font() const
 {
+    return m_font;
+}
+
+void cwLabel3dView::setFont(const QFont& font)
+{
+    if(m_font == font) {
+        return;
+    }
+    m_font = font;
+    emit fontChanged();
+    restyle();
+}
+
+QColor cwLabel3dView::color() const
+{
+    return m_color;
+}
+
+void cwLabel3dView::setColor(const QColor& color)
+{
+    if(m_color == color) {
+        return;
+    }
+    m_color = color;
+    emit colorChanged();
+    restyle();
+}
+
+QColor cwLabel3dView::outlineColor() const
+{
+    return m_outlineColor;
+}
+
+void cwLabel3dView::setOutlineColor(const QColor& outlineColor)
+{
+    if(m_outlineColor == outlineColor) {
+        return;
+    }
+    m_outlineColor = outlineColor;
+    emit outlineColorChanged();
+    restyle();
+}
+
+/**
+ * @brief cwLabel3dView::textLayer
+ *
+ * The shared text layer with this view's style applied, or null while the view
+ * has no window or scene.
+ */
+cwRenderTextBillboards* cwLabel3dView::textLayer()
+{
+    if(renderTextBillboards() == nullptr && ensureRenderTextBillboards() != nullptr) {
+        // A new layer has no billboards yet, so only the style needs pushing.
+        // Relayout here would re-enter updatePositions() mid-pass.
+        applyStyle();
+    }
+    return renderTextBillboards();
+}
+
+/**
+ * @brief cwLabel3dView::applyStyle
+ *
+ * Pushes this view's style to the text layer. Returns true when the layer's
+ * style changed.
+ */
+bool cwLabel3dView::applyStyle()
+{
+    cwRenderTextBillboards* layer = renderTextBillboards();
+    if(layer == nullptr) {
+        return false;
+    }
+
+    cwRenderTextBillboards::Style style;
+    style.font = m_font;
+    style.color = m_color;
+    style.outlineColor = m_outlineColor;
+    if(layer->style() == style) {
+        return false;
+    }
+    layer->setStyle(style);
+    return true;
+}
+
+void cwLabel3dView::restyle()
+{
+    if(applyStyle()) {
+        // Placed labels changed size; declutter again with the new rects.
+        updatePositions();
+    }
+}
+
+void cwLabel3dView::releaseBillboards()
+{
+    for(cwLabel3dGroup* group : std::as_const(m_labelGroups)) {
+        releaseAll(group->m_billboardHandles);
+    }
 }
 
 void cwLabel3dView::addGroup(cwLabel3dGroup *group) {
@@ -76,152 +187,17 @@ void cwLabel3dView::removeGroup(cwLabel3dGroup *group) {
   * @brief updateGroup
   * @param group
   *
-  * Updates the group's QQuickItem's. This will remove old label, create new ones, as needed, and
-  * update the text and font properties.
+  * Resizes the group's billboard handles to its labels (dropping the billboards
+  * of removed labels) and declutters the group again.
   */
-void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
-    if(m_component == nullptr) {
-        //Create the component that will generate all the labels
-        QQmlEngine* engine = QQmlEngine::contextForObject(this)->engine();
-        m_component = new QQmlComponent(engine,  "qrc:/qt/qml/cavewherelib/qml/Label3d.qml", this);
-
-        if(m_component == nullptr) {
-            qDebug() << "Component is nullptr" << LOCATION;
-        }
-
-        if(!m_component->errors().isEmpty()) {
-            qDebug() << m_component->errorString();
-        }
-    }
-
+void cwLabel3dView::updateGroup(cwLabel3dGroup* group)
+{
     Q_ASSERT(m_labelGroups.contains(group));
 
-    const int labelSize = group->m_labels.size();
-    const int itemSize = group->m_labelItems.size();
+    // New entries are empty handles; dropped ones remove their billboards.
+    group->m_billboardHandles.resize(group->m_labels.size());
 
-    if(labelSize < itemSize) {
-        for(int i = labelSize; i < itemSize; i++) {
-            releaseLabelItem(group, i);
-        }
-        group->m_labelItems.resize(labelSize);
-        group->m_billboardHandles.resize(labelSize);
-    } else if(labelSize > itemSize) {
-        group->m_labelItems.resize(labelSize);
-        group->m_billboardHandles.resize(labelSize);  // new entries are empty handles
-    }
-
-    //Update all the positions
     updateGroupPositions(group);
-}
-
-QQuickItem* cwLabel3dView::labelItem(cwLabel3dGroup* group, int labelIndex)
-{
-    if(group == nullptr) {
-        return nullptr;
-    }
-    if(labelIndex < 0 || labelIndex >= group->m_labelItems.size()) {
-        return nullptr;
-    }
-    return group->m_labelItems.at(labelIndex);
-}
-
-QQuickItem* cwLabel3dView::acquireLabelItem(cwLabel3dGroup* group, int labelIndex)
-{
-    if(group == nullptr) {
-        return nullptr;
-    }
-    if(labelIndex < 0 || labelIndex >= group->m_labelItems.size()) {
-        return nullptr;
-    }
-
-    if(labelItem(group, labelIndex) != nullptr) {
-        return group->m_labelItems.at(labelIndex);
-    }
-
-    if(m_component == nullptr) {
-        QQmlEngine* engine = QQmlEngine::contextForObject(this)->engine();
-        m_component = new QQmlComponent(engine, "qrc:/qt/qml/cavewherelib/qml/Label3d.qml", this);
-
-        if(m_component == nullptr) {
-            qDebug() << "Component is nullptr" << LOCATION;
-        }
-
-        if(!m_component->errors().isEmpty()) {
-            qDebug() << m_component->errorString();
-        }
-    }
-
-    QQuickItem* item = nullptr;
-    if(!group->m_itemPool.isEmpty()) {
-        item = group->m_itemPool.takeLast();
-    } else {
-        item = qobject_cast<QQuickItem*>(m_component->create());
-
-        if(item != nullptr) {
-            // The billboard draws in the on-demand 3D pass, so a fade animation
-            // must request a frame per step. Label3d mirrors its animated child
-            // opacity onto the root's opacity (its own opacity is excluded from
-            // the rendered subtree by refFromEffectItem, so it only serves as
-            // this signal), letting us drive re-renders without reaching into the
-            // QML internals. The connection self-limits to while opacity changes.
-            connect(item, &QQuickItem::opacityChanged, this, &cwLabel3dView::requestBillboardRender);
-        }
-    }
-
-    if(item == nullptr) {
-        qDebug() << "Problem creating new label item" << LOCATION;
-        return nullptr;
-    }
-
-    item->setParent(group);
-    item->setParentItem(this);
-    item->setVisible(false);
-    group->m_labelItems[labelIndex] = item;
-    return item;
-}
-
-void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
-{
-    if(group == nullptr) {
-        return;
-    }
-    if(labelIndex < 0 || labelIndex >= group->m_labelItems.size()) {
-        return;
-    }
-
-    QQuickItem* item = group->m_labelItems.at(labelIndex);
-    if(item == nullptr) {
-        return;
-    }
-
-    // Releasing the handle removes this label's billboard from the shared layer.
-    if(labelIndex < int(group->m_billboardHandles.size())) {
-        group->m_billboardHandles.at(labelIndex).reset();
-    }
-
-    item->setVisible(false);
-    item->setOpacity(0.0);
-    group->m_itemPool.append(item);
-    group->m_labelItems[labelIndex] = nullptr;
-}
-
-/**
- * @brief cwLabel3dView::addOrUpdateBillboard
- *
- * Registers (or refreshes) a visible label as a billboard. A station's world
- * position is camera-invariant, so this only does real work on first appearance
- * or when the station actually moves (updateBillboard is a no-op otherwise).
- */
-void cwLabel3dView::addOrUpdateBillboard(cwLabel3dGroup* group, int labelIndex, QQuickItem* item) {
-    if(item == nullptr) {
-        return;
-    }
-    if(labelIndex < 0 || labelIndex >= int(group->m_billboardHandles.size())) {
-        return;
-    }
-
-    setBillboard(group->m_billboardHandles.at(labelIndex), item,
-                 group->m_labels.at(labelIndex).position(), kLabelDepthBias);
 }
 
 void cwLabel3dView::repositionBillboards() {
@@ -229,9 +205,10 @@ void cwLabel3dView::repositionBillboards() {
 }
 
 /**
- * @brief cwLabel3dView::updatePositions
+ * @brief cwLabel3dView::updateGroupPositions
  *
- * Updates all the positions for the view.
+ * Declutters one group's labels into the shared grid and adds, updates or
+ * removes their text billboards to match.
  *
  * If camera is null, this does nothing
  */
@@ -241,90 +218,66 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
         return;
     }
 
+    std::vector<cwTextBillboardHandle>& handles = group->m_billboardHandles;
+
     // A keyword-hidden group renders nothing and claims no declutter space:
-    // release its pooled items and billboards and skip projection entirely.
-    // Reached when the group is toggled hidden (updateGroup); the per-frame
-    // updatePositions skips hidden groups outright so this loop runs once per
-    // toggle, not every frame.
+    // release its billboards and skip projection entirely. Reached when the
+    // group is toggled hidden (updateGroup); the per-frame updatePositions skips
+    // hidden groups outright so this loop runs once per toggle, not every frame.
     if(!group->isVisible()) {
-        for(int i = 0; i < group->m_labelItems.size(); i++) {
-            releaseLabelItem(group, i);
-        }
+        releaseAll(handles);
         return;
     }
 
-    Q_ASSERT(group->m_labels.size() == group->m_labelItems.size());
+    cwRenderTextBillboards* layer = textLayer();
+    if(layer == nullptr) {
+        return;
+    }
+
+    Q_ASSERT(group->m_labels.size() == int(handles.size()));
 
     QList<cwLabel3dItem>& labels = group->m_labels;
 
     const QMatrix4x4 matrix = camera()->qtViewportMatrix() * camera()->viewProjectionMatrix();
-    const QRectF viewportRect(camera()->viewport());
     const QSizeF averageSize = m_averageLabelSize;
 
     const int labelCount = labels.size();
 
     auto processIndex = [&](int i) {
-        QQuickItem* item = labelItem(group, i);
-        cwLabel3dItem& label = labels[i];
-        QVector3D qtViewportCoordinate = matrix.map(label.position());
-
-        auto accept = [&]() {
-            if(item == nullptr) {
-                item = acquireLabelItem(group, i);
-                item->setProperty("text", label.text());
-                item->setVisible(true);
-            }
-
-            // The billboard's model matrix places the item in 3D (depth-tested
-            // against cave geometry); we no longer position it in screen space.
-            addOrUpdateBillboard(group, i, item);
-        };
-
-        auto reject = [&]() {
-            if(item && item->isVisible()) {
-                releaseLabelItem(group, i);
-            }
-        };
+        cwTextBillboardHandle& handle = handles.at(i);
+        const cwLabel3dItem& label = labels.at(i);
+        const QVector3D qtViewportCoordinate = matrix.map(label.position());
 
         if(camera()->isQtViewportCoordinateClipped(qtViewportCoordinate)) {
-            reject();
+            handle.reset();
             return;
         }
 
-        //See if stationName overlaps with other stations
-        QPointF topLeftPoint(qtViewportCoordinate.x(), qtViewportCoordinate.y());
+        // A placed label declutters with its exact laid-out size; a candidate
+        // with the running average.
+        const bool placed = handle.isValid();
         QSizeF stationNameTextSize = averageSize;
-        if(item) {
-            const double width = item->width();
-            const double height = item->height();
-            if(width > 0.0 && height > 0.0) {
-                stationNameTextSize.setWidth(width);
-                stationNameTextSize.setHeight(height);
+        if(placed) {
+            const QSizeF textSize = layer->textSize(label.text());
+            if(hasArea(textSize)) {
+                stationNameTextSize = textSize;
             }
         }
 
-        const double marginFactor = (item != nullptr && item->isVisible())
-                ? kVisibleMarginFactor
-                : kInvisibleMarginFactor;
+        const double marginFactor = placed ? kVisibleMarginFactor : kInvisibleMarginFactor;
         stationNameTextSize = stationNameTextSize * marginFactor;
-        QRectF stationRect(QPointF(topLeftPoint.x() - stationNameTextSize.width() * 0.5,
-                                   topLeftPoint.y() - stationNameTextSize.height() * 0.5),
-                           stationNameTextSize);
-        bool couldAddText = m_labelGrid.addRect(stationRect.toAlignedRect());
+        const QRectF stationRect(QPointF(qtViewportCoordinate.x() - stationNameTextSize.width() * 0.5,
+                                         qtViewportCoordinate.y() - stationNameTextSize.height() * 0.5),
+                                 stationNameTextSize);
 
-        if(couldAddText) {
-            accept();
+        if(m_labelGrid.addRect(stationRect.toAlignedRect())) {
+            // The billboard's model matrix places the text in 3D, depth-tested
+            // against cave geometry. A station's world position is
+            // camera-invariant, so this only does real work on first placement.
+            setTextBillboard(handle, label.text(), label.position(), kLabelDepthBias);
         } else {
-            reject();
+            handle.reset();
         }
-
-        //Debugging
-        // if(item) {
-        //     item->setProperty("text", QString("%1 a:%2 p:%3")
-        //                                   .arg(label.text())
-        //                                   .arg(label.visibleStreak())
-        //                                   .arg(label.priority()));
-        // }
     };
 
     auto sortVisibleEntries = [&]() {
@@ -354,7 +307,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
     sortVisibleEntries();
 
-    //Go through all the station points and render the text (visible items first)
+    //Go through all the station points and place the text (visible labels first)
     for(int i = 0; i < group->m_visibleEntries.size(); i++) {
         processIndex(group->m_visibleEntries.at(i).index);
     }
@@ -369,15 +322,13 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
     double heightSum = 0.0;
     int sizeCount = 0;
     for(int i = 0; i < labelCount; i++) {
-        QQuickItem* item = group->m_labelItems.at(i);
-        const bool isVisible = item != nullptr && item->isVisible();
-        labels[i].setWasVisible(isVisible ? 1 : 0);
-        if(isVisible) {
-            const double width = item->width();
-            const double height = item->height();
-            if(width > 0.0 && height > 0.0) {
-                widthSum += width;
-                heightSum += height;
+        const bool isPlaced = handles.at(i).isValid();
+        labels[i].setWasVisible(isPlaced ? 1 : 0);
+        if(isPlaced) {
+            const QSizeF textSize = layer->textSize(labels.at(i).text());
+            if(hasArea(textSize)) {
+                widthSum += textSize.width();
+                heightSum += textSize.height();
                 sizeCount++;
             }
         }
@@ -402,8 +353,8 @@ void cwLabel3dView::updatePositions()
         m_labelGrid.reset(camera()->viewport(), declutterCellSize(m_averageLabelSize));
 
         for(cwLabel3dGroup* group : std::as_const(m_labelGroups)) {
-            // Hidden groups already released their items when toggled; skip the
-            // per-frame work entirely rather than re-walking an empty list.
+            // Hidden groups already released their billboards when toggled; skip
+            // the per-frame work entirely rather than re-walking an empty list.
             if(!group->isVisible()) {
                 continue;
             }

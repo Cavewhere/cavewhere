@@ -8,82 +8,11 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QMatrix4x4>
-#include <QVector4D>
 
 //Std includes
 #include <unordered_map>
-#include <algorithm>
 
 namespace {
-
-// World units per content pixel for WorldSized billboards: the quad scales with
-// the 3D scene, like a QtQuick3D Item2D under a Node.
-constexpr float kWorldPerPixel = 0.02f;
-
-// Floors guarding the screen-constant size division: clamp the perspective w and
-// the projection scales away from zero so a billboard crossing the eye plane (or
-// a degenerate projection) can't produce an infinite scale.
-constexpr float kMinClipW = 1e-4f;
-constexpr float kMinProjectionScale = 1e-6f;
-
-// Element (3, 2) — the one that divides by view-space depth — is 0 for an
-// orthographic projection and -1 for a perspective one. cwProjectionTransition
-// scrubs between the two with an element-wise lerp, so this midpoint classifies a
-// blended frame by whichever it is closer to. Same test cwEDLEffect uses on the
-// same render thread.
-constexpr float kPerspectiveDepthDivide = -0.5f;
-
-// True when @a projection is orthographic. The clip-space correction
-// cwRhiFrameRenderer premultiplies leaves the bottom row alone, so this holds for
-// the corrected matrices the render data carries.
-bool isOrthographic(const QMatrix4x4& projection)
-{
-    return projection(3, 2) >= kPerspectiveDepthDivide;
-}
-
-// Build the billboard's model matrix. Columns 0/1/2 are the camera basis (from
-// the view matrix rows) so the quad faces the camera; column 1 is negated so the
-// item's y-down pixel space maps to world-down. Column 3 places it at the world
-// position, pulled toward the viewer by the slot's depth bias so a billboard
-// sitting on a wall isn't self-occluded. The trailing translate centers the item
-// on that position.
-QMatrix4x4 buildModelMatrix(const cwRenderBillboards::RenderSlot& slot,
-                            const QMatrix4x4& view,
-                            const QMatrix4x4& projection,
-                            const QMatrix4x4& viewProjection,
-                            const QSizeF& logicalViewport,
-                            const cwBillboardSightLine& sightLine)
-{
-    const QVector3D right(view(0, 0), view(0, 1), view(0, 2));
-    const QVector3D up(view(1, 0), view(1, 1), view(1, 2));
-    const QVector3D forward(view(2, 0), view(2, 1), view(2, 2));
-
-    const QVector3D position = sightLine.biasedPosition(slot.worldPosition, slot.depthBias);
-
-    float scaleX = kWorldPerPixel;
-    float scaleY = kWorldPerPixel;
-    if (slot.sizeMode == cwRenderBillboards::SizeMode::ScreenConstant) {
-        // Invert PointCloud.vert's world-radius -> pixels projection so one
-        // content pixel maps to one logical screen pixel at this depth. Use the
-        // unbiased position's w so the size doesn't drift with depthBias.
-        const QVector4D clip = viewProjection * QVector4D(slot.worldPosition, 1.0f);
-        const float w = qMax(qAbs(clip.w()), kMinClipW);
-        const float projX = qMax(qAbs(projection(0, 0)), kMinProjectionScale);
-        const float projY = qMax(qAbs(projection(1, 1)), kMinProjectionScale);
-        scaleX = 2.0f * w / (projX * float(logicalViewport.width()));
-        scaleY = 2.0f * w / (projY * float(logicalViewport.height()));
-    }
-
-    QMatrix4x4 model;
-    model.setColumn(0, QVector4D(right * scaleX, 0.0f));
-    model.setColumn(1, QVector4D(-up * scaleY, 0.0f));
-    model.setColumn(2, QVector4D(forward, 0.0f));
-    model.setColumn(3, QVector4D(position, 1.0f));
-    model.translate(float(-slot.contentSize.width() / 2.0),
-                    float(-slot.contentSize.height() / 2.0),
-                    0.0f);
-    return model;
-}
 
 // Render-thread backend. Keeps one cwItem2DRenderer per slot (each caches its
 // own scene-graph render list, matching QtQuick3D) and records each billboard's
@@ -156,19 +85,16 @@ public:
             return false;
         }
 
-        const QMatrix4x4 view = renderData.viewMatrix;
-        const QMatrix4x4 projection = renderData.projectionMatrix;
-        const QMatrix4x4 viewProjection = renderData.viewProjectionMatrix;
-        // Frame-constant, and building it inverts a matrix under perspective, so
-        // resolve it once here rather than per billboard.
-        const cwBillboardSightLine sightLine(view, projection);
         const QSize pixelSize = target->pixelSize();
         // The job's device pixel ratio, NOT the QRhiRenderTarget's — the latter
         // defaults to 1.0, which would size ScreenConstant billboards at half their
         // pixels on a retina display.
         const float devicePixelRatio = renderData.devicePixelRatio;
-        const QSizeF logicalViewport(pixelSize.width() / devicePixelRatio,
-                                     pixelSize.height() / devicePixelRatio);
+        const cw::billboard::FrameCamera frameCamera(renderData.viewMatrix,
+                                                     renderData.projectionMatrix,
+                                                     renderData.viewProjectionMatrix,
+                                                     pixelSize, devicePixelRatio);
+        const QMatrix4x4& viewProjection = frameCamera.viewProjection();
 
         // Draw farthest-first so an overlapping billboard's transparent quad
         // corners can't reject the glyph of a billboard behind it (#538). The map
@@ -192,9 +118,8 @@ public:
             }
             cwItem2DRenderer* renderer2d = rendererIt->second.get();
 
-            const QMatrix4x4 model = buildModelMatrix(slot, view, projection,
-                                                       viewProjection, logicalViewport,
-                                                       sightLine);
+            const QMatrix4x4 model = frameCamera.modelMatrix(
+                slot.worldPosition, slot.contentSize, slot.sizeMode, slot.depthBias);
 
             // viewProjectionMatrix() is already clip-space corrected (matching the
             // convention the cave geometry was rendered with), so the billboard's
@@ -240,64 +165,10 @@ private:
 
 } // namespace
 
-cwBillboardSightLine::cwBillboardSightLine(const QMatrix4x4& view, const QMatrix4x4& projection) :
-    // The camera's +Z axis in world space (the view matrix's third row): the
-    // direction the eye looks *from*.
-    m_towardViewer(view(2, 0), view(2, 1), view(2, 2)),
-    m_orthographic(isOrthographic(projection))
-{
-    if (!m_orthographic) {
-        m_eye = view.inverted().column(3).toVector3D();
-    }
-}
-
-QVector3D cwBillboardSightLine::biasedPosition(const QVector3D& worldPosition,
-                                               float depthBias) const
-{
-    if (depthBias == 0.0f) {
-        return worldPosition;
-    }
-
-    if (m_orthographic) {
-        return worldPosition + m_towardViewer * depthBias;
-    }
-
-    const QVector3D toEye = m_eye - worldPosition;
-    if (toEye.isNull()) {
-        return worldPosition;
-    }
-    return worldPosition + toEye.normalized() * depthBias;
-}
-
 void cwSortBillboardSlotsBackToFront(QVector<cwRenderBillboards::RenderSlot>& renderSlots,
                                      const QMatrix4x4& viewProjection)
 {
-    if (renderSlots.size() < 2) {
-        return;
-    }
-
-    // Project each world position once into a per-slot key, so the comparator
-    // never reruns the matrix multiply (that would be O(n log n) projections and,
-    // because the key wouldn't be constant, would break the ordering contract).
-    // Larger depth == farther from the eye; the clamped |w| matches buildModelMatrix
-    // so a billboard near the eye plane can't produce a degenerate key.
-    for (cwRenderBillboards::RenderSlot& slot : renderSlots) {
-        const QVector4D clip = viewProjection * QVector4D(slot.worldPosition, 1.0f);
-        slot.sortDepth = clip.z() / qMax(qAbs(clip.w()), kMinClipW);
-    }
-
-    // Sort the slots in place (std::sort is in-place introsort — no per-frame heap
-    // allocation, unlike stable_sort). The id tiebreak gives a total order, so the
-    // result is deterministic for equal-depth billboards without relying on a
-    // stable sort or on the incoming slot order.
-    std::sort(renderSlots.begin(), renderSlots.end(),
-              [](const cwRenderBillboards::RenderSlot& a,
-                 const cwRenderBillboards::RenderSlot& b) {
-        if (a.sortDepth != b.sortDepth) {
-            return a.sortDepth > b.sortDepth;  // farthest first (back-to-front)
-        }
-        return a.id < b.id;
-    });
+    cw::billboard::sortBackToFront(renderSlots, viewProjection);
 }
 
 cwRenderBillboards::cwRenderBillboards(QObject* parent)

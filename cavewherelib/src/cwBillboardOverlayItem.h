@@ -26,11 +26,11 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwBillboardHandle.h"
+#include "cwTextBillboardHandle.h"
 
 class cwScene;
 class cwCamera;
-class cwRenderBillboards;
-class cwBillboardHandle;
 
 class CAVEWHERE_LIB_EXPORT cwBillboardOverlayItem : public QQuickItem
 {
@@ -67,6 +67,16 @@ protected:
     // The shared layer, or null until both a window and a scene are available.
     cwRenderBillboards* renderBillboards() const { return m_renderBillboards; }
 
+    // The scene's shared text layer, or null until ensureRenderTextBillboards()
+    // has fetched it. Only overlays that draw text fetch it, so only scenes with
+    // such an overlay create one.
+    cwRenderTextBillboards* renderTextBillboards() const { return m_renderTextBillboards; }
+
+    // Fetches the scene's text layer and binds it to the hosting window once both
+    // are available; returns it, or null while either is missing. Cheap to call
+    // every update pass.
+    cwRenderTextBillboards* ensureRenderTextBillboards();
+
     // Requests a frame of the 3D pass (a billboard's content faded or toggled).
     // A no-op until the shared layer exists.
     void requestBillboardRender();
@@ -77,12 +87,19 @@ protected:
     void setBillboard(cwBillboardHandle& handle, QQuickItem* content,
                       const QVector3D& worldPosition, float depthBias);
 
+    // Text counterpart of setBillboard: adds @a handle's label to the shared text
+    // layer on the first call and updates it thereafter. A no-op until the text
+    // layer exists.
+    void setTextBillboard(cwTextBillboardHandle& handle, const QString& text,
+                          const QVector3D& worldPosition, float depthBias);
+
 private:
     void ensureRenderBillboards();
 
     QPointer<cwScene> m_scene;
     QPointer<cwCamera> m_camera;
     QPointer<cwRenderBillboards> m_renderBillboards; //!< shared, owned by m_scene
+    QPointer<cwRenderTextBillboards> m_renderTextBillboards; //!< shared, owned by m_scene
 };
 
 #endif // CWBILLBOARDOVERLAYITEM_H

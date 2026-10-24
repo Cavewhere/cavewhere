@@ -1,11 +1,14 @@
 #ifndef CWBILLBOARDHANDLE_H
 #define CWBILLBOARDHANDLE_H
 
-// Move-only RAII owner of exactly one billboard in a shared cwRenderBillboards
-// layer. A producer (a lead view, a label view, any future overlay) holds a
-// handle next to whatever it already tracks and calls set() each update pass:
-// the first call adds the billboard and remembers its id, later calls update it
-// (cheap — updateBillboard early-outs when nothing changed). Dropping the handle
+// Move-only RAII owner of exactly one billboard in a shared billboard layer
+// (cwRenderBillboards for QQuickItem content, cwRenderTextBillboards for station
+// label text; see cwTextBillboardHandle.h). The layer type is a template
+// parameter so both layers share one implementation. A producer (a lead view, a
+// label view, any future overlay) holds a handle next to whatever it already
+// tracks and calls set() each update pass: the first call adds the billboard and
+// remembers its id, later calls update it (cheap — updateBillboard early-outs
+// when nothing changed). Dropping the handle
 // — reset(), move-out, or its container being destroyed/resized — removes the
 // billboard from the layer, so a producer cannot leak into the shared layer and
 // there are no manual removeBillboard calls or teardown loops to keep in sync.
@@ -19,24 +22,27 @@
 //Qt includes
 #include <QPointer>
 
-class cwBillboardHandle
+// Layer needs addBillboard(const Billboard&) -> cwBillboardId,
+// updateBillboard(cwBillboardId, const Billboard&) and removeBillboard(cwBillboardId).
+template <typename Layer, typename Billboard>
+class cwLayerBillboardHandle
 {
 public:
-    cwBillboardHandle() = default;
+    cwLayerBillboardHandle() = default;
 
-    ~cwBillboardHandle()
+    ~cwLayerBillboardHandle()
     {
         reset();
     }
 
-    cwBillboardHandle(cwBillboardHandle&& other) noexcept
+    cwLayerBillboardHandle(cwLayerBillboardHandle&& other) noexcept
         : m_layer(other.m_layer), m_id(other.m_id)
     {
         other.m_layer = nullptr;
         other.m_id = cwBillboardId{};
     }
 
-    cwBillboardHandle& operator=(cwBillboardHandle&& other) noexcept
+    cwLayerBillboardHandle& operator=(cwLayerBillboardHandle&& other) noexcept
     {
         if (this != &other) {
             reset();
@@ -48,14 +54,14 @@ public:
         return *this;
     }
 
-    cwBillboardHandle(const cwBillboardHandle&) = delete;
-    cwBillboardHandle& operator=(const cwBillboardHandle&) = delete;
+    cwLayerBillboardHandle(const cwLayerBillboardHandle&) = delete;
+    cwLayerBillboardHandle& operator=(const cwLayerBillboardHandle&) = delete;
 
     // Adds the billboard on the first call, updates it thereafter. If @a layer
     // differs from the one this handle already owns a billboard in (a layer
     // swap), the old billboard is removed first so the handle owns at most one.
     // A null @a layer just releases any held billboard.
-    void set(cwRenderBillboards* layer, const cwRenderBillboards::Billboard& billboard)
+    void set(Layer* layer, const Billboard& billboard)
     {
         // Reset whenever our layer isn't the requested one. This also covers the
         // case where m_layer (a QPointer) auto-nulled because the old layer was
@@ -97,8 +103,10 @@ public:
     }
 
 private:
-    QPointer<cwRenderBillboards> m_layer;
+    QPointer<Layer> m_layer;
     cwBillboardId m_id = cwBillboardId{};
 };
+
+using cwBillboardHandle = cwLayerBillboardHandle<cwRenderBillboards, cwRenderBillboards::Billboard>;
 
 #endif // CWBILLBOARDHANDLE_H
