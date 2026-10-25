@@ -258,7 +258,7 @@ void completeAttach(AsyncFuture::Deferred<Monad::Result<AttachReport>> deferred,
 {
     const QStringList dependencies = report.scan.dependencies;
     auto fingerprintFuture = QtConcurrent::run([dependencies]() {
-        return cwExternalSourceSettings::computeFingerprint(dependencies);
+        return cwExternalSourceRecord::computeFingerprint(dependencies);
     });
 
     AsyncFuture::observe(fingerprintFuture).context(saveLoad,

@@ -168,7 +168,7 @@ void setReadWarnings(cwErrorModel* errorModel, const cwError& warning, const QUu
 // True when every file in `stored` is on disk with the size and
 // last-modified time it had when the fingerprint was taken — the quiet
 // path, which reads no file (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §2).
-bool statsMatchDisk(const cwExternalSourceSettings::SourceFingerprint& stored)
+bool statsMatchDisk(const cwExternalSourceRecord::SourceFingerprint& stored)
 {
     for (const auto& record : stored.files) {
         const QFileInfo info(record.path);
@@ -184,13 +184,13 @@ bool statsMatchDisk(const cwExternalSourceSettings::SourceFingerprint& stored)
 // contents. Only the hashes are compared: the stats are exactly what a
 // content-preserving rewrite (a git checkout, an editor saving unchanged
 // text) moves, and they are what the caller goes on to refresh.
-bool contentsMatch(const cwExternalSourceSettings::SourceFingerprint& left,
-                   const cwExternalSourceSettings::SourceFingerprint& right)
+bool contentsMatch(const cwExternalSourceRecord::SourceFingerprint& left,
+                   const cwExternalSourceRecord::SourceFingerprint& right)
 {
     return std::equal(left.files.cbegin(), left.files.cend(),
                       right.files.cbegin(), right.files.cend(),
-                      [](const cwExternalSourceSettings::SourceFileFingerprint& leftFile,
-                         const cwExternalSourceSettings::SourceFileFingerprint& rightFile) {
+                      [](const cwExternalSourceRecord::SourceFileFingerprint& leftFile,
+                         const cwExternalSourceRecord::SourceFileFingerprint& rightFile) {
         return leftFile.sha256 == rightFile.sha256;
     });
 }
@@ -200,7 +200,7 @@ bool contentsMatch(const cwExternalSourceSettings::SourceFingerprint& left,
 // again. What the app banner remembers when the user dismisses it, so a
 // second edit of the same source is told apart from the first
 // (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §4).
-QString revisionOf(const cwExternalSourceSettings::SourceFingerprint& fingerprint)
+QString revisionOf(const cwExternalSourceRecord::SourceFingerprint& fingerprint)
 {
     QStringList hashes;
     hashes.reserve(fingerprint.files.size());
@@ -210,7 +210,7 @@ QString revisionOf(const cwExternalSourceSettings::SourceFingerprint& fingerprin
     return hashes.join(QLatin1Char('-'));
 }
 
-QStringList fingerprintedPaths(const cwExternalSourceSettings::SourceFingerprint& fingerprint)
+QStringList fingerprintedPaths(const cwExternalSourceRecord::SourceFingerprint& fingerprint)
 {
     QStringList paths;
     paths.reserve(fingerprint.files.size());
@@ -245,7 +245,7 @@ QStringList sortedList(const QSet<QString>& paths)
 // parent directory itself is gone, watching stops at that point and the
 // focus re-sweep is what notices the folder and its file returning
 // (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §2).
-void collectSourceWatchPaths(const cwExternalSourceSettings::SourceFingerprint& fingerprint,
+void collectSourceWatchPaths(const cwExternalSourceRecord::SourceFingerprint& fingerprint,
                              QSet<QString>& files,
                              QSet<QString>& directories)
 {
@@ -285,8 +285,8 @@ QByteArray copyContentKey(const QStringList& dependencies, const QString& attach
 {
     // The scan names files canonically, so the folder is too.
     const QDir dir(QFileInfo(attachmentDir).canonicalFilePath());
-    const cwExternalSourceSettings::SourceFingerprint fingerprint =
-        cwExternalSourceSettings::computeFingerprint(dependencies);
+    const cwExternalSourceRecord::SourceFingerprint fingerprint =
+        cwExternalSourceRecord::computeFingerprint(dependencies);
     QCryptographicHash hash(QCryptographicHash::Sha256);
     for (const auto& file : fingerprint.files) {
         hash.addData(dir.relativeFilePath(file.path).toUtf8());
@@ -1433,7 +1433,7 @@ QHash<QUuid, QStringList> cwExternalCenterlineManager::bareFixedStations() const
 
 cwExternalSourceStatusModel::Row
 cwExternalCenterlineManager::sourceStatusFor(
-    const QUuid& ownerId, const cwExternalSourceSettings::SourceFingerprint& stored)
+    const QUuid& ownerId, const cwExternalSourceRecord::SourceFingerprint& stored)
 {
     using Status = cwExternalSourceStatusModel::Status;
 
@@ -1472,7 +1472,7 @@ cwExternalCenterlineManager::sourceStatusFor(
 
     // A stat-level difference is only a question; the hash answers it.
     const auto current =
-        cwExternalSourceSettings::computeFingerprint(fingerprintedPaths(stored));
+        cwExternalSourceRecord::computeFingerprint(fingerprintedPaths(stored));
     if (contentsMatch(stored, current)) {
         // Identical contents under fresh stats — record the new stats so
         // the next check takes the pure-stat path. Nothing about the

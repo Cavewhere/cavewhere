@@ -41,7 +41,7 @@ struct cwSaveLoadPrivate;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
 #include "cwError.h"
-#include "cwExternalSourceSettings.h"
+#include "cwExternalSourceRecord.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
 #include "cwResultDir.h"
@@ -154,7 +154,7 @@ public:
         IdentityRepairData identityRepair;
         QList<cwError> errors;
         int maxFileVersion = 0; //!< Highest fileVersion seen across all entities during load
-        cwExternalSourceSettings::Records externalSources; //!< The project's records under .cw_local, filled only when a project is opened
+        cwExternalSourceRecord::Records externalSources; //!< The project's records under .cw_local, filled only when a project is opened
     };
 
     struct SyncReport {
@@ -372,7 +372,7 @@ public:
     //! Writes ownerId's source record into the project's .cw_local, on the
     //! file-system queue's worker.
     void enqueueExternalSourceRecordWrite(const QUuid& ownerId,
-                                          const cwExternalSourceSettings::Record& record);
+                                          const cwExternalSourceRecord::Record& record);
     //! Removes ownerId's source record from the project's .cw_local.
     void enqueueExternalSourceRecordRemove(const QUuid& ownerId);
 
@@ -457,7 +457,7 @@ signals:
     void saveBlockedByVersion(const QString& entityDescription); //!< Emitted when a save is skipped because the project has newer-version entities
     //! Emitted as a load installs a project, before its region is set, with
     //! the source records read from its .cw_local.
-    void externalSourceRecordsLoaded(const cwExternalSourceSettings::Records& records);
+    void externalSourceRecordsLoaded(const cwExternalSourceRecord::Records& records);
 
 private:
     // Shared body of the two external-centerline copy entry points.

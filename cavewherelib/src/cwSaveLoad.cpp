@@ -1057,7 +1057,7 @@ const QString kDsStoreEntry = QStringLiteral(".DS_Store");
 QDir externalSourceRecordsDir(const QDir& projectRoot)
 {
     return QDir(projectRoot.filePath(kLocalDirEntry + QLatin1Char('/')
-                                     + cwExternalSourceSettings::recordsDirName()));
+                                     + cwExternalSourceRecord::recordsDirName()));
 }
 
 QStringList readGitExcludePatterns(const QDir& repoDir)
@@ -1678,7 +1678,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     return result;
                 }
                 ProjectLoadData loadData = result.value();
-                loadData.externalSources = cwExternalSourceSettings::readRecords(
+                loadData.externalSources = cwExternalSourceRecord::readRecords(
                     externalSourceRecordsDir(projectRootDirForFile(filename)));
                 if (result.errorCode() == ResultBase::Warning) {
                     return Result<ProjectLoadData>(loadData, result.errorMessage());
@@ -4849,14 +4849,14 @@ void cwSaveLoad::enqueueExternalCenterlineRemoveTree(const QString& path)
 QString cwSaveLoad::externalSourceRecordPath(const QUuid& ownerId) const
 {
     return externalSourceRecordsDir(projectRootDir())
-        .filePath(cwExternalSourceSettings::recordFileName(ownerId));
+        .filePath(cwExternalSourceRecord::recordFileName(ownerId));
 }
 
 // The record is bookkeeping about the copy an attach, Replace or Reload made,
 // and those already dirtied the project, so neither job reports a mutation.
 // Nothing watches .cw_local, so neither notes a self-write either.
 void cwSaveLoad::enqueueExternalSourceRecordWrite(const QUuid& ownerId,
-                                                  const cwExternalSourceSettings::Record& record)
+                                                  const cwExternalSourceRecord::Record& record)
 {
     if (ownerId.isNull() || d->projectFileName.isEmpty()) {
         return;
@@ -4867,7 +4867,7 @@ void cwSaveLoad::enqueueExternalSourceRecordWrite(const QUuid& ownerId,
                                cwSaveLoadPrivate::Job::Kind::File,
                                cwSaveLoadPrivate::Job::Action::Custom,
                                [path, record]() {
-        return cwExternalSourceSettings::writeRecord(path, record);
+        return cwExternalSourceRecord::writeRecord(path, record);
     });
     job.path = path;
     d->addExplicitFileSystemJob(std::move(job), this);

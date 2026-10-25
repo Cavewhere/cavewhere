@@ -49,8 +49,8 @@ namespace {
 // the filesystem's granularity, which can be a full second.
 constexpr int kEditIsNewerSeconds = 3600;
 
-using SourceFingerprint = cwExternalSourceSettings::SourceFingerprint;
-using SourceFileFingerprint = cwExternalSourceSettings::SourceFileFingerprint;
+using SourceFingerprint = cwExternalSourceRecord::SourceFingerprint;
+using SourceFileFingerprint = cwExternalSourceRecord::SourceFileFingerprint;
 
 QString sha256Of(const QString& path)
 {

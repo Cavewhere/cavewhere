@@ -114,8 +114,8 @@ void saveAndSettle(SavedProjectFixture* fixture)
     REQUIRE_FALSE(fixture->project->modified());
 }
 
-const cwExternalSourceSettings::SourceFileFingerprint&
-onlyRecord(const cwExternalSourceSettings::SourceFingerprint& fingerprint)
+const cwExternalSourceRecord::SourceFileFingerprint&
+onlyRecord(const cwExternalSourceRecord::SourceFingerprint& fingerprint)
 {
     REQUIRE(fingerprint.files.size() == 1);
     return fingerprint.files.at(0);
@@ -302,7 +302,7 @@ TEST_CASE("cave-level attachments get their own status row",
     fixture->cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("cave.svx")));
     fixture->settings()->setBreadcrumb(
         fixture->cave->id(), caveSource,
-        cwExternalSourceSettings::computeFingerprint({caveSource}));
+        cwExternalSourceRecord::computeFingerprint({caveSource}));
     sweep(fixture.get());
 
     auto* statuses = statusModelOf(fixture.get());

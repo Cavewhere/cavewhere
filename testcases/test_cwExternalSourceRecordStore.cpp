@@ -48,7 +48,7 @@
 
 namespace {
 
-using SourceFingerprint = cwExternalSourceSettings::SourceFingerprint;
+using SourceFingerprint = cwExternalSourceRecord::SourceFingerprint;
 using AttachFuture = QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>;
 
 constexpr int kLargeBooks = 10;

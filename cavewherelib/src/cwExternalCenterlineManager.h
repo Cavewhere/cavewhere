@@ -842,7 +842,7 @@ private:
     // turns out to be identical content, so the fast path goes quiet again.
     cwExternalSourceStatusModel::Row
     sourceStatusFor(const QUuid& ownerId,
-                    const cwExternalSourceSettings::SourceFingerprint& stored);
+                    const cwExternalSourceRecord::SourceFingerprint& stored);
 
     // The whole answer to a source-side trigger — a watcher event, the
     // window regaining focus, a breadcrumb re-stamped: re-check every

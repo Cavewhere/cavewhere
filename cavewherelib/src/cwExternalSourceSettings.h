@@ -10,21 +10,16 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwExternalSourceRecord.h"
 
 //Qt includes
-#include <QDir>
-#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
 #include <QString>
-#include <QStringList>
 #include <QUrl>
 #include <QUuid>
-
-//Monad
-#include <Monad/Result.h>
 
 class cwSaveLoad;
 
@@ -70,61 +65,6 @@ class CAVEWHERE_LIB_EXPORT cwExternalSourceSettings : public QObject
     QML_UNCREATABLE("ExternalSourceSettings is owned by RootData and can't be created directly")
 
 public:
-    /**
-     * One owner's breadcrumb. ownerId is the cwCave or cwTrip QUuid
-     * (matches cwCave::id() / cwTrip::id()). An empty path is an entry
-     * that names no file, which the Replace dialog treats the same way
-     * as no entry at all.
-     */
-    struct Breadcrumb {
-        QUuid ownerId;
-        QString path;
-    };
-
-    /**
-     * The state one source file was in when it was last copied into
-     * the project: its absolute path, byte size, last-modified time
-     * (milliseconds since the epoch, UTC), and the SHA-256 of its
-     * contents as lowercase hex. size is -1 and sha256 is empty for a
-     * file that could not be read when the fingerprint was taken.
-     */
-    struct SourceFileFingerprint {
-        QString path;
-        qint64 size = -1;
-        qint64 lastModified = -1;
-        QString sha256;
-
-        bool operator==(const SourceFileFingerprint& other) const = default;
-    };
-
-    /**
-     * One owner's source fingerprint: one record per file in the
-     * source's *include dependency set, entry file first, in the
-     * scanner's order. An empty fingerprint means no fingerprint was
-     * recorded for that owner, which a caller must read as "nothing to
-     * compare against" rather than as a change.
-     */
-    struct SourceFingerprint {
-        QList<SourceFileFingerprint> files;
-
-        bool isEmpty() const { return files.isEmpty(); }
-        bool operator==(const SourceFingerprint& other) const = default;
-    };
-
-    /**
-     * One owner's whole record: the breadcrumb path and the fingerprint of
-     * the source it names.
-     */
-    struct Record {
-        QString path;
-        SourceFingerprint fingerprint;
-
-        bool operator==(const Record& other) const = default;
-    };
-
-    //! Every owner's record in one project.
-    using Records = QHash<QUuid, Record>;
-
     explicit cwExternalSourceSettings(QObject* parent = nullptr);
 
     /**
@@ -153,13 +93,13 @@ public:
     Q_INVOKABLE QUrl breadcrumbFolder(const QUuid& ownerId) const;
 
     /** Every recorded breadcrumb. */
-    QList<Breadcrumb> breadcrumbs() const;
+    QList<cwExternalSourceRecord::Breadcrumb> breadcrumbs() const;
 
     /**
      * The fingerprint recorded for ownerId, empty when there is no
      * entry or the entry was written by setBreadcrumbPath.
      */
-    SourceFingerprint fingerprint(const QUuid& ownerId) const;
+    cwExternalSourceRecord::SourceFingerprint fingerprint(const QUuid& ownerId) const;
 
     /**
      * Upserts the breadcrumb for ownerId, recording no fingerprint:
@@ -176,7 +116,7 @@ public:
      */
     void setBreadcrumb(const QUuid& ownerId,
                        const QString& path,
-                       const SourceFingerprint& fingerprint);
+                       const cwExternalSourceRecord::SourceFingerprint& fingerprint);
 
     /**
      * Rewrites the size and last-modified fields of ownerId's stored
@@ -188,39 +128,14 @@ public:
      * nothing, leaves the breadcrumb path alone, and does nothing at all
      * for an owner with no entry.
      */
-    void refreshFingerprintStats(const QUuid& ownerId, const SourceFingerprint& fingerprint);
-
-    /**
-     * Reads `files` and returns their fingerprint, in the order given.
-     * Sources are small text files, so this reads every one of them;
-     * callers on the quiet path compare size and last-modified first
-     * and only come here to settle a stat-level difference.
-     */
-    static SourceFingerprint computeFingerprint(const QStringList& files);
+    void refreshFingerprintStats(const QUuid& ownerId,
+                                 const cwExternalSourceRecord::SourceFingerprint& fingerprint);
 
     /** Removes any breadcrumb recorded for ownerId. */
     Q_INVOKABLE void clearBreadcrumb(const QUuid& ownerId);
 
     /** Removes the breadcrumbs of every owner in ownerIds, with one change signal. */
     void clearBreadcrumbs(const QList<QUuid>& ownerIds);
-
-    //! The directory under a project's .cw_local holding the records.
-    static QString recordsDirName();
-
-    //! The file name of ownerId's record in the records directory.
-    static QString recordFileName(const QUuid& ownerId);
-
-    /**
-     * Reads every record in recordsDir, skipping files whose name is no
-     * owner id and files that do not parse. Safe on any thread.
-     */
-    static Records readRecords(const QDir& recordsDir);
-
-    /**
-     * Serializes record and writes it to filePath atomically, creating the
-     * directory as needed. Safe on any thread.
-     */
-    static Monad::ResultBase writeRecord(const QString& filePath, const Record& record);
 
 signals:
     /**
@@ -231,11 +146,11 @@ signals:
     void breadcrumbsChanged();
 
 private:
-    void installRecords(const Records& records);
-    void writeThrough(const QUuid& ownerId, const Record& record);
+    void installRecords(const cwExternalSourceRecord::Records& records);
+    void writeThrough(const QUuid& ownerId, const cwExternalSourceRecord::Record& record);
     void removeThrough(const QUuid& ownerId);
 
-    Records m_records;
+    cwExternalSourceRecord::Records m_records;
     QPointer<cwSaveLoad> m_saveLoad;
 };
 

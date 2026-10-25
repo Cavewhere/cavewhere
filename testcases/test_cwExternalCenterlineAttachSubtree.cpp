@@ -370,7 +370,7 @@ TEST_CASE("A project saved with exclusions loads and reloads with every derived 
 
     const QString source = compassProjectMak();
     fixture->settings()->setBreadcrumb(
-        rootId, source, cwExternalSourceSettings::computeFingerprint({source}));
+        rootId, source, cwExternalSourceRecord::computeFingerprint({source}));
     REQUIRE(managerOf(fixture.get())->canReloadFromSource(loadedRoot));
     reload(fixture.get(), loadedRoot);
 
