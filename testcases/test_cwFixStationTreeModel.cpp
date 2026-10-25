@@ -1590,3 +1590,217 @@ TEST_CASE("Own fix rows and attached fix rows answer separate delegate kinds",
         CHECK(seen == allStations);
     }
 }
+
+namespace {
+
+const QString kAddCaveName = QStringLiteral("Spring Cave");
+const QString kAddFolderName = QStringLiteral("Hills");
+const QString kAddSourceRootName = QStringLiteral("Ridge File");
+const QString kAddDerivedName = QStringLiteral("deep");
+const QString kAddNestedFolderName = QStringLiteral("Notes");
+const QString kAddDerivedSourcePath = QStringLiteral("deep");
+const QString kAddCaveFix = QStringLiteral("c1");
+const QByteArray kCanHoldFixesRoleName = QByteArrayLiteral("canHoldFixes");
+
+//! A region whose nodes are marked by hand rather than by an attach: a native
+//! cave and folder at the top, a source root holding one derived node and one
+//! native folder, and the tree model on the region's root. The cave lists
+//! kAddCaveFix.
+struct AddTargetFixture
+{
+    cwCavingRegion region;
+    cwSurveyNode* cave = nullptr;
+    cwSurveyNode* folder = nullptr;
+    cwSurveyNode* sourceRoot = nullptr;
+    cwSurveyNode* derived = nullptr;
+    cwSurveyNode* nestedFolder = nullptr;
+    cwFixStationTreeModel model;
+
+    AddTargetFixture()
+    {
+        cave = region.addNode(nullptr, cwSurveyNode::Kind::Cave, kAddCaveName);
+        folder = region.addNode(nullptr, cwSurveyNode::Kind::Folder, kAddFolderName);
+        sourceRoot = region.addNode(nullptr, cwSurveyNode::Kind::Cave, kAddSourceRootName);
+        derived = region.addNode(sourceRoot, cwSurveyNode::Kind::Folder, kAddDerivedName);
+        nestedFolder = region.addNode(sourceRoot, cwSurveyNode::Kind::Folder, kAddNestedFolderName);
+        REQUIRE(cave != nullptr);
+        REQUIRE(folder != nullptr);
+        REQUIRE(sourceRoot != nullptr);
+        REQUIRE(derived != nullptr);
+        REQUIRE(nestedFolder != nullptr);
+
+        const QUuid sourceId = QUuid::createUuid();
+        sourceRoot->setSourceId(sourceId);
+        sourceRoot->setReadOnly(true);
+        derived->setSourceId(sourceId);
+        derived->setSourcePath(kAddDerivedSourcePath);
+        derived->setReadOnly(true);
+
+        REQUIRE(cave->fixStations()->addFixStation(kAddCaveFix) == 0);
+        model.setRootNode(region.rootNode());
+    }
+
+    QModelIndex rootRow() const { return model.index(0, 0); }
+    QModelIndex row(const QString& name) const { return nodeRow(model, name); }
+    QModelIndex caveFixRow() const { return fixRow(model, row(kAddCaveName), kAddCaveFix); }
+    bool canHoldFixesAt(const QModelIndex& index) const
+    {
+        return index.data(roleId(model, kCanHoldFixesRoleName)).toBool();
+    }
+};
+
+} // namespace
+
+TEST_CASE("Only a native node or a source root can hold fixes of its own",
+          "[FixStationTreeModel]")
+{
+    AddTargetFixture fixture;
+
+    CHECK_FALSE(fixture.region.rootNode()->canHoldFixes());
+    CHECK(fixture.cave->canHoldFixes());
+    CHECK(fixture.folder->canHoldFixes());
+    CHECK(fixture.sourceRoot->canHoldFixes());
+    CHECK_FALSE(fixture.derived->canHoldFixes());
+    CHECK(fixture.nestedFolder->canHoldFixes());
+}
+
+TEST_CASE("A node row and its fix rows answer whether the node can hold fixes",
+          "[FixStationTreeModel]")
+{
+    AddTargetFixture fixture;
+
+    CHECK_FALSE(fixture.canHoldFixesAt(fixture.rootRow()));
+    CHECK(fixture.canHoldFixesAt(fixture.row(kAddCaveName)));
+    CHECK(fixture.canHoldFixesAt(fixture.row(kAddFolderName)));
+    CHECK(fixture.canHoldFixesAt(fixture.row(kAddSourceRootName)));
+    CHECK_FALSE(fixture.canHoldFixesAt(fixture.row(kAddDerivedName)));
+    CHECK(fixture.canHoldFixesAt(fixture.row(kAddNestedFolderName)));
+
+    const QModelIndex caveFix = fixture.caveFixRow();
+    REQUIRE(caveFix.isValid());
+    CHECK(fixture.canHoldFixesAt(caveFix));
+
+    // A fix set on the root directly, the way an older project held one,
+    // answers for the root.
+    REQUIRE(fixture.region.rootNode()->fixStations()->addFixStation(QStringLiteral("r1")) == 0);
+    const QModelIndex rootFix = fixRow(fixture.model, fixture.rootRow(), QStringLiteral("r1"));
+    REQUIRE(rootFix.isValid());
+    CHECK_FALSE(fixture.canHoldFixesAt(rootFix));
+}
+
+TEST_CASE("Add Fix targets the current row's node, and the page's own node with no row",
+          "[FixStationTreeModel]")
+{
+    AddTargetFixture fixture;
+    cwSurveyNode* root = fixture.region.rootNode();
+
+    CHECK(fixture.model.nodeRowIndex(root) == fixture.rootRow());
+    CHECK(fixture.model.nodeRowIndex(fixture.cave) == fixture.row(kAddCaveName));
+    CHECK(fixture.model.nodeRowIndex(fixture.derived) == fixture.row(kAddDerivedName));
+    cwCave outside;
+    CHECK_FALSE(fixture.model.nodeRowIndex(&outside).isValid());
+
+    CHECK(fixture.model.addTargetAt(QModelIndex()) == root);
+    CHECK(fixture.model.addTargetAt(fixture.rootRow()) == root);
+    CHECK(fixture.model.addTargetAt(fixture.row(kAddCaveName)) == fixture.cave);
+    CHECK(fixture.model.addTargetAt(fixture.caveFixRow()) == fixture.cave);
+    CHECK(fixture.model.addTargetAt(fixture.row(kAddDerivedName)) == fixture.derived);
+    CHECK(fixture.model.addTargetAt(fixture.row(kAddNestedFolderName)) == fixture.nestedFolder);
+
+    SECTION("a cave page's tree targets the cave with no row") {
+        cwFixStationTreeModel caveModel;
+        caveModel.setRootNode(fixture.cave);
+        CHECK(caveModel.addTargetAt(QModelIndex()) == fixture.cave);
+    }
+}
+
+TEST_CASE("Add Fix refuses the region root and a derived node",
+          "[FixStationTreeModel]")
+{
+    AddTargetFixture fixture;
+    cwSurveyNode* root = fixture.region.rootNode();
+    const int fixRows = fixture.model.fixRowCount();
+
+    CHECK(fixture.model.addFixAt(QModelIndex()) == -1);
+    CHECK(fixture.model.addFixAt(fixture.rootRow()) == -1);
+    CHECK(fixture.model.addFixAt(fixture.row(kAddDerivedName)) == -1);
+
+    CHECK(root->fixStations()->count() == 0);
+    CHECK(fixture.derived->fixStations()->count() == 0);
+    CHECK(fixture.model.fixRowCount() == fixRows);
+}
+
+TEST_CASE("Add Fix adds to a native node or a source root and returns the new page row",
+          "[FixStationTreeModel]")
+{
+    AddTargetFixture fixture;
+
+    const auto addAndCheck = [&fixture](const QModelIndex& current, cwSurveyNode* target) {
+        INFO("target " << target->name().toStdString());
+        const int before = target->fixStations()->count();
+        const int fixRows = fixture.model.fixRowCount();
+        const int pageRow = fixture.model.addFixAt(current);
+        CHECK(target->fixStations()->count() == before + 1);
+        CHECK(fixture.model.fixRowCount() == fixRows + 1);
+        REQUIRE(pageRow >= 0);
+        const QModelIndex added = fixture.model.indexOfFixRow(pageRow);
+        REQUIRE(added.isValid());
+        CHECK(added.data(cwFixStationTreeModel::NodeObjectRole).value<cwSurveyNode*>() == target);
+        CHECK(added.data(cwFixStationTreeModel::FixRowRole).toInt() == pageRow);
+        CHECK(added.row() == target->fixStations()->count() - 1);
+    };
+
+    addAndCheck(fixture.row(kAddCaveName), fixture.cave);
+    addAndCheck(fixture.caveFixRow(), fixture.cave);
+    addAndCheck(fixture.row(kAddFolderName), fixture.folder);
+    addAndCheck(fixture.row(kAddSourceRootName), fixture.sourceRoot);
+    addAndCheck(fixture.row(kAddNestedFolderName), fixture.nestedFolder);
+    CHECK(fixture.region.rootNode()->fixStations()->count() == 0);
+}
+
+TEST_CASE("A node row announces whether it can hold fixes when its source changes",
+          "[FixStationTreeModel]")
+{
+    AddTargetFixture fixture;
+    const int role = roleId(fixture.model, kCanHoldFixesRoleName);
+    REQUIRE(fixture.folder->fixStations()->addFixStation(QStringLiteral("h1")) == 0);
+    const QModelIndex folderRow = fixture.row(kAddFolderName);
+    const QModelIndex folderFix = fixRow(fixture.model, folderRow, QStringLiteral("h1"));
+    REQUIRE(folderFix.isValid());
+    CHECK(fixture.canHoldFixesAt(folderRow));
+
+    QSignalSpy dataChanged(&fixture.model, &QAbstractItemModel::dataChanged);
+    fixture.folder->setSourceId(fixture.sourceRoot->sourceId());
+    fixture.folder->setSourcePath(QStringLiteral("hills"));
+
+    CHECK(roleAnnouncements(dataChanged, folderRow, role) > 0);
+    CHECK(roleAnnouncements(dataChanged, folderFix, role) > 0);
+    CHECK_FALSE(fixture.canHoldFixesAt(folderRow));
+    CHECK_FALSE(fixture.canHoldFixesAt(folderFix));
+}
+
+TEST_CASE("A trip row holds no fixes of its own, and Add on it targets its node",
+          "[FixStationTreeModel][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("fix-tree-trip-row-add"));
+    cwFixStationTreeModel model;
+    cwSurveyNode* root = attachForTree(fixture.get(), model, kLeafFixture, 1);
+    REQUIRE(root->isSourceRoot());
+    const int role = roleId(model, kCanHoldFixesRoleName);
+
+    const QModelIndex tripIndex = tripRow(model, kLeafTripName);
+    REQUIRE(tripIndex.isValid());
+    const QModelIndex tripFix = fixRow(model, tripIndex, kLeafFix);
+    REQUIRE(tripFix.isValid());
+
+    CHECK_FALSE(tripIndex.data(role).toBool());
+    CHECK(tripFix.data(role).toBool());
+    CHECK(model.addTargetAt(tripIndex) == root);
+    CHECK(model.addTargetAt(tripFix) == root);
+
+    const int pageRow = model.addFixAt(tripFix);
+    CHECK(root->fixStations()->count() == 1);
+    REQUIRE(pageRow >= 0);
+    CHECK(model.indexOfFixRow(pageRow).data(cwFixStationTreeModel::NodeObjectRole)
+              .value<cwSurveyNode*>() == root);
+}

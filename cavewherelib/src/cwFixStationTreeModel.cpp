@@ -180,16 +180,18 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
     if (isFixRow(index)) {
         const QObject* holder = holderOf(index);
         const auto* trip = qobject_cast<const cwTrip*>(holder);
+        cwSurveyNode* owner = trip != nullptr
+                                  ? trip->parentNode()
+                                  : const_cast<cwSurveyNode*>(static_cast<const cwSurveyNode*>(holder));
         switch (role) {
         case RowKindRole:
             return FixRow;
         case NodeObjectRole:
-            return QVariant::fromValue(trip != nullptr
-                                           ? trip->parentNode()
-                                           : const_cast<cwSurveyNode*>(
-                                                 static_cast<const cwSurveyNode*>(holder)));
+            return QVariant::fromValue(owner);
         case TripObjectRole:
             return QVariant::fromValue(const_cast<cwTrip*>(trip));
+        case CanHoldFixesRole:
+            return owner != nullptr && owner->canHoldFixes();
         case DelegateKindRole: {
             if (trip != nullptr) {
                 return ReadOnlyFix;
@@ -232,6 +234,8 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
             return QVariant::fromValue(trip->parentNode());
         case TripObjectRole:
             return QVariant::fromValue(const_cast<cwTrip*>(trip));
+        case CanHoldFixesRole:
+            return false;
         case OwnFixCountRole:
         case SubtreeFixCountRole:
             return static_cast<int>(fixes.size());
@@ -287,6 +291,8 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
         return QVariant::fromValue(const_cast<cwSurveyNode*>(node));
     case TripObjectRole:
         return QVariant::fromValue(static_cast<cwTrip*>(nullptr));
+    case CanHoldFixesRole:
+        return node->canHoldFixes();
     case OwnFixCountRole:
         return node->fixStationCount();
     case SubtreeFixCountRole:
@@ -390,7 +396,8 @@ QHash<int, QByteArray> cwFixStationTreeModel::roleNames() const
         {SubtreeUnsetFixCountRole,          "subtreeUnsetFixCount"},
         {TripObjectRole,                    "trip"},
         {BareFixOwnerTripsRole,             "bareFixOwnerTrips"},
-        {DelegateKindRole,                  "delegateKind"}
+        {DelegateKindRole,                  "delegateKind"},
+        {CanHoldFixesRole,                  "canHoldFixes"}
     });
     return names;
 }
@@ -636,6 +643,13 @@ void cwFixStationTreeModel::connectNode(cwSurveyNode* node)
     connect(node, &cwSurveyNode::externalCenterlineChanged, this, [this, node]() {
         emitAttachmentChanged(node);
     });
+    connect(node, &cwSurveyNode::sourceChanged, this, [this, node]() {
+        emitNodeRowChanged(node, {CanHoldFixesRole});
+        emitFixRowChanged(node, 0, fixRowsOf(node) - 1, {CanHoldFixesRole});
+        for (const cwTrip* trip : m_tripRows.value(node)) {
+            emitFixRowChanged(trip, 0, fixRowsOf(trip) - 1, {CanHoldFixesRole});
+        }
+    });
     // An owner's bare-fix count reaches over its derived nodes' rows.
     connect(node, &cwSurveyNode::attachedFixesChanged, this, [this, node]() {
         refreshBareFixOwnerTrips(node);
@@ -871,6 +885,30 @@ void cwFixStationTreeModel::fixRowsMoved()
     }
 }
 
+QModelIndex cwFixStationTreeModel::nodeRowIndex(cwSurveyNode* node) const
+{
+    return indexOfNode(node);
+}
+
+cwSurveyNode* cwFixStationTreeModel::addTargetAt(const QModelIndex& index) const
+{
+    if (!index.isValid()) {
+        return m_rootNode;
+    }
+    return index.data(NodeObjectRole).value<cwSurveyNode*>();
+}
+
+int cwFixStationTreeModel::addFixAt(const QModelIndex& index)
+{
+    cwSurveyNode* target = addTargetAt(index);
+    if (target == nullptr || !target->canHoldFixes()) {
+        return -1;
+    }
+    cwFixStationModel* fixes = target->fixStations();
+    fixes->addFixStation();
+    return fixIndex(target, fixes->count() - 1).data(FixRowRole).toInt();
+}
+
 void cwFixStationTreeModel::announceFixRows()
 {
     rebuildFixRows();
@@ -889,10 +927,11 @@ bool cwFixStationTreeModel::isLeaving(const QObject* holder, int row) const
                && row <= m_leavingRows.last);
 }
 
-void cwFixStationTreeModel::emitFixRowChanged(const QObject* holder, int first, int last)
+void cwFixStationTreeModel::emitFixRowChanged(const QObject* holder, int first, int last,
+                                              const QList<int>& roles)
 {
     if (first <= last) {
-        emit dataChanged(fixIndex(holder, first), fixIndex(holder, last), {FixRowRole});
+        emit dataChanged(fixIndex(holder, first), fixIndex(holder, last), roles);
     }
 }
 

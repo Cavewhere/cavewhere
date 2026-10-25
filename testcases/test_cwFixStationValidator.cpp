@@ -17,6 +17,7 @@
 #include "cwFixStation.h"
 #include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
+#include "cwFixStationTreeModel.h"
 #include "cwFixStationValidator.h"
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
@@ -1461,17 +1462,31 @@ TEST_CASE("the project-wide fix-station warnings list nodes in tree order",
     CHECK(messages.at(1).startsWith(QStringLiteral("Aardvark Pit: ")));
 }
 
-TEST_CASE("a fix on the region root raises no project-wide warning",
+TEST_CASE("the Fix Stations page's add path leaves the region root without fixes",
           "[cwFixStationValidator]")
 {
-    //Pins today's reach, which is narrower than the Fix Stations page's: the
-    //validator walks rootNode()->allNodes(), which leaves the root out, so a
-    //fix the page lets a user add on the root is never judged.
+    //The validator walks rootNode()->allNodes(), which leaves the root out, so
+    //the page's Add refuses the root rather than create a fix nothing judges.
     cwCavingRegion region;
-    region.rootNode()->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+    cwSurveyNode* cave =
+        region.addNode(nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Aardvark Pit"));
+    REQUIRE(cave != nullptr);
+    cwFixStationTreeModel model;
+    model.setRootNode(region.rootNode());
+    REQUIRE(model.rowCount() == 1);
 
-    CHECK(region.fixStationValidator()->fixStationWarningMessages().isEmpty());
+    CHECK(model.addFixAt(QModelIndex()) == -1);
+    CHECK(model.addFixAt(model.index(0, 0)) == -1);
+    CHECK(region.rootNode()->fixStations()->count() == 0);
+
+    CHECK(model.addFixAt(model.nodeRowIndex(cave)) >= 0);
+    CHECK(cave->fixStations()->count() == 1);
+    CHECK(region.rootNode()->fixStations()->count() == 0);
+
+    QCoreApplication::processEvents();
+    for (const QString& message : region.fixStationValidator()->fixStationWarningMessages()) {
+        CHECK(message.startsWith(QStringLiteral("Aardvark Pit: ")));
+    }
 }
 
 TEST_CASE("a node's fix-station warnings cover the node and its descendants",

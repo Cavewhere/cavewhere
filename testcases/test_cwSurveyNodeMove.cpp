@@ -307,6 +307,54 @@ TEST_CASE("Moving a node carries its qualified fixes and equates one level up", 
     CHECK(equates->equates() == QList<cwEquate>({intoSection}));
 }
 
+TEST_CASE("Moving a node to the region root hands its qualified fixes to the node itself",
+          "[SurveyNode]")
+{
+    Tree tree;
+    cwSurveyNode* root = tree.region.rootNode();
+
+    SECTION("a section leaving its cave") {
+        const QString oldLabel = tree.sideCave->childScopeLabels().value(tree.upperLevel->id());
+        REQUIRE_FALSE(oldLabel.isEmpty());
+        tree.sideCave->fixStations()->appendFixStation(fixAt(oldLabel + QStringLiteral(".s1")));
+        tree.sideCave->fixStations()->appendFixStation(fixAt(QStringLiteral("b1")));
+
+        REQUIRE(root->moveHere(tree.upperLevel));
+
+        CHECK(tree.upperLevel->parentNode() == root);
+        CHECK(fixNames(root).isEmpty());
+        CHECK(fixNames(tree.upperLevel) == QStringList({QStringLiteral("s1")}));
+        CHECK(fixNames(tree.sideCave) == QStringList({QStringLiteral("b1")}));
+
+        tree.undoStack.undo();
+
+        CHECK(tree.upperLevel->parentNode() == tree.sideCave);
+        CHECK(fixNames(tree.sideCave) == QStringList({oldLabel + QStringLiteral(".s1"), QStringLiteral("b1")}));
+        CHECK(fixNames(tree.upperLevel).isEmpty());
+        CHECK(fixNames(root).isEmpty());
+    }
+
+    SECTION("a cave leaving its folder") {
+        const QString oldLabel = tree.kentucky->childScopeLabels().value(tree.sideCave->id());
+        REQUIRE_FALSE(oldLabel.isEmpty());
+        tree.kentucky->fixStations()->appendFixStation(fixAt(oldLabel + QStringLiteral(".a1")));
+
+        REQUIRE(root->moveHere(tree.sideCave));
+
+        CHECK(tree.sideCave->parentNode() == root);
+        CHECK(fixNames(root).isEmpty());
+        CHECK(fixNames(tree.sideCave) == QStringList({QStringLiteral("a1")}));
+        CHECK(fixNames(tree.kentucky).isEmpty());
+
+        tree.undoStack.undo();
+
+        CHECK(tree.sideCave->parentNode() == tree.kentucky);
+        CHECK(fixNames(tree.kentucky) == QStringList({oldLabel + QStringLiteral(".a1")}));
+        CHECK(fixNames(tree.sideCave).isEmpty());
+        CHECK(fixNames(root).isEmpty());
+    }
+}
+
 TEST_CASE("Move to… carries a node's fix count from one branch to the other", "[SurveyNode]")
 {
     Tree tree;

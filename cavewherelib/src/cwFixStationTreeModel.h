@@ -105,7 +105,11 @@ public:
         BareFixOwnerTripsRole,
         //! The delegate that draws the row: a node row, a trip row, one of a
         //! node's own editable fixes, or a fix an attached file holds.
-        DelegateKindRole
+        DelegateKindRole,
+        //! True when the user may add a fix to the row's node
+        //! (cwSurveyNode::canHoldFixes): a node row's own node, a fix row's
+        //! owning node; false on a trip row.
+        CanHoldFixesRole
     };
     Q_ENUM(Roles)
 
@@ -119,6 +123,17 @@ public:
 
     //! The fix row at page row \a fixRow, invalid when there is none.
     Q_INVOKABLE QModelIndex indexOfFixRow(int fixRow) const;
+
+    //! The row \a node owns here, invalid when it hangs outside rootNode.
+    Q_INVOKABLE QModelIndex nodeRowIndex(cwSurveyNode* node) const;
+
+    //! The node Add Fix puts a new fix on when \a index is the current row: a
+    //! node row's own node, a fix or trip row's node, rootNode for no row.
+    Q_INVOKABLE cwSurveyNode* addTargetAt(const QModelIndex& index) const;
+
+    //! Adds a fix to addTargetAt(\a index) and returns its page row, or -1
+    //! with nothing added when that node cannot hold fixes.
+    Q_INVOKABLE int addFixAt(const QModelIndex& index);
 
     //! Announces every role of every fix row. A TreeView that reuses its
     //! delegates applies a dataChanged that arrives between a row insert or
@@ -176,8 +191,9 @@ private:
 
     bool isLeaving(const QObject* holder, int row) const;
 
-    //! Announces FixRowRole on \a holder's fix rows \a first through \a last.
-    void emitFixRowChanged(const QObject* holder, int first, int last);
+    //! Announces \a roles on \a holder's fix rows \a first through \a last.
+    void emitFixRowChanged(const QObject* holder, int first, int last,
+                           const QList<int>& roles = {FixRowRole});
 
     //! The node or trip whose rows hold \a index, nullptr for the top-level row.
     static QObject* holderOf(const QModelIndex& index);

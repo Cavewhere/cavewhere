@@ -12,6 +12,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwFixStation.h"
+#include "cwFixStationModel.h"
 #include "cwGeoReference.h"
 #include "cwProject.h"
 #include "cwRootData.h"
@@ -220,4 +221,29 @@ TEST_CASE("A local grid survives save/load with no frame",
     CHECK(reloaded->localCoordinateSystem().isEmpty());
     CHECK_FALSE(reloaded->anchor().isValid());
     CHECK_FALSE(reloaded->hasCoordinateSystem());
+}
+
+TEST_CASE("A project loads with no fix stations on the region root",
+          "[cwGeoReference][FixStation][SaveLoad]")
+{
+    // The region root has no scope of its own, so no fix belongs there; a
+    // root fix left in memory stays out of the file, and a load brings none back.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    cwCavingRegion* region = root->project()->cavingRegion();
+    addAnchorFix(region, kLocalOriginLongitude, kLocalOriginLatitude);
+    region->rootNode()->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("r1"), kWgs84, kOtherOriginLongitude, kOtherOriginLatitude,
+                kOriginElevation));
+    REQUIRE(region->rootNode()->fixStations()->count() == 1);
+
+    const QString path = saveProject(root.get(), tempDir, QStringLiteral("root-fix-dropped"));
+
+    auto reloadedRoot = reload(path);
+    cwCavingRegion* reloaded = reloadedRoot->project()->cavingRegion();
+    CHECK(reloaded->rootNode()->fixStations()->count() == 0);
+    REQUIRE(reloaded->caveCount() == 1);
+    CHECK(reloaded->cave(0)->fixStations()->count() == 1);
 }

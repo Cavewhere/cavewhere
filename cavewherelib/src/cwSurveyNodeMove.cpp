@@ -298,10 +298,14 @@ cwSurveyNode::MoveToCommand::MoveToCommand(QObject* subject,
     SubjectPtr(subject),
     SourcePtr(plan.source),
     DestinationPtr(destination),
+    FixHolderPtr(destination),
     Region(destination->parentRegion()),
     Plan(plan)
 {
     if(auto* node = qobject_cast<cwSurveyNode*>(subject)) {
+        if(!destination->canHoldFixes()) {
+            FixHolderPtr = node;
+        }
         Move = std::make_unique<MoveNodeCommand>(node, destination, destination->childNodeCount());
     } else {
         Move = std::make_unique<MoveTripCommand>(qobject_cast<cwTrip*>(subject), destination);
@@ -356,7 +360,10 @@ void cwSurveyNode::MoveToCommand::finishPlan()
     for(int row : std::as_const(Plan.leavingFixRows)) {
         const cwFixStation& before = fixes.at(row);
         cwFixStation after = before;
-        after.setStationName(arrivingName(before.stationName()).trimmed());
+        const QString arriving = FixHolderPtr != DestinationPtr
+                ? tailUnderLabel(before.stationName(), Plan.leavingLabel)
+                : arrivingName(before.stationName());
+        after.setStationName(arriving.trimmed());
         FixEdits.append({row, before, after});
     }
 
@@ -387,7 +394,7 @@ void cwSurveyNode::MoveToCommand::redo()
         sourceFixes->removeAt(sourceFixes->indexOf(edit.before.id()));
     }
     for(const FixEdit& edit : std::as_const(FixEdits)) {
-        DestinationPtr->fixStations()->appendFixStation(edit.after);
+        FixHolderPtr->fixStations()->appendFixStation(edit.after);
     }
 
     if(Region != nullptr) {
@@ -397,9 +404,9 @@ void cwSurveyNode::MoveToCommand::redo()
 
 void cwSurveyNode::MoveToCommand::undo()
 {
-    cwFixStationModel* destinationFixes = DestinationPtr->fixStations();
+    cwFixStationModel* holderFixes = FixHolderPtr->fixStations();
     for(auto it = FixEdits.crbegin(); it != FixEdits.crend(); ++it) {
-        destinationFixes->removeAt(destinationFixes->indexOf(it->after.id()));
+        holderFixes->removeAt(holderFixes->indexOf(it->after.id()));
     }
     for(const FixEdit& edit : std::as_const(FixEdits)) {
         SourcePtr->fixStations()->insertFixStation(edit.sourceRow, edit.before);

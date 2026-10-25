@@ -1,6 +1,7 @@
 import QtQuick as QQ
 import QtQuick.Layouts
 import QtQuick.Controls as QC
+import cavewherelib
 
 RowLayout {
     id: controlBarId
@@ -13,19 +14,41 @@ RowLayout {
     property alias addButtonText: splitButtonId.text
     property alias menuToolTip: splitButtonId.menuToolTip
 
+    property bool addEnabled: true
+    //! Shown on hover over the add button in either state; empty shows none.
+    property string addToolTip: ""
+
     signal add();
 
-    SplitButton {
-        id: splitButtonId
-
-        buttonObjectName: "addButton"
-        iconSource: "qrc:/twbs-icons/icons/plus.svg"
-        menu: controlBarId.menu
-
+    // The wrapper carries the hover and the tooltip because a disabled button
+    // reports no hover of its own.
+    QQ.Item {
+        implicitWidth: splitButtonId.implicitWidth
+        implicitHeight: splitButtonId.implicitHeight
         Layout.alignment: Qt.AlignLeft
 
-        onClicked: {
-            controlBarId.add();
+        QQ.HoverHandler {
+            id: addHoverId
+        }
+
+        QC.ToolTip {
+            objectName: "addToolTip"
+            text: controlBarId.addToolTip
+            delay: Theme.toolTipDelay
+            visible: addHoverId.hovered && controlBarId.addToolTip !== ""
+        }
+
+        SplitButton {
+            id: splitButtonId
+
+            buttonObjectName: "addButton"
+            iconSource: "qrc:/twbs-icons/icons/plus.svg"
+            menu: controlBarId.menu
+            enabled: controlBarId.addEnabled
+
+            onClicked: {
+                controlBarId.add();
+            }
         }
     }
 

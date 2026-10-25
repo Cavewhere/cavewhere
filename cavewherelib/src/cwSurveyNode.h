@@ -76,6 +76,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel, public cwUn
     Q_PROPERTY(bool isReadOnly READ isReadOnly NOTIFY sourceChanged)
     Q_PROPERTY(bool isSourced READ isSourced NOTIFY sourceChanged)
     Q_PROPERTY(bool isSourceRoot READ isSourceRoot NOTIFY sourceChanged)
+    Q_PROPERTY(bool canHoldFixes READ canHoldFixes NOTIFY sourceChanged)
     Q_PROPERTY(QUuid sourceId READ sourceId NOTIFY sourceChanged)
     Q_PROPERTY(QString sourcePath READ sourcePath NOTIFY sourceChanged)
     Q_PROPERTY(cwSurveyNode* parentNode READ parentNode NOTIFY parentNodeChanged)
@@ -136,6 +137,11 @@ public:
     //! True when this node is the top of a sourced subtree — the row that owns
     //! the copied file and carries the Reload and Replace verbs.
     bool isSourceRoot() const { return isSourced() && m_sourcePath.isEmpty(); }
+
+    //! True when the user may add a fix station of their own here: a native
+    //! node or a source root. The region root has no scope of its own, and a
+    //! derived node mirrors its file.
+    bool canHoldFixes() const;
 
     //! True where caves go: the root, or a Folder with no Cave and no sourced
     //! node at or above it. Everywhere else takes trips and sections, so a Cave
@@ -862,6 +868,9 @@ private:
         QObject* SubjectPtr;
         cwSurveyNode* SourcePtr;
         cwSurveyNode* DestinationPtr;
+        //! Where the carried fixes land: the destination, or the moved node
+        //! itself when the destination holds no fixes (the region root).
+        cwSurveyNode* FixHolderPtr;
         QPointer<cwCavingRegion> Region;
         std::unique_ptr<QUndoCommand> Move;
         MovePlan Plan;
