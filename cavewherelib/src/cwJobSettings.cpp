@@ -36,7 +36,6 @@ void cwJobSettings::applyMemoryBudget()
 void cwJobSettings::setThreadCountPrivate(int count)
 {
     if(isThreadCountValid(count)) {
-        QThreadPool::globalInstance()->setMaxThreadCount(count);
         cwTask::threadPool()->setMaxThreadCount(count);
     }
 }
@@ -72,8 +71,7 @@ void cwJobSettings::initialize()
 }
 
 int cwJobSettings::threadCount() const {
-    Q_ASSERT(QThreadPool::globalInstance()->maxThreadCount() == cwTask::threadPool()->maxThreadCount());
-    return QThreadPool::globalInstance()->maxThreadCount();
+    return cwTask::threadPool()->maxThreadCount();
 }
 
 void cwJobSettings::setAutomaticUpdate(bool automaticUpdate) {

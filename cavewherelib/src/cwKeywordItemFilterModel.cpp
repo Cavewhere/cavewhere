@@ -4,12 +4,11 @@
 #include "asyncfuture.h"
 #include "cwGlobals.h"
 #include "cwKeywordModel.h"
+#include "cwConcurrent.h"
+#include "cwTaskTrace.h"
 
 //Async includes
 #include "asyncfuture.h"
-
-//Qt includes
-#include <QtConcurrent>
 
 //Std includes
 #include <utility>
@@ -271,8 +270,8 @@ void cwKeywordItemFilterModel::updateAllRows()
         LastModelData.cancel();
     }
 
-    //Run the job on the threadpool
-    auto runFuture = QtConcurrent::run(filterRows);
+    cwTaskContextScope traceScope(QStringLiteral("filter"));
+    auto runFuture = cwConcurrent::run(filterRows);
     LastModelData = runFuture;
 
     LastRun = AsyncFuture::observe(runFuture).subscribe([this, runFuture]()

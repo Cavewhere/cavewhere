@@ -289,9 +289,11 @@ Monad::Result<QByteArray> encodeRgba(const QImage& image, int quality)
     params.uastcFlags = static_cast<ktx_pack_uastc_flags>(quality);
 
     //libktx encodes on one thread unless told otherwise. The encode lane runs
-    //one compress at a time, so that compress owns every core.
-    params.threadCount = static_cast<ktx_uint32_t>(std::max(kSmallestThreadCount,
-                                                            QThread::idealThreadCount()));
+    //one compress at a time, and that compress uses the task pool's worth of
+    //cores, so a user who sets one thread gets a one-thread encode.
+    const QThreadPool* taskPool = cwTask::threadPool();
+    const int poolThreads = taskPool != nullptr ? taskPool->maxThreadCount() : QThread::idealThreadCount();
+    params.threadCount = static_cast<ktx_uint32_t>(std::max(kSmallestThreadCount, poolThreads));
 
     const KTX_error_code compressError = compressOnLane(texture.get(), &params);
     if(compressError != KTX_SUCCESS) {

@@ -652,3 +652,30 @@ TEST_CASE("A worker waiting on the encode lane frees its pool slot", "[Ktx2][Enc
     REQUIRE(encodeFinished(encode, kEncodeTimeoutMs));
     CHECK_FALSE(encode.result().hasError());
 }
+
+namespace {
+    //! The RGBA8 bytes of every mip level of an encodeRgba result
+    QList<QByteArray> decodedLevels(const QByteArray& ktx2Bytes)
+    {
+        const auto transcoded = cw::ktx2::transcode(ktx2Bytes, QRhiTexture::RGBA8);
+        REQUIRE_FALSE(transcoded.hasError());
+        return transcoded.value().mipLevels;
+    }
+}
+
+TEST_CASE("A one-thread pool encodes the same pixels as the default pool", "[Ktx2][EncodeLane]") {
+    const QImage image = gradientImage(kGradientWidth, kGradientHeight);
+
+    const auto defaultEncode = cw::ktx2::encodeRgba(image);
+    REQUIRE_FALSE(defaultEncode.hasError());
+
+    const auto singleThreadEncode = [&image]() {
+        cwThreadCountRestorer threadCount(kSingleThread);
+        return cw::ktx2::encodeRgba(image);
+    }();
+    REQUIRE_FALSE(singleThreadEncode.hasError());
+
+    const QList<QByteArray> defaultLevels = decodedLevels(defaultEncode.value());
+    REQUIRE(defaultLevels.size() == kGradientMipCount);
+    CHECK(decodedLevels(singleThreadEncode.value()) == defaultLevels);
+}

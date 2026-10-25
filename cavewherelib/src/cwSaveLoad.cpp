@@ -4939,6 +4939,31 @@ void trackPhasedProgress(QObject* context,
     });
 }
 
+// The git LFS lambdas are submitted from continuations, after sync()'s and
+// gitOperationAndReconcile()'s "git" scope has closed, so they open their own.
+template <typename Function>
+auto runGitTask(Function&& function)
+{
+    cwTaskContextScope gitScope(QStringLiteral("git"));
+    return cwConcurrent::run(std::forward<Function>(function));
+}
+
+// Submits the report only once the snapshot is done, so the report task never
+// holds a pool slot while it waits on a sibling task.
+template <typename BuildReport>
+QFuture<cwSaveLoad::SyncReport> runReportAfterSnapshot(QObject* context,
+                                                       const QFuture<LfsSnapshot>& beforeSnapshotFuture,
+                                                       BuildReport buildReport)
+{
+    return AsyncFuture::observe(beforeSnapshotFuture)
+            .context(context, [beforeSnapshotFuture, buildReport]() {
+        return runGitTask([buildReport, beforeSnapshot = beforeSnapshotFuture.result()]() {
+            return buildReport(beforeSnapshot);
+        });
+    })
+            .future();
+}
+
 } // namespace
 
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
@@ -5021,7 +5046,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
             }
             const QString beforeHead = **firstAttemptBeforeHead;
 
-            auto beforeSnapshotFuture = QtConcurrent::run([repoPath]() {
+            auto beforeSnapshotFuture = runGitTask([repoPath]() {
                 return captureLfsSnapshot(repoPath);
             });
 
@@ -5071,12 +5096,14 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                 attemptState->planEpoch = d->modelMutationEpoch;
                 attemptState->localMutationPlanEpoch = d->localMutationEpoch;
 
-                auto reportFuture = QtConcurrent::run([repoPath, beforeHead, afterHead, pullState, beforeSnapshotFuture]() {
+                auto reportFuture = runReportAfterSnapshot(this,
+                                                           beforeSnapshotFuture,
+                                                           [repoPath, beforeHead, afterHead, pullState](const LfsSnapshot& beforeSnapshot) {
                     return buildSyncReport(repoPath,
                                            beforeHead,
                                            afterHead,
                                            pullState,
-                                           beforeSnapshotFuture.result());
+                                           beforeSnapshot);
                 });
 
                 return AsyncFuture::observe(reportFuture)
@@ -5204,7 +5231,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
         }
         const QString beforeHead = beforeHeadResult.value();
 
-        auto beforeSnapshotFuture = QtConcurrent::run([repoPath]() {
+        auto beforeSnapshotFuture = runGitTask([repoPath]() {
             return captureLfsSnapshot(repoPath);
         });
 
@@ -5239,12 +5266,14 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
             attemptState->planEpoch = d->modelMutationEpoch;
             attemptState->localMutationPlanEpoch = d->localMutationEpoch;
 
-            auto reportFuture = QtConcurrent::run([repoPath, beforeHead, afterHead, beforeSnapshotFuture]() {
+            auto reportFuture = runReportAfterSnapshot(this,
+                                                       beforeSnapshotFuture,
+                                                       [repoPath, beforeHead, afterHead](const LfsSnapshot& beforeSnapshot) {
                 return buildSyncReport(repoPath,
                                        beforeHead,
                                        afterHead,
                                        SyncReport::PullState::Unknown,
-                                       beforeSnapshotFuture.result());
+                                       beforeSnapshot);
             });
 
             return AsyncFuture::observe(reportFuture)
