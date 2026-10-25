@@ -95,6 +95,15 @@ namespace {
     //point's spacing state.
     constexpr qint64 kPassBHaloBytesPerPoint = kTempBytesPerPoint + kPassBIndexEntryBytes;
 
+    //Pass B's cost per point over pass A's, which sizes its share of the
+    //progress bar: on a 76 M point tile pass A took 2.4 s and pass B 17-19 s
+    constexpr qint64 kPassBPointWeight = 8;
+
+    //The pass B stages that each credit every chunk point once: building the
+    //subtree, measuring native spacing and writing the nodes, which took
+    //roughly equal time per column
+    constexpr qint64 kPassBStageCount = 3;
+
     //Widens the cells a halo point's columns are looked for in, so a point a
     //rounding error from a column's widened box still reaches the exact test
     constexpr double kHaloCellSlack = 1e-6;
@@ -1016,6 +1025,10 @@ namespace {
             return result;
         }
 
+        const NodeProgress creditNode = [pointsDone = context.pointsDone](qsizetype pointCount) {
+            pointsDone->fetch_add(pointCount, std::memory_order_relaxed);
+        };
+
         QVector<QVector<SampledNode>> subtrees;
         subtrees.reserve(chunkTasks.size());
         for(const ChunkTask& task : chunkTasks) {
@@ -1024,7 +1037,8 @@ namespace {
                 return result;
             }
             subtrees.append(buildSubtree(std::move(points), task.cell, context.rootMin,
-                                         context.rootSize));
+                                         context.rootSize, kLeafMaxPoints, kMinSplitPoints,
+                                         creditNode));
         }
 
         //Every point of the column, its chunk roots' included, measures its
@@ -1042,7 +1056,7 @@ namespace {
             measured.append(&subtree);
         }
         NativeSpacingEstimate estimate =
-            measureNativeSpacing(measured, halo, context.rootMin, context.rootSize);
+            measureNativeSpacing(measured, halo, context.rootMin, context.rootSize, creditNode);
         halo = QVector<QVector3D>();
         result.localSpacingMilliseconds = localSpacingTimer.elapsed();
         result.localSpacingCappedPoints = estimate.cappedPoints;
@@ -1063,6 +1077,7 @@ namespace {
                 if(i == 0) {
                     chunkResult.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()),
                                                             0.0f, node.children});
+                    creditNode(node.points.size());
                     continue;
                 }
 
@@ -1085,6 +1100,7 @@ namespace {
                     result.errorMessage = context.writer->errorMessage();
                     return result;
                 }
+                creditNode(node.points.size());
             }
 
             chunkResult.rootPoints = std::move(subtree.first().points);
@@ -1092,8 +1108,6 @@ namespace {
             //The chunk's points are written, so it frees them before the next
             subtree = QVector<SampledNode>();
             nativeSpacings = QVector<QVector<float>>();
-            context.pointsDone->fetch_add(chunkTasks.at(chunk).pointCount,
-                                          std::memory_order_relaxed);
             result.chunks.append(std::move(chunkResult));
         }
 
@@ -1473,7 +1487,11 @@ namespace {
                 result.columns[finished.columnIndex] = std::move(column);
             }
 
-            progress.report(progressBase + context.pointsDone->load(std::memory_order_relaxed));
+            //Each stage credits every point once, and the stages share pass B's
+            //weighted span of the bar
+            progress.report(progressBase
+                            + context.pointsDone->load(std::memory_order_relaxed)
+                                  * kPassBPointWeight / kPassBStageCount);
 
             //A slot a column just freed is filled on the next turn rather than
             //after a sleep, so the pool waits only while every column still runs
@@ -1708,7 +1726,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             for(int level = 0; level < depth; level++) {
                 nodeCountEstimate *= kChildCount;
             }
-            Reporter progress(promise, 2 * npoints + nodeCountEstimate);
+            Reporter progress(promise,
+                              npoints + kPassBPointWeight * npoints + nodeCountEstimate);
 
             const auto fail = [&promise, &progress](const QString& message, int code) {
                 progress.dismiss();
@@ -1946,6 +1965,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             //Pass C: every node the sampler pulls from is final only once its parent has sampled it
             QHash<quint64, TopNodeRecord> topNodes;
             qint64 nodesWritten = 0;
+            const qint64 passCProgressBase =
+                passA.pointCount + kPassBPointWeight * passA.pointCount;
 
             //What carrying pass B's native spacings through the top tree took
             QElapsedTimer topLocalSpacingTimer;
@@ -1965,7 +1986,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                 TopNodeRecord {quint32(node.points.size()),
                                                measureNodeSpacing(node.points)});
                 nodesWritten++;
-                progress.report(2 * passA.pointCount + nodesWritten);
+                progress.report(passCProgressBase + nodesWritten);
                 return true;
             };
 

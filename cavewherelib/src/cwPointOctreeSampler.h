@@ -7,6 +7,7 @@
 
 //Std includes
 #include <array>
+#include <functional>
 
 //Our includes
 #include "CaveWhereLibExport.h"
@@ -33,6 +34,10 @@ namespace cw::octree {
 
     //octant bit 0 is x, bit 1 is y, bit 2 is z
     CAVEWHERE_LIB_EXPORT Cell childCell(const Cell& parent, int octant);
+
+    //! Told the point count of each node as a build step finishes it, so a
+    //! caller can report progress finer than a whole subtree
+    using NodeProgress = std::function<void(qsizetype pointCount)>;
 
     /**
      * The octant of parentBounds that holds point. A point on a face, on the
@@ -88,13 +93,19 @@ namespace cw::octree {
      * A node that sampled first keeps the points its grid left behind as a
      * leaf while they number fewer than @a minSplitPoints (kMinSplitPoints);
      * 0 splits every leftover.
+     *
+     * @a onNode, when set, hears the count of the input points each node takes
+     * as it is made, so its counts add up to the size of @a points. A node
+     * filled by sampling its children's points is already counted there, and
+     * stays silent.
      */
     CAVEWHERE_LIB_EXPORT QVector<SampledNode> buildSubtree(QVector<QVector3D> points,
                                                            const Cell& root,
                                                            const QVector3D& rootMin,
                                                            double rootSize,
                                                            int leafMaxPoints = kLeafMaxPoints,
-                                                           int minSplitPoints = kMinSplitPoints);
+                                                           int minSplitPoints = kMinSplitPoints,
+                                                           const NodeProgress& onNode = {});
 
     //! What measureNativeSpacing() finds over one xy column of chunks
     struct NativeSpacingEstimate {
@@ -133,10 +144,13 @@ namespace cw::octree {
      * than the ceiling, takes it. Every spacing is then clamped to
      * [kMinLocalSpacingUnits, kMaxLocalSpacingUnits]. @a rootMin and
      * @a rootSize are the octree root cube's.
+     *
+     * @a onNode, when set, hears each node's point count once as the node is
+     * measured. It runs on several threads at once, so it must be thread-safe.
      */
     CAVEWHERE_LIB_EXPORT NativeSpacingEstimate measureNativeSpacing(
         const QVector<const QVector<SampledNode>*>& subtrees, const QVector<QVector3D>& neighbors,
-        const QVector3D& rootMin, double rootSize);
+        const QVector3D& rootMin, double rootSize, const NodeProgress& onNode = {});
 
     //! The codes (encodeLocalSpacing) of @a spacings
     CAVEWHERE_LIB_EXPORT QVector<quint16> encodeLocalSpacings(const QVector<float>& spacings);
