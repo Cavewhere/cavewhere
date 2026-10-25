@@ -87,6 +87,15 @@ StandardPage {
         addSurveyFileDialogId.open()
     }
 
+    // Opens the page's Attach survey file dialog with \a node as the place
+    // the file's subtree goes.
+    function attachSurveyFile(node: SurveyNode) {
+        attachDialogLoaderId.active = true
+        const dialog = attachDialogLoaderId.item as AttachSurveyFileDialog
+        dialog.target = node
+        dialog.open()
+    }
+
     // Master §8.7: the trip name comes from the picked file (directory
     // and extension stripped). uniqueTripName() dedupes - setName
     // silently rejects collisions.
@@ -526,6 +535,8 @@ StandardPage {
         Layout.fillWidth: true
         Layout.fillHeight: nodePageArea.isNarrow
         Layout.preferredHeight: nodePageArea.isNarrow ? -1 : nodePageArea.wideTreeHeight
+
+        onAttachSurveyFileRequested: (node) => nodePageArea.attachSurveyFile(node)
     }
 
     QQ.Flow {
@@ -597,7 +608,7 @@ StandardPage {
         hiddenVerbs: [nodePageArea.takesCaves ? AddVerbsMenu.AddCave : AddVerbsMenu.AddTrip]
 
         onAdded: (object, verb) => nodePageArea.showAdded(object, verb)
-        onAttachSurveyFileRequested: (node) => tripTreeId.attachSurveyFile(node)
+        onAttachSurveyFileRequested: (node) => nodePageArea.attachSurveyFile(node)
 
         QC.MenuItem {
             objectName: "addExternalTripMenuItem"
@@ -638,6 +649,21 @@ StandardPage {
             let index = nodePageArea.currentNode.indexOf(orphanTrip)
             if (index >= 0) {
                 nodePageArea.currentNode.removeTrip(index)
+            }
+        }
+    }
+
+    // Built on the first Attach survey file…: the dialog carries a file
+    // dialog and a scan preview that most visits to a page never open.
+    QQ.Loader {
+        id: attachDialogLoaderId
+
+        active: false
+
+        sourceComponent: QQ.Component {
+            AttachSurveyFileDialog {
+                onAttached: (sourceRoot) => tripTreeId.revealAttached(sourceRoot)
+                onImported: (cave) => tripTreeId.openObject(cave)
             }
         }
     }
