@@ -26,6 +26,7 @@
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
+#include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
 
@@ -39,9 +40,13 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QSignalSpy>
 #include <QString>
+#include <QStringList>
+#include <QTemporaryDir>
 #include <QUuid>
+#include <QWindow>
 
 // Std
 #include <memory>
@@ -150,6 +155,7 @@ TEST_CASE("the sweep at project open reports a source edited while the project w
     freshRoot->linePlotManager()->waitToFinish();
     freshRoot->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();
+    waitForSourceSweep(freshRoot->externalCenterlineManager());
 
     auto* statuses = freshRoot->externalCenterlineManager()->sourceStatusModel();
     REQUIRE(statuses->rowCount() == 1);
@@ -415,4 +421,284 @@ TEST_CASE("update all covers source-root rows alongside trip rows",
     sweep(fixture.get());
     CHECK(statuses->statusFor(fixture->trip->id()) == Status::UpToDate);
     CHECK(statuses->statusFor(cave->id()) == Status::UpToDate);
+}
+
+// SB.3 (plans/SOURCE_BREADCRUMB_LOCAL_STORE_PLAN.md): the source sweep reads
+// and hashes on a worker, one pass per burst of triggers, and a result that
+// a breadcrumb change or a deletion overtook while it was in flight never
+// lands.
+
+namespace {
+
+using SourceFingerprint = cwExternalSourceRecord::SourceFingerprint;
+
+// Far enough from any real mtime that the stored stats miss the disk and
+// the sweep has to hash the files to settle it.
+constexpr qint64 kStaleStatShiftMs = 60000;
+
+// Re-stamps in the burst case; each one is a distinct record, so each one
+// emits breadcrumbsChanged.
+constexpr int kBurstRestamps = 3;
+
+// One pass for the burst, plus at most the one queued re-run.
+constexpr int kMaxPassesPerBurst = 2;
+
+constexpr int kGrowthBooks = 2;
+constexpr int kGrowthSmallSurveysPerBook = 130;
+constexpr int kGrowthLargeSurveysPerBook = 520;
+constexpr int kGrowthShotsPerSurvey = 3;
+constexpr int kGrowthFixEvery = 25;
+constexpr double kMaxSweepGrowthRatio = 2.0;
+
+// A thousand-file Walls attach under Debug + ASAN on a loaded machine.
+constexpr int kLargeAttachWaitMs = 300000;
+
+SourceFingerprint withStaleStats(SourceFingerprint fingerprint, qint64 shiftMs = kStaleStatShiftMs)
+{
+    for (auto& record : fingerprint.files) {
+        record.lastModified -= shiftMs;
+    }
+    return fingerprint;
+}
+
+// Re-stamps ownerId's record with stats that miss the disk, which both
+// triggers a sweep and sends it down the hash path. The files themselves
+// are untouched, so the hash finds them identical.
+void stageHashPath(cwExternalSourceSettings* settings, const QUuid& ownerId)
+{
+    settings->setBreadcrumb(ownerId, settings->breadcrumbPath(ownerId),
+                            withStaleStats(settings->fingerprint(ownerId)));
+}
+
+// The same, with hold's FIFO added to the record, so the sweep's hash
+// stays in flight until the hold lets go.
+void stageHeldHashPath(cwExternalSourceSettings* settings, const QUuid& ownerId,
+                       const SourceReadHold& hold)
+{
+    auto fingerprint = withStaleStats(settings->fingerprint(ownerId));
+    fingerprint.files.append(hold.staleRecord());
+    settings->setBreadcrumb(ownerId, settings->breadcrumbPath(ownerId), fingerprint);
+}
+
+QStringList canonicalPathsOf(const SourceFingerprint& fingerprint)
+{
+    QStringList paths;
+    for (const auto& record : fingerprint.files) {
+        paths.append(QFileInfo(record.path).canonicalFilePath());
+    }
+    return paths;
+}
+
+QStringList pathsOf(const SourceFingerprint& fingerprint)
+{
+    QStringList paths;
+    for (const auto& record : fingerprint.files) {
+        paths.append(record.path);
+    }
+    return paths;
+}
+
+QString canonicalPathOf(const QString& path)
+{
+    return QFileInfo(path).canonicalFilePath();
+}
+
+// The longest main-thread gap from staging a hash-path sweep over a sourced
+// Walls root of kGrowthBooks books of surveysPerBook surveys until that
+// sweep has installed its stat refresh.
+qint64 hashSweepStall(int surveysPerBook)
+{
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString entry = writeWallsProject(tempSubdir(sourceDir, QStringLiteral("walls")),
+                                            kGrowthBooks, surveysPerBook, kGrowthShotsPerSurvey,
+                                            kGrowthFixEvery);
+    auto fixture = makeStatusProject(QStringLiteral("status-sweep-growth-%1").arg(surveysPerBook));
+    drainPipelines(fixture.get());
+
+    auto future = managerOf(fixture.get())
+                      ->attachSource(fixture->project->cavingRegion()->rootNode(), entry);
+    REQUIRE(AsyncFuture::waitForFinished(future, kLargeAttachWaitMs));
+    INFO("attach: " << future.result().errorMessage().toStdString());
+    REQUIRE_FALSE(future.result().hasError());
+    const QUuid rootId = future.result().value().root->id();
+    drainPipelines(fixture.get());
+
+    cwExternalSourceSettings* settings = fixture->settings();
+    const cwExternalCenterlineManager* manager = managerOf(fixture.get());
+    const SourceFingerprint settled = settings->fingerprint(rootId);
+    REQUIRE(settled.files.size() == kGrowthBooks * surveysPerBook + 1);
+    REQUIRE(statusModelOf(fixture.get())->statusFor(rootId) == Status::UpToDate);
+
+    const qint64 stall = longestMainThreadStallUntil(
+        [&]() { stageHashPath(settings, rootId); },
+        [&]() { return !manager->isSweepingSources() && settings->fingerprint(rootId) == settled; });
+    CHECK(statusModelOf(fixture.get())->statusFor(rootId) == Status::UpToDate);
+    drainPipelines(fixture.get());
+    return stall;
+}
+
+} // namespace
+
+TEST_CASE("a burst of sweep triggers in one event-loop turn runs one sweep pass",
+          "[ExternalSourceStatus][Sweep]")
+{
+    auto fixture = makeStatusProject(QStringLiteral("status-sweep-burst"));
+    const QString sourcePath =
+        writeSource(sourcePathIn(sourceDirOf(fixture.get()), QStringLiteral("entry.svx")),
+                    kOneShot);
+    attachThroughManager(fixture.get(), fixture->trip, sourcePath);
+    drainPipelines(fixture.get());
+
+    const QUuid tripId = fixture->trip->id();
+    cwExternalSourceSettings* settings = fixture->settings();
+    const SourceFingerprint stamped = settings->fingerprint(tripId);
+    REQUIRE_FALSE(stamped.isEmpty());
+
+    QWindow window;
+    QSignalSpy swept(managerOf(fixture.get()), &cwExternalCenterlineManager::sourcesSwept);
+
+    // Every trigger in one turn: re-stamps (each emits breadcrumbsChanged)
+    // and the window regaining focus.
+    for (int i = 1; i <= kBurstRestamps; ++i) {
+        settings->setBreadcrumb(tripId, sourcePath, withStaleStats(stamped, kStaleStatShiftMs * i));
+    }
+    emit qGuiApp->focusWindowChanged(&window);
+
+    drainPipelines(fixture.get());
+    settleEventLoop(kNothingHappensSettleMs);
+    drainPipelines(fixture.get());
+
+    INFO("sweep passes: " << swept.count());
+    CHECK(swept.count() >= 1);
+    CHECK(swept.count() <= kMaxPassesPerBurst);
+    CHECK(statusModelOf(fixture.get())->statusFor(tripId) == Status::UpToDate);
+    // The hash found the file as it was stamped and put the disk's stats back.
+    CHECK(settings->fingerprint(tripId) == stamped);
+}
+
+TEST_CASE("a Replace that lands while a sweep is hashing keeps the replacement's record",
+          "[ExternalSourceStatus][Sweep]")
+{
+    if (!SourceReadHold::kSupported) {
+        SKIP("Holding a sweep's read needs a POSIX FIFO");
+    }
+
+    auto fixture = makeStatusProject(QStringLiteral("status-sweep-replace"));
+    const QString sourceDir = sourceDirOf(fixture.get());
+    const QString originalSource =
+        writeSource(sourcePathIn(sourceDir, QStringLiteral("original.svx")), kOneShot);
+    attachThroughManager(fixture.get(), fixture->trip, originalSource);
+    const QString caveSource =
+        writeSource(sourcePathIn(sourceDir, QStringLiteral("cave.svx")), kOneShot);
+    cwCave* cave = attachSourceUnderRegion(fixture.get(), caveSource);
+    drainPipelines(fixture.get());
+    const QString replacementSource =
+        writeSource(sourcePathIn(sourceDir, QStringLiteral("replacement.svx")), kTwoShots);
+
+    const QUuid tripId = fixture->trip->id();
+    cwExternalSourceSettings* settings = fixture->settings();
+    cwExternalCenterlineManager* manager = managerOf(fixture.get());
+    auto* statuses = statusModelOf(fixture.get());
+    REQUIRE(statuses->statusFor(tripId) == Status::UpToDate);
+    // The sweep hashes owners in row order, so the trip must come before the
+    // held file: the stale pass then carries the trip's refresh for the
+    // original file when the hold lets go.
+    REQUIRE(statuses->rowCount() == 2);
+    REQUIRE(roleAt(statuses, 0, cwExternalSourceStatusModel::OwnerIdRole).toUuid() == tripId);
+
+    // The sweep snapshots the trip's original record with stats it will
+    // refresh, then stays on the cave's held file.
+    SourceReadHold hold;
+    stageHashPath(settings, tripId);
+    stageHeldHashPath(settings, cave->id(), hold);
+    REQUIRE(hold.waitUntilHeld());
+
+    auto future = manager->replaceCenterline(fixture->trip, replacementSource);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    INFO("replace: " << future.result().errorMessage().toStdString());
+    REQUIRE_FALSE(future.result().hasError());
+    // The Replace stamped its record while the older sweep was still reading.
+    REQUIRE(hold.isHolding());
+    REQUIRE(canonicalPathsOf(settings->fingerprint(tripId))
+            == QStringList { canonicalPathOf(replacementSource) });
+
+    hold.release();
+    drainPipelines(fixture.get());
+
+    const SourceFingerprint record = settings->fingerprint(tripId);
+    CHECK(canonicalPathOf(settings->breadcrumbPath(tripId)) == canonicalPathOf(replacementSource));
+    CHECK(canonicalPathsOf(record) == QStringList { canonicalPathOf(replacementSource) });
+    // Stats and hashes are the replacement's as it sits on disk.
+    CHECK(record == cwExternalSourceRecord::computeFingerprint(pathsOf(record)));
+    CHECK(statusModelOf(fixture.get())->statusFor(tripId) == Status::UpToDate);
+    const QStringList watched = manager->watchedSourceFiles();
+    CHECK(watched.contains(canonicalPathOf(replacementSource)));
+    CHECK_FALSE(watched.contains(canonicalPathOf(originalSource)));
+}
+
+TEST_CASE("an owner deleted while a sweep is hashing gets no status row",
+          "[ExternalSourceStatus][Sweep]")
+{
+    if (!SourceReadHold::kSupported) {
+        SKIP("Holding a sweep's read needs a POSIX FIFO");
+    }
+
+    auto fixture = makeStatusProject(QStringLiteral("status-sweep-delete"));
+    const QString sourceDir = sourceDirOf(fixture.get());
+    const QString tripSource =
+        writeSource(sourcePathIn(sourceDir, QStringLiteral("trip.svx")), kOneShot);
+    attachThroughManager(fixture.get(), fixture->trip, tripSource);
+    const QString caveSource =
+        writeSource(sourcePathIn(sourceDir, QStringLiteral("cave.svx")), kOneShot);
+    cwCave* cave = attachSourceUnderRegion(fixture.get(), caveSource);
+    drainPipelines(fixture.get());
+
+    const QUuid tripId = fixture->trip->id();
+    const QUuid caveId = cave->id();
+    auto* statuses = statusModelOf(fixture.get());
+    REQUIRE(statuses->rowCount() == 2);
+
+    SourceReadHold hold;
+    stageHeldHashPath(fixture->settings(), caveId, hold);
+    REQUIRE(hold.waitUntilHeld());
+
+    auto future = managerOf(fixture.get())->deleteSourceRoot(cave);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    INFO("delete: " << future.result().errorMessage().toStdString());
+    REQUIRE_FALSE(future.result().hasError());
+    REQUIRE(hold.isHolding());
+
+    // Every row set installed from here on, the held stale pass's included.
+    int installsWithDeletedOwner = 0;
+    QObject::connect(statuses, &cwExternalSourceStatusModel::statusesChanged, statuses,
+                     [statuses, caveId, &installsWithDeletedOwner]() {
+        for (int row = 0; row < statuses->rowCount(); ++row) {
+            if (roleAt(statuses, row, cwExternalSourceStatusModel::OwnerIdRole).toUuid() == caveId) {
+                ++installsWithDeletedOwner;
+            }
+        }
+    });
+    QSignalSpy swept(managerOf(fixture.get()), &cwExternalCenterlineManager::sourcesSwept);
+
+    hold.release();
+    drainPipelines(fixture.get());
+
+    CHECK(swept.count() >= 1);
+    CHECK(installsWithDeletedOwner == 0);
+    REQUIRE(statuses->rowCount() == 1);
+    CHECK(roleAt(statuses, 0, cwExternalSourceStatusModel::OwnerIdRole).toUuid() == tripId);
+    CHECK(statuses->statusFor(tripId) == Status::UpToDate);
+    CHECK_FALSE(fixture->settings()->hasBreadcrumb(caveId));
+}
+
+TEST_CASE("a hash-path sweep holds the main thread no longer as its source grows",
+          "[ExternalSourceStatus][Sweep]")
+{
+    const qint64 small = hashSweepStall(kGrowthSmallSurveysPerBook);
+    const qint64 large = hashSweepStall(kGrowthLargeSurveysPerBook);
+    INFO("longest stall: " << small << " ms at " << kGrowthSmallSurveysPerBook
+         << " surveys per book, " << large << " ms at " << kGrowthLargeSurveysPerBook);
+    REQUIRE(small > 0);
+    CHECK(static_cast<double>(large) / static_cast<double>(small) <= kMaxSweepGrowthRatio);
 }

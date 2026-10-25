@@ -73,8 +73,10 @@
 // Std
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <thread>
 
@@ -426,14 +428,25 @@ inline cwExternalCenterlineManager* managerOf(SavedProjectFixture* fixture)
     return fixture->rootData->externalCenterlineManager();
 }
 
-// Drains the scan-then-solve pipeline plus the save queue so the maps,
-// rows, and watch set reflect every queued recompute.
+// Waits until \a manager has no source sweep requested or in flight, so its
+// source status rows and source watch set are settled.
+inline void waitForSourceSweep(const cwExternalCenterlineManager* manager)
+{
+    REQUIRE(tryWait(kAttachWaitMs, [manager]() { return !manager->isSweepingSources(); }));
+}
+
+// Drains the scan-then-solve pipeline, the source sweep behind it, and the
+// save queue so the maps, rows, and watch sets reflect every queued
+// recompute. The save wait runs again after the sweep because the sweep's
+// stat refreshes reach the save queue when it installs.
 inline void drainPipelines(SavedProjectFixture* fixture)
 {
     fixture->project->waitSaveToFinish();
     fixture->rootData->linePlotManager()->waitToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();
+    waitForSourceSweep(managerOf(fixture));
+    fixture->project->waitSaveToFinish();
 }
 
 // Where a project keeps its source breadcrumbs: one record per owner under
@@ -493,6 +506,8 @@ inline std::unique_ptr<cwRootData> openInFreshRootData(const QString& projectPat
     rootData->linePlotManager()->waitToFinish();
     rootData->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();
+    waitForSourceSweep(rootData->externalCenterlineManager());
+    rootData->project()->waitSaveToFinish();
     return rootData;
 }
 
@@ -1013,6 +1028,130 @@ private:
     int m_writer = kNoWriter;
     std::atomic<bool> m_finished = false;
     std::thread m_worker;
+};
+
+//! A FIFO that holds whichever thread first opens it for reading, so a test
+//! can keep a source sweep's hash in flight while it does something else.
+//! Plant path() in an owner's stored fingerprint with stats that miss, and
+//! the sweep reads it to settle the difference. Call waitUntilHeld() right
+//! after the trigger: a reader that opened the FIFO before that call can
+//! only be the trigger's own thread (the sweep ran inside the trigger), so
+//! the hold lets it go at once and waitUntilHeld() answers false. release()
+//! unlinks the FIFO and then closes it, so the reader sees an empty file
+//! and the path is gone before any watcher could be pointed at it. POSIX
+//! only: on other platforms kSupported is false and the hold holds nothing.
+class SourceReadHold
+{
+public:
+#ifdef Q_OS_UNIX
+    static constexpr bool kSupported = true;
+#else
+    static constexpr bool kSupported = false;
+#endif
+
+    SourceReadHold()
+    {
+#ifdef Q_OS_UNIX
+        if (!m_dir.isValid()) {
+            return;
+        }
+        m_fifoPath = QDir(m_dir.path()).filePath(QStringLiteral("held.svx"));
+        if (::mkfifo(QFile::encodeName(m_fifoPath).constData(), kFifoMode) != 0) {
+            return;
+        }
+        m_writerThread = std::thread([this]() { holdFirstReader(); });
+#endif
+    }
+
+    ~SourceReadHold() { release(); }
+
+    SourceReadHold(const SourceReadHold&) = delete;
+    SourceReadHold& operator=(const SourceReadHold&) = delete;
+
+    //! The FIFO to plant in a stored fingerprint.
+    QString path() const { return m_fifoPath; }
+
+    //! The stored record that sends a sweep to read path(): its size and
+    //! last-modified time match no file.
+    cwExternalSourceRecord::SourceFileFingerprint staleRecord() const
+    {
+        cwExternalSourceRecord::SourceFileFingerprint record;
+        record.path = m_fifoPath;
+        record.size = kStaleSize;
+        record.lastModified = kStaleLastModified;
+        return record;
+    }
+
+    //! Spins the event loop until a reader other than the calling thread
+    //! holds the FIFO open. False when the reader was the calling thread
+    //! (it opened before this call) or none came within \a timeoutMs.
+    bool waitUntilHeld(int timeoutMs = kWatcherWaitMs)
+    {
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_waiting = true;
+        }
+        return tryWait(timeoutMs, [this]() { return isHolding(); });
+    }
+
+    bool isHolding() const { return m_holding; }
+
+    //! Lets the held reader see an empty file, with the path already gone.
+    void release()
+    {
+#ifdef Q_OS_UNIX
+        if (!m_writerThread.joinable()) {
+            return;
+        }
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_released = true;
+        }
+        m_releaseRequested.notify_all();
+        // A writer still waiting for its first reader gets one here, so the
+        // thread can see the release and stop.
+        const int unblocker =
+            ::open(QFile::encodeName(m_fifoPath).constData(), O_RDONLY | O_NONBLOCK);
+        m_writerThread.join();
+        if (unblocker >= 0) {
+            ::close(unblocker);
+        }
+        QFile::remove(m_fifoPath);
+#endif
+    }
+
+private:
+    static constexpr int kNoWriter = -1;
+    static constexpr int kFifoMode = 0600;
+    static constexpr qint64 kStaleSize = 1;
+    static constexpr qint64 kStaleLastModified = 1;
+
+    void holdFirstReader()
+    {
+#ifdef Q_OS_UNIX
+        // Blocks until a reader opens the FIFO.
+        const int writer = ::open(QFile::encodeName(m_fifoPath).constData(), O_WRONLY);
+        std::unique_lock<std::mutex> lock(m_mutex);
+        if (m_waiting && !m_released) {
+            m_holding = true;
+            m_releaseRequested.wait(lock, [this]() { return m_released; });
+        }
+        m_holding = false;
+        QFile::remove(m_fifoPath);
+        if (writer != kNoWriter) {
+            ::close(writer);
+        }
+#endif
+    }
+
+    QTemporaryDir m_dir;
+    QString m_fifoPath;
+    std::thread m_writerThread;
+    std::mutex m_mutex;
+    std::condition_variable m_releaseRequested;
+    bool m_waiting = false;
+    bool m_released = false;
+    std::atomic<bool> m_holding = false;
 };
 
 #endif // EXTERNALCENTERLINETESTHELPERS_H

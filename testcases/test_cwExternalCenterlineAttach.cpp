@@ -1688,6 +1688,7 @@ TEST_CASE("Save As keeps the attachment's remembered source and fingerprint",
     freshRoot->linePlotManager()->waitToFinish();
     freshRoot->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();
+    waitForSourceSweep(freshRoot->externalCenterlineManager());
 
     REQUIRE(freshRoot->region()->caveCount() == 1);
     cwTrip* reopenedTrip = freshRoot->region()->cave(0)->trip(0);

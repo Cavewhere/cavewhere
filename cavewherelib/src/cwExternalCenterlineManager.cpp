@@ -42,6 +42,7 @@
 //Std includes
 #include <algorithm>
 #include <functional>
+#include <optional>
 #include <tuple>
 #include <utility>
 
@@ -261,6 +262,23 @@ void collectSourceWatchPaths(const cwExternalSourceRecord::SourceFingerprint& fi
     }
 }
 
+// The fingerprint of `paths`, hashed one file at a time so a pass that
+// `superseded` reports as stale stops between files. Empty when it stopped.
+std::optional<cwExternalSourceRecord::SourceFingerprint>
+fingerprintUnlessSuperseded(const QStringList& paths, const std::function<bool()>& superseded)
+{
+    cwExternalSourceRecord::SourceFingerprint fingerprint;
+    fingerprint.files.reserve(paths.size());
+    for (const QString& path : paths) {
+        if (superseded()) {
+            return std::nullopt;
+        }
+        fingerprint.files.append(
+            cwExternalSourceRecord::computeFingerprint({ path }).files.constFirst());
+    }
+    return fingerprint;
+}
+
 // Deterministic presentation order: node display name, then trip
 // display name (node owners sort ahead of their node's trips via the
 // empty trip key), with ownerId as a stable tiebreak for duplicates.
@@ -393,7 +411,7 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
         connect(guiApplication, &QGuiApplication::focusWindowChanged,
                 this, [this](QWindow* window) {
             if (window != nullptr) {
-                sweepSources();
+                requestSourceSweep();
             }
         });
     }
@@ -451,8 +469,11 @@ cwExternalCenterlineManager::~cwExternalCenterlineManager()
 {
     // Cancel only, never drain (CLAUDE.md): the worker holds value
     // snapshots, the apply is context-guarded, and the restarter's alive
-    // flag drops any queued start — nothing dangles without a pump.
+    // flag drops any queued start — nothing dangles without a pump. The
+    // source sweep's worker stops at its next file once the generation
+    // moves.
     cancelScan();
+    ++*m_sourceSweepGeneration;
 }
 
 void cwExternalCenterlineManager::cancelScan()
@@ -472,6 +493,7 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
     }
     m_region = region;
     m_harvestCache->clear();
+    invalidateSourceSweep();
     m_signaler->setRegion(region);
     if (!m_region.isNull()) {
         // Cave-list churn (project load, undo/redo) can bring in owners
@@ -556,14 +578,14 @@ void cwExternalCenterlineManager::setExternalSourceSettings(cwExternalSourceSett
     // watch set and the statuses follow the store.
     if (!m_externalSourceSettings.isNull()) {
         disconnect(m_externalSourceSettings.data(), &cwExternalSourceSettings::breadcrumbsChanged,
-                   this, &cwExternalCenterlineManager::sweepSources);
+                   this, &cwExternalCenterlineManager::invalidateSourceSweep);
     }
     m_externalSourceSettings = settings;
     if (!m_externalSourceSettings.isNull()) {
         connect(m_externalSourceSettings.data(), &cwExternalSourceSettings::breadcrumbsChanged,
-                this, &cwExternalCenterlineManager::sweepSources);
+                this, &cwExternalCenterlineManager::invalidateSourceSweep);
     }
-    sweepSources();
+    invalidateSourceSweep();
 }
 
 void cwExternalCenterlineManager::setSaveLoad(cwSaveLoad* saveLoad)
@@ -622,6 +644,15 @@ void cwExternalCenterlineManager::setScanning(bool scanning)
     }
     m_scanning = scanning;
     emit scanningChanged();
+}
+
+void cwExternalCenterlineManager::setSweepingSources(bool sweeping)
+{
+    if (m_sweepingSources == sweeping) {
+        return;
+    }
+    m_sweepingSources = sweeping;
+    emit sweepingSourcesChanged();
 }
 
 void cwExternalCenterlineManager::recomputeWatchSet()
@@ -1084,7 +1115,7 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     // Every path that re-reads the attachments comes through here —
     // project open among them — so the source sweep rides along rather
     // than needing a trigger list of its own.
-    sweepSources();
+    invalidateSourceSweep();
 
     // Both emissions land after every member swap, so a handler — the trip
     // panel re-reading missingCopyPath(), the consumer's buildInput —
@@ -1431,116 +1462,229 @@ QHash<QUuid, QStringList> cwExternalCenterlineManager::bareFixedStations() const
     return stations;
 }
 
-cwExternalSourceStatusModel::Row
-cwExternalCenterlineManager::sourceStatusFor(
-    const QUuid& ownerId, const cwExternalSourceRecord::SourceFingerprint& stored)
+// One attached owner as the source sweep's worker sees it: the breadcrumb
+// and stored fingerprint, read on the main thread and carried by value.
+struct cwExternalCenterlineManager::SourceSweepOwner {
+    QUuid ownerId;
+    QString breadcrumbPath;
+    cwExternalSourceRecord::SourceFingerprint stored;
+};
+
+// What one sweep pass found, computed on the worker: a status row per
+// owner, the sorted watch set, and the owners whose stats moved while
+// their contents stayed, with the fresh stats to record.
+struct cwExternalCenterlineManager::SourceSweepResult {
+    QVector<cwExternalSourceStatusModel::Row> rows;
+    QStringList files;
+    QStringList directories;
+    QList<std::pair<QUuid, cwExternalSourceRecord::SourceFingerprint>> statRefreshes;
+};
+
+// How each owner's remembered source compares with that source on disk
+// now. Reads the disk only: the quiet path is one stat per fingerprinted
+// file, and only an owner whose sizes or mtimes moved has its files read
+// and hashed. Identical contents under fresh stats come back as a stat
+// refresh, so the next pass takes the quiet path again. Returns early,
+// partly filled, once `superseded` reports the pass stale; the caller
+// drops that result.
+cwExternalCenterlineManager::SourceSweepResult
+cwExternalCenterlineManager::sweepSourceOwners(const QVector<SourceSweepOwner>& owners,
+                                               const std::function<bool()>& superseded)
 {
     using Status = cwExternalSourceStatusModel::Status;
 
-    cwExternalSourceStatusModel::Row row;
-    row.ownerId = ownerId;
-    row.status = Status::NoBreadcrumb;
-    row.sourcePath = m_externalSourceSettings->breadcrumbPath(ownerId);
-
-    if (row.sourcePath.isEmpty()) {
-        return row;
-    }
-
-    // An entry recorded before fingerprints existed has nothing to
-    // compare against, and stays quiet: the feature never nags about data
-    // older than itself (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §5 N1).
-    if (stored.isEmpty()) {
-        return row;
-    }
-
-    // Missing is decided from the entry file alone. A fingerprinted
-    // dependency that is gone reads as Changed instead, which is what it
-    // usually is: dropping an *include and deleting the file it named is
-    // an ordinary edit, and re-copying from the entry file picks up the
-    // smaller dependency set. Only a gone entry file leaves nothing to
-    // copy from, which is what Update-all skips
-    // (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §4).
-    if (!QFileInfo::exists(row.sourcePath)) {
-        row.status = Status::SourceMissing;
-        return row;
-    }
-
-    if (statsMatchDisk(stored)) {
-        row.status = Status::UpToDate;
-        return row;
-    }
-
-    // A stat-level difference is only a question; the hash answers it.
-    const auto current =
-        cwExternalSourceRecord::computeFingerprint(fingerprintedPaths(stored));
-    if (contentsMatch(stored, current)) {
-        // Identical contents under fresh stats — record the new stats so
-        // the next check takes the pure-stat path. Nothing about the
-        // project changed, so nothing is emitted and nothing is dirtied.
-        m_externalSourceSettings->refreshFingerprintStats(ownerId, current);
-        row.status = Status::UpToDate;
-        return row;
-    }
-
-    row.status = Status::Changed;
-    row.sourceRevision = revisionOf(current);
-    return row;
-}
-
-void cwExternalCenterlineManager::sweepSources()
-{
-    QVector<cwExternalSourceStatusModel::Row> rows;
+    SourceSweepResult result;
     QSet<QString> files;
     QSet<QString> directories;
+    result.rows.reserve(owners.size());
+
+    for (const SourceSweepOwner& owner : owners) {
+        cwExternalSourceStatusModel::Row row;
+        row.ownerId = owner.ownerId;
+        row.status = Status::NoBreadcrumb;
+        row.sourcePath = owner.breadcrumbPath;
+
+        // An entry recorded before fingerprints existed has nothing to
+        // compare against, and stays quiet: the feature never nags about
+        // data older than itself (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html
+        // §5 N1).
+        if (!row.sourcePath.isEmpty() && !owner.stored.isEmpty()) {
+            // Missing is decided from the entry file alone. A fingerprinted
+            // dependency that is gone reads as Changed instead, which is
+            // what it usually is: dropping an *include and deleting the file
+            // it named is an ordinary edit, and re-copying from the entry
+            // file picks up the smaller dependency set. Only a gone entry
+            // file leaves nothing to copy from, which is what Update-all
+            // skips (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §4).
+            if (!QFileInfo::exists(row.sourcePath)) {
+                row.status = Status::SourceMissing;
+            } else if (statsMatchDisk(owner.stored)) {
+                row.status = Status::UpToDate;
+            } else {
+                // A stat-level difference is only a question; the hash
+                // answers it.
+                const auto current =
+                    fingerprintUnlessSuperseded(fingerprintedPaths(owner.stored), superseded);
+                if (!current.has_value()) {
+                    return result;
+                }
+                if (contentsMatch(owner.stored, *current)) {
+                    result.statRefreshes.append({ owner.ownerId, *current });
+                    row.status = Status::UpToDate;
+                } else {
+                    row.status = Status::Changed;
+                    row.sourceRevision = revisionOf(*current);
+                }
+            }
+        }
+
+        result.rows.append(row);
+        // The stored fingerprint names the files to watch as well as what
+        // the status is decided against.
+        collectSourceWatchPaths(owner.stored, files, directories);
+    }
+
+    result.files = sortedList(files);
+    result.directories = sortedList(directories);
+    return result;
+}
+
+void cwExternalCenterlineManager::requestSourceSweep()
+{
+    setSweepingSources(true);
+    if (m_sourceSweepInFlight) {
+        m_sourceSweepRerun = true;
+        return;
+    }
+    if (m_sourceSweepQueued) {
+        return;
+    }
+    m_sourceSweepQueued = true;
+    QMetaObject::invokeMethod(this, &cwExternalCenterlineManager::runSourceSweep,
+                              Qt::QueuedConnection);
+}
+
+void cwExternalCenterlineManager::invalidateSourceSweep()
+{
+    ++*m_sourceSweepGeneration;
+    requestSourceSweep();
+}
+
+void cwExternalCenterlineManager::runSourceSweep()
+{
+    m_sourceSweepQueued = false;
+    m_sourceSweepInFlight = true;
 
     // Without the store nothing remembers where anything came from, so no
-    // attachment has a source to compare against or to watch.
+    // attachment has a source to compare against or to watch. The owners
+    // the last scan published are exactly the attachments, so the sweep
+    // reads them instead of walking the region again.
+    QVector<SourceSweepOwner> owners;
     if (!m_externalSourceSettings.isNull()) {
-        // The owners the last scan published are exactly the attachments,
-        // so the sweep reads them instead of walking the region again.
-        rows.reserve(m_lastScanRows.size());
+        owners.reserve(m_lastScanRows.size());
         for (const cwAttachedCenterlinesModel::Row& attached : std::as_const(m_lastScanRows)) {
-            // One read of the stored fingerprint answers both halves of the
-            // sweep: it is what the status is decided against, and it names
-            // the files to watch.
-            const auto stored = m_externalSourceSettings->fingerprint(attached.ownerId);
-            rows.append(sourceStatusFor(attached.ownerId, stored));
-            collectSourceWatchPaths(stored, files, directories);
+            owners.append({ attached.ownerId,
+                            m_externalSourceSettings->breadcrumbPath(attached.ownerId),
+                            m_externalSourceSettings->fingerprint(attached.ownerId) });
         }
     }
 
-    m_sourceStatusModel->setRows(std::move(rows));
+    const quint64 generation = m_sourceSweepGeneration->load();
+    auto future = cwConcurrent::run([owners, generation, latest = m_sourceSweepGeneration]() {
+        return sweepSourceOwners(owners, [generation, &latest]() {
+            return latest->load() != generation;
+        });
+    });
 
-    // Swaps one half of m_sourceWatcher's table over to `desired` when the
-    // watcher is holding something else. The comparison is against what
-    // the watcher reports it actually holds — `armedNow` — rather than
-    // what a past sweep meant to arm, so a path an addPaths call quietly
-    // refused is tried again on the next sweep.
-    const auto armPaths = [this](const QStringList& desired,
-                                 const QStringList& armedNow,
-                                 QStringList& intended) {
-        intended = desired;
+    AsyncFuture::observe(future).context(this,
+        [this, generation](const SourceSweepResult& result) {
+            finishSourceSweep(result, generation == m_sourceSweepGeneration->load());
+        },
+        // A stale pass stops through the generation counter; nothing cancels
+        // this future, since onCanceled fires while the worker still runs and
+        // the re-run would start beside it.
+        [this]() {
+            finishSourceSweep(SourceSweepResult(), false);
+        });
+}
 
-        const QStringList armed =
-            sortedList(QSet<QString>(armedNow.cbegin(), armedNow.cend()));
-        if (desired == armed) {
-            return;
-        }
-        if (!armed.isEmpty()) {
-            m_sourceWatcher->removePaths(armed);
-        }
-        if (!desired.isEmpty()) {
-            m_sourceWatcher->addPaths(desired);
-        }
-    };
+void cwExternalCenterlineManager::finishSourceSweep(const SourceSweepResult& result,
+                                                    bool isCurrent)
+{
+    m_sourceSweepInFlight = false;
 
-    armPaths(sortedList(files), m_sourceWatcher->files(), m_watchedSourceFiles);
-    armPaths(sortedList(directories), m_sourceWatcher->directories(),
-             m_watchedSourceDirectories);
+    if (isCurrent) {
+        QSet<QUuid> attached;
+        attached.reserve(m_lastScanRows.size());
+        for (const cwAttachedCenterlinesModel::Row& row : std::as_const(m_lastScanRows)) {
+            attached.insert(row.ownerId);
+        }
+
+        QVector<cwExternalSourceStatusModel::Row> rows;
+        rows.reserve(result.rows.size());
+        for (const cwExternalSourceStatusModel::Row& row : result.rows) {
+            if (attached.contains(row.ownerId)) {
+                rows.append(row);
+            }
+        }
+        m_sourceStatusModel->setRows(std::move(rows));
+
+        // Swaps one half of m_sourceWatcher's table over to `desired` when
+        // the watcher is holding something else. The comparison is against
+        // what the watcher reports it actually holds — `armedNow` — rather
+        // than what a past sweep meant to arm, so a path an addPaths call
+        // quietly refused is tried again on the next sweep.
+        const auto armPaths = [this](const QStringList& desired,
+                                     const QStringList& armedNow,
+                                     QStringList& intended) {
+            intended = desired;
+
+            const QStringList armed =
+                sortedList(QSet<QString>(armedNow.cbegin(), armedNow.cend()));
+            if (desired == armed) {
+                return;
+            }
+            if (!armed.isEmpty()) {
+                m_sourceWatcher->removePaths(armed);
+            }
+            if (!desired.isEmpty()) {
+                m_sourceWatcher->addPaths(desired);
+            }
+        };
+
+        armPaths(result.files, m_sourceWatcher->files(), m_watchedSourceFiles);
+        armPaths(result.directories, m_sourceWatcher->directories(),
+                 m_watchedSourceDirectories);
+
+        // Nothing about the project changed, so the store emits nothing
+        // and nothing is dirtied.
+        if (!m_externalSourceSettings.isNull()) {
+            for (const auto& [ownerId, fingerprint] : result.statRefreshes) {
+                if (attached.contains(ownerId)) {
+                    m_externalSourceSettings->refreshFingerprintStats(ownerId, fingerprint);
+                }
+            }
+        }
+    }
+
+    emit sourcesSwept();
+
+    if (m_sourceSweepRerun) {
+        m_sourceSweepRerun = false;
+        m_sourceSweepQueued = true;
+        QMetaObject::invokeMethod(this, &cwExternalCenterlineManager::runSourceSweep,
+                                  Qt::QueuedConnection);
+    } else if (!m_sourceSweepQueued) {
+        setSweepingSources(false);
+    }
 }
 
 void cwExternalCenterlineManager::clearBreadcrumbsForDeletedOwners(const QList<QUuid>& ownerIds)
 {
+    // A deleted owner with no record changes nothing in the store, and a
+    // pass in flight would still install its row.
+    invalidateSourceSweep();
+
     if (m_externalSourceSettings.isNull()) {
         return;
     }
@@ -1589,12 +1733,12 @@ void cwExternalCenterlineManager::rearmWatcher(QFileSystemWatcher* watcher, cons
 void cwExternalCenterlineManager::onSourceFileChanged(const QString& path)
 {
     rearmWatcher(m_sourceWatcher, path);
-    sweepSources();
+    requestSourceSweep();
 }
 
 void cwExternalCenterlineManager::onSourceDirectoryChanged()
 {
-    sweepSources();
+    requestSourceSweep();
 }
 
 void cwExternalCenterlineManager::onWatchedFileChanged(const QString& path)

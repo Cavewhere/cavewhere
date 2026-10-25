@@ -77,6 +77,7 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineManager : public QObject
     Q_PROPERTY(cwAttachedCenterlinesModel* attachedCenterlinesModel READ attachedCenterlinesModel CONSTANT FINAL)
     Q_PROPERTY(cwExternalSourceStatusModel* sourceStatusModel READ sourceStatusModel CONSTANT FINAL)
     Q_PROPERTY(bool scanning READ isScanning NOTIFY scanningChanged FINAL)
+    Q_PROPERTY(bool sweepingSources READ isSweepingSources NOTIFY sweepingSourcesChanged FINAL)
 
 public:
     explicit cwExternalCenterlineManager(QObject* parent = nullptr);
@@ -326,6 +327,12 @@ public:
     // while this is true reads inputs the scan is about to replace.
     bool isScanning() const { return m_scanning; }
 
+    // True from the first source-sweep request until the last worker pass
+    // it led to, a queued re-run included, has installed or been dropped.
+    // sourceStatusModel() and watchedSourceFiles() are settled once it
+    // reads false.
+    bool isSweepingSources() const { return m_sweepingSources; }
+
     // Test helper: drains the scan pipeline (snapshot → worker → apply).
     // A solve the apply requested is the consumer's to drain.
     void waitToFinish();
@@ -343,6 +350,11 @@ signals:
     void solveNeeded();
 
     void scanningChanged();
+    void sweepingSourcesChanged();
+
+    // Emitted once per finished source-sweep worker pass, whether its
+    // result was installed or dropped as stale.
+    void sourcesSwept();
 
     // Emitted whenever the set of owners whose in-project copy is missing
     // changes, including the paths it names. QML re-reads
@@ -535,6 +547,21 @@ private:
 
     bool m_scanning = false;
     void setScanning(bool scanning);
+
+    bool m_sweepingSources = false;
+    void setSweepingSources(bool sweeping);
+
+    // The source sweep's pipeline state (requestSourceSweep): a pass queued
+    // for the next turn, a pass on the worker, and a re-run owed behind it.
+    bool m_sourceSweepQueued = false;
+    bool m_sourceSweepInFlight = false;
+    bool m_sourceSweepRerun = false;
+
+    // Bumped by invalidateSourceSweep(). A pass captures it at dispatch;
+    // the worker stops between files once it moves, and a pass whose
+    // generation moved installs nothing. Shared so the worker can read it.
+    std::shared_ptr<std::atomic<quint64>> m_sourceSweepGeneration =
+        std::make_shared<std::atomic<quint64>>(0);
 
     // Rows from the most recent scan apply; the rename rebuild reuses
     // their dep/warning counts so it never touches the disk.
@@ -836,14 +863,6 @@ private:
     // those stations as the file writes them (from m_ownerFixes).
     QHash<QUuid, QStringList> bareFixedStations() const;
 
-    // How ownerId's remembered source, fingerprinted as `stored` when it
-    // was copied, compares with that source on disk now. Reads the disk,
-    // and silently refreshes the stored stats when a stat-level difference
-    // turns out to be identical content, so the fast path goes quiet again.
-    cwExternalSourceStatusModel::Row
-    sourceStatusFor(const QUuid& ownerId,
-                    const cwExternalSourceRecord::SourceFingerprint& stored);
-
     // The whole answer to a source-side trigger — a watcher event, the
     // window regaining focus, a breadcrumb re-stamped: re-check every
     // remembered source into sourceStatusModel(), and arm m_sourceWatcher
@@ -852,9 +871,32 @@ private:
     // sourceStatusModel(); it copies nothing, requests no solve, and never
     // marks the project modified. Runs behind every scan apply too, so a
     // project open — which re-reads the attachments — sweeps the sources
-    // with it. Quiet-path cost is one stat per fingerprinted file; only a
-    // file whose size or mtime moved is read and hashed.
-    void sweepSources();
+    // with it.
+    //
+    // The pass is queued, so every trigger in one event-loop turn shares
+    // it. It snapshots each attached owner's breadcrumb by value, and a
+    // worker stats every fingerprinted file, hashes the files of an owner
+    // whose size or mtime moved, and collects the watch set;
+    // finishSourceSweep then installs the rows, arms the watcher and writes
+    // back refreshed stats when no invalidation landed while the pass ran.
+    // One pass runs at a time: a request during a pass queues one
+    // re-run behind it.
+    void requestSourceSweep();
+
+    // requestSourceSweep() after a change that makes any pass in flight
+    // stale (a breadcrumb stamped or cleared, an owner deleted, a scan
+    // applied): the stale pass stops early and installs nothing, so a
+    // Replace's new record is never overwritten with stats for the file it
+    // replaced.
+    void invalidateSourceSweep();
+
+    struct SourceSweepOwner;
+    struct SourceSweepResult;
+    static SourceSweepResult sweepSourceOwners(const QVector<SourceSweepOwner>& owners,
+                                               const std::function<bool()>& superseded);
+    // Installs `result` when `isCurrent` (no invalidation landed while it
+    // ran), then dispatches the owed re-run or ends the sweep.
+    void finishSourceSweep(const SourceSweepResult& result, bool isCurrent);
 
     // Re-arms `watcher` for `path` (the file that just fired) so we
     // continue to receive change events for it; on macOS the watcher
@@ -885,6 +927,8 @@ private slots:
     // A directory holding a remembered source changed — the event that
     // catches a source deleted, or written back after it was gone.
     void onSourceDirectoryChanged();
+
+    void runSourceSweep();
 
     // An object whose on-disk directory just finished moving — cwSaveLoad
     // emits this once a rename's move job has landed. Every attachment dir

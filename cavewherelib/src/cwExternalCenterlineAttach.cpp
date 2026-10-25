@@ -445,110 +445,122 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
                 [deferred, owner, createsRoot, saveLoadPtr, settingsPtr, scan, attachmentDir,
                  sourceFile]
                 (const Monad::ResultBase& reconcileResult) mutable {
-            if (!owner.isAlive() || settingsPtr.isNull()) {
-                deferred.complete(ReportResult(
-                    QStringLiteral("attach: owner was deleted mid-attach")));
-                return;
-            }
-
             // Verify with a fresh plan rather than bare existence: the
             // reconcile future completes Ok even when individual copy
             // jobs failed (errors go to the save-flush channel), and a
             // stale pre-existing destination would pass an exists()
             // check while holding old bytes. An empty copies list means
-            // every destination is present AND current.
-            const auto verifyPlan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
+            // every destination is present AND current. The plan stats
+            // every dependency and its copy, so it runs on a worker.
+            auto verifyFuture = QtConcurrent::run([scan, attachmentDir]() {
+                return cwExternalCenterlineSync::computePlan(scan, attachmentDir);
+            });
 
-            QStringList failures;
-            if (reconcileResult.hasError()) {
-                failures.append(reconcileResult.errorMessage());
-            }
-            for (const auto& [copySource, copyDestination] : verifyPlan.copies) {
-                failures.append(QStringLiteral("%1 was not copied to %2")
-                                    .arg(copySource, copyDestination));
-            }
-            // A dependency the plan omitted never becomes a pending copy, so
-            // the loop above cannot see it. The entry file still *includes
-            // it, though, which means the copy that landed references a file
-            // nothing brought into the project — an attachment that is
-            // broken the moment it is made. Fail rather than persist it.
-            failures += verifyPlan.warnings;
-
-            if (!failures.isEmpty()) {
-                // The model was never touched, so a failed attach leaves
-                // the owner exactly as it was. Partial files may remain
-                // on disk (the next reconcile's GC problem) and the
-                // project stays modified - the copy jobs already flipped
-                // the bit at enqueue. A root this attach created goes again,
-                // and its directory Remove job takes the partial copies.
-                if (createsRoot) {
-                    cwSurveyNode* parent = owner.node()->parentNode();
-                    const int row = parent->indexOfNode(owner.node());
-                    withoutUndo(parent, [parent, row]() { parent->removeNode(row); });
-                }
-                deferred.complete(ReportResult(
-                    QStringLiteral("attach: reconcile into the project failed:\n%1")
-                        .arg(failures.join(QLatin1Char('\n')))));
-                return;
-            }
-
-            // Set-model-on-success: flip the model only after the
-            // copies are verified on disk, so a crash mid-attach can
-            // never persist an attachment whose files were still in
-            // flight.
-            // The copy mirrors the source layout from the plan's base, so
-            // the entry is named by its path relative to that same base -
-            // a bare filename for the common flat case, a subpath when the
-            // closure reached above the entry's own directory. Reusing
-            // verifyPlan's base keeps attach and the planner on one answer.
-            // Replace and Reload rewrite the entry on the record the owner
-            // already holds, so the system chosen for its bare fixes stays;
-            // a first attach starts from an empty record, with none chosen.
-            cwExternalCenterline centerline = owner.externalCenterline();
-            centerline.setEntryFile(
-                QDir(verifyPlan.baseDir).relativeFilePath(scan.dependencies.first()));
-            owner.setExternalCenterline(centerline);
-
-            AttachReport report;
-            report.scan = scan;
-            report.persisted = owner.externalCenterline();
-            // verifyPlan.warnings are all omissions, and any of those failed
-            // the attach above, so only the scan's advisories reach here.
-            report.warnings = scan.warnings;
-            if (!owner.isNode()) {
-                report.metadata = seedTripMetadata(owner.trip(), scan.seededMetadata);
-                completeAttach(deferred, owner, settingsPtr, saveLoadPtr.data(), sourceFile,
-                               report);
-                return;
-            }
-
-            cwSurveyNode* root = owner.node();
-            ensureSourceRecord(root, scan.rows.first().kind);
-            report.warnings += writeManifest(attachmentDir, scan.rows);
-
-            // The future settles in the turn the last batch lands, so the
-            // manager's recompute and the solve it chains see the whole
-            // subtree.
-            cwSaveLoad* saveLoad = saveLoadPtr.data();
-            auto* fill = new cwSourceSubtreeFill(root, saveLoad);
-            QObject::connect(fill, &cwSourceSubtreeFill::finished, saveLoad,
-                    [deferred, owner, settingsPtr, saveLoad, sourceFile, report](bool installed) mutable {
-                if (!installed || !owner.isAlive()) {
-                    deferred.complete(ReportResult(
-                        QStringLiteral("attach: the source root left its region mid-attach")));
-                    return;
-                }
-                if (settingsPtr.isNull()) {
+            AsyncFuture::observe(verifyFuture).context(saveLoadPtr.data(),
+                    [deferred, owner, createsRoot, saveLoadPtr, settingsPtr, scan, attachmentDir,
+                     sourceFile, reconcileResult]
+                    (const cwExternalCenterlineSync::ReconcilePlan& verifyPlan) mutable {
+                if (!owner.isAlive() || settingsPtr.isNull()) {
                     deferred.complete(ReportResult(
                         QStringLiteral("attach: owner was deleted mid-attach")));
                     return;
                 }
-                report.root = owner.node();
-                completeAttach(deferred, owner, settingsPtr, saveLoad, sourceFile, report);
+                if (!owner.membershipIntact()) {
+                    deferred.complete(ReportResult(owner.membershipLostError()));
+                    return;
+                }
+
+                QStringList failures;
+                if (reconcileResult.hasError()) {
+                    failures.append(reconcileResult.errorMessage());
+                }
+                for (const auto& [copySource, copyDestination] : verifyPlan.copies) {
+                    failures.append(QStringLiteral("%1 was not copied to %2")
+                                        .arg(copySource, copyDestination));
+                }
+                // A dependency the plan omitted never becomes a pending copy, so
+                // the loop above cannot see it. The entry file still *includes
+                // it, though, which means the copy that landed references a file
+                // nothing brought into the project — an attachment that is
+                // broken the moment it is made. Fail rather than persist it.
+                failures += verifyPlan.warnings;
+
+                if (!failures.isEmpty()) {
+                    // The model was never touched, so a failed attach leaves
+                    // the owner exactly as it was. Partial files may remain
+                    // on disk (the next reconcile's GC problem) and the
+                    // project stays modified - the copy jobs already flipped
+                    // the bit at enqueue. A root this attach created goes again,
+                    // and its directory Remove job takes the partial copies.
+                    if (createsRoot) {
+                        cwSurveyNode* parent = owner.node()->parentNode();
+                        const int row = parent->indexOfNode(owner.node());
+                        withoutUndo(parent, [parent, row]() { parent->removeNode(row); });
+                    }
+                    deferred.complete(ReportResult(
+                        QStringLiteral("attach: reconcile into the project failed:\n%1")
+                            .arg(failures.join(QLatin1Char('\n')))));
+                    return;
+                }
+
+                // Set-model-on-success: flip the model only after the
+                // copies are verified on disk, so a crash mid-attach can
+                // never persist an attachment whose files were still in
+                // flight.
+                // The copy mirrors the source layout from the plan's base, so
+                // the entry is named by its path relative to that same base -
+                // a bare filename for the common flat case, a subpath when the
+                // closure reached above the entry's own directory. Reusing
+                // verifyPlan's base keeps attach and the planner on one answer.
+                // Replace and Reload rewrite the entry on the record the owner
+                // already holds, so the system chosen for its bare fixes stays;
+                // a first attach starts from an empty record, with none chosen.
+                cwExternalCenterline centerline = owner.externalCenterline();
+                centerline.setEntryFile(
+                    QDir(verifyPlan.baseDir).relativeFilePath(scan.dependencies.first()));
+                owner.setExternalCenterline(centerline);
+
+                AttachReport report;
+                report.scan = scan;
+                report.persisted = owner.externalCenterline();
+                // verifyPlan.warnings are all omissions, and any of those failed
+                // the attach above, so only the scan's advisories reach here.
+                report.warnings = scan.warnings;
+                if (!owner.isNode()) {
+                    report.metadata = seedTripMetadata(owner.trip(), scan.seededMetadata);
+                    completeAttach(deferred, owner, settingsPtr, saveLoadPtr.data(), sourceFile,
+                                   report);
+                    return;
+                }
+
+                cwSurveyNode* root = owner.node();
+                ensureSourceRecord(root, scan.rows.first().kind);
+                report.warnings += writeManifest(attachmentDir, scan.rows);
+
+                // The future settles in the turn the last batch lands, so the
+                // manager's recompute and the solve it chains see the whole
+                // subtree.
+                cwSaveLoad* saveLoad = saveLoadPtr.data();
+                auto* fill = new cwSourceSubtreeFill(root, saveLoad);
+                QObject::connect(fill, &cwSourceSubtreeFill::finished, saveLoad,
+                        [deferred, owner, settingsPtr, saveLoad, sourceFile, report](bool installed) mutable {
+                    if (!installed || !owner.isAlive()) {
+                        deferred.complete(ReportResult(
+                            QStringLiteral("attach: the source root left its region mid-attach")));
+                        return;
+                    }
+                    if (settingsPtr.isNull()) {
+                        deferred.complete(ReportResult(
+                            QStringLiteral("attach: owner was deleted mid-attach")));
+                        return;
+                    }
+                    report.root = owner.node();
+                    completeAttach(deferred, owner, settingsPtr, saveLoad, sourceFile, report);
+                });
+                fill->start(scan.rows,
+                            QStringLiteral("Attaching %1").arg(QFileInfo(sourceFile).fileName()),
+                            saveLoad->futureManagerToken());
             });
-            fill->start(scan.rows,
-                        QStringLiteral("Attaching %1").arg(QFileInfo(sourceFile).fileName()),
-                        saveLoad->futureManagerToken());
         });
     });
 
