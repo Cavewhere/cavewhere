@@ -17,6 +17,8 @@
 #include "cwRegionIOTask.h"
 #include "cwConcurrent.h"
 #include "cwTaskTrace.h"
+#include "cwProfileLog.h"
+#include "cwProfilePhase.h"
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
 #include "cwCavingRegion.h"
@@ -205,6 +207,11 @@ int stampVersionFor(const cwNoteLiDAR* note)
 int stampVersionFor(const cwSketch* sketch)
 {
     return sketch != nullptr ? stampVersionFor(sketch->parentTrip()) : kFlatProjectVersion;
+}
+
+cwProfilePhase loadPhase(const QString& name)
+{
+    return cwProfilePhase(lcProfileLoad(), QStringLiteral("project"), name);
 }
 
 // The geo-reference enums cross into the proto by static_cast, so their values
@@ -1670,6 +1677,8 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                 return AsyncFuture::completed(canceledResult());
             }
 
+            cwProfilePhase parsePhase = loadPhase(QStringLiteral("parse"));
+
             // Only an open reads the records: a sync apply keeps the
             // in-memory map, since .cw_local never travels through git.
             auto projectDataFuture = cwConcurrent::run([filename]() {
@@ -1689,7 +1698,9 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
             d->futureToken.addJob(projectDataFuture, QStringLiteral("Loading"));
 
             return AsyncFuture::observe(projectDataFuture)
-                    .context(this, cwTaskContextScope::wrap([this, projectDataFuture, filename, loadGeneration, canceledResult]() {
+                    .context(this, cwTaskContextScope::wrap([this, projectDataFuture, filename, loadGeneration, canceledResult, parsePhase]() mutable {
+                parsePhase.finish();
+
                 return mbind(projectDataFuture, [this, projectDataFuture, filename, loadGeneration, canceledResult](const ResultBase&) {
                     if (d->operationGeneration != loadGeneration
                             || d->retiring
@@ -1700,7 +1711,10 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     //The filename needs to be set first because, image providers should
                     //have the filename before the region model is set
                     setFileName(filename);
-                    initializeRepositoryForCurrentFile();
+                    {
+                        const cwProfilePhase phase = loadPhase(QStringLiteral("initializeRepository"));
+                        initializeRepositoryForCurrentFile();
+                    }
                     //A crash between a delete and a close leaves trash entries
                     //no undo stack can reach any more, so opening a project
                     //empties the trash.
@@ -1720,7 +1734,10 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     //already sees where they came from.
                     emit externalSourceRecordsLoaded(loadData.externalSources);
 
-                    d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
+                    {
+                        const cwProfilePhase phase = loadPhase(QStringLiteral("setData"));
+                        d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
+                    }
 
                     //What is on disk is what the project was just loaded from,
                     //so the rewrite pass starts from the file version the load

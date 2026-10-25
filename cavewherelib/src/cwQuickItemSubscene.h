@@ -9,9 +9,9 @@
 // exactly like ShaderEffectSource or QtQuick3D's Item2D content. Destruction
 // reverses it. All ref/deref must happen on the GUI thread.
 //
-// This is one of only two files in CaveWhere that touch Qt private API (the
-// other is cwItem2DRenderer). The QSGRootNode never leaks into this header — it
-// is handed out as an opaque quintptr handle.
+// This is one of only three files in CaveWhere that touch Qt private API (the
+// others are cwItem2DRenderer and cwQuickItemLayerTexture). The QSGRootNode
+// never leaks into this header — it is handed out as an opaque quintptr handle.
 
 //Qt includes
 #include <QPointer>

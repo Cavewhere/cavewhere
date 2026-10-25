@@ -265,6 +265,12 @@ TEST_CASE("cwProject::setAuthProvider same-instance guard and disconnect on repl
     MockAuthProvider mock1;
     MockAuthProvider mock2;
 
+    // The repository's status walk runs on a worker; let its status land
+    // before counting emissions.
+    REQUIRE(waitUntil([syncHealth]() {
+        return syncHealth->status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote;
+    }));
+
     // First assignment — connects mock1 signals to syncHealth.
     project.setAuthProvider(&mock1);
 

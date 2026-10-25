@@ -1,9 +1,9 @@
 // GUI-thread test for cwBillboardOverlayItem, the shared base that wires an
-// overlay item to the scene-owned billboard layer. Exercised through a minimal
+// overlay item to the scene-owned billboard layers. Exercised through a minimal
 // concrete subclass (the base is abstract): no QRhi is needed because every
-// effect — fetching the shared layer, pushing a billboard, refetching on a scene
-// swap — is observable on the GUI thread through cwRenderBillboards' public
-// surface. The cross-overlay sharing case is the #538 invariant in miniature.
+// effect — fetching a shared layer on first use, pushing a billboard, refetching
+// on a scene swap — is observable on the GUI thread through the layers' public
+// surfaces. The cross-overlay sharing case is the #538 invariant in miniature.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -14,7 +14,9 @@
 #include "cwBillboardHandle.h"
 #include "cwCamera.h"
 #include "cwRenderBillboards.h"
+#include "cwRenderSpriteBillboards.h"
 #include "cwScene.h"
+#include "cwSpriteBillboardHandle.h"
 
 #include <QMatrix4x4>
 
@@ -27,8 +29,10 @@ class TestOverlay : public cwBillboardOverlayItem
 public:
     using cwBillboardOverlayItem::cwBillboardOverlayItem;
     using cwBillboardOverlayItem::renderBillboards;
-    using cwBillboardOverlayItem::requestBillboardRender;
+    using cwBillboardOverlayItem::renderSpriteBillboards;
+    using cwBillboardOverlayItem::ensureRenderSpriteBillboards;
     using cwBillboardOverlayItem::setBillboard;
+    using cwBillboardOverlayItem::setSpriteBillboard;
 
     int repositionCount = 0;
 
@@ -54,9 +58,10 @@ QMatrix4x4 translatedView(float x)
 }
 }
 
-TEST_CASE("cwBillboardOverlayItem: setScene fetches the scene's shared layer", "[cwBillboardOverlayItem]")
+TEST_CASE("cwBillboardOverlayItem: the first setBillboard fetches the scene's shared layer", "[cwBillboardOverlayItem]")
 {
     QQuickWindow window;
+    auto content = std::make_unique<QQuickItem>(window.contentItem());
     TestOverlay overlay;
     overlay.setParentItem(window.contentItem());
     // The whole wiring hinges on window() resolving once parented into a window's
@@ -66,27 +71,156 @@ TEST_CASE("cwBillboardOverlayItem: setScene fetches the scene's shared layer", "
     cwScene scene;
     REQUIRE(overlay.renderBillboards() == nullptr);
 
+    // Attaching the scene fetches nothing: the item layer exists only for
+    // overlays that draw QQuickItem content.
     overlay.setScene(&scene);
+    REQUIRE(overlay.renderBillboards() == nullptr);
+    REQUIRE(scene.findChildren<cwRenderBillboards*>().isEmpty());
+
+    cwBillboardHandle handle;
+    overlay.setBillboard(handle, content.get(), QVector3D(1, 2, 3), 1.0f);
     REQUIRE(overlay.renderBillboards() == scene.billboardLayer());
+    REQUIRE(scene.billboardLayer()->window() == &window);
+}
+
+TEST_CASE("cwBillboardOverlayItem: an overlay that never calls setBillboard leaves the scene without an item layer", "[cwBillboardOverlayItem]")
+{
+    // A sprite-only overlay (the lead view) must cost the scene no per-item
+    // renderers: pushing sprites fetches the sprite layer and nothing else. (A
+    // text overlay in the same scene pulls in an empty item layer for draw
+    // order; that is pinned in test_cwScene_billboardLayer.cpp.)
+    QQuickWindow window;
+    TestOverlay overlay;
+    overlay.setParentItem(window.contentItem());
+
+    cwScene scene;
+    overlay.setScene(&scene);
+
+    cwSpriteBillboardHandle handle;
+    overlay.setSpriteBillboard(handle, QVector3D(1, 2, 3), 1.0f, 1.0f, true);
+    REQUIRE(handle.isValid());
+    REQUIRE(overlay.renderSpriteBillboards() == scene.spriteBillboardLayer());
+
+    CHECK(overlay.renderBillboards() == nullptr);
+    CHECK(scene.findChildren<cwRenderBillboards*>().isEmpty());
 }
 
 TEST_CASE("cwBillboardOverlayItem: overlays sharing a scene share one layer", "[cwBillboardOverlayItem]")
 {
-    // The #538 fix in miniature: a lead-like and a label-like overlay in the same
-    // scene must resolve to the SAME billboard layer so their billboards sort
+    // The #538 fix in miniature: two item-drawing overlays in the same scene
+    // must resolve to the SAME billboard layer so their billboards sort
     // back-to-front together.
     QQuickWindow window;
-    TestOverlay leadLike;
-    TestOverlay labelLike;
-    leadLike.setParentItem(window.contentItem());
-    labelLike.setParentItem(window.contentItem());
+    auto contentA = std::make_unique<QQuickItem>(window.contentItem());
+    auto contentB = std::make_unique<QQuickItem>(window.contentItem());
+    TestOverlay first;
+    TestOverlay second;
+    first.setParentItem(window.contentItem());
+    second.setParentItem(window.contentItem());
 
     cwScene scene;
-    leadLike.setScene(&scene);
-    labelLike.setScene(&scene);
+    first.setScene(&scene);
+    second.setScene(&scene);
 
-    REQUIRE(leadLike.renderBillboards() != nullptr);
-    REQUIRE(leadLike.renderBillboards() == labelLike.renderBillboards());
+    cwBillboardHandle handleA;
+    cwBillboardHandle handleB;
+    first.setBillboard(handleA, contentA.get(), QVector3D(1, 2, 3), 1.0f);
+    second.setBillboard(handleB, contentB.get(), QVector3D(4, 5, 6), 1.0f);
+
+    REQUIRE(first.renderBillboards() != nullptr);
+    REQUIRE(first.renderBillboards() == second.renderBillboards());
+    REQUIRE(scene.billboardLayer()->billboardCount() == 2);
+}
+
+TEST_CASE("cwBillboardOverlayItem: setSpriteBillboard adds then updates", "[cwBillboardOverlayItem]")
+{
+    QQuickWindow window;
+    TestOverlay overlay;
+    overlay.setParentItem(window.contentItem());
+
+    cwScene scene;
+    overlay.setScene(&scene);
+
+    // Attaching the scene fetches nothing; the first push fetches the sprite
+    // layer and binds it to the window, the way setBillboard does for items.
+    REQUIRE(overlay.renderSpriteBillboards() == nullptr);
+
+    cwSpriteBillboardHandle handle;
+    const float depthBias = 1.5f;
+    overlay.setSpriteBillboard(handle, QVector3D(1, 2, 3), depthBias, 1.0f, true);
+    REQUIRE(handle.isValid());
+
+    cwRenderSpriteBillboards* layer = overlay.renderSpriteBillboards();
+    REQUIRE(layer != nullptr);
+    REQUIRE(layer == scene.spriteBillboardLayer());
+    REQUIRE(layer->window() == &window);
+    REQUIRE(overlay.ensureRenderSpriteBillboards() == layer);
+    REQUIRE(layer->billboardCount() == 1);
+    REQUIRE(layer->hasBillboard(handle.id()));
+
+    auto instances = layer->buildInstances();
+    REQUIRE(instances.size() == 1);
+    CHECK(instances.at(0).worldPosition == QVector3D(1, 2, 3));
+    CHECK(instances.at(0).depthBias == depthBias);
+    CHECK(instances.at(0).opacity == 1.0f);
+
+    // A second push updates the same instance in place.
+    const float fadedOpacity = 0.6f;
+    const cwBillboardId id = handle.id();
+    overlay.setSpriteBillboard(handle, QVector3D(4, 5, 6), depthBias, fadedOpacity, true);
+    REQUIRE(handle.id() == id);
+    REQUIRE(layer->billboardCount() == 1);
+    instances = layer->buildInstances();
+    REQUIRE(instances.size() == 1);
+    CHECK(instances.at(0).worldPosition == QVector3D(4, 5, 6));
+    CHECK(instances.at(0).opacity == fadedOpacity);
+
+    // Hiding keeps the instance in the layer and out of the draw.
+    overlay.setSpriteBillboard(handle, QVector3D(4, 5, 6), depthBias, fadedOpacity, false);
+    REQUIRE(layer->billboardCount() == 1);
+    CHECK(layer->buildInstances().isEmpty());
+}
+
+TEST_CASE("cwBillboardOverlayItem: setSpriteBillboard carries the atlas slot", "[cwBillboardOverlayItem]")
+{
+    QQuickWindow window;
+    auto openSprite = std::make_unique<QQuickItem>(window.contentItem());
+    auto secondSprite = std::make_unique<QQuickItem>(window.contentItem());
+    const QSizeF spriteSize(20.0, 20.0);
+    openSprite->setSize(spriteSize);
+    secondSprite->setSize(spriteSize);
+
+    TestOverlay overlay;
+    overlay.setParentItem(window.contentItem());
+
+    cwScene scene;
+    overlay.setScene(&scene);
+
+    cwRenderSpriteBillboards* layer = scene.spriteBillboardLayer();
+    layer->setSprites({openSprite.get(), secondSprite.get()});
+    CHECK(layer->spriteCount() == 2);
+
+    const int secondSlot = 1;
+    cwSpriteBillboardHandle defaulted;
+    cwSpriteBillboardHandle second;
+    overlay.setSpriteBillboard(defaulted, QVector3D(1, 2, 3), 1.0f, 1.0f, true);
+    overlay.setSpriteBillboard(second, QVector3D(4, 5, 6), 1.0f, 1.0f, true, secondSlot);
+    REQUIRE(layer->billboardCount() == 2);
+
+    // Instances upload in id order, so the defaulted one comes first.
+    auto instances = layer->buildInstances();
+    REQUIRE(instances.size() == 2);
+    CHECK(instances.at(0).spriteIndex == 0u);
+    CHECK(instances.at(1).worldPosition == QVector3D(4, 5, 6));
+    CHECK(instances.at(1).spriteIndex == uint32_t(secondSlot));
+
+    // Changing only the slot is an update of the same instance.
+    const cwBillboardId id = second.id();
+    overlay.setSpriteBillboard(second, QVector3D(4, 5, 6), 1.0f, 1.0f, true, 0);
+    REQUIRE(second.id() == id);
+    instances = layer->buildInstances();
+    REQUIRE(instances.size() == 2);
+    CHECK(instances.at(1).spriteIndex == 0u);
 }
 
 TEST_CASE("cwBillboardOverlayItem: setBillboard pushes into the shared layer", "[cwBillboardOverlayItem]")
@@ -120,14 +254,12 @@ TEST_CASE("cwBillboardOverlayItem: setBillboard is a no-op without a scene", "[c
     cwBillboardHandle handle;
     overlay.setBillboard(handle, content.get(), QVector3D(1, 2, 3), 1.0f);
     REQUIRE_FALSE(handle.isValid());
-
-    // requestBillboardRender must not crash when there is no layer.
-    overlay.requestBillboardRender();
 }
 
 TEST_CASE("cwBillboardOverlayItem: a scene swap refetches the new scene's layer", "[cwBillboardOverlayItem]")
 {
     QQuickWindow window;
+    auto content = std::make_unique<QQuickItem>(window.contentItem());
     TestOverlay overlay;
     overlay.setParentItem(window.contentItem());
 
@@ -135,12 +267,20 @@ TEST_CASE("cwBillboardOverlayItem: a scene swap refetches the new scene's layer"
     cwScene sceneB;
 
     overlay.setScene(&sceneA);
+    cwBillboardHandle handle;
+    overlay.setBillboard(handle, content.get(), QVector3D(1, 2, 3), 1.0f);
     cwRenderBillboards* layerA = overlay.renderBillboards();
     REQUIRE(layerA == sceneA.billboardLayer());
 
+    // The swap drops the old layer; the next push fetches the new scene's.
     overlay.setScene(&sceneB);
+    REQUIRE(overlay.renderBillboards() == nullptr);
+    overlay.setBillboard(handle, content.get(), QVector3D(1, 2, 3), 1.0f);
     REQUIRE(overlay.renderBillboards() == sceneB.billboardLayer());
     REQUIRE(overlay.renderBillboards() != layerA);
+    // The handle moved its billboard across with it.
+    REQUIRE(sceneA.billboardLayer()->billboardCount() == 0);
+    REQUIRE(sceneB.billboardLayer()->billboardCount() == 1);
 }
 
 TEST_CASE("cwBillboardOverlayItem: setScene asks the subclass to reposition", "[cwBillboardOverlayItem]")
@@ -245,13 +385,19 @@ TEST_CASE("cwBillboardOverlayItem: moving to a new window rebinds the shared lay
 {
     cwScene scene;
     TestOverlay overlay;
+    cwBillboardHandle handle;
 
     {
         QQuickWindow window1;
+        auto content = std::make_unique<QQuickItem>(window1.contentItem());
         overlay.setParentItem(window1.contentItem());
         overlay.setScene(&scene);
+        overlay.setBillboard(handle, content.get(), QVector3D(1, 2, 3), 1.0f);
         REQUIRE(overlay.renderBillboards() == scene.billboardLayer());
         REQUIRE(scene.billboardLayer()->window() == &window1);
+        // The content lives in window1, so release its billboard before the
+        // window goes away.
+        handle.reset();
     }
 
     // Re-parenting into a second window must drive the shared layer's window to

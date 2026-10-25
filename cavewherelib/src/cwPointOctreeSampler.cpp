@@ -700,7 +700,8 @@ namespace {
 
 NativeSpacingEstimate measureNativeSpacing(const QVector<const QVector<SampledNode>*>& subtrees,
                                            const QVector<QVector3D>& neighbors,
-                                           const QVector3D& rootMin, double rootSize)
+                                           const QVector3D& rootMin, double rootSize,
+                                           const NodeProgress& onNode)
 {
     //Every node of every subtree in one flat list, so the workers share one
     //queue. A std::vector, so they write their own entries without a shared
@@ -718,7 +719,11 @@ NativeSpacingEstimate measureNativeSpacing(const QVector<const QVector<SampledNo
         const NativeSpacingIndex index(subtrees, neighbors, rootMin,
                                        rootSize > 0.0 ? rootSize : kEmptyIndexExtent);
         forEachIndexWithIdleThreads(qsizetype(nodes.size()), [&](qsizetype i) {
-            spacings[size_t(i)] = uncappedNativeSpacings(index, nodes.at(size_t(i))->points);
+            const QVector<QVector3D>& points = nodes.at(size_t(i))->points;
+            spacings[size_t(i)] = uncappedNativeSpacings(index, points);
+            if(onNode) {
+                onNode(points.size());
+            }
         });
 
         estimate.ceiling = columnCeiling(spacings);
@@ -760,11 +765,19 @@ QVector<SampledNode> buildSubtree(QVector<QVector3D> points,
                                   const QVector3D& rootMin,
                                   double rootSize,
                                   int leafMaxPoints,
-                                  int minSplitPoints)
+                                  int minSplitPoints,
+                                  const NodeProgress& onNode)
 {
     QVector<SampledNode> nodes;
 
+    const auto credit = [&onNode](qsizetype pointCount) {
+        if(onNode) {
+            onNode(pointCount);
+        }
+    };
+
     if(root.level >= kMaxLevel) {
+        credit(points.size());
         nodes.append(SampledNode{root, std::move(points)});
         return nodes;
     }
@@ -785,6 +798,7 @@ QVector<SampledNode> buildSubtree(QVector<QVector3D> points,
             ownSample.append(points);
             points = QVector<QVector3D>();
         }
+        credit(ownSample.size());
         if(points.isEmpty()) {
             nodes.append(SampledNode{root, std::move(ownSample)});
             return nodes;
@@ -816,7 +830,8 @@ QVector<SampledNode> buildSubtree(QVector<QVector3D> points,
                                           rootMin,
                                           rootSize,
                                           leafMaxPoints,
-                                          minSplitPoints);
+                                          minSplitPoints,
+                                          onNode);
         sampleSources.append(&childNodes[octant].first().points);
     }
 

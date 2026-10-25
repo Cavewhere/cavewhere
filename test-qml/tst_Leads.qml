@@ -99,6 +99,10 @@ MainWindowTest {
             compare(leadPoint0.scrapId, 2)
             compare(leadPoint0.pointIndex, 1)
 
+            // The popup anchors to the marker stand-in, the item sized to the sprite.
+            verify(quoteBox.pointAtObject === leadPoint0.marker,
+                   "popup should point at the lead's marker item")
+
             let description_obj1 = findChild(quoteBox, "description")
             tryVerify(() => {return description_obj1.text === "Walking"})
 
@@ -400,9 +404,10 @@ MainWindowTest {
 
         // #516: the 3D lead popup is a read-only summary (size label + status pill)
         // with an Edit button that flips it into the editable LeadInfoForm. The
-        // billboard/popup is not rendered under the offscreen platform, so this
-        // covers the view-mode chrome and the edit toggle; the field-editing and
-        // commit path is the shared LeadInfoForm, exercised in the 2D notes tests.
+        // sprite marker and popup are not rendered under the offscreen platform,
+        // so this covers the view-mode chrome and the edit toggle; the
+        // field-editing and commit path is the shared LeadInfoForm, exercised in
+        // the 2D notes tests.
         function test_editLeadInView3D() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
@@ -520,7 +525,7 @@ MainWindowTest {
 
         // #516: editing a lead's fields through the shared LeadInfoForm commits
         // back to the scrap. Driven through the 2D notes editor, which renders as
-        // normal QML (the 3D popup uses the same form but needs the RHI billboard).
+        // normal QML (the 3D popup uses the same form but needs the RHI sprite layer).
         function test_editLeadFieldsCommit() {
             let {scrap, leadIndex, widthText, heightText} = addNewLeadToScrap();
 
@@ -639,6 +644,64 @@ MainWindowTest {
             tryVerify(() => {
                 return ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox") === null;
             }, leadsTestCase.leadSelectTimeout, "popup should close on second tap")
+        }
+
+        // A completed lead hides its marker until it is selected, and a hidden
+        // marker is untappable: the marker's visible binding carries both the tap
+        // gate and the sprite instance's visible flag.
+        function test_completedUnselectedLeadIsUntappable() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
+                return leadPoint !== null;
+            }, leadsTestCase.leadSelectTimeout, "lead marker should exist");
+            verify(leadPoint.marker.visible, "an open lead shows its marker");
+            verify(leadPoint.marker.width > 0 && leadPoint.marker.height > 0,
+                   "the marker takes the sprite's size");
+
+            leadPoint.scrap.setLeadData(Scrap.LeadCompleted, leadPoint.pointIndex, true);
+            tryVerify(() => leadPoint.marker.visible === false, leadsTestCase.leadSelectTimeout,
+                      "a completed, unselected lead hides its marker");
+
+            // The tap must land on nothing, so a fixed wait is the only way to see
+            // that the selection stays clear.
+            mouseClick(leadPoint);
+            wait(250);
+            verify(!leadPoint.selected, "a completed lead should ignore the tap");
+            verify(leadPoint.selectionManager.selectedItem === null,
+                   "nothing should be selected after tapping a hidden marker");
+            verify(findChild(leadPoint, "leadQuoteBox") === null,
+                   "no popup should open for a hidden marker");
+        }
+
+        // The lead view's sprite atlas slots are a list named by the LeadSprite
+        // enum. The terrain view declares one slot, and every marker draws the
+        // open slot at that slot's size.
+        function test_leadSpriteSlots() {
+            compare(LeadView.OpenSprite, 0, "OpenSprite is atlas slot 0");
+            compare(LeadView.CompletedSprite, 1, "CompletedSprite is atlas slot 1");
+
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
+                return leadPoint !== null;
+            }, leadsTestCase.leadSelectTimeout, "lead marker should exist");
+
+            let leadView = leadPoint.leadView;
+            verify(leadView.sprites !== undefined, "LeadView exposes a sprites list");
+            compare(leadView.sprites.length, 1, "the terrain view declares one sprite slot");
+            compare(leadView.spriteSize.width, leadView.sprites[0].width,
+                    "spriteSize is slot 0's width");
+            compare(leadView.spriteSize.height, leadView.sprites[0].height,
+                    "spriteSize is slot 0's height");
+            compare(leadPoint.marker.spriteIndex, LeadView.OpenSprite,
+                    "a marker draws the open slot");
         }
 
         // 4a: a click on a lead hidden behind cave geometry must be ignored (the

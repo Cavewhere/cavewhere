@@ -10,6 +10,8 @@
 #include "cwRestarterTracking.h"
 #include "cwCavernRunner.h"
 #include "cwTaskTrace.h"
+#include "cwProfileLog.h"
+#include "cwProfilePhase.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
 #include "cwCave.h"
@@ -727,10 +729,12 @@ void cwLinePlotManager::startSolveAfterScan()
 
         const auto externalInputs = m_externalCenterlineManager->solveInputs();
         publishAttachedFixWarnings(externalInputs);
+        cwProfilePhase solvePhase(lcProfileLoad(), QStringLiteral("project"), QStringLiteral("solveKick"));
         auto input = cwLinePlotTask::buildInput(Region.data(), externalInputs);
         m_memberViewsMovedSinceSnapshot = false;
         cwTaskContextScope traceScope(QStringLiteral("lineplot"));
         auto worker = cwLinePlotTask::run(std::move(input));
+        solvePhase.finish();
         m_solveWorker = worker;
 
         // The restarter tracks the drain, not the worker, so the job lasts

@@ -5,6 +5,10 @@
 // isOccluded needs only a camera and a scene, so it runs here on the GUI thread
 // with no window, QRhi, or QML engine: the BVH is CPU-side and the billboard
 // plane is solved analytically.
+//
+// The sprite-slot cases at the end build a LeadView in QML over a one-lead
+// region, because LeadPoint markers come from QML. They read each lead's
+// instance back through the scene's sprite layer, still without a QRhi.
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -13,12 +17,29 @@
 // Qt
 #include <QMatrix4x4>
 #include <QPointF>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QQmlListReference>
+#include <QQuickItem>
+#include <QQuickWindow>
 #include <QRay3D>
 #include <QRect>
 #include <QVector3D>
 
+// Std
+#include <memory>
+
 // SUT
 #include "cwCamera.h"
+#include "cwCave.h"
+#include "cwCavingRegion.h"
+#include "cwLead.h"
+#include "cwNote.h"
+#include "cwRegionTreeModel.h"
+#include "cwRenderSpriteBillboards.h"
+#include "cwScrap.h"
+#include "cwSurveyNoteModel.h"
+#include "cwTrip.h"
 #include "cwGeometry.h"
 #include "cwGeometryItersecter.h"
 #include "TestGeometryBuilders.h"
@@ -186,4 +207,163 @@ TEST_CASE("cwLeadView does not occlude a lead in an empty scene",
     const QPointF tap = f.camera.project(leadPosition);
 
     CHECK_FALSE(f.leadView.isOccluded(leadPosition, tap));
+}
+
+namespace {
+
+constexpr int kSpriteViewportSize = 400;
+const QSizeF kOpenSpriteSize(20.0, 20.0);
+const QSizeF kCompletedSpriteSize(30.0, 12.0);
+
+// The one lead's LeadPoint: the first scrap's id is 1 and the lead's index 0.
+const QString kLeadPointName = QStringLiteral("leadPoint1_0");
+
+// A LeadView whose sprites list is @a spritesList, built from the openSprite
+// and completedSprite items it declares.
+QString leadViewQml(const QString& spritesList)
+{
+    return QStringLiteral(
+               "import QtQuick\n"
+               "import cavewherelib\n"
+               "Item {\n"
+               "  width: %1; height: %1\n"
+               "  LeadView {\n"
+               "    objectName: \"leadView\"\n"
+               "    anchors.fill: parent\n"
+               "    sprites: %2\n"
+               "    Item { id: openSprite; width: %3; height: %4 }\n"
+               "    Item { id: completedSprite; width: %5; height: %6 }\n"
+               "  }\n"
+               "}\n")
+        .arg(kSpriteViewportSize)
+        .arg(spritesList)
+        .arg(kOpenSpriteSize.width())
+        .arg(kOpenSpriteSize.height())
+        .arg(kCompletedSpriteSize.width())
+        .arg(kCompletedSpriteSize.height());
+}
+
+// One cave, trip, note and scrap holding one lead, under a region tree model,
+// with a QML LeadView over it in a window that is never shown.
+struct SpriteFixture
+{
+    cwCavingRegion region;
+    cwRegionTreeModel regionModel;
+    cwScene scene;
+    cwCamera camera;
+    QQmlEngine engine;
+    QQuickWindow window;
+    std::unique_ptr<QObject> root;
+    cwLeadView* leadView = nullptr;
+
+    explicit SpriteFixture(const QString& spritesList)
+    {
+        regionModel.setCavingRegion(&region);
+        auto* cave = new cwCave();
+        region.addCave(cave);
+        auto* trip = new cwTrip();
+        cave->addTrip(trip);
+
+        auto* scrap = new cwScrap();
+        cwLead lead;
+        lead.setDescription(QStringLiteral("Sprite slot lead"));
+        lead.setPositionOnNote(QPointF(0.5, 0.5));
+        scrap->addLead(lead);
+        auto* note = new cwNote();
+        note->addScrap(scrap);
+        trip->notes()->addNotes({note});
+
+        camera.setViewport(QRect(0, 0, kSpriteViewportSize, kSpriteViewportSize));
+        camera.setProjection(camera.orthoProjectionDefault());
+        window.resize(kSpriteViewportSize, kSpriteViewportSize);
+
+        QQmlComponent component(&engine);
+        component.setData(leadViewQml(spritesList).toUtf8(), QUrl());
+        root.reset(component.create());
+        INFO(component.errorString().toStdString());
+        REQUIRE(root != nullptr);
+        auto* rootItem = qobject_cast<QQuickItem*>(root.get());
+        REQUIRE(rootItem != nullptr);
+        rootItem->setParentItem(window.contentItem());
+
+        leadView = root->findChild<cwLeadView*>(QStringLiteral("leadView"));
+        REQUIRE(leadView != nullptr);
+        REQUIRE(leadView->window() == &window);
+
+        leadView->setScene(&scene);
+        leadView->setCamera(&camera);
+        leadView->setRegionModel(&regionModel);
+    }
+
+    QQuickItem* marker() const
+    {
+        auto* leadPoint = leadView->findChild<QQuickItem*>(kLeadPointName);
+        if (leadPoint == nullptr) {
+            return nullptr;
+        }
+        return leadPoint->property("marker").value<QQuickItem*>();
+    }
+};
+
+} // namespace
+
+TEST_CASE("cwLeadView names its sprite slots with the LeadSprite enum", "[cwLeadView][sprites]")
+{
+    CHECK(int(cwLeadView::OpenSprite) == 0);
+    CHECK(int(cwLeadView::CompletedSprite) == 1);
+}
+
+TEST_CASE("cwLeadView hands its sprites list to the scene's sprite layer", "[cwLeadView][sprites]")
+{
+    SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
+
+    CHECK(QQmlListReference(f.leadView, "sprites").count() == 2);
+    CHECK(f.leadView->spriteSize() == kOpenSpriteSize);
+
+    cwRenderSpriteBillboards* layer = f.scene.spriteBillboardLayer();
+    CHECK(layer->spriteCount() == 2);
+    CHECK(layer->spriteSize() == kOpenSpriteSize);
+
+    QQuickItem* marker = f.marker();
+    REQUIRE(marker != nullptr);
+    CHECK(marker->size() == kOpenSpriteSize);
+    CHECK(marker->property("spriteIndex").toInt() == int(cwLeadView::OpenSprite));
+
+    auto instances = layer->buildInstances();
+    REQUIRE(instances.size() == 1);
+    CHECK(instances.at(0).spriteIndex == uint32_t(cwLeadView::OpenSprite));
+
+    // The marker's spriteIndex picks the lead's slot as it changes.
+    REQUIRE(marker->setProperty("spriteIndex", int(cwLeadView::CompletedSprite)));
+    instances = layer->buildInstances();
+    REQUIRE(instances.size() == 1);
+    CHECK(instances.at(0).spriteIndex == uint32_t(cwLeadView::CompletedSprite));
+}
+
+TEST_CASE("cwLeadView drops a lead whose slot the sprites list lacks", "[cwLeadView][sprites]")
+{
+    SpriteFixture f(QStringLiteral("[openSprite]"));
+
+    cwRenderSpriteBillboards* layer = f.scene.spriteBillboardLayer();
+    CHECK(layer->spriteCount() == 1);
+
+    QQuickItem* marker = f.marker();
+    REQUIRE(marker != nullptr);
+    REQUIRE(layer->buildInstances().size() == 1);
+
+    REQUIRE(marker->setProperty("spriteIndex", int(cwLeadView::CompletedSprite)));
+    CHECK(layer->billboardCount() == 1);
+    CHECK(layer->buildInstances().isEmpty());
+}
+
+TEST_CASE("cwLeadView hands the layer an empty list when it goes", "[cwLeadView][sprites]")
+{
+    SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
+
+    cwRenderSpriteBillboards* layer = f.scene.spriteBillboardLayer();
+    CHECK(layer->spriteCount() == 2);
+
+    f.root.reset();
+    CHECK(layer->spriteCount() == 0);
+    CHECK(layer->sprites().isEmpty());
 }

@@ -34,6 +34,7 @@
 #include "cwPointOctreePack.h"
 #include "cwPointOctreeSampler.h"
 #include "cwProfileLog.h"
+#include "cwProfilePhase.h"
 #include "cwProgressReporter.h"
 #include "cwTask.h"
 
@@ -95,6 +96,15 @@ namespace {
     //point's spacing state.
     constexpr qint64 kPassBHaloBytesPerPoint = kTempBytesPerPoint + kPassBIndexEntryBytes;
 
+    //Pass B's cost per point over pass A's, which sizes its share of the
+    //progress bar: on a 76 M point tile pass A took 2.4 s and pass B 17-19 s
+    constexpr qint64 kPassBPointWeight = 8;
+
+    //The pass B stages that each credit every chunk point once: building the
+    //subtree, measuring native spacing and writing the nodes, which took
+    //roughly equal time per column
+    constexpr qint64 kPassBStageCount = 3;
+
     //Widens the cells a halo point's columns are looked for in, so a point a
     //rounding error from a column's widened box still reaches the exact test
     constexpr double kHaloCellSlack = 1e-6;
@@ -107,18 +117,10 @@ namespace {
 
     constexpr int kMapPollMs = 30;
 
-    //A build log line's field for @a milliseconds, in seconds
-    QString seconds(qint64 milliseconds)
+    //One pass of a build, as a "build <name> ..." line on cw.profile.load
+    cwProfilePhase buildProfilePhase(const QString& name)
     {
-        constexpr double kMillisecondsPerSecond = 1000.0;
-        constexpr int kSecondsPrecision = 3;
-        return QString::number(double(milliseconds) / kMillisecondsPerSecond, 'f', kSecondsPrecision);
-    }
-
-    //A build log line's elapsed field, in seconds
-    QString secondsSince(const QElapsedTimer& timer)
-    {
-        return seconds(timer.elapsed());
+        return cwProfilePhase(lcProfileLoad(), QStringLiteral("build"), name);
     }
 
     quint64 cellKey(const Cell& cell)
@@ -1016,6 +1018,10 @@ namespace {
             return result;
         }
 
+        const NodeProgress creditNode = [pointsDone = context.pointsDone](qsizetype pointCount) {
+            pointsDone->fetch_add(pointCount, std::memory_order_relaxed);
+        };
+
         QVector<QVector<SampledNode>> subtrees;
         subtrees.reserve(chunkTasks.size());
         for(const ChunkTask& task : chunkTasks) {
@@ -1024,7 +1030,8 @@ namespace {
                 return result;
             }
             subtrees.append(buildSubtree(std::move(points), task.cell, context.rootMin,
-                                         context.rootSize));
+                                         context.rootSize, kLeafMaxPoints, kMinSplitPoints,
+                                         creditNode));
         }
 
         //Every point of the column, its chunk roots' included, measures its
@@ -1042,7 +1049,7 @@ namespace {
             measured.append(&subtree);
         }
         NativeSpacingEstimate estimate =
-            measureNativeSpacing(measured, halo, context.rootMin, context.rootSize);
+            measureNativeSpacing(measured, halo, context.rootMin, context.rootSize, creditNode);
         halo = QVector<QVector3D>();
         result.localSpacingMilliseconds = localSpacingTimer.elapsed();
         result.localSpacingCappedPoints = estimate.cappedPoints;
@@ -1063,6 +1070,7 @@ namespace {
                 if(i == 0) {
                     chunkResult.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()),
                                                             0.0f, node.children});
+                    creditNode(node.points.size());
                     continue;
                 }
 
@@ -1085,6 +1093,7 @@ namespace {
                     result.errorMessage = context.writer->errorMessage();
                     return result;
                 }
+                creditNode(node.points.size());
             }
 
             chunkResult.rootPoints = std::move(subtree.first().points);
@@ -1092,8 +1101,6 @@ namespace {
             //The chunk's points are written, so it frees them before the next
             subtree = QVector<SampledNode>();
             nativeSpacings = QVector<QVector<float>>();
-            context.pointsDone->fetch_add(chunkTasks.at(chunk).pointCount,
-                                          std::memory_order_relaxed);
             result.chunks.append(std::move(chunkResult));
         }
 
@@ -1473,7 +1480,11 @@ namespace {
                 result.columns[finished.columnIndex] = std::move(column);
             }
 
-            progress.report(progressBase + context.pointsDone->load(std::memory_order_relaxed));
+            //Each stage credits every point once, and the stages share pass B's
+            //weighted span of the bar
+            progress.report(progressBase
+                            + context.pointsDone->load(std::memory_order_relaxed)
+                                  * kPassBPointWeight / kPassBStageCount);
 
             //A slot a column just freed is filled on the next turn rather than
             //after a sleep, so the pool waits only while every column still runs
@@ -1708,7 +1719,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             for(int level = 0; level < depth; level++) {
                 nodeCountEstimate *= kChildCount;
             }
-            Reporter progress(promise, 2 * npoints + nodeCountEstimate);
+            Reporter progress(promise,
+                              npoints + kPassBPointWeight * npoints + nodeCountEstimate);
 
             const auto fail = [&promise, &progress](const QString& message, int code) {
                 progress.dismiss();
@@ -1734,11 +1746,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
 
             const int workerCount = decodeWorkerCount(request, npoints, cheapSeeks);
 
-            QElapsedTimer buildTimer;
-            buildTimer.start();
-
-            QElapsedTimer passTimer;
-            passTimer.start();
+            cwProfilePhase buildPhase = buildProfilePhase(QStringLiteral("total"));
+            cwProfilePhase passPhase = buildProfilePhase(QStringLiteral("passA"));
 
             PassAResult passA = runPassA(request, sourceCS, root, depth, npoints,
                                          workerCount, tempPath, promise, progress);
@@ -1770,13 +1779,11 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 return;
             }
 
-            cw::profile::write(lcProfileLoad(),
-                               QStringLiteral("build passA points=%1 ranges=%2 workers=%3 seconds=%4")
-                                   .arg(passA.pointCount)
-                                   .arg(passA.rangeCount)
-                                   .arg(workerCount)
-                                   .arg(secondsSince(passTimer)));
-            passTimer.restart();
+            passPhase.addField(QStringLiteral("points"), passA.pointCount);
+            passPhase.addField(QStringLiteral("ranges"), passA.rangeCount);
+            passPhase.addField(QStringLiteral("workers"), workerCount);
+            passPhase.finish();
+            passPhase = buildProfilePhase(QStringLiteral("split"));
 
             //A cell over the cap is a pass B task no budget can admit beside
             //another, so it becomes eight cells a level deeper
@@ -1793,12 +1800,10 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 return;
             }
 
-            cw::profile::write(lcProfileLoad(),
-                               QStringLiteral("build split cells=%1 maxPoints=%2 seconds=%3")
-                                   .arg(split.cellsSplit)
-                                   .arg(chunkMaxPoints)
-                                   .arg(secondsSince(passTimer)));
-            passTimer.restart();
+            passPhase.addField(QStringLiteral("cells"), split.cellsSplit);
+            passPhase.addField(QStringLiteral("maxPoints"), chunkMaxPoints);
+            passPhase.finish();
+            passPhase = buildProfilePhase(QStringLiteral("halo"));
 
             QVector<ChunkTask> tasks;
             tasks.reserve(passA.parts.size());
@@ -1860,12 +1865,10 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             for(const ColumnTask& column : std::as_const(columns.columns)) {
                 haloPoints += column.haloPoints;
             }
-            cw::profile::write(lcProfileLoad(),
-                               QStringLiteral("build halo columns=%1 haloPoints=%2 seconds=%3")
-                                   .arg(columns.columns.size())
-                                   .arg(haloPoints)
-                                   .arg(secondsSince(passTimer)));
-            passTimer.restart();
+            passPhase.addField(QStringLiteral("columns"), columns.columns.size());
+            passPhase.addField(QStringLiteral("haloPoints"), haloPoints);
+            passPhase.finish();
+            passPhase = buildProfilePhase(QStringLiteral("passB"));
 
             PassBResult passB = runPassB(tasks, columns.columns, context, memoryBudgetBytes,
                                          promise, progress, passA.pointCount);
@@ -1892,21 +1895,15 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                                .arg(ceilingRange->first)
                                                .arg(ceilingRange->second)
                                          : QStringLiteral("none");
-            cw::profile::write(lcProfileLoad(),
-                               QStringLiteral("build passB chunks=%1 columns=%8 budgetBytes=%2 "
-                                              "inFlightPeakBytes=%3 seconds=%4 "
-                                              "localSpacingChunkSeconds=%5 "
-                                              "localSpacingCappedPoints=%6 "
-                                              "localSpacingCeilings=%7")
-                                   .arg(tasks.size())
-                                   .arg(memoryBudgetBytes)
-                                   .arg(passB.peakBytes)
-                                   .arg(secondsSince(passTimer))
-                                   .arg(seconds(localSpacingMilliseconds))
-                                   .arg(localSpacingCappedPoints)
-                                   .arg(ceilings)
-                                   .arg(columns.columns.size()));
-            passTimer.restart();
+            passPhase.addField(QStringLiteral("chunks"), tasks.size());
+            passPhase.addField(QStringLiteral("columns"), columns.columns.size());
+            passPhase.addField(QStringLiteral("budgetBytes"), memoryBudgetBytes);
+            passPhase.addField(QStringLiteral("inFlightPeakBytes"), passB.peakBytes);
+            passPhase.addField(QStringLiteral("localSpacingChunkMs"), localSpacingMilliseconds);
+            passPhase.addField(QStringLiteral("localSpacingCappedPoints"), localSpacingCappedPoints);
+            passPhase.addField(QStringLiteral("localSpacingCeilings"), ceilings);
+            passPhase.finish();
+            passPhase = buildProfilePhase(QStringLiteral("passC"));
 
             if(passB.errorCode != Monad::ResultBase::NoError) {
                 fail(passB.errorCode == Cancelled ? cancelledMessage : passB.errorMessage,
@@ -1946,6 +1943,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             //Pass C: every node the sampler pulls from is final only once its parent has sampled it
             QHash<quint64, TopNodeRecord> topNodes;
             qint64 nodesWritten = 0;
+            const qint64 passCProgressBase =
+                passA.pointCount + kPassBPointWeight * passA.pointCount;
 
             //What carrying pass B's native spacings through the top tree took
             QElapsedTimer topLocalSpacingTimer;
@@ -1965,7 +1964,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                 TopNodeRecord {quint32(node.points.size()),
                                                measureNodeSpacing(node.points)});
                 nodesWritten++;
-                progress.report(2 * passA.pointCount + nodesWritten);
+                progress.report(passCProgressBase + nodesWritten);
                 return true;
             };
 
@@ -2113,16 +2112,13 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 return;
             }
 
-            cw::profile::write(lcProfileLoad(),
-                               QStringLiteral("build passC nodes=%1 seconds=%2 "
-                                              "localSpacingSeconds=%3")
-                                   .arg(manifest.nodes.size())
-                                   .arg(secondsSince(passTimer))
-                                   .arg(seconds(topLocalSpacingMilliseconds)));
-            cw::profile::write(lcProfileLoad(),
-                               QStringLiteral("build total seconds=%1 peakRssBytes=%2")
-                                   .arg(secondsSince(buildTimer))
-                                   .arg(cw::profile::peakResidentBytes()));
+            passPhase.addField(QStringLiteral("nodes"), manifest.nodes.size());
+            passPhase.addField(QStringLiteral("localSpacingMs"), topLocalSpacingMilliseconds);
+            passPhase.finish();
+            if(buildPhase.logging()) {
+                buildPhase.addField(QStringLiteral("peakRssBytes"), cw::profile::peakResidentBytes());
+            }
+            buildPhase.finish();
 
             promise.addResult(Result(manifest));
         });

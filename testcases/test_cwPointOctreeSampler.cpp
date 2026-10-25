@@ -10,6 +10,7 @@
 //Std includes
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cmath>
 #include <limits>
@@ -891,6 +892,86 @@ TEST_CASE("buildSubtree defaults to kMinSplitPoints", "[PointOctree][PointOctree
     CHECK(sameTree(byDefault, named));
     CHECK(kMinSplitPoints > 0);
     CHECK(kMinSplitPoints <= kLeafMaxPoints);
+}
+
+namespace {
+    //Enough points that the passage builds several nodes, few enough that
+    //measuring every one stays quick
+    constexpr int kNodeProgressPointCount = 20000;
+    //Well under kNodeProgressPointCount, so the root and other crowded cells
+    //fill by sampling their children's points instead of sampling first
+    constexpr int kNodeProgressLeafMaxPoints = kLeafMaxPoints / 8;
+}
+
+TEST_CASE("buildSubtree tells its node progress each node's points, which add up to its input",
+          "[PointOctree][PointOctreeSampler]") {
+    const QVector<QVector3D> points = passagePoints(kNodeProgressPointCount, kPassageSeed);
+    const RootCube root = rootCubeOf(points);
+
+    qsizetype calls = 0;
+    qsizetype total = 0;
+    const NodeProgress onNode = [&](qsizetype pointCount) {
+        calls++;
+        total += pointCount;
+    };
+
+    REQUIRE(points.size() > kNodeProgressLeafMaxPoints);
+    const QVector<SampledNode> nodes = buildSubtree(points, Cell{0, 0, 0, 0}, root.minimum,
+                                                    root.size, kNodeProgressLeafMaxPoints,
+                                                    kMinSplitPoints, onNode);
+    REQUIRE(nodes.size() > 1);
+
+    CHECK(calls > 1);
+    CHECK(total == points.size());
+}
+
+TEST_CASE("measureNativeSpacing tells its node progress each node's points across every subtree, from any thread",
+          "[PointOctree][PointOctreeSampler]") {
+    const QVector<QVector3D> points = passagePoints(kNodeProgressPointCount, kPassageSeed);
+    const RootCube root = rootCubeOf(points);
+    const Cell rootCell {0, 0, 0, 0};
+    const QBox3D rootBounds = cellBounds(rootCell, root.minimum, root.size);
+
+    std::array<QVector<QVector3D>, kChildCount> octantPoints;
+    for(const QVector3D& point : points) {
+        octantPoints[octantOf(point, rootBounds)].append(point);
+    }
+
+    //One subtree per occupied octant, as a column hands pass B several chunks
+    QVector<QVector<SampledNode>> subtrees;
+    for(int octant = 0; octant < kChildCount; octant++) {
+        if(!octantPoints.at(octant).isEmpty()) {
+            subtrees.append(buildSubtree(octantPoints.at(octant), childCell(rootCell, octant),
+                                         root.minimum, root.size, kNodeProgressLeafMaxPoints));
+        }
+    }
+    REQUIRE(subtrees.size() > 1);
+
+    QVector<const QVector<SampledNode>*> measured;
+    qsizetype nodeCount = 0;
+    qsizetype expectedTotal = 0;
+    for(const QVector<SampledNode>& subtree : std::as_const(subtrees)) {
+        measured.append(&subtree);
+        nodeCount += subtree.size();
+        for(const SampledNode& node : subtree) {
+            expectedTotal += node.points.size();
+        }
+    }
+    REQUIRE(expectedTotal == points.size());
+
+    std::atomic<qsizetype> calls {0};
+    std::atomic<qsizetype> total {0};
+    const NodeProgress onNode = [&](qsizetype pointCount) {
+        calls.fetch_add(1, std::memory_order_relaxed);
+        total.fetch_add(pointCount, std::memory_order_relaxed);
+    };
+
+    const NativeSpacingEstimate estimate =
+        measureNativeSpacing(measured, {}, root.minimum, root.size, onNode);
+    REQUIRE(estimate.spacings.size() == subtrees.size());
+
+    CHECK(calls.load() == nodeCount);
+    CHECK(total.load() == expectedTotal);
 }
 
 // ---- WP13: per-point native spacing -------------------------------------------

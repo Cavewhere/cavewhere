@@ -246,6 +246,9 @@ Item {
         region: RootData.region
         keywordItemModel: RootData.keywordItemModel
         visible: RootData.stationsVisible
+        font.pixelSize: Theme.fontSizeUI
+        color: Theme.textInverse
+        outlineColor: Theme.text
     }
 
     LeadView {
@@ -257,6 +260,14 @@ Item {
         scene: rendererId.scene
         keywordItemModel: RootData.keywordItemModel
         visible: RootData.leadsVisible
+        sprites: [leadSprite]
+
+        // The one marker every lead draws (slot LeadView.OpenSprite). Referenced
+        // into the 3D pass as a texture, so it is hidden from the 2D tree.
+        Image {
+            id: leadSprite
+            source: "qrc:/icons/question.png"
+        }
 
         // Tap on empty space closes the open lead popup (dialog dismiss). Lead
         // items grab their taps exclusively, so this only fires off a lead.

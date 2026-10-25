@@ -2,11 +2,13 @@
 #define CWRENDERBILLBOARDS_H
 
 // Renders a set of live QQuickItems as depth-occluded billboards inside the
-// cwRhiScene 3D pass (issues #535 leads / #536 station labels). Each billboard
-// is a QML item placed at a world position; it depth-tests against cave
-// geometry and the point cloud, so a label behind a wall is hidden. Built on
-// the Phase-0 encapsulation classes (cwQuickItemSubscene + cwItem2DRenderer),
-// so no private Qt API leaks through this surface.
+// cwRhiScene 3D pass (issue #535). Each billboard is a QML item placed at a
+// world position; it depth-tests against cave geometry and the point cloud, so
+// an item behind a wall is hidden. Built on the Phase-0 encapsulation classes
+// (cwQuickItemSubscene + cwItem2DRenderer), so no private Qt API leaks through
+// this surface. Kept for overlays whose every billboard is a unique item; lead
+// markers draw through cwRenderSpriteBillboards and station labels through
+// cwRenderTextBillboards, so no producer feeds this layer today.
 //
 // Identity: billboards are added/updated/removed individually by a stable
 // cwBillboardId (returned by addBillboard). The render-side renderer cache is
@@ -29,6 +31,7 @@
 //Our includes
 #include "cwRenderObject.h"
 #include "cwBillboardId.h"
+#include "cwBillboardGeometry.h"
 
 //Qt includes
 #include <QVector3D>
@@ -42,18 +45,14 @@
 
 class QQuickItem;
 class QQuickWindow;
-class QMatrix4x4;
 class cwQuickItemSubscene;
 
 class CAVEWHERE_LIB_EXPORT cwRenderBillboards : public cwRenderObject
 {
     Q_OBJECT
 public:
-    enum class SizeMode {
-        WorldSized,      // scales with the 3D scene (a fixed world size)
-        ScreenConstant,  // fixed pixel size on screen regardless of distance
-    };
-    Q_ENUM(SizeMode)
+    // Shared with the text layer through cwBillboardGeometry.
+    using SizeMode = cwBillboardSizeMode;
 
     struct Billboard {
         QQuickItem* content = nullptr;
@@ -121,41 +120,14 @@ private:
     std::unordered_map<cwBillboardId, Entry> m_billboards;
 };
 
-// The camera's line of sight, resolved once per frame so biasing each billboard
-// costs no matrix work.
-//
-// Which line it is depends on the projection: under perspective it runs from the
-// billboard to the eye point, but under a parallel projection every billboard
-// shares one direction — the view axis — and the eye point is an arbitrary point
-// on it (the turntable parks it ~50 m from the pivot at any cave size). Offsetting
-// orthographic labels toward that point is what made them drown in the scraps,
-// issue #645. Either way the offset is screen-invariant.
-//
-// Pure (no QRhi), so it's unit-tested directly.
-class CAVEWHERE_LIB_EXPORT cwBillboardSightLine
-{
-public:
-    cwBillboardSightLine(const QMatrix4x4& view, const QMatrix4x4& projection);
-
-    // Shifts @a worldPosition toward the viewer by @a depthBias world units, so
-    // nearby geometry (a scrap surface the station sits on, the centerline) doesn't
-    // draw over the billboard's content.
-    QVector3D biasedPosition(const QVector3D& worldPosition, float depthBias) const;
-
-private:
-    QVector3D m_towardViewer;  // orthographic: the direction every billboard shares
-    QVector3D m_eye;           // perspective: the point every billboard aims at
-    bool m_orthographic;
-};
-
 // Sorts billboard render slots back-to-front (farthest from the eye first) by the
 // NDC depth of each slot's world position through @a viewProjection. Every quad
 // is a parallel, camera-facing plane, so center-depth order equals per-pixel
 // order everywhere on the quad — drawing in this order keeps an overlapping
 // billboard's transparent quad corners (which still write depth in RenderMode3D)
-// from rejecting the glyph pixels of a farther billboard behind it (#538). Stable,
-// so equal-depth billboards keep their insertion order. Pure (no QRhi), so it's
-// unit-tested directly.
+// from rejecting the glyph pixels of a farther billboard behind it (#538).
+// Equal-depth billboards order by ascending id. Forwards to
+// cw::billboard::sortBackToFront, which the text layer shares.
 void CAVEWHERE_LIB_EXPORT cwSortBillboardSlotsBackToFront(
     QVector<cwRenderBillboards::RenderSlot>& renderSlots,
     const QMatrix4x4& viewProjection);
