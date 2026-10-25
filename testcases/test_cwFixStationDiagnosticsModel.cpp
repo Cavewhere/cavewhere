@@ -231,18 +231,34 @@ TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole ignores surrounding whi
     CHECK_FALSE(fixture.stationError().isEmpty());
 }
 
-TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole defers a named fix when the network is empty",
+TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole flags a named fix in a cave with nothing to solve",
           "[FixStation][cwFixStationDiagnosticsModel]") {
-    // No survey network computed yet — a named fix can't be judged, so it must
-    // not cry wolf. An empty name is invalid regardless of the network, though.
+    // A cave with no named station in any trip never gets a solve, so its empty
+    // network is final and a named fix names nothing. An empty name is invalid
+    // regardless.
     FixFixture fixture;
-
-    // Empty name is flagged even before a network exists (the empty check runs
-    // before the "nothing to check against" deferral).
     CHECK_FALSE(fixture.stationError().isEmpty());
 
-    // A named fix defers while there's no network to match it against.
     fixture.edit(cwFixStationModel::StationNameRole, QStringLiteral("A1"));
+    CHECK_FALSE(fixture.stationError().isEmpty());
+
+    // The model learns of survey data through the network, so the first solve
+    // naming the station is what clears the row.
+    QSignalSpy proxySpy(fixture.diagnostics, &QAbstractItemModel::dataChanged);
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("a1"), QStringLiteral("a2"));
+    SurveyTreeTestHelper::setScopedNetwork(fixture.cave, network);
+    CHECK(rolesSeen(proxySpy).contains(cwFixStationDiagnosticsModel::StationErrorRole));
+    CHECK(fixture.stationError().isEmpty());
+}
+
+TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole defers a named fix while the trips await a solve",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    FixFixture fixture;
+    SurveyTreeTestHelper::addTripWithStations(fixture.cave, {QStringLiteral("a1")});
+    REQUIRE(fixture.cave->scopedNetwork().isEmpty());
+
+    fixture.edit(cwFixStationModel::StationNameRole, QStringLiteral("zzz"));
     CHECK(fixture.stationError().isEmpty());
 }
 

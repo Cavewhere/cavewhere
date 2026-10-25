@@ -17,6 +17,7 @@
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwSurveyNetwork.h"
+#include "SurveyTreeTestHelper.h"
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -28,6 +29,7 @@
 namespace {
 
 using StationReference = cwFixStationDiagnostics::StationReference;
+using SurveyData = cwFixStationDiagnostics::SurveyData;
 
 // An in-zone Colorado location in UTM 13N, and the same point with a transposed
 // leading digit on the easting — ~1000 km east of the zone, so its longitude
@@ -187,33 +189,122 @@ TEST_CASE("cwFixStationDiagnostics::classifyStationReference measures a name aga
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
 
     SECTION("A name in the network is Ok") {
-        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("A1"), network)
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("A1"), network,
+                                                                SurveyData::Stations)
               == StationReference::Ok);
     }
 
     SECTION("Matching is case-insensitive and ignores surrounding whitespace") {
-        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral(" a1 "), network)
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral(" a1 "), network,
+                                                                SurveyData::Stations)
               == StationReference::Ok);
     }
 
     SECTION("A name no station matches is Unknown") {
-        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("Z9"), network)
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("Z9"), network,
+                                                                SurveyData::Stations)
               == StationReference::Unknown);
     }
 
     SECTION("An empty or whitespace-only name is Empty") {
-        CHECK(cwFixStationDiagnostics::classifyStationReference(QString(), network)
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QString(), network,
+                                                                SurveyData::Stations)
               == StationReference::Empty);
-        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("  "), network)
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("  "), network,
+                                                                SurveyData::Stations)
               == StationReference::Empty);
     }
 
     SECTION("An empty network defers a named fix but still flags a blank one") {
         const cwSurveyNetwork empty;
-        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("Z9"), empty)
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("Z9"), empty,
+                                                                SurveyData::Stations)
               == StationReference::Ok);
-        CHECK(cwFixStationDiagnostics::classifyStationReference(QString(), empty)
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QString(), empty,
+                                                                SurveyData::Stations)
               == StationReference::Empty);
+    }
+
+    SECTION("An empty network flags a named fix when the node has nothing to solve") {
+        const cwSurveyNetwork empty;
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("A1"), empty,
+                                                                SurveyData::Nothing)
+              == StationReference::Unknown);
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("  "), empty,
+                                                                SurveyData::Nothing)
+              == StationReference::Empty);
+    }
+
+    SECTION("An empty network defers a named fix while a solve is still to come") {
+        const cwSurveyNetwork empty;
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("Z9"), empty,
+                                                                SurveyData::Stations)
+              == StationReference::Ok);
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("Z9"), empty,
+                                                                SurveyData::FromFile)
+              == StationReference::Ok);
+    }
+
+    SECTION("A non-empty network outranks the survey data") {
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("A1"), network,
+                                                                SurveyData::Nothing)
+              == StationReference::Ok);
+        CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("Z9"), network,
+                                                                SurveyData::FromFile)
+              == StationReference::Unknown);
+    }
+}
+
+TEST_CASE("cwFixStationDiagnostics::classifySurveyData says what a node's solve has to work with",
+          "[FixStation][cwFixStationDiagnostics]")
+{
+    cwCavingRegion region;
+    cwCave* cave = SurveyTreeTestHelper::addNode(&region, nullptr, cwSurveyNode::Kind::Cave,
+                                                 QStringLiteral("cave"));
+
+    SECTION("A bare cave has Nothing") {
+        CHECK(cwFixStationDiagnostics::classifySurveyData(*cave) == SurveyData::Nothing);
+    }
+
+    SECTION("A chunk station makes it Stations") {
+        SurveyTreeTestHelper::addTripWithStations(cave, {QStringLiteral("a1")});
+        CHECK(cwFixStationDiagnostics::classifySurveyData(*cave) == SurveyData::Stations);
+    }
+
+    SECTION("A chunk station in a child node makes it Stations") {
+        cwCave* child = SurveyTreeTestHelper::addNode(&region, cave, cwSurveyNode::Kind::Cave,
+                                                      QStringLiteral("child"));
+        SurveyTreeTestHelper::addTripWithStations(child, {QStringLiteral("a1")});
+        CHECK(cwFixStationDiagnostics::classifySurveyData(*cave) == SurveyData::Stations);
+    }
+
+    SECTION("A whitespace-only station name counts as Nothing") {
+        auto* trip = new cwTrip();
+        cave->addTrip(trip);
+        auto* chunk = new cwSurveyChunk();
+        trip->addChunk(chunk);
+        cwStation blank;
+        blank.setName(QStringLiteral("  "));
+        chunk->appendShot(blank, blank, cwShot());
+        REQUIRE(chunk->stationCount() > 0);
+        CHECK(cwFixStationDiagnostics::classifySurveyData(*cave) == SurveyData::Nothing);
+    }
+
+    SECTION("An externally backed child node with no chunk stations is FromFile") {
+        cwCave* child = SurveyTreeTestHelper::addNode(&region, cave, cwSurveyNode::Kind::Cave,
+                                                      QStringLiteral("child"));
+        child->setExternalCenterline(cwExternalCenterline(QStringLiteral("child.svx")));
+        REQUIRE(child->externallyBacked());
+        CHECK(cwFixStationDiagnostics::classifySurveyData(*cave) == SurveyData::FromFile);
+    }
+
+    SECTION("An externally backed trip under a native cave is FromFile") {
+        auto* trip = new cwTrip();
+        cave->addTrip(trip);
+        trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("trip.svx")));
+        REQUIRE(trip->externallyBacked());
+        REQUIRE_FALSE(cave->externallyBacked());
+        CHECK(cwFixStationDiagnostics::classifySurveyData(*cave) == SurveyData::FromFile);
     }
 }
 
