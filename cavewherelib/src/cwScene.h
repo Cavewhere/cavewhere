@@ -29,6 +29,7 @@
 #include "CaveWhereLibExport.h"
 class cwRenderObject;
 class cwRenderBillboards;
+class cwRenderSpriteBillboards;
 class cwRenderTextBillboards;
 class cwCamera;
 class cwShaderDebugger;
@@ -75,11 +76,19 @@ public:
     // (last writer wins), which stays a no-op only while they agree.
     cwRenderBillboards* billboardLayer();
 
+    // The one sprite billboard layer (lead markers: one instanced draw of one
+    // shared prototype texture) shared by every overlay in this scene, mirroring
+    // billboardLayer(). Its depth follows the marker's silhouette, so the layers
+    // drawn after it blend through the marker's transparent pixels.
+    cwRenderSpriteBillboards* spriteBillboardLayer();
+
     // The one text billboard layer (station labels) shared by every overlay in
-    // this scene, mirroring billboardLayer(). The item layer is registered before
-    // it whichever is requested first, so leads draw before labels in the Overlay
-    // pass: the layer drawn second is clipped by the first layer's quad depth, and
-    // a label behind a lead marker is the right one to lose pixels.
+    // this scene, mirroring billboardLayer(). The item and sprite layers are
+    // registered before it whichever is requested first, so leads draw before
+    // labels in the Overlay pass: a label's glyphs depth-test against the lead
+    // markers already drawn, showing through their transparent pixels and hidden
+    // by their ink, and the text layer's own quad-depth post-pass clips nothing
+    // because it runs last.
     cwRenderTextBillboards* textBillboardLayer();
 
     void setCamera(cwCamera* camera);
@@ -182,6 +191,7 @@ private:
     // The shared billboard overlay layer (see billboardLayer()); a render object
     // parented to the scene, created on first request.
     cwRenderBillboards* m_billboardLayer = nullptr;
+    cwRenderSpriteBillboards* m_spriteBillboardLayer = nullptr;
     cwRenderTextBillboards* m_textBillboardLayer = nullptr;
 
     // Offscreen render requests queued from the GUI thread, drained onto the

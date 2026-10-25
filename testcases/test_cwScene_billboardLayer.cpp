@@ -3,7 +3,9 @@
 // so their billboards sort back-to-front together (#538). The accessor's wiring
 // runs entirely on the GUI thread, so no QRhi is needed here. The text layer
 // (station labels) gets the same treatment, plus its draw order relative to the
-// item layer, read from the render-thread registry after a CPU-only synchroize.
+// item and sprite layers, read from the render-thread registry after a CPU-only
+// synchroize. The sprite layer (lead markers) is created only when requested and
+// registers before the text layer whichever is requested first.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -11,6 +13,7 @@
 
 #include "cwScene.h"
 #include "cwRenderBillboards.h"
+#include "cwRenderSpriteBillboards.h"
 #include "cwRenderTextBillboards.h"
 #include "cwBillboardOverlayItem.h"
 #include "cwRHIObject.h"
@@ -157,5 +160,81 @@ TEST_CASE("cwScene gathers the item billboard layer before the text layer", "[cw
         REQUIRE(itemIndex >= 0);
         REQUIRE(textIndex >= 0);
         CHECK(itemIndex < textIndex);
+    }
+}
+
+TEST_CASE("cwScene::spriteBillboardLayer returns one shared, scene-owned layer", "[cwScene]")
+{
+    cwScene scene;
+
+    cwRenderSpriteBillboards* layer = scene.spriteBillboardLayer();
+    REQUIRE(layer != nullptr);
+    REQUIRE(scene.spriteBillboardLayer() == layer);
+    REQUIRE(layer->parent() == &scene);
+    REQUIRE(layer->scene() == &scene);
+
+    // Requesting the sprite layer creates no item layer: a scene with only leads
+    // and labels never needs a per-item renderer.
+    CHECK(scene.findChildren<cwRenderBillboards*>().isEmpty());
+    CHECK(scene.findChildren<cwRenderTextBillboards*>().isEmpty());
+
+    // A separate layer from the others once they exist.
+    REQUIRE(static_cast<cwRenderObject*>(layer) != static_cast<cwRenderObject*>(scene.billboardLayer()));
+    REQUIRE(static_cast<cwRenderObject*>(layer) != static_cast<cwRenderObject*>(scene.textBillboardLayer()));
+}
+
+TEST_CASE("cwScene gathers the sprite layer before the text layer", "[cwScene]")
+{
+    // Labels depth-test against the lead markers, so the sprite layer must draw
+    // first whichever layer is requested first.
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    SECTION("text layer requested first")
+    {
+        cwRenderTextBillboards* textLayer = scene.textBillboardLayer();
+        REQUIRE(textLayer != nullptr);
+        cwRenderSpriteBillboards* spriteLayer = scene.spriteBillboardLayer();
+
+        CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+
+        const int spriteIndex = gatherIndex(rhiScene, spriteLayer);
+        const int textIndex = gatherIndex(rhiScene, textLayer);
+        REQUIRE(spriteIndex >= 0);
+        REQUIRE(textIndex >= 0);
+        CHECK(spriteIndex < textIndex);
+    }
+
+    SECTION("sprite layer requested first")
+    {
+        cwRenderSpriteBillboards* spriteLayer = scene.spriteBillboardLayer();
+        cwRenderTextBillboards* textLayer = scene.textBillboardLayer();
+        REQUIRE(textLayer != nullptr);
+
+        CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+
+        const int spriteIndex = gatherIndex(rhiScene, spriteLayer);
+        const int textIndex = gatherIndex(rhiScene, textLayer);
+        REQUIRE(spriteIndex >= 0);
+        REQUIRE(textIndex >= 0);
+        CHECK(spriteIndex < textIndex);
+    }
+
+    SECTION("the item layer stays ahead of both")
+    {
+        cwRenderTextBillboards* textLayer = scene.textBillboardLayer();
+        cwRenderSpriteBillboards* spriteLayer = scene.spriteBillboardLayer();
+        cwRenderBillboards* itemLayer = scene.billboardLayer();
+
+        CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+
+        const int itemIndex = gatherIndex(rhiScene, itemLayer);
+        const int spriteIndex = gatherIndex(rhiScene, spriteLayer);
+        const int textIndex = gatherIndex(rhiScene, textLayer);
+        REQUIRE(itemIndex >= 0);
+        REQUIRE(spriteIndex >= 0);
+        REQUIRE(textIndex >= 0);
+        CHECK(itemIndex < spriteIndex);
+        CHECK(spriteIndex < textIndex);
     }
 }

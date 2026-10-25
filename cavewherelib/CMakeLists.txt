@@ -451,7 +451,8 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
 # LinePlot reads a per-vertex unsigned-integer visibility attribute in the
 # vertex shader, which the legacy 120 / 100es targets reject (integer vertex
 # inputs need GLSL 150 / GLSL ES 300). Target those plus the usual HLSL SM5 /
-# MSL 1.2; Vulkan SPIR-V is always emitted.
+# MSL 1.2; Vulkan SPIR-V is always emitted. SpriteBillboard expands its quad
+# from gl_VertexIndex, which needs the same floor.
 qt_add_shaders(cavewherelib "cavewherelib_shaders_lineplot"
     PREFIX "/"
     GLSL "150,300es"
@@ -460,6 +461,8 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders_lineplot"
     FILES
         "shaders/LinePlot.frag"
         "shaders/LinePlot.vert"
+        "shaders/SpriteBillboard.frag"
+        "shaders/SpriteBillboard.vert"
     )
 
 # Second EDL.frag variant: same source, compiled with MSAA=1 so it samples the

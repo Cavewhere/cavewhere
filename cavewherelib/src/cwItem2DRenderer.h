@@ -5,11 +5,11 @@
 // pass, sharing that pass's depth buffer so the 2D content is occluded by 3D
 // geometry. This is the same mechanism QtQuick3D uses for its Item2D content.
 //
-// This is one of only two files in CaveWhere that touch Qt private API (the
-// other is cwQuickItemSubscene). Everything below the pimpl boundary
-// (QSGRenderer / QSGRenderTarget) is hidden; the public surface is plain Qt
-// public types. If a Qt upgrade breaks the private contract, this class's smoke
-// test fails rather than the whole renderer.
+// This is one of only three files in CaveWhere that touch Qt private API (the
+// others are cwQuickItemSubscene and cwQuickItemLayerTexture). Everything below
+// the pimpl boundary (QSGRenderer / QSGRenderTarget) is hidden; the public
+// surface is plain Qt public types. If a Qt upgrade breaks the private
+// contract, this class's smoke test fails rather than the whole renderer.
 
 //Qt includes
 #include <QMatrix4x4>
