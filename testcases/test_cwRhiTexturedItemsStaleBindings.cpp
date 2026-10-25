@@ -1,7 +1,8 @@
 // Real-QRhi reproduction of the multi-tile export crash: a streamed texture swap
 // that lands while an offscreen target rebuild has nulled the item's pipeline
 // record leaves its SRB pointing at the deleted texture, and the next live frame
-// draws with it. Needs a GPU-backed window; skips under the offscreen QPA.
+// draws with it. Needs a GPU-backed window; skips under the offscreen QPA and
+// when the window is hidden long enough to stop its frames.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -68,6 +69,7 @@ constexpr int kOutstandingJobs = 64;
 constexpr int kWaitTimeoutMs = 60000;
 constexpr int kPollIntervalMs = 2;
 constexpr int kSettleFrames = 60;
+constexpr int kHiddenGraceMs = 5000;
 
 template <typename Predicate>
 bool waitFor(Predicate predicate, int timeoutMs = kWaitTimeoutMs)
@@ -218,9 +220,31 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
     itemB.uniformBlock = cwRenderTexturedItems::emptyItemBlock();
     render->addItem(itemB);
 
+    // A covered window gets no frames, and offscreen jobs drain only inside live
+    // frames, so every wait below stalls until it is shown again. Skip once it has
+    // stayed hidden for the grace period; a stall while shown still fails. Catch2
+    // rejects a SKIP raised inside a REQUIRE, so each result lands in a local first.
+    const auto waitWhileShown = [&](const auto& predicate) {
+        QElapsedTimer hiddenFor;
+        bool met = false;
+        waitFor([&]() {
+            met = predicate();
+            if (window.isExposed()) {
+                hiddenFor.invalidate();
+            } else if (!hiddenFor.isValid()) {
+                hiddenFor.start();
+            }
+            return met || (hiddenFor.isValid() && hiddenFor.elapsed() > kHiddenGraceMs);
+        });
+        if (!met && !window.isExposed()) {
+            SKIP("the test window was hidden, so it stopped receiving frames");
+        }
+        return met;
+    };
+
     const auto framesFrom = [&](int count) {
         const int target = framesSwapped + count;
-        return waitFor([&]() {
+        return waitWhileShown([&]() {
             viewer->update();
             return framesSwapped >= target;
         });
@@ -228,12 +252,14 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
 
     // B's pinned base lands while nothing evicts, so its first swap is harmless:
     // the SRB it replaces only ever sampled the shared loading texture.
-    REQUIRE(waitFor([&]() {
+    const bool baseLanded = waitWhileShown([&]() {
         viewer->update();
         const auto counts = streamingFrame().counts;
         return counts.streamedItems == 2 && counts.loadsInFlight == 0;
-    }));
-    REQUIRE(framesFrom(kSettleFrames));
+    });
+    REQUIRE(baseLanded);
+    const bool settledBeforeTiles = framesFrom(kSettleFrames);
+    REQUIRE(settledBeforeTiles);
 
     // Every job looks only at A, alternating tile sizes, so each frame's offscreen
     // render rebuilds the scratch target and nulls B's pipeline record.
@@ -254,10 +280,11 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
     };
 
     // Let A reach its export level so tiles dispatch one per frame.
-    REQUIRE(waitFor([&]() {
+    const bool tilesWarmedUp = waitWhileShown([&]() {
         keepTilesFlowing();
         return jobsQueued > 4 * kOutstandingJobs;
-    }));
+    });
+    REQUIRE(tilesWarmedUp);
 
     // Now the live camera moves in on B. Its refinement loads off-thread and lands
     // in some live frame's streamResources, which always follows an evicting tile.
@@ -273,7 +300,7 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
     const quint64 revisionBeforeMove = streamingFrame().revision;
     setLiveCamera(viewer->camera(), kLiveNearDistance);
 
-    const bool refined = waitFor([&]() {
+    const bool refined = waitWhileShown([&]() {
         keepTilesFlowing();
         viewer->update();
         const auto frame = streamingFrame();
@@ -285,13 +312,15 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
 
     // The live frames that draw B after its swap are where a stale SRB binds a
     // freed QRhiTexture.
-    REQUIRE(framesFrom(kSettleFrames));
+    const bool settledAfterSwap = framesFrom(kSettleFrames);
+    REQUIRE(settledAfterSwap);
 
-    REQUIRE(waitFor([&]() {
+    const bool jobsDrained = waitWhileShown([&]() {
         jobs.removeIf([](const QFuture<QImage>& job) { return job.isFinished(); });
         viewer->update();
         return jobs.isEmpty();
-    }));
+    });
+    REQUIRE(jobsDrained);
 
     CHECK(refined);
     window.hide();
