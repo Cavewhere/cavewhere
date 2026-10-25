@@ -1916,8 +1916,8 @@ TEST_CASE("cwPointOctreeBuilder: a cancel in the split step leaves no manifest a
 
     QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
 
-    //Pass A writes its line as the split starts and the split writes its own
-    //only once it is through, so a cancel between the two lands in the split
+    //Pass A writes its line as the split starts, so a cancel after it lands in
+    //the split
     while(!future.isFinished() && !log.hasLineContaining(QStringLiteral("build passA"))) {
         QThread::msleep(kCancelPollMs);
     }
@@ -1925,10 +1925,12 @@ TEST_CASE("cwPointOctreeBuilder: a cancel in the split step leaves no manifest a
     future.cancel();
     future.waitForFinished();
 
-    //A build that split everything before the cancel reached it proves nothing
-    //about cancelling the split, so say so
+    //A split line carries its cells= field only when it ran to the end, so a
+    //build that split everything before the cancel reached it proves nothing
+    //about cancelling the split, and says so
     REQUIRE(log.hasLineContaining(QStringLiteral("build passA")));
-    REQUIRE_FALSE(log.hasLineContaining(QStringLiteral("build split")));
+    REQUIRE(log.hasLineContaining(QStringLiteral("build split")));
+    REQUIRE_FALSE(log.hasLineContaining(QStringLiteral("cells=")));
 
     //QPromise drops a result added after the cancel, so a delivered one is the only one to check
     const QList<cwPointOctreeBuilder::Result> results = future.results();

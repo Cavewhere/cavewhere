@@ -1,25 +1,17 @@
 #include "cwProjectSyncHealth.h"
 #include "cwRemoteAuthProvider.h"
 #include "cwProfileLog.h"
+#include "cwProfilePhase.h"
 
 #include "GitRemoteInfo.h"
 #include "GitRepository.h"
 
 #include "asyncfuture.h"
-#include <QElapsedTimer>
 #include <algorithm>
 #include <chrono>
 
-#include <MarkScope/Profiler.h>
-
 namespace {
 constexpr std::chrono::minutes kPollInterval{5};
-
-MarkScope::Profiler& gitProfiler()
-{
-    static MarkScope::Profiler instance(QStringLiteral("com.cavewhere.git"));
-    return instance;
-}
 }
 
 cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
@@ -169,26 +161,22 @@ void cwProjectSyncHealth::refresh()
         m_pollTimer.start();
     }
 
-    QElapsedTimer timer;
-    timer.start();
+    cwProfilePhase walk(lcProfileLoad(), QStringLiteral("project"), QStringLiteral("gitStatus"));
     const QPointer<QQuickGit::GitRepository> requested = m_repository;
     AsyncFuture::observe(m_repository->checkStatusAsync())
-        .context(this, [this, requested, timer]() {
+        .context(this, [this, requested, walk]() mutable {
             // The walk belongs to a repository that has since been replaced.
             if (requested.isNull() || requested != m_repository) {
                 return;
             }
-            cw::profile::write(lcProfileLoad(),
-                               QStringLiteral("project phase=gitStatus us=%1 modified=%2")
-                                   .arg(cw::profile::elapsedUs(timer))
-                                   .arg(m_repository->modifiedFileCount()));
+            walk.addField(QStringLiteral("modified"), m_repository->modifiedFileCount());
+            walk.finish();
             composeStatus();
         });
 }
 
 void cwProjectSyncHealth::composeStatus()
 {
-    const MarkScope::ScopedProfiler scope(gitProfiler(), QStringLiteral("composeStatus"));
     if (m_repository == nullptr) {
         setStatus(cwSyncStatus{
             .m_hasLocalChanges = false,

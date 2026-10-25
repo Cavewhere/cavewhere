@@ -23,12 +23,12 @@
 namespace {
 QStringList projectLines()
 {
-    return ProfileLogCapture::linesStartingWith(QStringLiteral("project phase="));
+    return ProfileLogCapture::linesStartingWith(QStringLiteral("project "));
 }
 
 QRegularExpression phasePattern(const QString& phase)
 {
-    return QRegularExpression(QStringLiteral("^project phase=%1 us=\\d+$").arg(phase));
+    return QRegularExpression(QStringLiteral("^project %1 us=\\d+$").arg(phase));
 }
 
 void addSurvey(cwCavingRegion* region)
@@ -109,6 +109,6 @@ TEST_CASE("Opening a native project writes one cw.profile.load line per load pha
 
     // Opening the repository runs the sync-health status walk.
     const QRegularExpression gitStatusPattern(
-        QStringLiteral("^project phase=gitStatus us=\\d+ modified=\\d+$"));
+        QStringLiteral("^project gitStatus us=\\d+ modified=\\d+$"));
     CHECK(!lines.filter(gitStatusPattern).isEmpty());
 }

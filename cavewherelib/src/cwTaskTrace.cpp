@@ -513,3 +513,8 @@ bool cwTaskIdleWindow::update(const cwTaskQuietState& state, qint64 nowMs)
     m_quietSinceMs = -1;
     return false;
 }
+
+MarkScope::Profiler& cwTaskProfiler()
+{
+    return profiler();
+}

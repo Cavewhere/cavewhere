@@ -34,6 +34,9 @@ struct cwTaskContext
 
 #include <MarkScope/Profiler.h>
 
+//! The signpost profiler every task interval and cwProfilePhase records on
+CAVEWHERE_LIB_EXPORT MarkScope::Profiler& cwTaskProfiler();
+
 //! RAII thread-local context tag. Scopes nest: the destructor restores the previous context.
 class CAVEWHERE_LIB_EXPORT cwTaskContextScope
 {

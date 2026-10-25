@@ -120,7 +120,7 @@ RecomposeMeasurement measureRecompose(int fileCount)
         },
         [&syncHealth]() { return syncHealth.status().hasLocalChanges(); });
     measurement.gitStatusLines =
-        ProfileLogCapture::linesStartingWith(QStringLiteral("project phase=gitStatus ")).size();
+        ProfileLogCapture::linesStartingWith(QStringLiteral("project gitStatus ")).size();
     measurement.modifiedCountChanges = modifiedSpy.count();
     return measurement;
 }
@@ -389,12 +389,12 @@ TEST_CASE("cwProjectSyncHealth writes a cw.profile.load line for each status wal
     syncStatus.setRepository(&repo);
     syncStatus.refresh();
 
-    const QString prefix = QStringLiteral("project phase=gitStatus ");
+    const QString prefix = QStringLiteral("project gitStatus ");
     REQUIRE(waitUntil([&prefix]() {
         return !ProfileLogCapture::linesStartingWith(prefix).isEmpty();
     }));
 
-    const QRegularExpression pattern(QStringLiteral("^project phase=gitStatus us=\\d+ modified=1$"));
+    const QRegularExpression pattern(QStringLiteral("^project gitStatus us=\\d+ modified=1$"));
     const QStringList lines = ProfileLogCapture::linesStartingWith(prefix);
     for (const QString& line : lines) {
         INFO("line: " << line.toStdString());
