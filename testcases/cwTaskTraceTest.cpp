@@ -101,6 +101,7 @@ cwTaskQuietState quietState()
     state.activeThreadCount = 0;
     state.queuedTaskCount = 0;
     state.runningTaskCount = 0;
+    state.redirtyPending = false;
     return state;
 }
 }
@@ -278,6 +279,12 @@ TEST_CASE("Quiet state requires all four idle conditions", "[cwTaskTrace]")
     SECTION("Running tasks") {
         cwTaskQuietState state = quietState();
         state.runningTaskCount = 1;
+        CHECK_FALSE(state.isQuiet());
+    }
+
+    SECTION("Redirty still to come") {
+        cwTaskQuietState state = quietState();
+        state.redirtyPending = true;
         CHECK_FALSE(state.isQuiet());
     }
 }

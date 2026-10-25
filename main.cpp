@@ -156,11 +156,15 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
                                         "Write the cw.profile.* lines to stderr.");
     QCommandLineOption profileTasksQuitOption("profile-tasks-quit",
                                               "Quit once the task trace reports the app idle.");
+    QCommandLineOption profileTasksRedirtyOption("profile-tasks-redirty",
+                                                 "Mark every scrap and LiDAR note dirty once, this many seconds after the project loads.",
+                                                 "seconds");
     parser.addOption(profileGpuBudgetOption);
     parser.addOption(profileSseOption);
     parser.addOption(profilePointBudgetOption);
     parser.addOption(profileLogOption);
     parser.addOption(profileTasksQuitOption);
+    parser.addOption(profileTasksRedirtyOption);
 
     // Adding optional filename argument
     parser.addPositionalArgument("filename", "The optional file to open.");
@@ -173,11 +177,17 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
     }
 
 #if CAVEWHERE_TASK_TRACE
-    cwTaskTrace::start(rootData, parser.isSet(profileTasksQuitOption));
+    cwTaskTrace::start(rootData,
+                       parser.isSet(profileTasksQuitOption),
+                       parser.value(profileTasksRedirtyOption).toDouble());
 #else
     if (parser.isSet(profileTasksQuitOption)) {
         //The runner waits for this build to quit on idle, which it never will, so leave right away
         fputs("--profile-tasks-quit: CaveWhere was built without task tracing\n", stderr);
+        QTimer::singleShot(0, &a, []() { QCoreApplication::exit(EXIT_FAILURE); });
+    }
+    if (parser.isSet(profileTasksRedirtyOption)) {
+        fputs("--profile-tasks-redirty: CaveWhere was built without task tracing\n", stderr);
         QTimer::singleShot(0, &a, []() { QCoreApplication::exit(EXIT_FAILURE); });
     }
 #endif

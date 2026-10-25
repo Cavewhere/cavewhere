@@ -21,6 +21,7 @@ import io
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -276,7 +277,7 @@ class ThreadPeakTests(unittest.TestCase):
             tasks.ThreadState(4 * MS, 6 * MS, 5, "Running"),
         ]
 
-        self.assertEqual(tasks.peak_threads_wanting_core(states), 3)
+        self.assertEqual(tasks.peak_threads_wanting_core(states), (3, {1, 2, 3}))
 
 
 def memory_event(time_ns, footprint, **args):
@@ -428,6 +429,41 @@ class HeaderTests(unittest.TestCase):
         self.assertEqual(tasks.cache_state(self.arguments(), "foo.cw"), "cold (bundle)")
         self.assertEqual(tasks.cache_state(self.arguments(), "marble.cwproj"), "warm")
         self.assertEqual(tasks.cache_state(self.arguments(cold=True), "marble.cwproj"), "cold")
+
+
+class RedirtyTests(unittest.TestCase):
+    def arguments(self, **values):
+        defaults = {"device": None, "build": "build", "cold": False, "runs": 3, "page": "View"}
+        defaults.update(values)
+        return tasks.argparse.Namespace(**defaults)
+
+    def test_app_arguments_pass_the_redirty_delay_through(self):
+        command = tasks.app_arguments(self.arguments(redirty=1.5), "marble.cwproj")
+
+        index = command.index("--profile-tasks-redirty")
+        self.assertEqual(command[index + 1], "1.5")
+
+    def test_app_arguments_leave_redirty_out_by_default(self):
+        self.assertNotIn("--profile-tasks-redirty",
+                         tasks.app_arguments(self.arguments(redirty=None), "marble.cwproj"))
+        self.assertNotIn("--profile-tasks-redirty",
+                         tasks.app_arguments(self.arguments(), "marble.cwproj"))
+
+    def test_header_records_the_redirty_delay(self):
+        head = dict(tasks.header(self.arguments(redirty=1.5), "marble.cwproj"))
+
+        self.assertEqual(head["Redirty after s"], "1.5")
+
+    def test_header_reports_none_without_a_redirty(self):
+        self.assertEqual(dict(tasks.header(self.arguments(), "marble.cwproj"))["Redirty after s"], "none")
+
+    def test_redirty_option_reads_seconds(self):
+        with unittest.mock.patch.object(tasks, "profile") as profile:
+            status = tasks.main(["--build", "build", "--project", "marble.cwproj",
+                                 "--out", "out", "--redirty", "2.5"])
+
+        self.assertEqual(status, 0)
+        self.assertEqual(profile.call_args.args[0].redirty, 2.5)
 
 
 class QueueWaitTests(unittest.TestCase):

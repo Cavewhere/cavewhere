@@ -9,9 +9,13 @@
 #include <QFuture>
 #include <QList>
 #include <QString>
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QEventLoop>
 
 //Std includes
 #include <algorithm>
+#include <functional>
 
 //Helpers for tests that watch AsyncFuture::limited() admit a pipeline's items
 
@@ -47,6 +51,22 @@ template <typename T>
 bool spinUntilSettled(const QList<QFuture<T>>& futures)
 {
     return spinUntilSettled(futures, []() {});
+}
+
+//One pass of spinFinelyUntil: short enough to stop between two hops of a run
+inline constexpr int kFineSpinSliceMs = 2;
+
+//Like waitUntil, but checks the condition every kFineSpinSliceMs, so a test can
+//act on a run's state before the run's next hop changes it
+inline bool spinFinelyUntil(const std::function<bool()>& condition, int timeoutMs)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while(!condition() && timer.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
+                                        kFineSpinSliceMs);
+    }
+    return condition();
 }
 
 inline bool hasActiveChild(const cwProgressNodePtr& root, const QString& name)

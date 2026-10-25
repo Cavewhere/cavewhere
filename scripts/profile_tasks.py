@@ -23,10 +23,12 @@ Python 3 standard library only.
 import argparse
 import bisect
 import collections
+import contextlib
 import dataclasses
 import json
 import os
 import platform
+import re
 import shutil
 import signal
 import statistics
@@ -65,6 +67,24 @@ PEAK_PLATEAU_FRACTION = 0.95
 # Thread states in which a thread wants a core
 WANTS_CORE_STATES = ("Running", "Runnable", "Preempted")
 WAITING_STATES = ("Runnable", "Preempted")
+
+THREAD_SUFFIX = re.compile(r"\s*\(0x[0-9a-f]+\).*$")
+PROCESS_SUFFIX = re.compile(r"\s*\(\d+\)$")
+# Qt names every QThreadPool worker "Thread (pooled)"; the task pool and the global pool share it
+POOL_THREAD = "Thread (pooled)"
+# A thread that carries the process name is a std::thread with no name:
+# basisu's job_pool, which libktx creates per encode
+MAIN_THREAD = "Main Thread"
+RENDER_THREAD = "QSGRenderThread"
+ENCODE_LANE_THREAD = "cw::ktx2::encodeLane"
+THREAD_GROUPS = [("main", "Main thread"), ("render", "Render thread"),
+                 ("encode_lane", "Encode lane"), ("pool", "Qt pool threads"),
+                 ("basisu", "basisu job_pool (process-named)"), ("other", "Other named threads")]
+THREAD_GROUP_METRICS = [("created", "Created"), ("running_s", "Running s"),
+                        ("waiting_s", "Runnable + Preempted s"), ("at_peak", "At the runnable peak")]
+
+RUN_KINDS = {"A": ("A",), "B": ("B",), "AB": ("A", "B")}
+DEFAULT_RUN_KINDS = "AB"
 
 TOP_STACKS = 3
 ALLOCATION_ROWS = 15
@@ -108,6 +128,8 @@ class ThreadState:
     end_ns: int
     tid: int
     state: str
+    name: str = ""
+    process: str = ""
 
 
 @dataclasses.dataclass
@@ -289,15 +311,28 @@ def parse_events(source, pid=None):
     return events
 
 
+def thread_name(thread, resolve):
+    """The thread's name as Instruments shows it, without the id and process suffix:
+    "QSGRenderThread (0x1a2b) (CaveWhere, pid: 42)" is "QSGRenderThread"."""
+    return THREAD_SUFFIX.sub("", resolve(thread).get("fmt") or "")
+
+
+def process_name(thread, resolve):
+    process = child(thread, "process", resolve)
+    return PROCESS_SUFFIX.sub("", process.get("fmt") or "") if process is not None else ""
+
+
 def parse_thread_states(source, pid=None):
     """The spans of a thread-state export, in file order."""
     states = []
     for row, resolve in export_rows(source):
         if not accepts(row_pid(row, "thread", resolve), pid):
             continue
+        thread = row.get("thread")
         start = integer(row.get("start"))
         states.append(ThreadState(start, start + integer(row.get("duration")),
-                                  thread_id(row.get("thread"), resolve), text(row.get("state"))))
+                                  thread_id(thread, resolve), text(row.get("state")),
+                                  thread_name(thread, resolve), process_name(thread, resolve)))
     return states
 
 
@@ -493,18 +528,59 @@ def load_metrics(folder):
 
 
 def peak_threads_wanting_core(states):
+    """The most threads wanting a core at once, and the threads at that moment."""
     edges = []
     for state in states:
         if state.state in WANTS_CORE_STATES:
-            edges.append((state.start_ns, 1))
-            edges.append((state.end_ns, -1))
+            edges.append((state.start_ns, True, state.tid))
+            edges.append((state.end_ns, False, state.tid))
     # An end sorts before a start at the same time
     edges.sort()
-    peak = current = 0
-    for _, step in edges:
-        current += step
-        peak = max(peak, current)
-    return peak
+    wanting = set()
+    peak, at_peak = 0, set()
+    for _, starts, tid in edges:
+        if starts:
+            wanting.add(tid)
+        else:
+            wanting.discard(tid)
+        if len(wanting) > peak:
+            peak, at_peak = len(wanting), set(wanting)
+    return peak, at_peak
+
+
+def thread_group(state):
+    if state.name == MAIN_THREAD:
+        return "main"
+    if state.name == RENDER_THREAD:
+        return "render"
+    if state.name == ENCODE_LANE_THREAD:
+        return "encode_lane"
+    if state.name == POOL_THREAD:
+        return "pool"
+    if state.name == state.process:
+        return "basisu"
+    return "other"
+
+
+def thread_metrics(states, at_peak):
+    """Per thread group: threads created, time Running, time waiting for a core,
+    and how many were wanting a core at the runnable peak."""
+    groups = {group: {"created": set(), "running_s": 0, "waiting_s": 0, "at_peak": 0}
+              for group, _ in THREAD_GROUPS}
+    for state in states:
+        values = groups[thread_group(state)]
+        values["created"].add(state.tid)
+        if state.state == "Running":
+            values["running_s"] += state.end_ns - state.start_ns
+        elif state.state in WAITING_STATES:
+            values["waiting_s"] += state.end_ns - state.start_ns
+    metrics = {}
+    for group, values in groups.items():
+        metrics["threads/{}/created".format(group)] = len(values["created"])
+        metrics["threads/{}/running_s".format(group)] = values["running_s"] / NS_PER_S
+        metrics["threads/{}/waiting_s".format(group)] = values["waiting_s"] / NS_PER_S
+        metrics["threads/{}/at_peak".format(group)] = len(values["created"] & at_peak)
+    return metrics
 
 
 def memory_events(events):
@@ -564,7 +640,8 @@ def analyze_timing(intervals, events, states, samples, cores):
 
     footprint, details["running_at_peak"] = footprint_metrics(events, intervals)
     metrics.update(footprint)
-    metrics["peak_threads_wanting_core"] = peak_threads_wanting_core(states)
+    metrics["peak_threads_wanting_core"], at_peak = peak_threads_wanting_core(states)
+    metrics.update(thread_metrics(states, at_peak))
     if cores is not None:
         metrics["cores"] = cores
     metrics["cpu_s"] = sum(sample.weight_ns for sample in samples) / NS_PER_S
@@ -647,7 +724,11 @@ def export(trace, xpath, output):
 
 
 def app_arguments(arguments, project):
-    return [project, "--page", arguments.page, "--profile-log", "--profile-tasks-quit"]
+    command = [project, "--page", arguments.page, "--profile-log", "--profile-tasks-quit"]
+    redirty = getattr(arguments, "redirty", None)
+    if redirty is not None:
+        command += ["--profile-tasks-redirty", str(redirty)]
+    return command
 
 
 def record_on_device(arguments, project, command, log):
@@ -716,10 +797,13 @@ def record(arguments, project, prefix):
         if instruments is ALLOCATIONS_INSTRUMENTS and not arguments.keep_traces:
             shutil.rmtree(trace)
 
-    run("A", TIME_PROFILER_INSTRUMENTS, RUN_A_TABLES, [])
-    run("B", ALLOCATIONS_INSTRUMENTS, RUN_B_TABLES, RUN_B_DETAILS)
+    kinds = RUN_KINDS[arguments.instruments]
+    if "A" in kinds:
+        run("A", TIME_PROFILER_INSTRUMENTS, RUN_A_TABLES, [])
+    if "B" in kinds:
+        run("B", ALLOCATIONS_INSTRUMENTS, RUN_B_TABLES, RUN_B_DETAILS)
 
-    if arguments.peak:
+    if arguments.peak and "B" in kinds:
         # Allocations slows the app, so B's own sampler places the peak
         with open(exported["B-os-signpost"], "rb") as source:
             events = parse_events(source, launched_pid(exported["B-toc"]))
@@ -757,6 +841,9 @@ def launched_pid(toc):
 
 
 def read_exports(exported, run):
+    """The parsed tables of one run kind; every table empty when it was not recorded."""
+    if run + "-toc" not in exported:
+        return {"intervals": [], "events": [], "states": [], "samples": []}
     pid = launched_pid(exported[run + "-toc"])
 
     def read(table, parser):
@@ -813,12 +900,19 @@ def header(arguments, project):
         ("Cores", cores),
         ("Thread count", settings["threadCount"]),
         ("Memory budget MB", settings["memoryBudgetMb"]),
+        ("App Nap", "disabled by the runner" if not arguments.device else UNKNOWN),
         ("Automatic update", settings["automaticUpdate"]),
         ("Build", str(arguments.build)),
         ("Project", project),
         ("Cache", cache_state(arguments, project)),
         ("Runs", str(arguments.runs)),
+        ("Redirty after s", redirty_label(arguments)),
     ]
+
+
+def redirty_label(arguments):
+    redirty = getattr(arguments, "redirty", None)
+    return "none" if redirty is None else str(redirty)
 
 
 def markdown(columns, rows):
@@ -870,14 +964,32 @@ WHOLE_RUN_ROWS = [
 
 FIRST_TASK_NOTE = ("First scraps and LiDAR task done is the end of the earliest task in that context: "
                    "the first stage of a chain, which can land well before the first mesh is delivered.\n")
+THREAD_NOTE = ("Qt pool threads are the task pool and the global pool together, which Qt both names "
+               "`Thread (pooled)`; basisu's job_pool threads, created per KTX2 encode, carry the process "
+               "name. Created counts distinct thread ids over the run, so a pool that expires and recreates "
+               "its workers counts each one.\n")
 BATCH_NOTE = ("Only `task` intervals are attributed. Each item of a cwConcurrent::map/mapped batch "
               "(such as the octree decode and halo passes) is a task named `map` or `mapped` on its "
               "worker, so it counts toward its context like a run() task; the enclosing `batch` interval "
               "only marks the submission span and is skipped.\n")
 
 
+def thread_report(timing):
+    """The UI-thread table: who wanted a core, and for how long."""
+    rows = []
+    for group, label in THREAD_GROUPS:
+        values = [summary(timing.get("threads/{}/{}".format(group, key), []))
+                  for key, _ in THREAD_GROUP_METRICS]
+        if any(value != "—" for value in values):
+            rows.append([label] + values)
+    return markdown(["Thread"] + [label for _, label in THREAD_GROUP_METRICS], rows)
+
+
 def project_report(head, timing, timing_details, memory, memory_details, allocations, peak_allocations):
     parts = ["## {}\n".format(dict(head)["Project"]), markdown(["", ""], head)]
+    if not timing:
+        parts.append(memory_report(memory, memory_details, allocations, peak_allocations))
+        return "\n".join(parts)
 
     parts.append("### Whole run (A)\n")
     parts.append(markdown(["Metric", "Median ± spread"],
@@ -917,7 +1029,17 @@ def project_report(head, timing, timing_details, memory, memory_details, allocat
         rows.append(row)
     parts.append(markdown([""] + contexts, rows))
 
-    parts.append("### Memory (B)\n")
+    parts.append("### Threads (A)\n")
+    parts.append(thread_report(timing))
+    parts.append(THREAD_NOTE)
+
+    if memory:
+        parts.append(memory_report(memory, memory_details, allocations, peak_allocations))
+    return "\n".join(parts)
+
+
+def memory_report(memory, memory_details, allocations, peak_allocations):
+    parts = ["### Memory (B)\n"]
     parts.append(markdown(["Metric", "Median ± spread"],
                           [(label, summary(memory.get(name, []))) for name, label in WHOLE_RUN_ROWS
                            if name in memory]))
@@ -951,13 +1073,30 @@ def live_by_caller(rows):
             for key, total in totals.most_common()]
 
 
-def profile(arguments):
-    out = Path(arguments.out)
-    out.mkdir(parents=True, exist_ok=True)
-    if not arguments.device:
-        sign(arguments.build)
+APP_NAP_KEY = "NSAppSleepDisabled"
 
-    cores = None if arguments.device else os.cpu_count()
+
+@contextlib.contextmanager
+def app_nap_disabled(arguments):
+    """macOS throttles an app whose window sits behind others (App Nap) to a background
+    scheduling class: a recording made that way runs its workers at priority 4 instead of
+    31, taking three times as long. The key is machine-wide, so the previous value is put
+    back when the recordings end."""
+    if arguments.device:
+        yield
+        return
+    previous = command_output("defaults", "read", DEFAULTS_DOMAIN, APP_NAP_KEY)
+    subprocess.run(["defaults", "write", DEFAULTS_DOMAIN, APP_NAP_KEY, "-bool", "YES"], check=True)
+    try:
+        yield
+    finally:
+        if previous:
+            subprocess.run(["defaults", "write", DEFAULTS_DOMAIN, APP_NAP_KEY, "-bool", previous], check=False)
+        else:
+            subprocess.run(["defaults", "delete", DEFAULTS_DOMAIN, APP_NAP_KEY], check=False)
+
+
+def record_projects(arguments, out, cores):
     all_metrics = {}
     sections = []
     for project in arguments.project:
@@ -985,6 +1124,18 @@ def profile(arguments):
         sections.append(project_report(header(arguments, project), timing, timing_details,
                                        memory, memory_details, allocations, peak_allocations))
 
+    return sections, all_metrics
+
+
+def profile(arguments):
+    out = Path(arguments.out)
+    out.mkdir(parents=True, exist_ok=True)
+    if not arguments.device:
+        sign(arguments.build)
+
+    cores = None if arguments.device else os.cpu_count()
+    with app_nap_disabled(arguments):
+        sections, all_metrics = record_projects(arguments, out, cores)
     write_metrics(out, all_metrics)
     (out / REPORT_FILE).write_text("# Task pool profile\n\n" + "\n".join(sections))
     print(out / REPORT_FILE)
@@ -1014,10 +1165,14 @@ def main(argv=None):
     parser.add_argument("--runs", type=int, default=DEFAULT_RUNS,
                         help="recordings per project and run kind")
     parser.add_argument("--page", default=DEFAULT_PAGE, help="the page to open the app on")
+    parser.add_argument("--redirty", type=float, default=None, metavar="SECONDS",
+                        help="mark every scrap and LiDAR note dirty once, this many seconds after the project loads")
     parser.add_argument("--keep-traces", action="store_true",
                         help="keep the Allocations .trace bundles after their tables are exported")
     parser.add_argument("--peak", action="store_true",
                         help="also record B′: run B again, stopped where run B peaked")
+    parser.add_argument("--instruments", choices=sorted(RUN_KINDS), default=DEFAULT_RUN_KINDS,
+                        help="which recordings to make: A (Time Profiler), B (Allocations) or both")
     parser.add_argument("--compare", nargs=2, metavar=("BASELINE", "AFTER"),
                         help="print the differences between two output folders")
     arguments = parser.parse_args(argv)

@@ -80,6 +80,9 @@ public:
 
     QVector<uint32_t> renderItemIds(cwNoteLiDAR* note) const;
 
+    //! The latest dispatched run's notes; default before the first run
+    AsyncFuture::Limited<cwTriangulateLiDARTask::Result> triangulationRun() const;
+
     // Map helpers, exposed for testing, shouldn't be used directly
     static cwTriangulateLiDARInData mapNoteToInData(const cwNoteLiDAR* note, const cwProject *project);
 
@@ -87,6 +90,11 @@ signals:
     void updateStateChanged();
     // Emitted after a successful triangulation batch completes
     void liDARNotesUpdated(const QList<cwNoteLiDAR*>& notes);
+
+public slots:
+    //Marks every LiDAR note in the region dirty and leaves the run to whoever
+    //drives the pipeline, like cwScrapManager::markAllScrapsDirty
+    void markAllLiDARNotesDirty();
 
 private slots:
     // Region tree wiring
@@ -160,6 +168,9 @@ private:
 
     cwFutureManagerToken m_futureManagerToken;
     AsyncFuture::Restarter<void> m_restarter;
+
+    // The latest dispatched run; a restart cancels it before starting the next
+    AsyncFuture::Limited<cwTriangulateLiDARTask::Result> m_triangulationRun;
 
     // The run's progress tree, and the job the task list watches. The run grows
     // it as it works, so nothing here declares how many steps a note takes.

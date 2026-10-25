@@ -153,9 +153,10 @@ cwNoteLiDARManager::~cwNoteLiDARManager()
     //value copies (note stations, model matrix, station lookup, network, glTF
     //path), so a worker that outlives this manager touches nothing that died
     //with it. Every per-note continuation is bound with context(this) and is
-    //dropped here, as is the combined completion; the workers themselves run
-    //to completion and their results go nowhere.
+    //dropped here, as is the combined completion; the workers stop at their
+    //next poll.
     m_restarter.future().cancel();
+    m_triangulationRun.cancel();
 
     //The row would otherwise outlive the run that feeds it
     if (m_progressRoot) {
@@ -647,6 +648,7 @@ QFuture<void> cwNoteLiDARManager::runBatch()
     m_restarter.restart([this, notes, inputs]() {
         m_runGeneration++;
         const quint64 generation = m_runGeneration;
+        m_triangulationRun.cancel();
         cwTaskContextScope traceScope(QStringLiteral("lidar"), generation);
 
         //One tree, and one row, per run. A restart abandons the previous run's
@@ -665,14 +667,14 @@ QFuture<void> cwNoteLiDARManager::runBatch()
             m_futureManagerToken.addJob(cwFuture(progressRoot->future(), kLiDARJobName, progressRoot));
         }
 
-        const auto limited = cwTriangulateLiDARTask::triangulate(this, inputs, progressRoot);
-        const auto& futures = limited.items;
+        m_triangulationRun = cwTriangulateLiDARTask::triangulate(this, inputs, progressRoot);
+        const QList<QFuture<cwTriangulateLiDARTask::Result>> futures = m_triangulationRun.items;
         Q_ASSERT(futures.size() == notes.size());
 
         for (int i = 0; i < futures.size(); i++) {
             //Deliver this note the moment it's triangulated, rather than
-            //waiting on the whole batch. A restart cancels the combine, leaving
-            //these futures running, so the generation check drops their results.
+            //waiting on the whole batch. A restart cancels this run; a result
+            //that lands anyway is dropped by the generation check.
             AsyncFuture::observe(futures.at(i))
                 .context(this, [this, note = notes.at(i), i, generation, future = futures.at(i)]() {
                     if (generation != m_runGeneration) {
@@ -687,7 +689,13 @@ QFuture<void> cwNoteLiDARManager::runBatch()
         }
 
         auto combine = AsyncFuture::combine() << futures;
-        return combine.context(this, [this, notes, progressRoot]() {
+        return combine.context(this, [this, notes, progressRoot, generation]() {
+            //The delivered meshes live in the render items; holding the run
+            //would keep a second copy of every mesh until the next restart
+            if (generation == m_runGeneration) {
+                m_triangulationRun = {};
+            }
+
             // Remove processed from dirty, clear deleted set entries
             for (cwNoteLiDAR* n : notes) {
                 m_dirtyNotes.remove(n);
@@ -890,6 +898,30 @@ NotePtrList cwNoteLiDARManager::notesFromModel(cwSurveyNoteLiDARModel* model)
     }
 
     return out;
+}
+
+AsyncFuture::Limited<cwTriangulateLiDARTask::Result> cwNoteLiDARManager::triangulationRun() const
+{
+    return m_triangulationRun;
+}
+
+void cwNoteLiDARManager::markAllLiDARNotesDirty()
+{
+    if (m_regionModel.isNull() || m_regionModel->cavingRegion() == nullptr) {
+        return;
+    }
+
+    for (cwCave* cave : m_regionModel->cavingRegion()->caves()) {
+        for (cwTrip* trip : cave->trips()) {
+            if (auto* model = trip->notesLiDAR()) {
+                for (cwNoteLiDAR* note : notesFromModel(model)) {
+                    markDirty(note);
+                }
+            }
+        }
+    }
+
+    emit updateStateChanged();
 }
 
 QVector<uint32_t> cwNoteLiDARManager::renderItemIds(cwNoteLiDAR* note) const
