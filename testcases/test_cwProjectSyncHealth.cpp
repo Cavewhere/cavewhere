@@ -2,10 +2,15 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Qt
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QRegularExpression>
+#include <QSignalSpy>
 #include <QTemporaryDir>
+
+// Std
+#include <algorithm>
 
 // Ours
 #include "cwProjectSyncHealth.h"
@@ -14,6 +19,7 @@
 #include "asyncfuture.h"
 #include "TestHelper.h"
 #include "ProfileLogCapture.h"
+#include "MainThreadStallHelpers.h"
 
 // libgit2
 #include "git2.h"
@@ -36,6 +42,87 @@ void writeFile(const QString& directoryPath, const QString& fileName, const QStr
     QFile file(QDir(directoryPath).filePath(fileName));
     REQUIRE(file.open(QFile::WriteOnly | QFile::Truncate | QFile::Text));
     file.write(contents.toUtf8());
+}
+
+constexpr qint64 kStaleStatOffsetSeconds = -3600;
+
+QString syntheticFileName(int index)
+{
+    return QStringLiteral("f%1.txt").arg(index);
+}
+
+// Commits through a repository that is gone before the test starts, so the
+// repository under test has no status walk in flight.
+void commitSyntheticWorkTree(const QString& path, int fileCount)
+{
+    Account account;
+    account.setName(QStringLiteral("Tester"));
+    account.setEmail(QStringLiteral("tester@example.com"));
+
+    GitRepository setup;
+    setup.setDirectory(QDir(path));
+    setup.initRepository();
+    setup.setAccount(&account);
+    for (int i = 0; i < fileCount; ++i) {
+        writeFile(path, syntheticFileName(i), QStringLiteral("line %1\n").arg(i));
+    }
+    CHECK_NOTHROW(setup.commitAll(QStringLiteral("Initial"), QStringLiteral("initial commit")));
+}
+
+// Moves every committed file's mtime to a whole second an hour back, so the
+// index stat cache disagrees and the next status walk re-hashes each file.
+void makeStatDataStale(const QString& path, int fileCount)
+{
+    const QDateTime past =
+        QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch() + kStaleStatOffsetSeconds);
+    for (int i = 0; i < fileCount; ++i) {
+        QFile file(QDir(path).filePath(syntheticFileName(i)));
+        REQUIRE(file.open(QFile::ReadWrite));
+        REQUIRE(file.setFileTime(past, QFileDevice::FileModificationTime));
+    }
+}
+
+struct RecomposeMeasurement
+{
+    qint64 longestStallMs = 0;
+    qsizetype gitStatusLines = 0;
+    qsizetype modifiedCountChanges = 0;
+};
+
+// Settles a sync health on a clean work tree of fileCount files, then adds one
+// file and refreshes the count through the repository alone.
+RecomposeMeasurement measureRecompose(int fileCount)
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString path = tempDir.path();
+    commitSyntheticWorkTree(path, fileCount);
+
+    GitRepository repo;
+    repo.setDirectory(QDir(path));
+    repo.initRepository();
+
+    cwProjectSyncHealth syncHealth;
+    syncHealth.setRepository(&repo);
+    REQUIRE(waitUntil([&syncHealth]() {
+        return syncHealth.status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote;
+    }));
+    REQUIRE(!syncHealth.status().hasLocalChanges());
+
+    QSignalSpy modifiedSpy(&repo, &GitRepository::modifiedFileCountChanged);
+    const ProfileLogCapture capture(QStringLiteral("cw.profile.load.debug=true"));
+
+    RecomposeMeasurement measurement;
+    measurement.longestStallMs = longestMainThreadStallUntil(
+        [&repo, &path]() {
+            writeFile(path, QStringLiteral("added.txt"), QStringLiteral("added\n"));
+            repo.checkStatusAsync();
+        },
+        [&syncHealth]() { return syncHealth.status().hasLocalChanges(); });
+    measurement.gitStatusLines =
+        ProfileLogCapture::linesStartingWith(QStringLiteral("project phase=gitStatus ")).size();
+    measurement.modifiedCountChanges = modifiedSpy.count();
+    return measurement;
 }
 } // namespace
 
@@ -313,6 +400,89 @@ TEST_CASE("cwProjectSyncHealth writes a cw.profile.load line for each status wal
         INFO("line: " << line.toStdString());
         CHECK(pattern.match(line).hasMatch());
     }
+}
+
+TEST_CASE("cwProjectSyncHealth refresh returns before the status lands", "[cwProjectSyncHealth]")
+{
+    constexpr int kFileCount = 32;
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    commitSyntheticWorkTree(tempDir.path(), kFileCount);
+    makeStatDataStale(tempDir.path(), kFileCount);
+
+    GitRepository repo;
+    repo.setDirectory(QDir(tempDir.path()));
+    repo.initRepository();
+
+    cwProjectSyncHealth syncHealth;
+    QSignalSpy statusSpy(&syncHealth, &cwProjectSyncHealth::statusChanged);
+    syncHealth.setRepository(&repo);
+    syncHealth.refresh();
+
+    CHECK(statusSpy.count() == 0);
+
+    REQUIRE(waitUntil([&statusSpy]() { return statusSpy.count() >= 1; }));
+    CHECK(syncHealth.status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote);
+    CHECK(!syncHealth.status().hasLocalChanges());
+}
+
+TEST_CASE("cwProjectSyncHealth runs no status walk inside initRepository and bounds the emissions",
+          "[cwProjectSyncHealth]")
+{
+    constexpr int kFileCount = 8;
+    constexpr qsizetype kMaxStatusChangesPerOpen = 2;
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    commitSyntheticWorkTree(tempDir.path(), kFileCount);
+    makeStatDataStale(tempDir.path(), kFileCount);
+    writeFile(tempDir.path(), QStringLiteral("untracked.txt"), QStringLiteral("untracked\n"));
+
+    // As in cwProject: the sync health holds the repository before the load opens it.
+    GitRepository repo;
+    repo.setDirectory(QDir(tempDir.path()));
+
+    cwProjectSyncHealth syncHealth;
+    syncHealth.setRepository(&repo);
+    REQUIRE(waitUntil([&syncHealth]() {
+        return syncHealth.status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote;
+    }));
+
+    QSignalSpy modifiedSpy(&repo, &GitRepository::modifiedFileCountChanged);
+    QSignalSpy statusSpy(&syncHealth, &cwProjectSyncHealth::statusChanged);
+
+    repo.initRepository();
+
+    CHECK(modifiedSpy.count() == 0);
+
+    REQUIRE(waitUntil([&syncHealth]() { return syncHealth.status().hasLocalChanges(); }));
+    REQUIRE(AsyncFuture::waitForFinished(repo.checkStatusAsync(), DefaultTimeoutMs));
+
+    CHECK(repo.modifiedFileCount() == 1);
+    CHECK(modifiedSpy.count() == 1);
+    CHECK(statusSpy.count() <= kMaxStatusChangesPerOpen);
+    CHECK(syncHealth.status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote);
+}
+
+TEST_CASE("cwProjectSyncHealth recomposes on a count change without another status walk",
+          "[cwProjectSyncHealth]")
+{
+    constexpr int kBaseFileCount = 64;
+    constexpr int kGrowthFactor = 4;
+    constexpr qint64 kGrowthRatio = 4;
+
+    const RecomposeMeasurement base = measureRecompose(kBaseFileCount);
+    const RecomposeMeasurement grown = measureRecompose(kBaseFileCount * kGrowthFactor);
+
+    CHECK(base.gitStatusLines == 0);
+    CHECK(grown.gitStatusLines == 0);
+    CHECK(base.modifiedCountChanges == 1);
+    CHECK(grown.modifiedCountChanges == 1);
+
+    INFO("base stall ms: " << base.longestStallMs << " grown stall ms: " << grown.longestStallMs);
+    CHECK(grown.longestStallMs
+          <= kGrowthRatio * std::max(base.longestStallMs, qint64(mainThreadStall::kFrameIntervalMs)));
 }
 
 TEST_CASE("cwSyncStatus operator== compares syncBlocker", "[cwSyncStatus]")
