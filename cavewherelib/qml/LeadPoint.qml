@@ -41,6 +41,9 @@ PositionItem {
     // marker is also untappable. Opacity has no 2D effect on an empty item.
     QQ.Item {
         id: hitTarget
+
+        property int spriteIndex: LeadView.OpenSprite
+
         width: pointId.leadView.spriteSize.width
         height: pointId.leadView.spriteSize.height
         anchors.centerIn: parent

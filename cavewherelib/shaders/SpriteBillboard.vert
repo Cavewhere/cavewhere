@@ -17,6 +17,8 @@ layout(location = 0) in vec3 iWorldPosition;
 // a wall is in front of it.
 layout(location = 1) in float iDepthBias;
 layout(location = 2) in float iOpacity;
+// The atlas slot this instance draws.
+layout(location = 3) in uint iSpriteIndex;
 
 layout(location = 0) out vec2 vUv;
 layout(location = 1) out float vOpacity;
@@ -31,9 +33,9 @@ layout(std140, binding = 0) uniform GlobalBlock {
 
 // Mirrors SpriteBlock in cwRenderSpriteBillboards.cpp.
 layout(std140, binding = 1) uniform SpriteBlock {
-    vec2 spriteSizePx;   // the prototype's size in logical pixels
+    vec2 spriteSizePx;   // every slot's shared size in logical pixels
     float sizeMode;      // kSizeModeWorldSized or screen constant
-    float pad;
+    float slotCount;     // cells in the atlas row
 };
 
 const float kSizeModeWorldSized = 0.0;
@@ -50,11 +52,12 @@ const float kMinProjectionScale = 1e-6;
 
 void main(void)
 {
-    // gl_VertexIndex 0..3 -> (0,0) (1,0) (0,1) (1,1), also the uv: the texture
-    // has an Image's orientation, so (0,0) is the content's top-left corner.
+    // gl_VertexIndex 0..3 -> (0,0) (1,0) (0,1) (1,1), also the uv within the
+    // slot's cell: the atlas has an Image's orientation, so (0,0) is the
+    // content's top-left corner. The cells sit side by side in one row.
     vec2 corner = vec2(float(gl_VertexIndex & 1), float(gl_VertexIndex >> 1));
     vec2 offsetPx = (corner - 0.5) * spriteSizePx;
-    vUv = corner;
+    vUv = vec2((float(iSpriteIndex) + corner.x) / slotCount, corner.y);
     vOpacity = iOpacity;
 
     vec4 viewPos = viewMatrix * vec4(iWorldPosition, 1.0);

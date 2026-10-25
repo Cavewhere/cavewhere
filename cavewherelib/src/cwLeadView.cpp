@@ -50,7 +50,7 @@ cwLeadView::~cwLeadView()
     // The scene's layer outlives this view; release the prototype so the layer
     // drops its subscene and texture of it.
     if(!m_spriteLayer.isNull()) {
-        m_spriteLayer->setSprite(nullptr);
+        m_spriteLayer->setSprites({});
     }
 }
 
@@ -442,6 +442,15 @@ QQuickItem* cwLeadView::createItem()
         const auto updateMarker = [this, item]() { updateMarkerBillboard(item); };
         connect(marker, &QQuickItem::opacityChanged, this, updateMarker);
         connect(marker, &QQuickItem::visibleChanged, this, updateMarker);
+
+        // spriteIndex is declared in QML, so its notifier is only reachable
+        // through the meta-object.
+        const QMetaObject* markerMeta = marker->metaObject();
+        const int signalIndex = markerMeta->indexOfSignal("spriteIndexChanged()");
+        if(signalIndex >= 0) {
+            const int slotIndex = staticMetaObject.indexOfSlot("markerSpriteIndexChanged()");
+            connect(marker, markerMeta->method(signalIndex), this, staticMetaObject.method(slotIndex));
+        }
     }
 
     return item;
@@ -515,63 +524,101 @@ void cwLeadView::scrapsRemoved(QModelIndex parent, int begin, int end)
 
 
 /**
- * @brief cwLeadView::sprite
- * @return The prototype item every lead marker draws, or null until QML sets it.
+ * @brief cwLeadView::sprites
+ * @return The atlas slots every lead marker can draw, in LeadSprite order.
  */
-QQuickItem* cwLeadView::sprite() const {
-    return m_sprite;
+QQmlListProperty<QQuickItem> cwLeadView::sprites() {
+    return QQmlListProperty<QQuickItem>(this, nullptr,
+                                        &cwLeadView::appendSprite,
+                                        &cwLeadView::spriteCount,
+                                        &cwLeadView::spriteAt,
+                                        &cwLeadView::clearSprites);
 }
 
-/**
- * @brief cwLeadView::setSprite
- *
- * Hands the prototype to the scene's sprite layer (once the layer exists; see
- * pushSpriteToLayer) and tracks its size so LeadPoint's tap target follows it.
- */
-void cwLeadView::setSprite(QQuickItem* sprite) {
-    if(m_sprite == sprite) {
+void cwLeadView::appendSprite(QQmlListProperty<QQuickItem>* list, QQuickItem* sprite) {
+    auto view = static_cast<cwLeadView*>(list->object);
+    view->m_sprites.append(sprite);
+    if(view->m_sprites.size() == 1 && sprite != nullptr) {
+        // Slot 0's size is the marker size LeadPoint's tap target follows.
+        connect(sprite, &QQuickItem::widthChanged, view, &cwLeadView::spriteSizeChanged);
+        connect(sprite, &QQuickItem::heightChanged, view, &cwLeadView::spriteSizeChanged);
+    }
+    view->spritesEdited();
+}
+
+qsizetype cwLeadView::spriteCount(QQmlListProperty<QQuickItem>* list) {
+    return static_cast<cwLeadView*>(list->object)->m_sprites.size();
+}
+
+QQuickItem* cwLeadView::spriteAt(QQmlListProperty<QQuickItem>* list, qsizetype index) {
+    return static_cast<cwLeadView*>(list->object)->m_sprites.at(index);
+}
+
+void cwLeadView::clearSprites(QQmlListProperty<QQuickItem>* list) {
+    auto view = static_cast<cwLeadView*>(list->object);
+    if(!view->m_sprites.isEmpty() && !view->m_sprites.at(0).isNull()) {
+        QQuickItem* sizeSource = view->m_sprites.at(0);
+        disconnect(sizeSource, &QQuickItem::widthChanged, view, &cwLeadView::spriteSizeChanged);
+        disconnect(sizeSource, &QQuickItem::heightChanged, view, &cwLeadView::spriteSizeChanged);
+    }
+    view->m_sprites.clear();
+    view->spritesEdited();
+}
+
+void cwLeadView::spritesEdited() {
+    m_spritesEdited = true;
+    // QML assigns a list as a clear plus one append per item; while the
+    // component is being created, componentComplete hands over the whole list once.
+    if(!isComponentComplete()) {
         return;
     }
-
-    if(!m_sprite.isNull()) {
-        disconnect(m_sprite, &QQuickItem::widthChanged, this, &cwLeadView::spriteSizeChanged);
-        disconnect(m_sprite, &QQuickItem::heightChanged, this, &cwLeadView::spriteSizeChanged);
-    }
-
-    m_sprite = sprite;
-
-    if(!m_sprite.isNull()) {
-        connect(m_sprite, &QQuickItem::widthChanged, this, &cwLeadView::spriteSizeChanged);
-        connect(m_sprite, &QQuickItem::heightChanged, this, &cwLeadView::spriteSizeChanged);
-    }
-
-    pushSpriteToLayer();
-    emit spriteChanged();
+    pushSpritesToLayer();
+    emit spritesChanged();
     emit spriteSizeChanged();
 }
 
 /**
  * @brief cwLeadView::spriteSize
- * @return The prototype's size in logical pixels; empty without a prototype.
+ * @return Slot 0's size in logical pixels; empty without a slot.
  */
 QSizeF cwLeadView::spriteSize() const {
-    if(m_sprite.isNull()) {
+    if(m_sprites.isEmpty() || m_sprites.at(0).isNull()) {
         return QSizeF();
     }
-    return QSizeF(m_sprite->width(), m_sprite->height());
+    const QQuickItem* sprite = m_sprites.at(0);
+    return QSizeF(sprite->width(), sprite->height());
 }
 
-void cwLeadView::pushSpriteToLayer() {
+void cwLeadView::pushSpritesToLayer() {
     cwRenderSpriteBillboards* layer = ensureRenderSpriteBillboards();
     if(layer == nullptr) {
         return;
     }
 
+    if(m_spriteLayer == layer && !m_spritesEdited) {
+        return;
+    }
+
     if(!m_spriteLayer.isNull() && m_spriteLayer != layer) {
-        m_spriteLayer->setSprite(nullptr);
+        m_spriteLayer->setSprites({});
     }
     m_spriteLayer = layer;
-    layer->setSprite(m_sprite);
+    m_spritesEdited = false;
+
+    // A destroyed sprite drops out, so the layer sees a list without nulls.
+    QList<QQuickItem*> sprites;
+    sprites.reserve(m_sprites.size());
+    for(const QPointer<QQuickItem>& sprite : std::as_const(m_sprites)) {
+        if(!sprite.isNull()) {
+            sprites.append(sprite.data());
+        }
+    }
+    layer->setSprites(sprites);
+}
+
+void cwLeadView::componentComplete() {
+    cwBillboardOverlayItem::componentComplete();
+    spritesEdited();
 }
 
 /**
@@ -583,7 +630,7 @@ void cwLeadView::pushSpriteToLayer() {
 * reprojected through updateItemPositions().
 */
 void cwLeadView::repositionBillboards() {
-    pushSpriteToLayer();
+    pushSpritesToLayer();
     updateItemPositions();
 }
 
@@ -638,7 +685,9 @@ void cwLeadView::addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* 
     QQuickItem* marker = item->property("marker").value<QQuickItem*>();
     const float opacity = marker != nullptr ? float(marker->opacity()) : 1.0f;
     const bool visible = marker != nullptr ? marker->isVisible() : item->isVisible();
-    setSpriteBillboard(entry.billboardHandles.at(index), worldPosition, kLeadDepthBias, opacity, visible);
+    const QVariant spriteIndex = marker != nullptr ? marker->property("spriteIndex") : QVariant();
+    const int slot = spriteIndex.isValid() ? spriteIndex.toInt() : int(OpenSprite);
+    setSpriteBillboard(entry.billboardHandles.at(index), worldPosition, kLeadDepthBias, opacity, visible, slot);
 }
 
 /**
@@ -667,6 +716,13 @@ void cwLeadView::updateMarkerBillboard(QQuickItem* item) {
     }
 
     addOrUpdateBillboard(entry, index, item, positionItem->position3D());
+}
+
+void cwLeadView::markerSpriteIndexChanged() {
+    auto marker = qobject_cast<QQuickItem*>(sender());
+    if(marker != nullptr) {
+        updateMarkerBillboard(marker->parentItem());
+    }
 }
 
 /**

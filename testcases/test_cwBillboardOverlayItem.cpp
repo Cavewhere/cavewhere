@@ -181,6 +181,48 @@ TEST_CASE("cwBillboardOverlayItem: setSpriteBillboard adds then updates", "[cwBi
     CHECK(layer->buildInstances().isEmpty());
 }
 
+TEST_CASE("cwBillboardOverlayItem: setSpriteBillboard carries the atlas slot", "[cwBillboardOverlayItem]")
+{
+    QQuickWindow window;
+    auto openSprite = std::make_unique<QQuickItem>(window.contentItem());
+    auto secondSprite = std::make_unique<QQuickItem>(window.contentItem());
+    const QSizeF spriteSize(20.0, 20.0);
+    openSprite->setSize(spriteSize);
+    secondSprite->setSize(spriteSize);
+
+    TestOverlay overlay;
+    overlay.setParentItem(window.contentItem());
+
+    cwScene scene;
+    overlay.setScene(&scene);
+
+    cwRenderSpriteBillboards* layer = scene.spriteBillboardLayer();
+    layer->setSprites({openSprite.get(), secondSprite.get()});
+    CHECK(layer->spriteCount() == 2);
+
+    const int secondSlot = 1;
+    cwSpriteBillboardHandle defaulted;
+    cwSpriteBillboardHandle second;
+    overlay.setSpriteBillboard(defaulted, QVector3D(1, 2, 3), 1.0f, 1.0f, true);
+    overlay.setSpriteBillboard(second, QVector3D(4, 5, 6), 1.0f, 1.0f, true, secondSlot);
+    REQUIRE(layer->billboardCount() == 2);
+
+    // Instances upload in id order, so the defaulted one comes first.
+    auto instances = layer->buildInstances();
+    REQUIRE(instances.size() == 2);
+    CHECK(instances.at(0).spriteIndex == 0u);
+    CHECK(instances.at(1).worldPosition == QVector3D(4, 5, 6));
+    CHECK(instances.at(1).spriteIndex == uint32_t(secondSlot));
+
+    // Changing only the slot is an update of the same instance.
+    const cwBillboardId id = second.id();
+    overlay.setSpriteBillboard(second, QVector3D(4, 5, 6), 1.0f, 1.0f, true, 0);
+    REQUIRE(second.id() == id);
+    instances = layer->buildInstances();
+    REQUIRE(instances.size() == 2);
+    CHECK(instances.at(1).spriteIndex == 0u);
+}
+
 TEST_CASE("cwBillboardOverlayItem: setBillboard pushes into the shared layer", "[cwBillboardOverlayItem]")
 {
     QQuickWindow window;

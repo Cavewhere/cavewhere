@@ -157,7 +157,8 @@ cwRenderSpriteBillboards* cwBillboardOverlayItem::ensureRenderSpriteBillboards()
 
 void cwBillboardOverlayItem::setSpriteBillboard(cwSpriteBillboardHandle& handle,
                                                 const QVector3D& worldPosition,
-                                                float depthBias, float opacity, bool visible) {
+                                                float depthBias, float opacity, bool visible,
+                                                int spriteIndex) {
     if(ensureRenderSpriteBillboards() == nullptr) {
         return;
     }
@@ -167,6 +168,7 @@ void cwBillboardOverlayItem::setSpriteBillboard(cwSpriteBillboardHandle& handle,
     billboard.depthBias = depthBias;
     billboard.opacity = opacity;
     billboard.visible = visible;
+    billboard.spriteIndex = spriteIndex;
 
     // Adds on first call, updates after; the handle removes it on teardown.
     handle.set(m_renderSpriteBillboards, billboard);

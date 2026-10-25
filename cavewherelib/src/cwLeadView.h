@@ -13,6 +13,7 @@
 #include <QPointer>
 #include <QModelIndex>
 #include <QQmlEngine>
+#include <QQmlListProperty>
 #include <QVector>
 #include <QVector3D>
 #include <QPointF>
@@ -39,11 +40,12 @@ class cwKeywordItemModel;
  * (computed by the carpeting algorithm). Following cwLabel3dView, the view
  * projects those world positions itself on each camera change and draws every
  * lead's marker as one instance of the scene's sprite layer
- * (cwRenderSpriteBillboards): one QML prototype, declared once and handed in
- * through the sprite property, rendered to a shared texture and drawn once for
- * all leads. The LeadPoint item stays as the invisible 2D layer that owns the
- * tap, selection, and popup; its "marker" item carries the visibility and
- * opacity each lead's instance draws with.
+ * (cwRenderSpriteBillboards): QML prototypes, declared once and handed in
+ * through the sprites property, rendered into one atlas and drawn once for all
+ * leads. The LeadPoint item stays as the invisible 2D layer that owns the tap,
+ * selection, and popup; its "marker" item carries the visibility, opacity and
+ * atlas slot (an optional spriteIndex property, a LeadSprite value) each lead's
+ * instance draws with.
  */
 class cwLeadView : public cwBillboardOverlayItem
 {
@@ -53,11 +55,21 @@ class cwLeadView : public cwBillboardOverlayItem
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionModel NOTIFY regionModelChanged)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager CONSTANT)
     Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel WRITE setKeywordItemModel NOTIFY keywordItemModelChanged)
-    Q_PROPERTY(QQuickItem* sprite READ sprite WRITE setSprite NOTIFY spriteChanged)
+    // The atlas slots every lead marker can draw. Slot order is the LeadSprite
+    // enum order. All slots share spriteSize (slot 0's size), the size of
+    // LeadPoint's tap target. A marker needing its own size or live content
+    // belongs on cwRenderBillboards, see cwBillboardOverlayItem::setBillboard.
+    Q_PROPERTY(QQmlListProperty<QQuickItem> sprites READ sprites NOTIFY spritesChanged)
     Q_PROPERTY(QSizeF spriteSize READ spriteSize NOTIFY spriteSizeChanged)
 
 
 public:
+    enum LeadSprite {
+        OpenSprite = 0,
+        CompletedSprite = 1
+    };
+    Q_ENUM(LeadSprite)
+
     cwLeadView(QQuickItem* parent = 0);
     ~cwLeadView() override;
 
@@ -66,11 +78,7 @@ public:
 
     cwSelectionManager* selectionManager() const;
 
-    // The one QML item every lead marker draws; its width and height in logical
-    // pixels are the marker size (spriteSize), which LeadPoint uses to size its
-    // tap target.
-    QQuickItem* sprite() const;
-    void setSprite(QQuickItem* sprite);
+    QQmlListProperty<QQuickItem> sprites();
     QSizeF spriteSize() const;
 
     cwKeywordItemModel* keywordItemModel() const;
@@ -97,17 +105,19 @@ public:
 signals:
     void regionModelChanged();
     void keywordItemModelChanged();
-    void spriteChanged();
+    void spritesChanged();
     void spriteSizeChanged();
 
 protected:
+    void componentComplete() override;
     void repositionBillboards() override;
 
 private:
     QPointer<cwRegionTreeModel> RegionModel; //!<
     cwSelectionManager* SelectionMananger;
-    QPointer<QQuickItem> m_sprite;
-    QPointer<cwRenderSpriteBillboards> m_spriteLayer; //!< the layer m_sprite was last handed to
+    QList<QPointer<QQuickItem>> m_sprites;
+    QPointer<cwRenderSpriteBillboards> m_spriteLayer; //!< the layer m_sprites was last handed to
+    bool m_spritesEdited = true; //!< m_sprites changed since it was last handed to m_spriteLayer
 
     struct ScrapEntry {
         int scrapLeadId = -1;
@@ -146,11 +156,18 @@ private:
 
     QString qmlSource() const;
 
-    // Hands the sprite prototype to the scene's sprite layer once both exist,
-    // taking it back from the layer of a previous scene first so that layer
-    // drops its subscene and texture of it. Cheap to call on every reposition:
-    // the layer early-outs on an unchanged sprite.
-    void pushSpriteToLayer();
+    static void appendSprite(QQmlListProperty<QQuickItem>* list, QQuickItem* sprite);
+    static qsizetype spriteCount(QQmlListProperty<QQuickItem>* list);
+    static QQuickItem* spriteAt(QQmlListProperty<QQuickItem>* list, qsizetype index);
+    static void clearSprites(QQmlListProperty<QQuickItem>* list);
+    void spritesEdited();
+
+    // Hands the sprite slots to the scene's sprite layer once both exist,
+    // taking them back from the layer of a previous scene first so that layer
+    // drops its subscenes and textures of them. Cheap to call on every
+    // reposition: it returns early unless the list was edited or the layer
+    // changed, so a destroyed sprite keeps its slot in the layer.
+    void pushSpritesToLayer();
 
     void addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* item, const QVector3D& worldPosition);
 
@@ -159,6 +176,10 @@ private:
     void updateMarkerBillboard(QQuickItem* item);
 
 private slots:
+    // The sending marker's QML-declared spriteIndex changed; its parent is the
+    // LeadPoint.
+    void markerSpriteIndexChanged();
+
     void scrapsAdded(QModelIndex parent, int begin, int end);
     void scrapsRemoved(QModelIndex parent, int begin, int end);
     void updateItemPositions();

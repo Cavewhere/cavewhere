@@ -62,8 +62,8 @@ public:
 
     // Renders the subtree when it changed since the last call. Records its own
     // render pass on the current frame's command buffer, so call it outside any
-    // open pass (from gather).
-    void updateTexture();
+    // open pass (from gather). True when the layer rendered this call.
+    bool updateTexture();
 
     // The texture of the last updateTexture(). Null before the first one. The
     // pointer changes when the layer resizes, so callers compare it each frame

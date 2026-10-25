@@ -679,6 +679,33 @@ MainWindowTest {
                    "no popup should open for a hidden marker");
         }
 
+        // The lead view's sprite atlas slots are a list named by the LeadSprite
+        // enum. The terrain view declares one slot, and every marker draws the
+        // open slot at that slot's size.
+        function test_leadSpriteSlots() {
+            compare(LeadView.OpenSprite, 0, "OpenSprite is atlas slot 0");
+            compare(LeadView.CompletedSprite, 1, "CompletedSprite is atlas slot 1");
+
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
+                return leadPoint !== null;
+            }, leadsTestCase.leadSelectTimeout, "lead marker should exist");
+
+            let leadView = leadPoint.leadView;
+            verify(leadView.sprites !== undefined, "LeadView exposes a sprites list");
+            compare(leadView.sprites.length, 1, "the terrain view declares one sprite slot");
+            compare(leadView.spriteSize.width, leadView.sprites[0].width,
+                    "spriteSize is slot 0's width");
+            compare(leadView.spriteSize.height, leadView.sprites[0].height,
+                    "spriteSize is slot 0's height");
+            compare(leadPoint.marker.spriteIndex, LeadView.OpenSprite,
+                    "a marker draws the open slot");
+        }
+
         // 4a: a click on a lead hidden behind cave geometry must be ignored (the
         // click must not pass through walls). cwLeadView::isOccluded gates the
         // tap; here we drive it directly. A visible lead (the one the other tests

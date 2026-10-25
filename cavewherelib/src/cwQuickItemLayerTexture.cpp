@@ -99,14 +99,14 @@ void cwQuickItemLayerTexture::setContentSize(const QSizeF& logicalSize, float de
     d->hasSize = !pixelSize.isEmpty();
 }
 
-void cwQuickItemLayerTexture::updateTexture()
+bool cwQuickItemLayerTexture::updateTexture()
 {
     if (d->layer == nullptr || !d->hasItem || !d->hasSize) {
-        return;
+        return false;
     }
     // A no-op while the layer is clean; otherwise one render pass of the subtree
     // on the current frame's command buffer.
-    d->layer->updateTexture();
+    return d->layer->updateTexture();
 }
 
 QRhiTexture* cwQuickItemLayerTexture::rhiTexture() const

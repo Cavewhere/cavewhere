@@ -260,10 +260,10 @@ Item {
         scene: rendererId.scene
         keywordItemModel: RootData.keywordItemModel
         visible: RootData.leadsVisible
-        sprite: leadSprite
+        sprites: [leadSprite]
 
-        // The one marker every lead draws. Referenced into the 3D pass as a
-        // texture, so it is hidden from the 2D tree.
+        // The one marker every lead draws (slot LeadView.OpenSprite). Referenced
+        // into the 3D pass as a texture, so it is hidden from the 2D tree.
         Image {
             id: leadSprite
             source: "qrc:/icons/question.png"

@@ -103,9 +103,10 @@ protected:
     // Sprite counterpart of setBillboard: adds @a handle's instance to the shared
     // sprite layer, which is fetched here on first use, and updates it thereafter.
     // A no-op while the window or scene is missing. A hidden instance stays in
-    // the layer and is left out of the draw.
+    // the layer and is left out of the draw. @a spriteIndex picks the layer's
+    // atlas slot (cwRenderSpriteBillboards::setSprites).
     void setSpriteBillboard(cwSpriteBillboardHandle& handle, const QVector3D& worldPosition,
-                            float depthBias, float opacity, bool visible);
+                            float depthBias, float opacity, bool visible, int spriteIndex = 0);
 
     // Text counterpart of setBillboard: adds @a handle's label to the shared text
     // layer on the first call and updates it thereafter. A no-op until the text

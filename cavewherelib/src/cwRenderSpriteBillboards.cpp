@@ -17,16 +17,23 @@
 
 //Qt includes
 #include <QElapsedTimer>
+#include <QImage>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QtMath>
 #include <rhi/qrhi.h>
 
 //Std includes
 #include <cstddef>
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace {
+
+// The atlas slot cap. One row of cells, so the atlas stays well under every
+// backend's 2D texture limit at icon sizes.
+constexpr int kMaxSprites = 16;
 
 // The fixed TriangleStrip the vertex shader expands per instance: 4 corners
 // selected from gl_VertexIndex, no corner vertex buffer.
@@ -43,10 +50,12 @@ using SpriteInstance = cwRenderSpriteBillboards::Instance;
 constexpr quint32 kWorldPositionOffset = offsetof(SpriteInstance, worldPosition);
 constexpr quint32 kDepthBiasOffset = offsetof(SpriteInstance, depthBias);
 constexpr quint32 kOpacityOffset = offsetof(SpriteInstance, opacity);
+constexpr quint32 kSpriteIndexOffset = offsetof(SpriteInstance, spriteIndex);
 static_assert(kWorldPositionOffset == 0, "iWorldPosition is Float3 at offset 0");
 static_assert(kDepthBiasOffset == 3 * sizeof(float), "iDepthBias follows the three position floats");
 static_assert(kOpacityOffset == kDepthBiasOffset + sizeof(float), "iOpacity follows iDepthBias");
-static_assert(sizeof(SpriteInstance) == kOpacityOffset + sizeof(float),
+static_assert(kSpriteIndexOffset == kOpacityOffset + sizeof(float), "iSpriteIndex follows iOpacity");
+static_assert(sizeof(SpriteInstance) == kSpriteIndexOffset + sizeof(uint32_t),
               "Instance must match the vertex input layout with no padding");
 
 // The vertex shader's size-mode selector (a float in the std140 block).
@@ -57,7 +66,7 @@ constexpr float kSizeModeScreenConstant = 1.0f;
 struct SpriteBlock {
     float spriteSizePx[2];
     float sizeMode;
-    float pad;
+    float slotCount;
 };
 
 float sizeModeSelector(cwBillboardSizeMode sizeMode)
@@ -80,8 +89,16 @@ void uploadPerInstance(QRhiBuffer* buffer, QRhiResourceUpdateBatch* batch, const
     }
 }
 
+// The device-pixel size a layer renders logicalSize at, as cwQuickItemLayerTexture
+// sizes its texture, so an atlas cell and a slot's texture match.
+QSize cellPixelSize(const QSizeF& logicalSize, float devicePixelRatio)
+{
+    return QSize(qCeil(logicalSize.width() * devicePixelRatio),
+                 qCeil(logicalSize.height() * devicePixelRatio));
+}
+
 // Render-thread backend: one instanced draw of every visible billboard, sampling
-// the prototype's layer texture.
+// an atlas that holds a copy of each slot's layer texture.
 class cwRHISpriteBillboards : public cwRHIObject
 {
 public:
@@ -116,7 +133,8 @@ public:
         inputLayout.setAttributes({
             { 0, 0, QRhiVertexInputAttribute::Float3, kWorldPositionOffset },  // iWorldPosition
             { 0, 1, QRhiVertexInputAttribute::Float, kDepthBiasOffset },       // iDepthBias
-            { 0, 2, QRhiVertexInputAttribute::Float, kOpacityOffset }          // iOpacity
+            { 0, 2, QRhiVertexInputAttribute::Float, kOpacityOffset },         // iOpacity
+            { 0, 3, QRhiVertexInputAttribute::UInt, kSpriteIndexOffset }       // iSpriteIndex
         });
         m_inputLayout = inputLayout;
 
@@ -149,34 +167,47 @@ public:
         }
 
         if (m_window.isNull() || !m_window->isSceneGraphInitialized()) {
-            releaseLayerTexture();
+            releaseAtlas();
             return;
         }
 
         const float devicePixelRatio = float(m_window->effectiveDevicePixelRatio());
-        const quintptr rootNodeHandle = renderObject->spriteRootNodeHandle();
+        const int slotCount = renderObject->spriteCount();
 
-        if (rootNodeHandle == 0) {
-            // The prototype has no nodes (no sprite, or no window); draw nothing
-            // until they exist.
-            releaseLayerTexture();
-            return;
-        }
-
-        if (!m_layerTexture) {
-            m_layerTexture = std::make_unique<cwQuickItemLayerTexture>(m_window, renderObject);
-            if (!m_layerTexture->isValid()) {
-                releaseLayerTexture();
-                return;
+        m_slots.resize(size_t(slotCount));
+        for (int i = 0; i < slotCount; ++i) {
+            SlotTexture& slot = m_slots.at(size_t(i));
+            if (!slot.layer) {
+                slot.layer = std::make_unique<cwQuickItemLayerTexture>(m_window, renderObject);
+                if (!slot.layer->isValid()) {
+                    releaseAtlas();
+                    return;
+                }
             }
+            // A slot without nodes (a destroyed prototype) leaves its cell as it was.
+            slot.layer->setRootNodeHandle(renderObject->spriteRootNodeHandle(i));
+            slot.layer->setContentSize(m_spriteSize, devicePixelRatio);
         }
-        m_layerTexture->setRootNodeHandle(rootNodeHandle);
-        m_layerTexture->setContentSize(m_spriteSize, devicePixelRatio);
+
+        const QSize cellSize = cellPixelSize(m_spriteSize, devicePixelRatio);
+        if (cellSize != m_pendingCellSize || slotCount != m_pendingSlotCount) {
+            m_pendingCellSize = cellSize;
+            m_pendingSlotCount = slotCount;
+            m_atlasDirty = true;
+        }
+        if (m_atlas == nullptr && slotCount > 0 && !cellSize.isEmpty()) {
+            m_atlasDirty = true;
+        }
     }
 
     void updateResources(const ResourceUpdateData& data) override
     {
         QRhiResourceUpdateBatch* batch = data.resourceUpdateBatch;
+
+        if (m_atlasDirty) {
+            recreateAtlas(data.renderData.cb->rhi(), batch);
+            m_atlasDirty = false;
+        }
 
         if (m_instancesDirty && m_instanceBuffer) {
             uploadPerInstance(m_instanceBuffer, batch, m_instances);
@@ -188,7 +219,7 @@ public:
             block.spriteSizePx[0] = float(m_spriteSize.width());
             block.spriteSizePx[1] = float(m_spriteSize.height());
             block.sizeMode = sizeModeSelector(m_sizeMode);
-            block.pad = 0.0f;
+            block.slotCount = float(m_atlasSlotCount);
             batch->updateDynamicBuffer(m_spriteBlockBuffer, 0, sizeof(SpriteBlock), &block);
             m_spriteBlockDirty = false;
         }
@@ -196,7 +227,7 @@ public:
 
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override
     {
-        if (context.renderPass != RenderPass::Overlay || m_instances.isEmpty() || !m_layerTexture) {
+        if (context.renderPass != RenderPass::Overlay || m_instances.isEmpty() || m_atlas == nullptr) {
             return false;
         }
 
@@ -212,15 +243,9 @@ public:
             return false;
         }
 
-        // Gather runs before any pass opens, which is where the layer may record
-        // its own pass to re-render a changed prototype.
-        m_layerTexture->updateTexture();
-        QRhiTexture* texture = m_layerTexture->rhiTexture();
-        if (!texture) {
-            return false;
-        }
+        copySlotsIntoAtlas(context.resourceUpdateBatch);
 
-        if (!ensurePipeline(renderData, texture)) {
+        if (!ensurePipeline(renderData, m_atlas)) {
             return false;
         }
 
@@ -271,19 +296,92 @@ private:
 
     void teardownWindowResources()
     {
-        releaseLayerTexture();
+        releaseAtlas();
         delete m_sampler;
         m_sampler = nullptr;
     }
 
-    // Destroying the layer frees the QRhiTexture the SRB samples, so the SRB
-    // goes with it; the next gather rebuilds both.
-    void releaseLayerTexture()
+    // Destroying a slot's layer frees the texture it renders, and the SRB samples
+    // the atlas, so all of them go together; the next synchronize and gather
+    // rebuild them.
+    void releaseAtlas()
     {
-        m_layerTexture.reset();
+        m_slots.clear();
+        destroyAtlasTexture();
+        m_pendingCellSize = QSize();
+        m_pendingSlotCount = 0;
+    }
+
+    // The SRB samples the atlas, so it goes with it.
+    void destroyAtlasTexture()
+    {
         delete m_srb;
         m_srb = nullptr;
         m_boundTexture = nullptr;
+        delete m_atlas;
+        m_atlas = nullptr;
+        m_atlasCellSize = QSize();
+        m_atlasSlotCount = 0;
+        m_spriteBlockDirty = true;
+    }
+
+    // One row of cells, cleared to transparent so a cell no slot has filled yet
+    // draws nothing. Every slot is copied in again on the next gather.
+    void recreateAtlas(QRhi* rhi, QRhiResourceUpdateBatch* batch)
+    {
+        destroyAtlasTexture();
+
+        const QSize atlasSize(m_pendingCellSize.width() * m_pendingSlotCount, m_pendingCellSize.height());
+        if (rhi == nullptr || atlasSize.isEmpty()) {
+            return;
+        }
+
+        m_atlas = rhi->newTexture(QRhiTexture::RGBA8, atlasSize);
+        if (!m_atlas->create()) {
+            delete m_atlas;
+            m_atlas = nullptr;
+            return;
+        }
+        m_atlasCellSize = m_pendingCellSize;
+        m_atlasSlotCount = m_pendingSlotCount;
+
+        QImage transparent(atlasSize, QImage::Format_RGBA8888_Premultiplied);
+        transparent.fill(Qt::transparent);
+        batch->uploadTexture(m_atlas, transparent);
+
+        for (SlotTexture& slot : m_slots) {
+            slot.needsCopy = true;
+        }
+    }
+
+    // Gather runs before any pass opens, which is where each slot's layer may
+    // record its own pass to re-render a changed prototype. The copy of a slot
+    // that rendered, still waits for its first copy, or replaced its texture
+    // (a resize) is recorded into the frame's batch, which is committed after
+    // those passes and before the draw.
+    void copySlotsIntoAtlas(QRhiResourceUpdateBatch* batch)
+    {
+        const int copySlots = qMin(int(m_slots.size()), m_atlasSlotCount);
+        for (int i = 0; i < copySlots; ++i) {
+            SlotTexture& slot = m_slots.at(size_t(i));
+            if (slot.layer->updateTexture()) {
+                slot.needsCopy = true;
+            }
+            QRhiTexture* source = slot.layer->rhiTexture();
+            if (source == nullptr || batch == nullptr) {
+                continue;
+            }
+            if (!slot.needsCopy && source == slot.copiedTexture) {
+                continue;
+            }
+
+            QRhiTextureCopyDescription copy;
+            copy.setDestinationTopLeft(QPoint(i * m_atlasCellSize.width(), 0));
+            copy.setPixelSize(m_atlasCellSize.boundedTo(source->pixelSize()));
+            batch->copyTexture(m_atlas, source, copy);
+            slot.needsCopy = false;
+            slot.copiedTexture = source;
+        }
     }
 
     bool ensurePipeline(const RenderData& data, QRhiTexture* texture)
@@ -362,8 +460,8 @@ private:
         return ensureShaderResources(rhi, data.renderer, texture);
     }
 
-    // The SRB is rebuilt when the layer's texture pointer changed (a resize
-    // allocates a fresh QRhiTexture) or when the pipeline layout changed.
+    // The SRB is rebuilt when the atlas is recreated or the pipeline layout
+    // changed; a slot replacing its layer texture only needs a fresh copy.
     bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer, QRhiTexture* texture)
     {
         if (!rhi || !renderer || !texture) {
@@ -428,9 +526,24 @@ private:
         return key;
     }
 
+    struct SlotTexture {
+        std::unique_ptr<cwQuickItemLayerTexture> layer;
+        QRhiTexture* copiedTexture = nullptr;   // the layer texture last copied in; owned by the layer
+        bool needsCopy = true;
+    };
+
     QPointer<QQuickWindow> m_window;
     std::unique_ptr<QObject> m_invalidationContext;
-    std::unique_ptr<cwQuickItemLayerTexture> m_layerTexture;
+    std::vector<SlotTexture> m_slots;
+
+    // The atlas: one row of m_atlasSlotCount cells of m_atlasCellSize device
+    // pixels. synchronize records the wanted layout and updateResources applies it.
+    QRhiTexture* m_atlas = nullptr;
+    QSize m_atlasCellSize;
+    int m_atlasSlotCount = 0;
+    QSize m_pendingCellSize;
+    int m_pendingSlotCount = 0;
+    bool m_atlasDirty = false;
 
     // The GUI snapshot and what has changed since the last upload.
     QVector<cwRenderSpriteBillboards::Instance> m_instances;
@@ -445,7 +558,7 @@ private:
     QRhiBuffer* m_spriteBlockBuffer = nullptr;   // SpriteBlock at kSpriteBlockBinding
     QRhiSampler* m_sampler = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
-    QRhiTexture* m_boundTexture = nullptr;       // the texture m_srb samples; owned by the layer
+    QRhiTexture* m_boundTexture = nullptr;       // the atlas m_srb samples
 };
 
 } // namespace
@@ -463,7 +576,7 @@ void cwRenderSpriteBillboards::setWindow(QQuickWindow* window)
         return;
     }
     m_window = window;
-    rebuildSubscene();
+    rebuildSubscenes();
     update();
 }
 
@@ -472,38 +585,98 @@ QQuickWindow* cwRenderSpriteBillboards::window() const
     return m_window;
 }
 
-void cwRenderSpriteBillboards::setSprite(QQuickItem* prototype)
+void cwRenderSpriteBillboards::setSprites(const QList<QQuickItem*>& prototypes)
 {
-    if (m_sprite == prototype) {
+    QList<QQuickItem*> accepted;
+    accepted.reserve(prototypes.size());
+    for (QQuickItem* prototype : prototypes) {
+        if (prototype != nullptr) {
+            accepted.append(prototype);
+        }
+    }
+    const qsizetype nullCount = prototypes.size() - accepted.size();
+    const bool truncated = accepted.size() > kMaxSprites;
+    if (truncated) {
+        accepted.resize(kMaxSprites);
+    }
+
+    if (accepted == sprites()) {
         return;
     }
 
-    if (m_sprite) {
-        disconnect(m_sprite, nullptr, this, nullptr);
+    if (nullCount > 0) {
+        qWarning() << "cwRenderSpriteBillboards: skipped" << nullCount << "null sprite prototype(s)";
     }
-    m_sprite = prototype;
-    rebuildSubscene();
+    if (truncated) {
+        qWarning() << "cwRenderSpriteBillboards:" << prototypes.size() << "sprite prototypes exceed the"
+                   << kMaxSprites << "atlas slots; the rest are dropped";
+    }
 
-    if (m_sprite) {
-        // The sprite size is the prototype's size, snapshotted at synchronize, so
-        // a resize needs a frame.
-        connect(m_sprite, &QQuickItem::widthChanged, this, &cwRenderSpriteBillboards::update);
-        connect(m_sprite, &QQuickItem::heightChanged, this, &cwRenderSpriteBillboards::update);
+    for (const Slot& slot : m_slots) {
+        if (slot.prototype) {
+            disconnect(slot.prototype, nullptr, this, nullptr);
+        }
     }
+
+    m_slots.clear();
+    m_slots.resize(accepted.size());
+    for (int i = 0; i < accepted.size(); ++i) {
+        m_slots.at(i).prototype = accepted.at(i);
+    }
+    rebuildSubscenes();
+
+    for (QQuickItem* prototype : std::as_const(accepted)) {
+        // Sizes are snapshotted at synchronize and drive each slot's layer, so a
+        // resize needs a frame.
+        connect(prototype, &QQuickItem::widthChanged, this, &cwRenderSpriteBillboards::prototypeResized,
+                Qt::UniqueConnection);
+        connect(prototype, &QQuickItem::heightChanged, this, &cwRenderSpriteBillboards::prototypeResized,
+                Qt::UniqueConnection);
+    }
+
+    warnOnSizeMismatch();
     update();
 }
 
-QQuickItem* cwRenderSpriteBillboards::sprite() const
+QList<QQuickItem*> cwRenderSpriteBillboards::sprites() const
 {
-    return m_sprite;
+    QList<QQuickItem*> prototypes;
+    prototypes.reserve(int(m_slots.size()));
+    for (const Slot& slot : m_slots) {
+        prototypes.append(slot.prototype.data());
+    }
+    return prototypes;
+}
+
+int cwRenderSpriteBillboards::spriteCount() const
+{
+    return int(m_slots.size());
 }
 
 QSizeF cwRenderSpriteBillboards::spriteSize() const
 {
-    if (m_sprite.isNull()) {
+    if (m_slots.empty() || m_slots.front().prototype.isNull()) {
         return QSizeF();
     }
-    return QSizeF(m_sprite->width(), m_sprite->height());
+    const QQuickItem* prototype = m_slots.front().prototype;
+    return QSizeF(prototype->width(), prototype->height());
+}
+
+void cwRenderSpriteBillboards::setSprite(QQuickItem* prototype)
+{
+    if (prototype != nullptr) {
+        setSprites({prototype});
+    } else {
+        setSprites({});
+    }
+}
+
+QQuickItem* cwRenderSpriteBillboards::sprite() const
+{
+    if (m_slots.empty()) {
+        return nullptr;
+    }
+    return m_slots.front().prototype;
 }
 
 void cwRenderSpriteBillboards::setSizeMode(cwBillboardSizeMode sizeMode)
@@ -520,12 +693,45 @@ cwBillboardSizeMode cwRenderSpriteBillboards::sizeMode() const
     return m_sizeMode;
 }
 
-void cwRenderSpriteBillboards::rebuildSubscene()
+void cwRenderSpriteBillboards::rebuildSubscenes()
 {
     // Subscenes are bound to a window's scene graph and to one item.
-    m_spriteSubscene.reset();
-    if (m_sprite && m_window) {
-        m_spriteSubscene = std::make_unique<cwQuickItemSubscene>(m_sprite, m_window);
+    for (Slot& slot : m_slots) {
+        slot.subscene.reset();
+        if (slot.prototype && m_window) {
+            slot.subscene = std::make_unique<cwQuickItemSubscene>(slot.prototype, m_window);
+        }
+    }
+}
+
+void cwRenderSpriteBillboards::prototypeResized()
+{
+    warnOnSizeMismatch();
+    update();
+}
+
+void cwRenderSpriteBillboards::warnOnSizeMismatch()
+{
+    if (m_warnedSizeMismatch) {
+        return;
+    }
+    const QSizeF sharedSize = spriteSize();
+    if (sharedSize.isEmpty()) {
+        return;
+    }
+    for (int i = 1; i < int(m_slots.size()); ++i) {
+        const QQuickItem* prototype = m_slots.at(i).prototype;
+        if (prototype == nullptr) {
+            continue;
+        }
+        const QSizeF slotSize(prototype->width(), prototype->height());
+        // An empty slot is one still loading; it is drawn at the shared size too.
+        if (!slotSize.isEmpty() && slotSize != sharedSize) {
+            qWarning() << "cwRenderSpriteBillboards: sprite slot" << i << "is" << slotSize
+                       << "but every slot draws at slot 0's size" << sharedSize;
+            m_warnedSizeMismatch = true;
+            return;
+        }
     }
 }
 
@@ -566,33 +772,50 @@ int cwRenderSpriteBillboards::billboardCount() const
 
 QVector<cwRenderSpriteBillboards::Instance> cwRenderSpriteBillboards::buildInstances() const
 {
+    // With no slots there is no atlas and nothing draws, so the bound is moot.
+    const int slotCount = spriteCount();
+    const bool boundSlots = slotCount > 0;
+
     QVector<Instance> instances;
     instances.reserve(int(m_billboards.size()));
     for (const auto& [id, billboard] : m_billboards) {
         if (!billboard.visible) {
             continue;
         }
+        if (boundSlots && (billboard.spriteIndex < 0 || billboard.spriteIndex >= slotCount)) {
+            if (!m_warnedMissingSlot) {
+                qWarning() << "cwRenderSpriteBillboards: billboard" << uint32_t(id) << "names sprite slot"
+                           << billboard.spriteIndex << "outside the" << slotCount << "declared slots and is left out";
+                m_warnedMissingSlot = true;
+            }
+            continue;
+        }
         Instance instance;
         instance.worldPosition = billboard.worldPosition;
         instance.depthBias = billboard.depthBias;
         instance.opacity = billboard.opacity;
+        instance.spriteIndex = uint32_t(billboard.spriteIndex);
         instances.append(instance);
     }
     return instances;
 }
 
-quintptr cwRenderSpriteBillboards::spriteRootNodeHandle() const
+quintptr cwRenderSpriteBillboards::spriteRootNodeHandle(int slot) const
 {
-    if (!m_spriteSubscene) {
+    if (slot < 0 || slot >= spriteCount()) {
         return 0;
     }
-    quintptr handle = m_spriteSubscene->rootNodeHandle();
+    const Slot& entry = m_slots.at(slot);
+    if (entry.prototype.isNull() || !entry.subscene) {
+        return 0;
+    }
+    quintptr handle = entry.subscene->rootNodeHandle();
     if (handle == 0) {
         // The viewer syncs ahead of the prototype on the frame that referenced
         // it, so build the prototype's nodes now (as QQuickShaderEffectSource
         // does for its source item) instead of waiting for another update.
-        m_spriteSubscene->forceSync();
-        handle = m_spriteSubscene->rootNodeHandle();
+        entry.subscene->forceSync();
+        handle = entry.subscene->rootNodeHandle();
     }
     return handle;
 }

@@ -1,14 +1,18 @@
 // GUI-thread tests for cwRenderSpriteBillboards, the instanced sprite layer for
 // lead markers. Everything here is observable without a QRhi: the stable-id
-// bookkeeping, the instance snapshot the render thread uploads, the prototype's
-// size and the subscene wiring. The render path itself is covered by
-// test_cwRenderSpriteBillboards_render.cpp.
+// bookkeeping, the instance snapshot the render thread uploads, the atlas slots
+// with their shared size and subscene wiring. The render path itself is covered
+// by test_cwRenderSpriteBillboards_render.cpp.
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSignalSpy>
+#include <QStringList>
+
+#include <memory>
+#include <vector>
 
 #include "cwRenderSpriteBillboards.h"
 #include "cwRhiScene.h"
@@ -24,6 +28,62 @@ constexpr float kBias = 1.0f;
 constexpr float kFadedOpacity = 0.6f;
 const QSizeF kSpriteSize(20.0, 20.0);
 const QSizeF kLargerSpriteSize(32.0, 24.0);
+const QSizeF kWiderSpriteSize(40.0, 20.0);
+
+// Mirrors kMaxSprites in cwRenderSpriteBillboards.cpp, the atlas slot cap.
+constexpr int kMaxSprites = 16;
+
+constexpr int kOpenSlot = 0;
+constexpr int kSecondSlot = 1;
+constexpr int kMissingSlot = 2;
+constexpr int kNegativeSlot = -1;
+
+// Keeps the warnings logged while it lives; other messages pass through.
+class WarningCapture
+{
+public:
+    WarningCapture()
+    {
+        warnings().clear();
+        previousHandler() = qInstallMessageHandler(&WarningCapture::keep);
+    }
+
+    ~WarningCapture()
+    {
+        qInstallMessageHandler(previousHandler());
+        previousHandler() = nullptr;
+    }
+
+    WarningCapture(const WarningCapture&) = delete;
+    WarningCapture& operator=(const WarningCapture&) = delete;
+
+    static int count() { return int(warnings().size()); }
+    static void clear() { warnings().clear(); }
+    static std::string joined() { return warnings().join(QStringLiteral("\n")).toStdString(); }
+
+private:
+    static void keep(QtMsgType type, const QMessageLogContext& context, const QString& message)
+    {
+        if (type == QtWarningMsg) {
+            warnings().append(message);
+        }
+        if (previousHandler() != nullptr) {
+            previousHandler()(type, context, message);
+        }
+    }
+
+    static QStringList& warnings()
+    {
+        static QStringList kept;
+        return kept;
+    }
+
+    static QtMessageHandler& previousHandler()
+    {
+        static QtMessageHandler handler = nullptr;
+        return handler;
+    }
+};
 
 cwRenderSpriteBillboards::SpriteBillboard makeBillboard(const QVector3D& position,
                                                         float depthBias = kBias,
@@ -36,6 +96,20 @@ cwRenderSpriteBillboards::SpriteBillboard makeBillboard(const QVector3D& positio
     billboard.opacity = opacity;
     billboard.visible = visible;
     return billboard;
+}
+
+cwRenderSpriteBillboards::SpriteBillboard makeSlotBillboard(const QVector3D& position, int spriteIndex)
+{
+    cwRenderSpriteBillboards::SpriteBillboard billboard = makeBillboard(position);
+    billboard.spriteIndex = spriteIndex;
+    return billboard;
+}
+
+std::unique_ptr<QQuickItem> makePrototype(QQuickWindow& window, const QSizeF& size)
+{
+    auto prototype = std::make_unique<QQuickItem>(window.contentItem());
+    prototype->setSize(size);
+    return prototype;
 }
 
 } // namespace
@@ -252,16 +326,16 @@ TEST_CASE("cwRenderSpriteBillboards: the subscene follows the window and the spr
     // graph, so there is no root node to hand out.
     layer.setSprite(prototype.get());
     CHECK(layer.window() == nullptr);
-    CHECK(layer.spriteRootNodeHandle() == 0);
+    CHECK(layer.spriteRootNodeHandle(0) == 0);
 
     // With a sprite and a window the prototype is referenced into the window's
     // scene graph, and the handle builds the node subtree itself when no sync has
     // reached it yet, so it is set at once (and stable across reads).
     layer.setWindow(&window);
     CHECK(layer.window() == &window);
-    const quintptr firstHandle = layer.spriteRootNodeHandle();
+    const quintptr firstHandle = layer.spriteRootNodeHandle(0);
     CHECK(firstHandle != 0);
-    CHECK(layer.spriteRootNodeHandle() == firstHandle);
+    CHECK(layer.spriteRootNodeHandle(0) == firstHandle);
 
     SECTION("swapping the sprite re-references the new item")
     {
@@ -270,13 +344,13 @@ TEST_CASE("cwRenderSpriteBillboards: the subscene follows the window and the spr
         layer.setSprite(other.get());
         CHECK(layer.sprite() == other.get());
         CHECK(layer.spriteSize() == kLargerSpriteSize);
-        const quintptr otherHandle = layer.spriteRootNodeHandle();
+        const quintptr otherHandle = layer.spriteRootNodeHandle(0);
         CHECK(otherHandle != 0);
         CHECK(otherHandle != firstHandle);
 
         layer.setSprite(nullptr);
         CHECK(layer.sprite() == nullptr);
-        CHECK(layer.spriteRootNodeHandle() == 0);
+        CHECK(layer.spriteRootNodeHandle(0) == 0);
     }
 
     SECTION("unbinding the window releases the reference and keeps the sprite")
@@ -284,11 +358,11 @@ TEST_CASE("cwRenderSpriteBillboards: the subscene follows the window and the spr
         layer.setWindow(nullptr);
         CHECK(layer.window() == nullptr);
         CHECK(layer.sprite() == prototype.get());
-        CHECK(layer.spriteRootNodeHandle() == 0);
+        CHECK(layer.spriteRootNodeHandle(0) == 0);
 
         layer.setWindow(&window);
         CHECK(layer.sprite() == prototype.get());
-        CHECK(layer.spriteRootNodeHandle() != 0);
+        CHECK(layer.spriteRootNodeHandle(0) != 0);
     }
 
     SECTION("the size mode is a store setting")
@@ -328,4 +402,216 @@ TEST_CASE("cwRenderSpriteBillboards: a handle reset removes its billboard", "[cw
         REQUIRE(layer.billboardCount() == 1);
     }
     CHECK(layer.billboardCount() == 0);
+}
+
+TEST_CASE("cwRenderSpriteBillboards: setSprites declares the atlas slots in order",
+          "[cwRenderSpriteBillboards]")
+{
+    QQuickWindow window;
+    auto open = makePrototype(window, kSpriteSize);
+    auto second = makePrototype(window, kSpriteSize);
+
+    cwRenderSpriteBillboards layer;
+    layer.setWindow(&window);
+    CHECK(layer.spriteCount() == 0);
+
+    layer.setSprites({open.get(), second.get()});
+    CHECK(layer.spriteCount() == 2);
+    CHECK(layer.sprites() == QList<QQuickItem*>({open.get(), second.get()}));
+    CHECK(layer.sprite() == open.get());
+    CHECK(layer.spriteSize() == kSpriteSize);
+
+    // Each slot is referenced into the window's scene graph on its own.
+    const quintptr openHandle = layer.spriteRootNodeHandle(kOpenSlot);
+    const quintptr secondHandle = layer.spriteRootNodeHandle(kSecondSlot);
+    CHECK(openHandle != 0);
+    CHECK(secondHandle != 0);
+    CHECK(secondHandle != openHandle);
+    CHECK(layer.spriteRootNodeHandle(kMissingSlot) == 0);
+    CHECK(layer.spriteRootNodeHandle(kNegativeSlot) == 0);
+
+    SECTION("unbinding the window releases every slot's reference")
+    {
+        layer.setWindow(nullptr);
+        CHECK(layer.spriteCount() == 2);
+        CHECK(layer.spriteRootNodeHandle(kOpenSlot) == 0);
+        CHECK(layer.spriteRootNodeHandle(kSecondSlot) == 0);
+
+        layer.setWindow(&window);
+        CHECK(layer.spriteRootNodeHandle(kSecondSlot) != 0);
+    }
+
+    SECTION("a destroyed prototype keeps its slot so the other indices stay put")
+    {
+        open.reset();
+        CHECK(layer.spriteCount() == 2);
+        CHECK(layer.sprites() == QList<QQuickItem*>({nullptr, second.get()}));
+        CHECK(layer.sprite() == nullptr);
+        CHECK(layer.spriteSize() == QSizeF());
+        CHECK(layer.spriteRootNodeHandle(kOpenSlot) == 0);
+        CHECK(layer.spriteRootNodeHandle(kSecondSlot) != 0);
+    }
+}
+
+TEST_CASE("cwRenderSpriteBillboards: setSprite is setSprites with one slot", "[cwRenderSpriteBillboards]")
+{
+    QQuickWindow window;
+    auto prototype = makePrototype(window, kSpriteSize);
+
+    cwRenderSpriteBillboards single;
+    cwRenderSpriteBillboards listed;
+    single.setWindow(&window);
+    listed.setWindow(&window);
+
+    single.setSprite(prototype.get());
+    listed.setSprites({prototype.get()});
+    CHECK(single.spriteCount() == 1);
+    CHECK(listed.spriteCount() == 1);
+    CHECK(single.sprites() == listed.sprites());
+    CHECK(single.sprite() == listed.sprite());
+    CHECK(single.spriteSize() == listed.spriteSize());
+
+    // Clearing through either form leaves no slots and is quiet.
+    WarningCapture warnings;
+    single.setSprite(nullptr);
+    listed.setSprites({});
+    CHECK(single.spriteCount() == 0);
+    CHECK(listed.spriteCount() == 0);
+    CHECK(single.sprites().isEmpty());
+    INFO("warnings: " << WarningCapture::joined());
+    CHECK(WarningCapture::count() == 0);
+}
+
+TEST_CASE("cwRenderSpriteBillboards: every slot shares slot 0's size", "[cwRenderSpriteBillboards]")
+{
+    QQuickWindow window;
+    auto open = makePrototype(window, kSpriteSize);
+    auto larger = makePrototype(window, kLargerSpriteSize);
+    auto wider = makePrototype(window, kWiderSpriteSize);
+
+    cwRenderSpriteBillboards layer;
+    layer.setWindow(&window);
+
+    WarningCapture warnings;
+    layer.setSprites({open.get(), larger.get()});
+    CHECK(layer.spriteCount() == 2);
+    CHECK(layer.spriteSize() == kSpriteSize);
+    INFO("warnings: " << WarningCapture::joined());
+    CHECK(WarningCapture::count() == 1);
+
+    // The mismatch is reported once per store.
+    WarningCapture::clear();
+    layer.setSprites({open.get(), wider.get()});
+    CHECK(layer.spriteCount() == 2);
+    CHECK(layer.spriteSize() == kSpriteSize);
+    CHECK(WarningCapture::count() == 0);
+}
+
+TEST_CASE("cwRenderSpriteBillboards: setSprites skips null entries and caps the slot count",
+          "[cwRenderSpriteBillboards]")
+{
+    QQuickWindow window;
+    cwRenderSpriteBillboards layer;
+    layer.setWindow(&window);
+
+    SECTION("a null entry is dropped with a warning and the rest apply in order")
+    {
+        auto open = makePrototype(window, kSpriteSize);
+        auto second = makePrototype(window, kSpriteSize);
+
+        WarningCapture warnings;
+        layer.setSprites({open.get(), nullptr, second.get()});
+        CHECK(layer.spriteCount() == 2);
+        CHECK(layer.sprites() == QList<QQuickItem*>({open.get(), second.get()}));
+        CHECK(WarningCapture::count() > 0);
+    }
+
+    SECTION("a list over the cap is truncated with a warning")
+    {
+        std::vector<std::unique_ptr<QQuickItem>> prototypes;
+        QList<QQuickItem*> list;
+        for (int i = 0; i < kMaxSprites + 1; ++i) {
+            prototypes.push_back(makePrototype(window, kSpriteSize));
+            list.append(prototypes.back().get());
+        }
+
+        WarningCapture warnings;
+        layer.setSprites(list);
+        CHECK(layer.spriteCount() == kMaxSprites);
+        CHECK(layer.sprites() == list.first(kMaxSprites));
+        CHECK(WarningCapture::count() > 0);
+    }
+}
+
+TEST_CASE("cwRenderSpriteBillboards: a slot change asks for a frame and an unchanged list does not",
+          "[cwRenderSpriteBillboards]")
+{
+    QQuickWindow window;
+    auto open = makePrototype(window, kSpriteSize);
+    auto second = makePrototype(window, kSpriteSize);
+    auto replacement = makePrototype(window, kSpriteSize);
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+    auto* layer = new cwRenderSpriteBillboards(&scene);
+    layer->setScene(&scene);
+    layer->setWindow(&window);
+    layer->setSprites({open.get(), second.get()});
+    CHECK(layer->spriteCount() == 2);
+
+    // Drain the pending Add so each change below queues its own Update (and a frame).
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    QSignalSpy frameSpy(&scene, &cwScene::needsRendering);
+
+    layer->setSprites({open.get(), second.get()});
+    CHECK(frameSpy.count() == 0);
+
+    layer->setSprites({open.get(), replacement.get()});
+    CHECK(frameSpy.count() > 0);
+    CHECK(layer->sprites() == QList<QQuickItem*>({open.get(), replacement.get()}));
+
+    // A later slot's resize re-snapshots too, since it drives that slot's layer.
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    frameSpy.clear();
+    replacement->setSize(kLargerSpriteSize);
+    CHECK(frameSpy.count() > 0);
+}
+
+TEST_CASE("cwRenderSpriteBillboards: buildInstances carries each billboard's slot and drops a missing one",
+          "[cwRenderSpriteBillboards]")
+{
+    QQuickWindow window;
+    auto open = makePrototype(window, kSpriteSize);
+    auto second = makePrototype(window, kSpriteSize);
+
+    cwRenderSpriteBillboards layer;
+    layer.setWindow(&window);
+    layer.setSprites({open.get(), second.get()});
+    CHECK(layer.spriteCount() == 2);
+
+    layer.addBillboard(makeSlotBillboard(QVector3D(0, 0, 0), kOpenSlot));
+    layer.addBillboard(makeSlotBillboard(QVector3D(0, 10, 0), kSecondSlot));
+    layer.addBillboard(makeSlotBillboard(QVector3D(0, 20, 0), kMissingSlot));
+    layer.addBillboard(makeSlotBillboard(QVector3D(0, 30, 0), kNegativeSlot));
+    REQUIRE(layer.billboardCount() == 4);
+
+    WarningCapture warnings;
+    const auto instances = layer.buildInstances();
+    REQUIRE(instances.size() == 2);
+    CHECK(instances.at(0).worldPosition == QVector3D(0, 0, 0));
+    CHECK(instances.at(0).spriteIndex == uint32_t(kOpenSlot));
+    CHECK(instances.at(1).worldPosition == QVector3D(0, 10, 0));
+    CHECK(instances.at(1).spriteIndex == uint32_t(kSecondSlot));
+    CHECK(WarningCapture::count() == 1);
+
+    // The store warns once, not on every snapshot.
+    WarningCapture::clear();
+    CHECK(layer.buildInstances().size() == 2);
+    CHECK(WarningCapture::count() == 0);
+
+    // Dropping a slot drops the billboards that name it.
+    layer.setSprites({open.get()});
+    const auto oneSlot = layer.buildInstances();
+    REQUIRE(oneSlot.size() == 1);
+    CHECK(oneSlot.at(0).spriteIndex == uint32_t(kOpenSlot));
 }

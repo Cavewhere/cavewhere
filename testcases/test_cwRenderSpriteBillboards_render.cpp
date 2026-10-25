@@ -7,8 +7,10 @@
 // is hidden under the ink, a label in front paints over the blue, the drawn
 // extent is the prototype's size under both projections and scales with an
 // offscreen job's device pixel ratio, and unbinding and rebinding the window
-// drops and rebuilds the layer texture. Needs a GPU-backed window; skips under
-// the offscreen QPA, which has no QRhi.
+// drops and rebuilds the layer texture. A two-slot atlas of a solid blue and a
+// solid red prototype draws each instance from its own slot, and re-skinning one
+// slot changes only the instances that name it. Needs a GPU-backed window;
+// skips under the offscreen QPA, which has no QRhi.
 //
 // Pixels are read back through cwScene::renderOffscreen with a fixed camera, so
 // probes sit at known positions regardless of the live view.
@@ -84,6 +86,12 @@ constexpr float kWallBehindZ = 0.0f;
 // The open sprite sits where nothing else draws; labels go a little behind or
 // in front of it.
 const QVector3D kOpenSprite(0.0f, 0.0f, 0.0f);
+
+// The second atlas slot's instance sits left of the open one, clear of the wall
+// and of the open sprite's extent.
+const QVector3D kSecondSlotSprite(-6.0f, 0.0f, 0.0f);
+constexpr int kOpenSlot = 0;
+constexpr int kSecondSlot = 1;
 constexpr float kLabelBehindZ = -2.0f;
 constexpr float kLabelFrontZ = 2.0f;
 
@@ -264,6 +272,24 @@ cwRenderSpriteBillboards::SpriteBillboard makeSprite(const QVector3D& position, 
     return billboard;
 }
 
+cwRenderSpriteBillboards::SpriteBillboard makeSlotSprite(const QVector3D& position, int spriteIndex)
+{
+    cwRenderSpriteBillboards::SpriteBillboard billboard = makeSprite(position);
+    billboard.spriteIndex = spriteIndex;
+    return billboard;
+}
+
+// A solid square prototype of the sprite size in @a color.
+QByteArray solidPrototypeQml(const QByteArray& color)
+{
+    return "import QtQuick\n"
+           "Rectangle {\n"
+           "  width: " + QByteArray::number(kSpriteSize) + "\n"
+           "  height: " + QByteArray::number(kSpriteSize) + "\n"
+           "  color: \"" + color + "\"\n"
+           "}\n";
+}
+
 cwRenderTextBillboards::TextBillboard makeLabel(const QVector3D& position)
 {
     cwRenderTextBillboards::TextBillboard billboard;
@@ -281,6 +307,11 @@ bool isBlue(QRgb pixel)
 bool isRed(QRgb pixel)
 {
     return qRed(pixel) > kLitChannel && qBlue(pixel) < kDarkChannel && qGreen(pixel) < kDarkChannel;
+}
+
+bool isGreen(QRgb pixel)
+{
+    return qGreen(pixel) > kLitChannel && qRed(pixel) < kDarkChannel && qBlue(pixel) < kDarkChannel;
 }
 
 bool isBackground(QRgb pixel)
@@ -539,6 +570,51 @@ TEST_CASE("cwRenderSpriteBillboards renders one instanced, silhouette-depth spri
         CHECK(qBlue(pixel) > kLitChannel);
         CHECK(qBlue(pixel) < kMaxChannel - kDarkChannel);
         CHECK(qRed(pixel) < kDarkChannel);
+    }
+
+    SECTION("a two-slot atlas draws each instance from its own slot")
+    {
+        const auto createSolid = [&](const QByteArray& color) {
+            QQmlComponent solidComponent(&engine);
+            solidComponent.setData(solidPrototypeQml(color), QUrl());
+            std::unique_ptr<QObject> object(solidComponent.create());
+            INFO(solidComponent.errorString().toStdString());
+            REQUIRE(object != nullptr);
+            auto* item = qobject_cast<QQuickItem*>(object.get());
+            REQUIRE(item != nullptr);
+            item->setParentItem(window.contentItem());
+            return object;
+        };
+        std::unique_ptr<QObject> blueObject = createSolid("#0000ff");
+        std::unique_ptr<QObject> redObject = createSolid("#ff0000");
+        auto* blue = qobject_cast<QQuickItem*>(blueObject.get());
+        auto* red = qobject_cast<QQuickItem*>(redObject.get());
+
+        layer->setSprites({blue, red});
+        CHECK(layer->spriteCount() == 2);
+        REQUIRE(layer->spriteSize() == QSizeF(kSpriteSize, kSpriteSize));
+
+        cwSpriteBillboardHandle openInstance;
+        cwSpriteBillboardHandle secondInstance;
+        openInstance.set(layer, makeSlotSprite(kOpenSprite, kOpenSlot));
+        secondInstance.set(layer, makeSlotSprite(kSecondSlotSprite, kSecondSlot));
+        REQUIRE(framesFrom(kSettleFrames));
+
+        const QPoint secondPixel = toPixel(kSecondSlotSprite, ortho);
+        const QImage image = renderImage(ortho);
+        CHECK(isBlue(image.pixel(openPixel)));
+        CHECK(isRed(image.pixel(secondPixel)));
+
+        // Re-skinning slot 1 re-renders its cell; slot 0's instance is unchanged.
+        red->setProperty("color", QColor(Qt::green));
+        REQUIRE(framesFrom(kSettleFrames));
+        const QImage reskinned = renderImage(ortho);
+        CHECK(isGreen(reskinned.pixel(secondPixel)));
+        CHECK(isBlue(reskinned.pixel(openPixel)));
+        CHECK(differingPixels(reskinned, image, openPixel) == 0);
+
+        // Hand the layer back its single prototype before these items go.
+        layer->setSprite(prototype);
     }
 
     SECTION("unbinding and rebinding the window drops and rebuilds the layer texture")

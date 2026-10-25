@@ -5,15 +5,16 @@
 // layer's. The profile part needs a GPU-backed window and skips under the
 // offscreen QPA.
 //
-// Both cases are hidden (a timing budget would flake in the parallel nightly
+// Every case is hidden (a timing budget would flake in the parallel nightly
 // suite). Run them with:
 //   cavewhere-test "[SpriteBillboardsBenchmark]"
 //
 // Profile line contract: the sprite backend writes one cw.profile.render line
 // per live frame that draws sprites, starting with "spriteBillboards" and
 // carrying "instances=<count>" and "gatherUs=<microseconds>", the render-thread
-// time of its gather (the layer texture update, pipeline and binding checks and
-// the one drawable).
+// time of its gather (the layer texture updates, the atlas copies, pipeline and
+// binding checks and the one drawable). The two-slot variant draws half the
+// billboards from each atlas slot, so its gather includes a second layer.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -39,6 +40,7 @@
 #include <algorithm>
 #include <atomic>
 #include <memory>
+#include <vector>
 
 namespace {
 
@@ -106,33 +108,13 @@ qint64 median(QVector<qint64> values)
     return values.at(values.size() / 2);
 }
 
-} // namespace
+const QList<QByteArray> kOneSlotColors{"#0000ff"};
+const QList<QByteArray> kTwoSlotColors{"#0000ff", "#ff0000"};
 
-TEST_CASE("cwRenderSpriteBillboards: ten thousand billboards snapshot under a millisecond",
-          "[.][Benchmark][SpriteBillboardsBenchmark]")
-{
-    cwRenderSpriteBillboards layer;
-    for (int i = 0; i < kBillboardCount; ++i) {
-        layer.addBillboard(gridBillboard(i));
-    }
-    REQUIRE(layer.billboardCount() == kBillboardCount);
-
-    QVector<qint64> elapsedUs;
-    for (int repeat = 0; repeat < kSnapshotRepeats; ++repeat) {
-        QElapsedTimer timer;
-        timer.start();
-        const auto instances = layer.buildInstances();
-        elapsedUs.append(timer.nsecsElapsed() / 1000);
-        REQUIRE(instances.size() == visibleCount());
-    }
-
-    const qint64 medianUs = median(elapsedUs);
-    WARN("buildInstances over " << kBillboardCount << " billboards: median " << medianUs << " us");
-    CHECK(medianUs < kSnapshotBudgetUs);
-}
-
-TEST_CASE("cwRenderSpriteBillboards: the render thread profiles one gather per frame",
-          "[.][Benchmark][SpriteBillboardsBenchmark][rhi]")
+// Shows a window with a viewer, declares one solid prototype per entry in
+// @a slotColors as the atlas slots, adds the grid with billboards spread across
+// the slots, and reports the gather time the render thread profiles per frame.
+void profileGather(const QList<QByteArray>& slotColors)
 {
     if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
         SKIP("needs a GPU-backed window; the offscreen QPA has no QRhi");
@@ -149,18 +131,24 @@ TEST_CASE("cwRenderSpriteBillboards: the render thread profiles one gather per f
     viewer->setSize(QSizeF(kWindowSize, kWindowSize));
     viewer->setScene(&scene);
 
-    const QByteArray prototypeQml =
-        "import QtQuick\n"
-        "Rectangle { width: " + QByteArray::number(kSpriteSize)
-        + "; height: " + QByteArray::number(kSpriteSize) + "; color: \"#0000ff\" }\n";
-    QQmlComponent component(&engine);
-    component.setData(prototypeQml, QUrl());
-    std::unique_ptr<QObject> prototypeObject(component.create());
-    INFO(component.errorString().toStdString());
-    REQUIRE(prototypeObject != nullptr);
-    auto* prototype = qobject_cast<QQuickItem*>(prototypeObject.get());
-    REQUIRE(prototype != nullptr);
-    prototype->setParentItem(window.contentItem());
+    std::vector<std::unique_ptr<QObject>> prototypeObjects;
+    QList<QQuickItem*> prototypes;
+    for (const QByteArray& color : slotColors) {
+        const QByteArray prototypeQml =
+            "import QtQuick\n"
+            "Rectangle { width: " + QByteArray::number(kSpriteSize)
+            + "; height: " + QByteArray::number(kSpriteSize) + "; color: \"" + color + "\" }\n";
+        QQmlComponent component(&engine);
+        component.setData(prototypeQml, QUrl());
+        std::unique_ptr<QObject> prototypeObject(component.create());
+        INFO(component.errorString().toStdString());
+        REQUIRE(prototypeObject != nullptr);
+        auto* prototype = qobject_cast<QQuickItem*>(prototypeObject.get());
+        REQUIRE(prototype != nullptr);
+        prototype->setParentItem(window.contentItem());
+        prototypes.append(prototype);
+        prototypeObjects.push_back(std::move(prototypeObject));
+    }
 
     std::atomic<int> framesSwapped {0};
     QObject::connect(&window, &QQuickWindow::frameSwapped, &window,
@@ -184,9 +172,12 @@ TEST_CASE("cwRenderSpriteBillboards: the render thread profiles one gather per f
     cwRenderSpriteBillboards* layer = scene.spriteBillboardLayer();
     REQUIRE(layer != nullptr);
     layer->setWindow(&window);
-    layer->setSprite(prototype);
+    layer->setSprites(prototypes);
+    REQUIRE(layer->spriteCount() == int(slotColors.size()));
     for (int i = 0; i < kBillboardCount; ++i) {
-        layer->addBillboard(gridBillboard(i));
+        cwRenderSpriteBillboards::SpriteBillboard billboard = gridBillboard(i);
+        billboard.spriteIndex = i % int(slotColors.size());
+        layer->addBillboard(billboard);
     }
     REQUIRE(framesFrom(kSettleFrames));
 
@@ -215,6 +206,7 @@ TEST_CASE("cwRenderSpriteBillboards: the render thread profiles one gather per f
         REQUIRE(gatherUs.size() >= kProfileFrames);
 
         WARN("Sprite billboard gather over " << gatherUs.size() << " frames"
+             << "\n  slots: " << slotColors.size()
              << "\n  median: " << median(gatherUs) << " us"
              << "\n  max: " << *std::max_element(gatherUs.cbegin(), gatherUs.cend()) << " us"
              << "\n  instances: " << visibleCount()
@@ -223,4 +215,41 @@ TEST_CASE("cwRenderSpriteBillboards: the render thread profiles one gather per f
     }
 
     window.hide();
+}
+
+} // namespace
+
+TEST_CASE("cwRenderSpriteBillboards: ten thousand billboards snapshot under a millisecond",
+          "[.][Benchmark][SpriteBillboardsBenchmark]")
+{
+    cwRenderSpriteBillboards layer;
+    for (int i = 0; i < kBillboardCount; ++i) {
+        layer.addBillboard(gridBillboard(i));
+    }
+    REQUIRE(layer.billboardCount() == kBillboardCount);
+
+    QVector<qint64> elapsedUs;
+    for (int repeat = 0; repeat < kSnapshotRepeats; ++repeat) {
+        QElapsedTimer timer;
+        timer.start();
+        const auto instances = layer.buildInstances();
+        elapsedUs.append(timer.nsecsElapsed() / 1000);
+        REQUIRE(instances.size() == visibleCount());
+    }
+
+    const qint64 medianUs = median(elapsedUs);
+    WARN("buildInstances over " << kBillboardCount << " billboards: median " << medianUs << " us");
+    CHECK(medianUs < kSnapshotBudgetUs);
+}
+
+TEST_CASE("cwRenderSpriteBillboards: the render thread profiles one gather per frame",
+          "[.][Benchmark][SpriteBillboardsBenchmark][rhi]")
+{
+    profileGather(kOneSlotColors);
+}
+
+TEST_CASE("cwRenderSpriteBillboards: a two-slot atlas profiles one gather per frame",
+          "[.][Benchmark][SpriteBillboardsBenchmark][rhi]")
+{
+    profileGather(kTwoSlotColors);
 }

@@ -12,7 +12,7 @@ layout(location = 1) in float vOpacity;
 
 layout(location = 0) out vec4 fragColor;
 
-// The prototype's layer texture, premultiplied.
+// The atlas of every slot's layer texture, premultiplied.
 layout(binding = 2) uniform sampler2D sprite;
 
 // Fragments below this alpha are discarded so they write no depth: the depth
