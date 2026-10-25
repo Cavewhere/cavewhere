@@ -9,6 +9,7 @@
 #include "cwLinePlotManager.h"
 #include "cwRestarterTracking.h"
 #include "cwTaskTrace.h"
+#include "cwProfileLog.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
 #include "cwCave.h"
@@ -45,6 +46,12 @@
 #include <QSet>
 
 namespace {
+
+MarkScope::Profiler& solveProfiler()
+{
+    static MarkScope::Profiler instance(QStringLiteral("com.cavewhere.load"));
+    return instance;
+}
 
 const char* solveErrorStepName(cwLinePlotTask::SolveError::Step step)
 {
@@ -571,11 +578,17 @@ QFuture<void> cwLinePlotManager::doRun() {
                 return QFuture<cwLinePlotTask::LinePlotResultData>();
             }
 
+            const MarkScope::ScopedProfiler solveScope(solveProfiler(), QStringLiteral("solveKick"));
+            QElapsedTimer solveTimer;
+            solveTimer.start();
+
             auto input = cwLinePlotTask::buildInput(Region.data(),
                                                     m_caveAttachmentDirs,
                                                     m_tripAttachmentDirs);
             cwTaskContextScope traceScope(QStringLiteral("lineplot"));
             auto future = cwLinePlotTask::run(std::move(input));
+            cw::profile::write(lcProfileLoad(),
+                               QStringLiteral("project phase=solveKick us=%1").arg(cw::profile::elapsedUs(solveTimer)));
 
             // Receive the worker's result by parameter rather than capturing
             // the future and calling future.result() — the parameter form

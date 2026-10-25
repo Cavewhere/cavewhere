@@ -17,6 +17,7 @@
 #include "cwRegionIOTask.h"
 #include "cwConcurrent.h"
 #include "cwTaskTrace.h"
+#include "cwProfileLog.h"
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
 #include "cwCavingRegion.h"
@@ -103,6 +104,18 @@
 using namespace Monad;
 
 namespace {
+
+MarkScope::Profiler& loadProfiler()
+{
+    static MarkScope::Profiler instance(QStringLiteral("com.cavewhere.load"));
+    return instance;
+}
+
+void writeLoadPhase(const QString& phase, const QElapsedTimer& timer)
+{
+    cw::profile::write(lcProfileLoad(),
+                       QStringLiteral("project phase=%1 us=%2").arg(phase).arg(cw::profile::elapsedUs(timer)));
+}
 
 // The geo-reference enums cross into the proto by static_cast, so their values
 // are file format. Reordering either C++ enum — inserting a state, adding an
@@ -1422,12 +1435,19 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                 return AsyncFuture::completed(canceledResult());
             }
 
+            const auto parseToken = loadProfiler().start(QStringLiteral("parse"));
+            QElapsedTimer parseTimer;
+            parseTimer.start();
+
             auto projectDataFuture = cwSaveLoad::loadAll(filename);
 
             d->futureToken.addJob(projectDataFuture, QStringLiteral("Loading"));
 
             return AsyncFuture::observe(projectDataFuture)
-                    .context(this, cwTaskContextScope::wrap([this, projectDataFuture, filename, loadGeneration, canceledResult]() {
+                    .context(this, cwTaskContextScope::wrap([this, projectDataFuture, filename, loadGeneration, canceledResult, parseToken, parseTimer]() {
+                loadProfiler().stop(parseToken);
+                writeLoadPhase(QStringLiteral("parse"), parseTimer);
+
                 return mbind(projectDataFuture, [this, projectDataFuture, filename, loadGeneration, canceledResult](const ResultBase&) {
                     if (d->operationGeneration != loadGeneration
                             || d->retiring
@@ -1439,7 +1459,13 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     //The filename needs to be set first because, image providers should
                     //have the filename before the region model is set
                     setFileName(filename);
-                    initializeRepositoryForCurrentFile();
+                    {
+                        const MarkScope::ScopedProfiler scope(loadProfiler(), QStringLiteral("initializeRepository"));
+                        QElapsedTimer timer;
+                        timer.start();
+                        initializeRepositoryForCurrentFile();
+                        writeLoadPhase(QStringLiteral("initializeRepository"), timer);
+                    }
                     setTemporary(false);
 
                     setSaveEnabled(false);
@@ -1452,7 +1478,13 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     d->saveBlockedWarningEmitted = false;
                     emit dataRootChanged();
 
-                    d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
+                    {
+                        const MarkScope::ScopedProfiler scope(loadProfiler(), QStringLiteral("setData"));
+                        QElapsedTimer timer;
+                        timer.start();
+                        d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
+                        writeLoadPhase(QStringLiteral("setData"), timer);
+                    }
 
                     // Clear the undo stack so old objects from
                     // clearCaves()/addCaves() commands are freed.

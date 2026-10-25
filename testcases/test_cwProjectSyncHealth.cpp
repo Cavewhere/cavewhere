@@ -4,6 +4,7 @@
 // Qt
 #include <QDir>
 #include <QFile>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 
 // Ours
@@ -12,6 +13,7 @@
 #include "Account.h"
 #include "asyncfuture.h"
 #include "TestHelper.h"
+#include "ProfileLogCapture.h"
 
 // libgit2
 #include "git2.h"
@@ -274,6 +276,43 @@ TEST_CASE("cwProjectSyncHealth clears NoRemote after remote is added", "[cwProje
 
     REQUIRE(waitUntil([&syncHealth]() { return syncHealth.status().hasRemote(); }));
     CHECK(syncHealth.status().syncBlocker() != cwSyncStatus::SyncBlocker::NoRemote);
+}
+
+TEST_CASE("cwProjectSyncHealth writes a cw.profile.load line for each status walk", "[cwProjectSyncHealth]")
+{
+    auto tempDir = QTemporaryDir();
+    REQUIRE(tempDir.isValid());
+
+    Account account;
+    account.setName(QStringLiteral("Tester"));
+    account.setEmail(QStringLiteral("tester@example.com"));
+
+    GitRepository repo;
+    repo.setDirectory(QDir(tempDir.path()));
+    repo.initRepository();
+    repo.setAccount(&account);
+
+    writeFile(tempDir.path(), QStringLiteral("state.txt"), QStringLiteral("initial\n"));
+    CHECK_NOTHROW(repo.commitAll(QStringLiteral("Initial"), QStringLiteral("initial commit")));
+    writeFile(tempDir.path(), QStringLiteral("added.txt"), QStringLiteral("untracked\n"));
+
+    const ProfileLogCapture capture(QStringLiteral("cw.profile.load.debug=true"));
+
+    cwProjectSyncHealth syncStatus;
+    syncStatus.setRepository(&repo);
+    syncStatus.refresh();
+
+    const QString prefix = QStringLiteral("project phase=gitStatus ");
+    REQUIRE(waitUntil([&prefix]() {
+        return !ProfileLogCapture::linesStartingWith(prefix).isEmpty();
+    }));
+
+    const QRegularExpression pattern(QStringLiteral("^project phase=gitStatus us=\\d+ modified=1$"));
+    const QStringList lines = ProfileLogCapture::linesStartingWith(prefix);
+    for (const QString& line : lines) {
+        INFO("line: " << line.toStdString());
+        CHECK(pattern.match(line).hasMatch());
+    }
 }
 
 TEST_CASE("cwSyncStatus operator== compares syncBlocker", "[cwSyncStatus]")

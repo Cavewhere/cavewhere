@@ -1,11 +1,22 @@
 #include "cwProjectSyncHealth.h"
 #include "cwRemoteAuthProvider.h"
+#include "cwProfileLog.h"
 
 #include "GitRemoteInfo.h"
 #include "GitRepository.h"
 
 #include "asyncfuture.h"
 #include <algorithm>
+
+#include <MarkScope/Profiler.h>
+
+namespace {
+MarkScope::Profiler& gitProfiler()
+{
+    static MarkScope::Profiler instance(QStringLiteral("com.cavewhere.git"));
+    return instance;
+}
+}
 
 cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
     QObject(parent),
@@ -159,7 +170,16 @@ void cwProjectSyncHealth::refresh()
         m_pollTimer.start();
     }
 
-    m_repository->checkStatus();
+    {
+        const MarkScope::ScopedProfiler scope(gitProfiler(), QStringLiteral("gitStatus"));
+        QElapsedTimer timer;
+        timer.start();
+        m_repository->checkStatus();
+        cw::profile::write(lcProfileLoad(),
+                           QStringLiteral("project phase=gitStatus us=%1 modified=%2")
+                               .arg(cw::profile::elapsedUs(timer))
+                               .arg(m_repository->modifiedFileCount()));
+    }
     const bool localChanges = m_repository->modifiedFileCount() > 0;
     const QVector<QQuickGit::GitRemoteInfo> configuredRemotes = m_repository->remotes();
     if (configuredRemotes.isEmpty()) {
