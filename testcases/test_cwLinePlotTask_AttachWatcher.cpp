@@ -276,6 +276,9 @@ std::unique_ptr<RememberedSourceFixture> makeRememberedSourceFixture()
 
     fixture->rootData = std::make_unique<cwRootData>();
     fixture->project = fixture->rootData->project();
+    // The .cwproj Save commits, and a commit needs a git identity.
+    fixture->rootData->account()->setName(QStringLiteral("Watcher Tester"));
+    fixture->rootData->account()->setEmail(QStringLiteral("watcher.tester@example.com"));
 
     // The centerline is set before saveAs so the fixture settles with
     // modified() == false, which the gate test baselines against.

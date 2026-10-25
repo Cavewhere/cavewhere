@@ -181,6 +181,12 @@ public:
         bool hasHydrationDeltaPaths = false;
     };
 
+    //! What a finished save covered: the local mutation epoch at the moment
+    //! its save-job drain ended.
+    struct SaveReceipt {
+        quint64 mutationEpoch = 0;
+    };
+
     enum class SyncErrorCode : int {
         // Offset by 100 to avoid collisions with GitErrorCode which also
         // starts at CustomError + 1 and shares the same ResultBase transport.
@@ -298,8 +304,11 @@ public:
     // a data-root directory whose name matches the bundle.
     Monad::ResultBase prepareBundleStage(const QString& bundleBaseName);
 
-    QFuture<Monad::ResultBase> saveBundledArchive(const QString& targetArchivePath);
-    QFuture<Monad::ResultBase> enqueueFlushAndCommit();
+    QFuture<Monad::Result<SaveReceipt>> saveBundledArchive(const QString& targetArchivePath);
+    QFuture<Monad::Result<SaveReceipt>> enqueueFlushAndCommit();
+
+    //! Counts every localMutationOccurred emission.
+    quint64 localMutationEpoch() const;
 
     // Queues the dataRoot directory rename and .cwproj descriptor file rename jobs, and
     // rebuilds internal object-state paths to reflect the new dataRoot. Called by the sync
@@ -612,6 +621,8 @@ private:
     QFuture<Monad::ResultBase> gitOperationAndReconcile(const QString& operationLabel,
                                                         const GitOperationFn& gitOp);
     QFuture<Monad::ResultBase> saveFlushImpl();
+    QFuture<Monad::Result<SaveReceipt>> saveFlushWithReceipt();
+    Monad::ResultBase finishSaveFlush();
     QFuture<Monad::ResultBase> enqueueReconcilePhase(const QFuture<Monad::ResultBase>& prepareFuture,
                                                      quint64 syncGeneration,
                                                      const std::shared_ptr<ReconcileAttemptState>& attemptState,

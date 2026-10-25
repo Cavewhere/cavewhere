@@ -21,6 +21,7 @@
 #include <asyncfuture.h>
 
 // Qt
+#include <QDirIterator>
 #include <QMetaObject>
 #include <QPersistentModelIndex>
 #include <QPointer>
@@ -428,6 +429,42 @@ void saveMidFill(cwSurveyNode* parent, QObject* context, const AttachFuture* fut
     });
 }
 
+//! What a project held when fileSaved fired.
+struct SaveCoverage {
+    qsizetype tripsInTree = 0;
+    qsizetype tripFilesOnDisk = 0;
+};
+
+qsizetype tripFilesUnder(const QDir& root)
+{
+    const QString trashSegment = QStringLiteral("/.cw_trash/");
+    qsizetype count = 0;
+    QDirIterator it(root.absolutePath(), {QStringLiteral("*.cwtrip")}, QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        if (!it.next().contains(trashSegment)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+//! Records, at each fileSaved, the trips in the tree. A .cwproj project also
+//! records the trip files in its project directory.
+void watchSaveCoverage(QList<SaveCoverage>* coverage, cwProject* project, QObject* context,
+                       bool countFilesOnDisk)
+{
+    QObject::connect(project, &cwProject::fileSaved, context,
+                     [coverage, project, countFilesOnDisk]() {
+        SaveCoverage saved;
+        saved.tripsInTree = project->cavingRegion()->rootNode()->allTrips().size();
+        if (countFilesOnDisk) {
+            saved.tripFilesOnDisk = tripFilesUnder(projectRootOf(project));
+        }
+        coverage->append(saved);
+    });
+}
+
 void saveAndSettle(SavedProjectFixture* fixture)
 {
     REQUIRE(fixture->project->save());
@@ -452,6 +489,8 @@ TEST_CASE("A Save pressed mid-fill leaves the project modified until the fill's 
     QObject context;
     QList<bool> modifiedAtFileSaved;
     watchFileSaved(&modifiedAtFileSaved, project, &context);
+    QList<SaveCoverage> coverage;
+    watchSaveCoverage(&coverage, project, &context, true);
 
     AttachFuture future;
     bool savedMidFill = false;
@@ -465,9 +504,18 @@ TEST_CASE("A Save pressed mid-fill leaves the project modified until the fill's 
 
     REQUIRE(savedMidFill);
     REQUIRE(modifiedAtFileSaved.size() == 1);
-    // Batches landed after the save began, so the save may not cover them.
-    CHECK(modifiedAtFileSaved.at(0));
-    CHECK(project->modified());
+    REQUIRE(coverage.size() == 1);
+    const SaveCoverage midFill = coverage.at(0);
+    INFO("trips in the tree at fileSaved: " << midFill.tripsInTree
+         << ", trip files on disk: " << midFill.tripFilesOnDisk);
+    // The save clears the indicator only when every row it reports is on disk.
+    if (!modifiedAtFileSaved.at(0)) {
+        CHECK(midFill.tripFilesOnDisk == midFill.tripsInTree);
+    }
+    // A batch that landed after the save's drain keeps the indicator on.
+    if (midFill.tripsInTree < regionRoot(fixture.get())->allTrips().size()) {
+        CHECK(project->modified());
+    }
 
     // A Save after the fill covers every row and clears the indicator.
     saveAndSettle(fixture.get());
@@ -477,7 +525,7 @@ TEST_CASE("A Save pressed mid-fill leaves the project modified until the fill's 
     checkGeneratedShape(future.result().value().root.data(), kBooks, kSurveysPerBook);
 }
 
-TEST_CASE("A Save As to a bundle mid-fill leaves the project modified after the fill",
+TEST_CASE("A Save As to a bundle mid-fill leaves the project modified until the fill's rows are in the bundle",
           "[AttachFill][Save]")
 {
     QTemporaryDir sourceDir;
@@ -494,6 +542,8 @@ TEST_CASE("A Save As to a bundle mid-fill leaves the project modified after the 
     QObject context;
     QList<bool> modifiedAtFileSaved;
     watchFileSaved(&modifiedAtFileSaved, project, &context);
+    QList<SaveCoverage> coverage;
+    watchSaveCoverage(&coverage, project, &context, false);
 
     AttachFuture future;
     bool savedMidFill = false;
@@ -507,10 +557,20 @@ TEST_CASE("A Save As to a bundle mid-fill leaves the project modified after the 
 
     REQUIRE(savedMidFill);
     REQUIRE(modifiedAtFileSaved.size() == 1);
-    // Batches landed after the Save As was enqueued, so the bundle may be
-    // missing rows; the indicator asks for another Save before the project closes.
-    CHECK(modifiedAtFileSaved.at(0));
-    CHECK(project->modified());
+    REQUIRE(coverage.size() == 1);
+    const SaveCoverage midFill = coverage.at(0);
+    INFO("trips in the tree at fileSaved: " << midFill.tripsInTree);
+    // The Save As clears the indicator only when the bundle holds every row
+    // the tree had then.
+    if (!modifiedAtFileSaved.at(0)) {
+        auto reopened = openInFreshRootData(bundlePath);
+        CHECK(reopened->project()->cavingRegion()->rootNode()->allTrips().size()
+              == midFill.tripsInTree);
+    }
+    // A batch that landed after the Save As's drain keeps the indicator on.
+    if (midFill.tripsInTree < regionRoot(fixture.get())->allTrips().size()) {
+        CHECK(project->modified());
+    }
 
     saveAndSettle(fixture.get());
     REQUIRE(modifiedAtFileSaved.size() == 2);

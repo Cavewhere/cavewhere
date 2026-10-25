@@ -60,6 +60,7 @@ using namespace Catch;
 #include <QTemporaryFile>
 #include <QEventLoop>
 #include <QTimer>
+#include <QTimeZone>
 #include <QSignalSpy>
 #include <QTest>
 #include <QElapsedTimer>
@@ -13820,4 +13821,350 @@ TEST_CASE("cwProject::sync() skips install check when provider reports unsupport
     CHECK(needsInstallSpy.count() == 0);
     CHECK(finishedSpy.count() >= 1);
     CHECK(stub->verifyCalls() == 0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Save receipts: a Save clears the modified bit when its drain covered every
+// local mutation.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+
+// The flush, the commit or the zip, and the queued fileSaved under Debug + ASAN
+// on a loaded machine.
+constexpr int kSaveReceiptWaitMs = 60000;
+
+const QDate kReceiptTripDate(2024, 3, 9);
+const QDate kReceiptLateTripDate(2024, 11, 23);
+
+//! A clean project with one cave and one trip, saved as \a fileName (.cwproj
+//! or a .cw bundle) under its own temporary directory.
+struct SaveReceiptFixture {
+    QTemporaryDir tempDir;
+    std::unique_ptr<cwRootData> rootData;
+    cwProject* project = nullptr;
+    cwCave* cave = nullptr;
+    cwTrip* trip = nullptr;
+
+    explicit SaveReceiptFixture(const QString& fileName)
+    {
+        REQUIRE(tempDir.isValid());
+        rootData = std::make_unique<cwRootData>();
+        project = rootData->project();
+        rootData->account()->setName(QStringLiteral("Receipt Tester"));
+        rootData->account()->setEmail(QStringLiteral("receipt.tester@example.com"));
+
+        project->cavingRegion()->addCave();
+        cave = project->cavingRegion()->cave(0);
+        cave->setName(QStringLiteral("Receipt Cave"));
+        cave->addTrip();
+        trip = cave->trip(0);
+        trip->setName(QStringLiteral("Receipt Trip"));
+
+        REQUIRE(project->saveAs(tempDir.filePath(fileName)));
+        settle();
+        REQUIRE(project->save());
+        settle();
+        REQUIRE_FALSE(project->modified());
+    }
+
+    void settle()
+    {
+        project->waitSaveToFinish();
+        rootData->futureManagerModel()->waitForFinished();
+        project->waitSaveToFinish();
+        QCoreApplication::processEvents();
+    }
+
+    cwSaveLoad* saveLoad() const { return project->saveLoad(); }
+};
+
+//! Records modified() at each fileSaved, in order.
+void recordModifiedAtFileSaved(QList<bool>* modifiedAtFileSaved, cwProject* project,
+                               QObject* context)
+{
+    QObject::connect(project, &cwProject::fileSaved, context, [modifiedAtFileSaved, project]() {
+        modifiedAtFileSaved->append(project->modified());
+    });
+}
+
+bool waitForFileSavedCount(const QList<bool>& modifiedAtFileSaved, int count)
+{
+    return QTest::qWaitFor([&modifiedAtFileSaved, count]() {
+        return modifiedAtFileSaved.size() >= count;
+    }, kSaveReceiptWaitMs);
+}
+
+QDateTime receiptDateTime(const QDate& date)
+{
+    return QDateTime(date, QTime(), QTimeZone::utc());
+}
+
+//! Opens \a projectPath in its own cwRootData and waits for the load.
+std::unique_ptr<cwRootData> reopenSavedProject(const QString& projectPath)
+{
+    auto rootData = std::make_unique<cwRootData>();
+    rootData->project()->loadFile(projectPath);
+    rootData->project()->waitLoadToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    return rootData;
+}
+
+//! Checks that \a projectPath holds the cave rename and the trip date the
+//! same-turn tests make.
+void checkReopenedHasSameTurnEdits(const QString& projectPath)
+{
+    auto reopened = reopenSavedProject(projectPath);
+    cwCavingRegion* region = reopened->project()->cavingRegion();
+    REQUIRE(region->caveCount() == 1);
+    CHECK(region->cave(0)->name() == QStringLiteral("Renamed Cave"));
+    REQUIRE(region->cave(0)->tripCount() == 1);
+    CHECK(region->cave(0)->trip(0)->date().date() == kReceiptTripDate);
+}
+
+} // namespace
+
+TEST_CASE("A Save covers a mutation made on its own turn while the save jobs drain",
+          "[cwProject][Save]")
+{
+    const QString fileName = GENERATE(QStringLiteral("same-turn.cwproj"),
+                                      QStringLiteral("same-turn.cw"));
+    INFO("project: " << fileName.toStdString());
+    SaveReceiptFixture f(fileName);
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+
+    // The rename puts its jobs on the save pool; the save and the date edit
+    // on the same turn join that drain.
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    REQUIRE(f.project->save());
+    f.trip->setDate(receiptDateTime(kReceiptTripDate));
+
+    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    CHECK_FALSE(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+
+    checkReopenedHasSameTurnEdits(f.project->filename());
+}
+
+TEST_CASE("A Save As to a bundle covers a mutation made on its own turn while the save jobs drain",
+          "[cwProject][Save]")
+{
+    SaveReceiptFixture f(QStringLiteral("same-turn-source.cwproj"));
+    const QString bundlePath = f.tempDir.filePath(QStringLiteral("same-turn-target.cw"));
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    REQUIRE(f.project->saveAs(bundlePath));
+    f.trip->setDate(receiptDateTime(kReceiptTripDate));
+
+    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    CHECK_FALSE(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+
+    checkReopenedHasSameTurnEdits(bundlePath);
+}
+
+TEST_CASE("A mutation made after a Save's drain keeps the project modified",
+          "[cwProject][Save]")
+{
+    const QString fileName = GENERATE(QStringLiteral("after-drain.cwproj"),
+                                      QStringLiteral("after-drain.cw"));
+    INFO("project: " << fileName.toStdString());
+    SaveReceiptFixture f(fileName);
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+
+    // The rename's own automatic flush settles first, so the slot below
+    // fires on the save's flush rather than on one the save's drain follows.
+    QSignalSpy renameFlushSpy(f.saveLoad(), &cwSaveLoad::saveFlushCompleted);
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    REQUIRE(QTest::qWaitFor([&renameFlushSpy]() { return renameFlushSpy.count() >= 1; },
+                            kSaveReceiptWaitMs));
+    f.settle();
+    REQUIRE(f.project->modified());
+
+    bool mutatedAfterDrain = false;
+    QObject::connect(f.saveLoad(), &cwSaveLoad::saveFlushCompleted, &context,
+                     [&f, &mutatedAfterDrain]() {
+        if (mutatedAfterDrain) {
+            return;
+        }
+        mutatedAfterDrain = true;
+        f.trip->setDate(receiptDateTime(kReceiptLateTripDate));
+    });
+
+    REQUIRE(f.project->save());
+
+    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    REQUIRE(mutatedAfterDrain);
+    CHECK(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK(f.project->modified());
+}
+
+TEST_CASE("A Save with no concurrent mutation clears the modified bit",
+          "[cwProject][Save]")
+{
+    const QString fileName = GENERATE(QStringLiteral("quiet.cwproj"),
+                                      QStringLiteral("quiet.cw"));
+    INFO("project: " << fileName.toStdString());
+    SaveReceiptFixture f(fileName);
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    f.settle();
+    REQUIRE(f.project->modified());
+
+    REQUIRE(f.project->save());
+    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    CHECK_FALSE(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+}
+
+TEST_CASE("A Save after a mutation that queued no save job clears the modified bit",
+          "[cwProject][Save]")
+{
+    const QString fileName = GENERATE(QStringLiteral("jobless.cwproj"),
+                                      QStringLiteral("jobless.cw"));
+    INFO("project: " << fileName.toStdString());
+    SaveReceiptFixture f(fileName);
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+
+    f.saveLoad()->reportProjectFileChangedOnDisk();
+    REQUIRE(f.project->modified());
+
+    REQUIRE(f.project->save());
+    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    CHECK_FALSE(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+}
+
+TEST_CASE("Two Saves queued back to back each answer for their own drain",
+          "[cwProject][Save]")
+{
+    SaveReceiptFixture f(QStringLiteral("back-to-back.cwproj"));
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+
+    bool secondSaveQueued = false;
+    QObject::connect(f.saveLoad(), &cwSaveLoad::saveFlushCompleted, &context,
+                     [&f, &secondSaveQueued]() {
+        if (secondSaveQueued) {
+            return;
+        }
+        f.trip->setDate(receiptDateTime(kReceiptLateTripDate));
+        secondSaveQueued = f.project->save();
+    });
+
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    REQUIRE(f.project->save());
+
+    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 2));
+    REQUIRE(secondSaveQueued);
+    // The date edit landed after the first drain ended and inside the second.
+    CHECK(modifiedAtFileSaved.at(0));
+    CHECK_FALSE(modifiedAtFileSaved.at(1));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+}
+
+TEST_CASE("A save entry point's receipt carries the epoch at the end of its drain",
+          "[cwProject][Save]")
+{
+    const QString fileName = GENERATE(QStringLiteral("receipt.cwproj"),
+                                      QStringLiteral("receipt.cw"));
+    INFO("project: " << fileName.toStdString());
+    SaveReceiptFixture f(fileName);
+    cwSaveLoad* saveLoad = f.saveLoad();
+    const bool bundled = fileName.endsWith(QStringLiteral(".cw"));
+    const quint64 epochBefore = saveLoad->localMutationEpoch();
+
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    auto future = bundled ? saveLoad->saveBundledArchive(f.project->filename())
+                          : saveLoad->enqueueFlushAndCommit();
+    f.trip->setDate(receiptDateTime(kReceiptTripDate));
+
+    REQUIRE(AsyncFuture::waitForFinished(future, kSaveReceiptWaitMs));
+    const auto result = future.result();
+    INFO("save: " << result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    CHECK(saveLoad->localMutationEpoch() > epochBefore);
+    CHECK(result.value().mutationEpoch == saveLoad->localMutationEpoch());
+}
+
+TEST_CASE("Back-to-back save entry points return their own drain's epoch",
+          "[cwProject][Save]")
+{
+    SaveReceiptFixture f(QStringLiteral("receipts-back-to-back.cwproj"));
+    cwSaveLoad* saveLoad = f.saveLoad();
+
+    QObject context;
+    QFuture<Monad::Result<cwSaveLoad::SaveReceipt>> second;
+    bool secondQueued = false;
+    QObject::connect(saveLoad, &cwSaveLoad::saveFlushCompleted, &context,
+                     [&f, saveLoad, &second, &secondQueued]() {
+        if (secondQueued) {
+            return;
+        }
+        secondQueued = true;
+        f.trip->setDate(receiptDateTime(kReceiptLateTripDate));
+        second = saveLoad->enqueueFlushAndCommit();
+    });
+
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    auto first = saveLoad->enqueueFlushAndCommit();
+
+    REQUIRE(AsyncFuture::waitForFinished(first, kSaveReceiptWaitMs));
+    REQUIRE(secondQueued);
+    REQUIRE(AsyncFuture::waitForFinished(second, kSaveReceiptWaitMs));
+    REQUIRE_FALSE(first.result().hasError());
+    REQUIRE_FALSE(second.result().hasError());
+
+    const quint64 firstEpoch = first.result().value().mutationEpoch;
+    const quint64 secondEpoch = second.result().value().mutationEpoch;
+    INFO("first receipt " << firstEpoch << ", second receipt " << secondEpoch
+         << ", live " << saveLoad->localMutationEpoch());
+    CHECK(firstEpoch < secondEpoch);
+    CHECK(secondEpoch == saveLoad->localMutationEpoch());
+}
+
+TEST_CASE("Every local mutation notice advances the local mutation epoch",
+          "[cwProject][Save]")
+{
+    SaveReceiptFixture f(QStringLiteral("epoch-count.cwproj"));
+    cwSaveLoad* saveLoad = f.saveLoad();
+    f.cave->addTrip();
+    f.settle();
+
+    QSignalSpy mutationSpy(saveLoad, &cwSaveLoad::localMutationOccurred);
+    const quint64 epochBefore = saveLoad->localMutationEpoch();
+
+    // A row removal reports the mutation from the region tree's handler,
+    // beside the jobs that move the trip to the trash.
+    f.cave->removeTrip(f.cave->tripCount() - 1);
+    f.settle();
+
+    REQUIRE(mutationSpy.count() > 0);
+    CHECK(saveLoad->localMutationEpoch() - epochBefore
+          == static_cast<quint64>(mutationSpy.count()));
 }

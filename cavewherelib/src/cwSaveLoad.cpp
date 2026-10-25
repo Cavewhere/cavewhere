@@ -1776,14 +1776,42 @@ QFuture<ResultBase> cwSaveLoad::saveFlushImpl()
 {
     return AsyncFuture::observe(completeSaveJobs())
             .context(this, [this]() {
-        const QString pendingErrors = d->takePendingSaveJobErrors();
-        emit saveFlushCompleted();
-        if (!pendingErrors.isEmpty()) {
-            return ResultBase(QStringLiteral("Save flush failed:\n%1").arg(pendingErrors));
-        }
-        return ResultBase();
+        return finishSaveFlush();
     })
             .future();
+}
+
+QFuture<Result<cwSaveLoad::SaveReceipt>> cwSaveLoad::saveFlushWithReceipt()
+{
+    return AsyncFuture::observe(completeSaveJobs())
+            .context(this, [this]() -> Result<SaveReceipt> {
+        // A mutation that queued no job (a watcher-reported edit) ends no
+        // drain, so an idle queue stamps here: every counted mutation's job,
+        // if it had one, is on disk.
+        if (d->m_pendingJobs.isEmpty() && d->m_pendingJobsDeferred.future().isFinished()) {
+            d->drainedEpoch = d->localMutationEpoch;
+        }
+        // Read before saveFlushCompleted, whose slots may mutate. A job
+        // enqueued since the drain ended leaves drainedEpoch alone until
+        // its own drain ends, so the stamp is this flush's.
+        const SaveReceipt receipt{d->drainedEpoch};
+        const ResultBase flushResult = finishSaveFlush();
+        if (flushResult.hasError()) {
+            return Result<SaveReceipt>(flushResult.errorMessage(), flushResult.errorCode());
+        }
+        return Result<SaveReceipt>(receipt);
+    })
+            .future();
+}
+
+ResultBase cwSaveLoad::finishSaveFlush()
+{
+    const QString pendingErrors = d->takePendingSaveJobErrors();
+    emit saveFlushCompleted();
+    if (!pendingErrors.isEmpty()) {
+        return ResultBase(QStringLiteral("Save flush failed:\n%1").arg(pendingErrors));
+    }
+    return ResultBase();
 }
 
 QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave(bool persistNoteDescriptors,
@@ -2688,18 +2716,24 @@ ResultBase cwSaveLoad::copyProjectTo(const QString& destinationFileUrl)
     return transferProjectTo(destinationFileUrl, ProjectTransferMode::Copy);
 }
 
-QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchivePath)
+QFuture<Result<cwSaveLoad::SaveReceipt>> cwSaveLoad::saveBundledArchive(const QString& targetArchivePath)
 {
     const QString normalizedTargetPath = cwGlobals::convertFromURL(targetArchivePath);
     if (normalizedTargetPath.isEmpty()) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Bundle target path is empty.")));
+        return AsyncFuture::completed(Result<SaveReceipt>(QStringLiteral("Bundle target path is empty.")));
     }
 
-    auto saveFlushFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this]() {
-        return saveFlushImpl();
+    // The flush's receipt outlives its operation so the bundle's result can
+    // report the drain it zipped.
+    auto flushReceiptFuture = std::make_shared<QFuture<Result<SaveReceipt>>>();
+    auto saveFlushFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this, flushReceiptFuture]() {
+        *flushReceiptFuture = saveFlushWithReceipt();
+        return flushReceiptFuture->then([](const Result<SaveReceipt>& flushResult) -> ResultBase {
+            return flushResult;
+        });
     });
 
-    return d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::BundlePackage, [this, saveFlushFuture, normalizedTargetPath]() {
+    auto bundleFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::BundlePackage, [this, saveFlushFuture, normalizedTargetPath]() {
         const auto flushResult = saveFlushFuture.result();
         if (flushResult.hasError()) {
             return AsyncFuture::completed(flushResult);
@@ -2744,20 +2778,39 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
             return packageResult;
         }).future();
     });
+
+    return AsyncFuture::observe(bundleFuture)
+            .context(this, [bundleFuture, flushReceiptFuture]() -> Result<SaveReceipt> {
+        const auto bundleResult = bundleFuture.result();
+        if (bundleResult.hasError()) {
+            return Result<SaveReceipt>(bundleResult.errorMessage(), bundleResult.errorCode());
+        }
+        return flushReceiptFuture->result();
+    })
+            .future();
 }
 
-QFuture<ResultBase> cwSaveLoad::enqueueFlushAndCommit()
+QFuture<Result<cwSaveLoad::SaveReceipt>> cwSaveLoad::enqueueFlushAndCommit()
 {
-    auto flushFuture = saveFlushImpl();
+    auto flushFuture = saveFlushWithReceipt();
     return AsyncFuture::observe(flushFuture)
-            .context(this, [this, flushFuture]() -> ResultBase {
+            .context(this, [this, flushFuture]() -> Result<SaveReceipt> {
         const auto flushResult = flushFuture.result();
         if (flushResult.hasError()) {
             return flushResult;
         }
-        return commitProjectChanges();
+        const auto commitResult = commitProjectChanges();
+        if (commitResult.hasError()) {
+            return Result<SaveReceipt>(commitResult.errorMessage(), commitResult.errorCode());
+        }
+        return flushResult;
     })
             .future();
+}
+
+quint64 cwSaveLoad::localMutationEpoch() const
+{
+    return d->localMutationEpoch;
 }
 
 void cwSaveLoad::setOwnedTempDir(const QString& path)
@@ -4252,9 +4305,7 @@ void cwSaveLoad::connectTreeModel()
             d->rewatchObjectLifetime(object, this);
         }
 
-        if (!d->suppressLocalMutationTracking) {
-            emit localMutationOccurred();
-        }
+        d->noteLocalMutation(this);
     });
 
     connectObjects();
@@ -4472,9 +4523,7 @@ void cwSaveLoad::connectTreeModel()
                         d->m_objectStates.remove(layer);
                     }
                 }
-                if (!d->suppressLocalMutationTracking) {
-                    emit localMutationOccurred();
-                }
+                d->noteLocalMutation(this);
             });
             connect(lazLayers, &QAbstractItemModel::rowsRemoved, this, saveMetadata);
 
@@ -4732,9 +4781,7 @@ void cwSaveLoad::enqueueExternalCenterlineCopy(const QString& sourcePath,
     // Under CopyPolicy::SkipUpToDate reconcile()'s planner skips
     // up-to-date destinations, so a no-op reconcile never reaches this
     // and the bit stays untouched.
-    if (!d->suppressLocalMutationTracking) {
-        emit localMutationOccurred();
-    }
+    d->noteLocalMutation(this);
 
     // Whether the job body mutated the destination, set on the worker and
     // read by onDone on the main thread — the job future's completion orders
@@ -4822,9 +4869,7 @@ void cwSaveLoad::enqueueExternalCenterlineRemoveFile(const QString& path)
     // GC of a stranded attachment file is a project mutation too; see
     // enqueueExternalCenterlineCopyIfNewer (including why this runs on
     // temporary projects).
-    if (!d->suppressLocalMutationTracking) {
-        emit localMutationOccurred();
-    }
+    d->noteLocalMutation(this);
 
     cwSaveLoadPrivate::Job job(nullptr,
                                cwSaveLoadPrivate::Job::Kind::File,
@@ -4847,9 +4892,7 @@ void cwSaveLoad::enqueueExternalCenterlineRemoveTree(const QString& path)
     // Removing an attachment dir (detach) is a project mutation too; see
     // enqueueExternalCenterlineCopyIfNewer (including why this runs on
     // temporary projects).
-    if (!d->suppressLocalMutationTracking) {
-        emit localMutationOccurred();
-    }
+    d->noteLocalMutation(this);
 
     cwSaveLoadPrivate::Job job(nullptr,
                                cwSaveLoadPrivate::Job::Kind::Directory,
@@ -4905,10 +4948,10 @@ void cwSaveLoad::enqueueExternalSourceRecordRemove(const QUuid& ownerId)
 
 void cwSaveLoad::reportProjectFileChangedOnDisk()
 {
-    if (d->suppressLocalMutationTracking || d->selfWrite.isOpen()) {
+    if (d->selfWrite.isOpen()) {
         return;
     }
-    emit localMutationOccurred();
+    d->noteLocalMutation(this);
 }
 
 void cwSaveLoad::disconnectObjects()

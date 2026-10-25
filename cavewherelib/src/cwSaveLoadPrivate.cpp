@@ -1872,6 +1872,15 @@ void cwSaveLoadPrivate::compressPendingJobs()
     m_pendingJobs = std::move(compressed);
 }
 
+void cwSaveLoadPrivate::noteLocalMutation(cwSaveLoad* context)
+{
+    if (suppressLocalMutationTracking) {
+        return;
+    }
+    ++localMutationEpoch;
+    emit context->localMutationOccurred();
+}
+
 void cwSaveLoadPrivate::execFileSystemJobs(cwSaveLoad* context) {
     if (m_pendingJobs.isEmpty()) {
         return;
@@ -1883,6 +1892,7 @@ void cwSaveLoadPrivate::execFileSystemJobs(cwSaveLoad* context) {
     }
 
     if (m_pendingJobs.isEmpty()) {
+        drainedEpoch = localMutationEpoch;
         m_pendingJobsDeferred.complete();
         return;
     }
@@ -1906,6 +1916,7 @@ void cwSaveLoadPrivate::execFileSystemJobs(cwSaveLoad* context) {
             job.onDone(data);
         }
         if (m_pendingJobs.isEmpty()) {
+            drainedEpoch = localMutationEpoch;
             m_pendingJobsDeferred.complete();
         } else {
             //Start another job

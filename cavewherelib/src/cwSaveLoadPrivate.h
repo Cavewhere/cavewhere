@@ -388,6 +388,9 @@ struct cwSaveLoadPrivate {
     QString pendingCancellationReason;
     quint64 modelMutationEpoch = 0;
     quint64 localMutationEpoch = 0;
+    // localMutationEpoch when the save-job drain last ended; every mutation
+    // counted at or before it has its job on disk.
+    quint64 drainedEpoch = 0;
     bool suppressLocalMutationTracking = false;
 
     // Open while cwSaveLoad is rewriting the project's own files in place —
@@ -758,6 +761,8 @@ struct cwSaveLoadPrivate {
 
     void execFileSystemJobs(cwSaveLoad* context);
 
+    void noteLocalMutation(cwSaveLoad* context);
+
     template<typename T>
     void saveObject(cwSaveLoad* context, const T* object) {
         if(saveEnabled) {
@@ -770,10 +775,9 @@ struct cwSaveLoadPrivate {
                 return;
             }
             if (!suppressLocalMutationTracking) {
-                ++localMutationEpoch;
                 remoteApplyGuard.noteMutation();
-                emit context->localMutationOccurred();
             }
+            noteLocalMutation(context);
 
             if constexpr (std::is_same_v<T, cwCave>) {
                 saveProtoMessage(context, cwSaveLoad::toProtoCave(object), object);

@@ -245,7 +245,7 @@ private:
     void runSyncOperation(const std::shared_ptr<SyncCycle>& cycle,
                           const QFuture<Monad::ResultBase>& operationFuture);
     void setModified(bool modified);
-    void completeSave(quint64 savedGeneration);
+    void completeSave(const cwSaveLoad::SaveReceipt& receipt);
 
     //! Seed the region's unitSystem from the app-level default. Runs only at
     //! new-project creation on the main thread; a load overrides it via setData().
@@ -267,7 +267,6 @@ private:
     QUndoStack* UndoStack;
 
     bool m_modified = false;
-    quint64 m_mutationGeneration = 0;
 
     //Set by convertFromProjectV6Helper for a read-only legacy SQLite source; cleared by load, saveAs, and newProject
     bool m_unsavedReadOnlyConversion;
