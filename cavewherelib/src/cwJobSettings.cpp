@@ -13,13 +13,18 @@
 //Std includes
 #include <algorithm>
 
+namespace {
+// One core for the main thread, one for the render thread
+constexpr int kThreadsReservedForUi = 2;
+}
+
 cwJobSettings* cwJobSettings::Settings = nullptr;
 
 cwJobSettings::cwJobSettings(QObject* parent) :
     QObject(parent)
 {
     QSettings settings;
-    int threadCount = settings.value(threadCountKey(), QThread::idealThreadCount()).toInt();
+    int threadCount = settings.value(threadCountKey(), defaultThreadCount()).toInt();
     setThreadCountPrivate(threadCount);
     AutomaticUpdate = settings.value(automaticUpdateKey(), AutomaticUpdate).toBool();
     m_memoryBudgetMb = std::max(settings.value(memoryBudgetMbKey(), m_memoryBudgetMb).toInt(), 0);
@@ -54,6 +59,10 @@ void cwJobSettings::setThreadCount(int threadCount) {
 
 int cwJobSettings::idleThreadCount() const {
     return QThread::idealThreadCount();
+}
+
+int cwJobSettings::defaultThreadCount() const {
+    return std::max(1, QThread::idealThreadCount() - kThreadsReservedForUi);
 }
 
 cwJobSettings *cwJobSettings::instance()
@@ -117,11 +126,11 @@ int cwJobSettings::totalMemoryMb() const
 }
 
 bool cwJobSettings::isAtDefaults() const {
-    return threadCount() == idleThreadCount() && automaticUpdate() && memoryBudgetMb() == 0;
+    return threadCount() == defaultThreadCount() && automaticUpdate() && memoryBudgetMb() == 0;
 }
 
 void cwJobSettings::resetToDefaults() {
-    setThreadCount(idleThreadCount());
+    setThreadCount(defaultThreadCount());
     setAutomaticUpdate(true);
     setMemoryBudgetMb(0);
 }

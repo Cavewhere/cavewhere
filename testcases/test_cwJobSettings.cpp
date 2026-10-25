@@ -13,6 +13,44 @@
 #include <QSettings>
 #include "cwSignalSpy.h"
 
+//Std includes
+#include <algorithm>
+
+namespace {
+    const QString kThreadCountKey = QStringLiteral("threadCount");
+    constexpr int kThreadsReservedForUi = 2;
+
+    //! Puts the thread count setting and its stored value back the way the test found them
+    class ThreadCountSettingRestorer {
+    public:
+        explicit ThreadCountSettingRestorer(cwJobSettings* settings) :
+            m_settings(settings),
+            m_previousCount(settings->threadCount()),
+            m_previousStored(QSettings().value(kThreadCountKey))
+        {
+        }
+
+        ~ThreadCountSettingRestorer()
+        {
+            m_settings->setThreadCount(m_previousCount);
+            QSettings diskSettings;
+            if(m_previousStored.isValid()) {
+                diskSettings.setValue(kThreadCountKey, m_previousStored);
+            } else {
+                diskSettings.remove(kThreadCountKey);
+            }
+        }
+
+        ThreadCountSettingRestorer(const ThreadCountSettingRestorer&) = delete;
+        ThreadCountSettingRestorer& operator=(const ThreadCountSettingRestorer&) = delete;
+
+    private:
+        cwJobSettings* m_settings;
+        int m_previousCount;
+        QVariant m_previousStored;
+    };
+}
+
 TEST_CASE("cwJobSettings should initilize correctly and update settings correcly", "[cwJobSettings]") {
     cwJobSettings::initialize();
     auto settings = cwJobSettings::instance();
@@ -49,6 +87,27 @@ TEST_CASE("cwJobSettings should initilize correctly and update settings correcly
         settings->setThreadCount(QThread::idealThreadCount());
     }
 
+    SECTION("Default thread count leaves two threads for the UI") {
+        ThreadCountSettingRestorer restorer(settings);
+        const int expectedDefault = std::max(1, QThread::idealThreadCount() - kThreadsReservedForUi);
+        CHECK(settings->defaultThreadCount() == expectedDefault);
+
+        settings->resetToDefaults();
+        diskSettings.remove(kThreadCountKey);
+        CHECK(settings->threadCount() == settings->defaultThreadCount());
+
+        CHECK(settings->isAtDefaults());
+
+        if(QThread::idealThreadCount() > kThreadsReservedForUi) {
+            settings->setThreadCount(settings->idleThreadCount());
+            CHECK_FALSE(settings->isAtDefaults());
+
+            settings->resetToDefaults();
+            CHECK(settings->threadCount() == settings->defaultThreadCount());
+            CHECK(settings->isAtDefaults());
+        }
+    }
+
     SECTION("Check auto update") {
         CHECK(settings->automaticUpdate() == true);
 
@@ -69,42 +128,7 @@ TEST_CASE("cwJobSettings should initilize correctly and update settings correcly
 
     diskSettings.clear();
 
-    CHECK(settings->threadCount() == QThread::idealThreadCount());
     CHECK(QThreadPool::globalInstance()->maxThreadCount() == QThread::idealThreadCount());
-}
-
-namespace {
-    const QString kThreadCountKey = QStringLiteral("threadCount");
-
-    //! Puts the thread count setting and its stored value back the way the test found them
-    class ThreadCountSettingRestorer {
-    public:
-        explicit ThreadCountSettingRestorer(cwJobSettings* settings) :
-            m_settings(settings),
-            m_previousCount(settings->threadCount()),
-            m_previousStored(QSettings().value(kThreadCountKey))
-        {
-        }
-
-        ~ThreadCountSettingRestorer()
-        {
-            m_settings->setThreadCount(m_previousCount);
-            QSettings diskSettings;
-            if(m_previousStored.isValid()) {
-                diskSettings.setValue(kThreadCountKey, m_previousStored);
-            } else {
-                diskSettings.remove(kThreadCountKey);
-            }
-        }
-
-        ThreadCountSettingRestorer(const ThreadCountSettingRestorer&) = delete;
-        ThreadCountSettingRestorer& operator=(const ThreadCountSettingRestorer&) = delete;
-
-    private:
-        cwJobSettings* m_settings;
-        int m_previousCount;
-        QVariant m_previousStored;
-    };
 }
 
 TEST_CASE("cwJobSettings sizes only the task pool", "[cwJobSettings]") {
