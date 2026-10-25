@@ -13,6 +13,7 @@
 #include "cwOffscreenRenderParameters.h"
 #include "cwProjection.h"
 #include "cwRenderFrameStats.h"
+#include "cwRenderMemoryLedger.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiViewer.h"
 #include "cwScene.h"
@@ -260,24 +261,26 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
 
     // Now the live camera moves in on B. Its refinement loads off-thread and lands
     // in some live frame's streamResources, which always follows an evicting tile.
-    // At the far distance B already reads as settled, so only frames published
-    // after the move count, and B must first be seen wanting more detail.
+    // A holds its export level and refinement only adds bytes, so the category's
+    // GPU bytes grow exactly when B's finer chain swaps in. That growth outlasts
+    // the frame that published it, unlike B's brief below-desired state.
+    auto* ledger = cwRenderMemoryLedger::instance();
+    const auto textureGpuBytes = [ledger]() {
+        return ledger->bytes(cwRenderMemoryLedger::Category::TexturedItemTexture,
+                             cwRenderMemoryLedger::Residency::Gpu);
+    };
+    const qint64 textureGpuBytesBeforeMove = textureGpuBytes();
     const quint64 revisionBeforeMove = streamingFrame().revision;
     setLiveCamera(viewer->camera(), kLiveNearDistance);
 
-    bool sawBelowDesired = false;
     const bool refined = waitFor([&]() {
         keepTilesFlowing();
         viewer->update();
         const auto frame = streamingFrame();
-        if (frame.revision <= revisionBeforeMove) {
-            return false;
-        }
-        if (frame.counts.itemsBelowDesired > 0) {
-            sawBelowDesired = true;
-            return false;
-        }
-        return sawBelowDesired && frame.counts.loadsInFlight == 0;
+        return frame.revision > revisionBeforeMove
+               && textureGpuBytes() > textureGpuBytesBeforeMove
+               && frame.counts.itemsBelowDesired == 0
+               && frame.counts.loadsInFlight == 0;
     });
 
     // The live frames that draw B after its swap are where a stale SRB binds a
