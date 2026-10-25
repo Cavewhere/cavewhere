@@ -57,19 +57,38 @@ namespace cw::ktx2 {
     constexpr int kDefaultUastcQuality = 0;
 
     /**
-     * The pool every UASTC compress runs on. It has one thread, so encodes run
-     * one at a time and each one is free to use every core through libktx.
-     * Exposed so callers can see whether an encode is active
+     * The backends that produce UASTC blocks. Both write the same KTX2 bytes at
+     * the same quality.
+     *
+     * TaskPool runs basisu's per-block UASTC kernel itself, spreading runs of
+     * 256 blocks over cwTask::threadPool(), so the encode follows the pool's
+     * thread count. Libktx hands the texture to ktxTexture2_CompressBasisEx,
+     * the reference the kernel is checked against and the route for encodes
+     * the kernel does not cover.
+     */
+    enum class UastcEncoder {
+        TaskPool,
+        Libktx
+    };
+
+    constexpr UastcEncoder kDefaultUastcEncoder = UastcEncoder::TaskPool;
+
+    /**
+     * The pool every UASTC encode runs on. It has one thread, so encodes run
+     * one at a time; the TaskPool encoder's blocks run on the task pool while
+     * the lane waits. Exposed so callers can see whether an encode is active
      * (activeThreadCount) or queued.
      */
     CAVEWHERE_LIB_EXPORT QThreadPool* encodeLane();
 
     /**
-     * Encodes image as a UASTC supercompressed .ktx2 file with a full mip chain
-     * (built CPU-side, halving down to 1x1) and returns the serialized bytes.
+     * Encodes image as a UASTC .ktx2 file with a full mip chain (built
+     * CPU-side, halving down to 1x1) and returns the serialized bytes. encoder
+     * picks the backend; both give the same bytes at the same quality.
      */
     CAVEWHERE_LIB_EXPORT Monad::Result<QByteArray> encodeRgba(const QImage& image,
-                                                              int quality = kDefaultUastcQuality);
+                                                              int quality = kDefaultUastcQuality,
+                                                              UastcEncoder encoder = kDefaultUastcEncoder);
 
     /**
      * Transcodes .ktx2 bytes produced by encodeRgba() into target, which must be
