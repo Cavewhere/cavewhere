@@ -576,6 +576,20 @@ Item {
                     }
                 }
             }
+
+            //Where "Split chunk here" would end the chunk
+            Rectangle {
+                objectName: "splitPreviewLine"
+                x: itemId.columnTemplate.stationX
+                width: itemId.columnTemplate.width - x
+                y: shotDistanceDataBox.y + shotDistanceDataBox.height - height / 2
+                height: Theme.chunkSplitLineThickness
+                color: Theme.accent
+                visible: itemId.removePreview !== null
+                         && itemId.removePreview.splitChunk === itemId.rowIndex.chunk
+                         && itemId.removePreview.splitShotIndex === itemId.rowIndex.indexInChunk
+                z: 2
+            }
         }
     }
 }

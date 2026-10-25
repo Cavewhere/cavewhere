@@ -1080,6 +1080,103 @@ void cwSurveyEditorModel::removeShotAt(const cwSurveyEditorCellIndex& cell,
     chunk->removeShot(rowIndex.indexInChunk(), direction);
 }
 
+/**
+ * The chunk and shot a split from \a cell happens at. A shot cell splits at its
+ * shot; a station cell splits at the shot below it. The chunk is null for a
+ * cell that names no real shot, such as a title, splay, or virtual row
+ */
+cwSurveyEditorModel::SplitPoint cwSurveyEditorModel::splitPointAt(const cwSurveyEditorCellIndex& cell) const
+{
+    if(m_trip.isNull()) {
+        return {};
+    }
+
+    const int modelRow = cell.modelRow();
+    if(modelRow < 0 || modelRow >= rowCount()) {
+        return {};
+    }
+
+    const auto rowIndex = toRowIndex(modelRow);
+    cwSurveyChunk* chunk = rowIndex.chunk();
+    const auto rowType = rowIndex.rowType();
+    if(chunk == nullptr
+            || (rowType != cwSurveyEditorRowIndex::StationRow && rowType != cwSurveyEditorRowIndex::ShotRow)
+            || rowType != toRowType(cell.cellRole())
+            || !m_trip->chunks().contains(chunk))
+    {
+        return {};
+    }
+
+    //Station s and shot s share an index, and shot s is the one below station s
+    const int shotIndex = rowIndex.indexInChunk();
+    if(shotIndex < 0 || shotIndex >= chunk->shotCount()) {
+        return {};
+    }
+
+    return {chunk, shotIndex};
+}
+
+/**
+ * True when splitChunkAt() would split at \a cell. The answer is for the chunk
+ * as it stands after the trim splitChunkAt() runs first
+ */
+bool cwSurveyEditorModel::canSplitChunkAt(const cwSurveyEditorCellIndex& cell) const
+{
+    const auto split = splitPointAt(cell);
+    if(split.chunk == nullptr || split.shotIndex < 1) {
+        return false;
+    }
+
+    cwSurveyChunk* chunk = split.chunk;
+    const int shotIndex = split.shotIndex;
+    if(!chunk->isShotDataEmpty(shotIndex)) {
+        return true;
+    }
+
+    //An empty shot is dropped. The trim takes it out entirely when its station is
+    //empty too, and the lower half needs a shot that outlasts the trim
+    if(isStationShotEmpty(chunk, shotIndex + 1)) {
+        return false;
+    }
+
+    for(int lowerShot = shotIndex + 1; lowerShot < chunk->shotCount(); ++lowerShot) {
+        if(!isStationShotEmpty(chunk, lowerShot + 1)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void cwSurveyEditorModel::splitChunkAt(const cwSurveyEditorCellIndex& cell)
+{
+    if(!canSplitChunkAt(cell)) {
+        return;
+    }
+
+    const auto split = splitPointAt(cell);
+    cwSurveyChunk* chunk = split.chunk;
+    const QUuid shotId = chunk->shot(split.shotIndex).id();
+
+    //A trailing empty station would otherwise ride along into the new chunk
+    trim(chunk, FullTrim);
+
+    //The trim can take out empty stations above the shot, which renumbers it
+    const QList<cwShot> shots = chunk->shots();
+    const auto shotIter = std::find_if(shots.cbegin(), shots.cend(),
+                                       [&shotId](const cwShot& shot) { return shot.id() == shotId; });
+    if(shotIter == shots.cend()) {
+        return;
+    }
+
+    cwSurveyChunk* newChunk = m_trip->splitChunk(chunk, static_cast<int>(std::distance(shots.cbegin(), shotIter)));
+    if(newChunk == nullptr) {
+        return;
+    }
+
+    const int row = modelRowForCellRole(newChunk, 0, cwSurveyEditorCellIndex::StationNameCell);
+    setFocusedCell(cellIndex(row, cwSurveyEditorCellIndex::StationNameCell));
+}
+
 void cwSurveyEditorModel::insertStationAt(const cwSurveyEditorCellIndex& cell,
                                           cwSurveyChunk::Direction direction)
 {

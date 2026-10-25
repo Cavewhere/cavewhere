@@ -323,6 +323,62 @@ void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
      }
  }
 
+bool cwTrip::canSplitChunk(cwSurveyChunk* chunk, int shotIndex) const
+{
+    if(chunk == nullptr || !Chunks.contains(chunk)) {
+        return false;
+    }
+
+    if(shotIndex < 1 || shotIndex >= chunk->shotCount()) {
+        return false;
+    }
+
+    //An empty shot is dropped, so the lower half needs a shot after it
+    if(chunk->isShotDataEmpty(shotIndex)) {
+        return shotIndex <= chunk->shotCount() - 2;
+    }
+    return true;
+}
+
+/**
+  Splits \a chunk at \a shotIndex and inserts the lower half right after it.
+
+  The upper half keeps the chunk's id and stations 0..shotIndex. A shot with
+  readings starts the new chunk under a name-only copy of its from-station; an
+  empty shot is dropped. Returns the new chunk, or nullptr when canSplitChunk()
+  refuses.
+  */
+cwSurveyChunk* cwTrip::splitChunk(cwSurveyChunk* chunk, int shotIndex)
+{
+    if(!canSplitChunk(chunk, shotIndex)) {
+        return nullptr;
+    }
+
+    const QList<cwStation> stations = chunk->stations();
+    const QList<cwShot> shots = chunk->shots();
+
+    cwSurveyChunkData data;
+    data.id = QUuid::createUuid();
+    if(chunk->isShotDataEmpty(shotIndex)) {
+        data.stations = stations.mid(shotIndex + 1);
+        data.shots = shots.mid(shotIndex + 1);
+    } else {
+        data.stations.append(cwStation(stations.at(shotIndex).name()));
+        data.stations.append(stations.mid(shotIndex + 1));
+        data.shots = shots.mid(shotIndex);
+    }
+
+    auto newChunk = new cwSurveyChunk();
+    newChunk->setData(data);
+
+    //The lower half lands in the trip before the upper one lets go of it, so
+    //listeners always see every shot somewhere
+    insertChunk(Chunks.indexOf(chunk) + 1, newChunk);
+    chunk->removeTail(shotIndex + 1);
+
+    return newChunk;
+}
+
 /**
   \brief Set chunks for the group
 

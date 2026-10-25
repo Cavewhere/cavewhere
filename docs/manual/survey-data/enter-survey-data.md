@@ -208,6 +208,15 @@ A block can never shrink below 2 stations and the shot between them, so
 `canRemoveStation` refuses there and the remove items gray out. To clear the
 last of it, remove the chunk.
 
+**Split chunk here** cuts a block in two at a shot. On a station cell it cuts at
+the shot below that station. Everything from that shot down moves into a new
+block right under the old one, and CaveWhere repeats the shot's from-station at
+the top so the new block still ties in. The copy carries the name only: its
+LRUDs and splays stay with the original. A shot with no distance and no angles
+gets dropped instead of moved, and the new block starts at the station below it.
+Hover the item and a line marks where the cut would go. Like **Remove Chunk**,
+the split has no undo.
+
 ## Exclude a distance from the total
 
 Select a Distance cell and a caret button appears in its top-right corner, only

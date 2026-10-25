@@ -131,6 +131,11 @@ public:
     cwSurveyChunkData data() const;
     void setData(const cwSurveyChunkData& data);
 
+    bool isShotDataEmpty(int index) const;
+
+    // Drops stations firstStationIndex..end and the shots that end on them
+    void removeTail(int firstStationIndex);
+
     // Mark or clear one warning kind on one cell. Writes the station/shot set,
     // flips the matching cell-model row, emits ignoredWarningsChanged.
     Q_INVOKABLE void setWarningIgnored(int index, cwSurveyChunk::DataRole role, int errorTypeId, bool ignored);
@@ -190,8 +195,6 @@ signals:
 public slots:
     void appendNewShot();
     void appendShot(cwStation fromStation, cwStation toStation, cwShot shot);
-
-    cwSurveyChunk* splitAtStation(int stationIndex);
 
     void insertStation(int stationIndex, cwSurveyChunk::Direction direction);
     void insertShot(int shotIndex, cwSurveyChunk::Direction direction);
@@ -293,7 +296,6 @@ private:
     QList<cwError> checkDataError(cwSurveyChunk::DataRole role, int index) const;
     QList<cwError> checkWithTolerance(cwSurveyChunk::DataRole frontSightRole, cwSurveyChunk::DataRole backSightRole, int index, double tolerance = 2.0, QString units = "°") const;
     QList<cwError> checkClinoMixingType(cwSurveyChunk::DataRole role, int index) const;
-    bool isShotDataEmpty(int index) const;
     bool isLrudOnlyShot(int index) const;
     static bool allDirectionReadingsEmpty(const cwShot& shot);
     bool isStationDataEmpty(int index) const;

@@ -56,8 +56,8 @@ QQ.QtObject {
         testCase.tryVerify(() => {
             view = ObjectFinder.findObjectByChain(
                         helperId.mainWindow, "rootId->tripPage->surveyEditor->view")
-            return view !== null && view.model !== null
-        }, 5000, "survey editor view should be reachable")
+            return view !== null && view.model !== null && view.model.trip === trip
+        }, 5000, "survey editor view should show the new trip")
 
         return {
             cave: cave,

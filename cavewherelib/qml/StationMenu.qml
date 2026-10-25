@@ -204,6 +204,13 @@ QQ.Loader {
                 }
             }
 
+            SplitChunkMenuItem {
+                objectName: "stationMenuSplitChunk"
+                model: stationMenuLoader.model
+                cell: stationMenuLoader.model.cellIndex(listViewIndex, dataValue.cellRole)
+                removePreview: stationMenuLoader.removePreview
+            }
+
             QC.MenuSeparator { }
 
             RemoveChunkMenuItem {

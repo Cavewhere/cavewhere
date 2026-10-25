@@ -106,6 +106,8 @@ public:
     void addChunk(cwSurveyChunk* chunk);
     Q_INVOKABLE void addNewChunk();
     Q_INVOKABLE void removeChunk(cwSurveyChunk* chunk);
+    bool canSplitChunk(cwSurveyChunk* chunk, int shotIndex) const;
+    cwSurveyChunk* splitChunk(cwSurveyChunk* chunk, int shotIndex);
 
     int chunkCount() const;
     Q_INVOKABLE cwSurveyChunk* chunk(int i) const;

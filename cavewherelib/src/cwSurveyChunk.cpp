@@ -422,54 +422,6 @@ void cwSurveyChunk::appendShot(cwStation fromStation, cwStation toStation, cwSho
 }
 
 /**
-  \brief Splits the current survey chunk at stationIndex
-
-  This will split the this chunk into two pieces, if it's valid to split there, ie
-  the station Index, is valid.
-
-  This will create a new chunk, that the caller is responsible for deleting
-  */
-cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
-    if(stationIndex < 1 || stationIndex >= d.stations.size()) { return nullptr; }
-
-    cwSurveyChunk* newChunk = new cwSurveyChunk(this);
-    newChunk->d.stations.append(cwStation()); //Add an empty station to the front
-
-    //Copy the points from one chunk to another
-    for(int i = stationIndex; i < d.stations.size(); i++) {
-
-        //Get the current stations and shots
-        cwStation station = d.stations[i];
-        cwShot currentShot = shot(i - 1);
-
-        newChunk->d.stations.append(station);
-        if(currentShot.isValid()) {
-            newChunk->d.shots.append(currentShot);
-        }
-    }
-
-    //Remove the stations and shots from the list
-    int shotIndex = stationIndex - 1;
-    emit aboutToRemove(stationIndex, stationIndex, shotIndex, shotIndex);
-
-    QList<cwStation>::iterator stationIter = d.stations.begin() + stationIndex;
-    QList<cwShot>::iterator shotIter = d.shots.begin() + shotIndex;
-    d.stations.erase(stationIter, d.stations.end());
-    d.shots.erase(shotIter, d.shots.end());
-
-    emit removed(stationIndex, stationIndex, shotIndex, shotIndex);
-
-    //Check for errors
-    updateErrors();
-
-    //Append a new last station
-    appendNewShot();
-
-    return newChunk;
-}
-
-
-/**
   Inserts a station a index stationIndex.
 
   If direction is above, it's inserted at index, if it's below, then this is insert
@@ -2386,6 +2338,28 @@ cwErrorModel* cwSurveyChunk::errorsAt(int index, cwSurveyChunk::DataRole role) c
 cwErrorModel* cwSurveyChunk::splayErrorsAt(int index, int splayIndex, cwSurveyChunk::DataRole role) const
 {
     return SplayCellErrorModels.value(SplayCellIndex(index, splayIndex, role), nullptr);
+}
+
+void cwSurveyChunk::removeTail(int firstStationIndex)
+{
+    //Station 1 is the last that still leaves the chunk a shot
+    constexpr int kFirstRemovableStation = 2;
+    if(firstStationIndex < kFirstRemovableStation || firstStationIndex >= d.stations.size()) {
+        return;
+    }
+
+    const int lastStationIndex = d.stations.size() - 1;
+    const int firstShotIndex = firstStationIndex - 1;
+    const int lastShotIndex = d.shots.size() - 1;
+
+    emit aboutToRemove(firstStationIndex, lastStationIndex, firstShotIndex, lastShotIndex);
+
+    d.stations.remove(firstStationIndex, lastStationIndex - firstStationIndex + 1);
+    d.shots.remove(firstShotIndex, lastShotIndex - firstShotIndex + 1);
+
+    emit removed(firstStationIndex, lastStationIndex, firstShotIndex, lastShotIndex);
+
+    updateErrors();
 }
 
 /**

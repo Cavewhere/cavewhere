@@ -129,6 +129,8 @@ public:
     Q_INVOKABLE void removeShotAt(const cwSurveyEditorCellIndex& cell, cwSurveyChunk::Direction direction);
     Q_INVOKABLE void insertStationAt(const cwSurveyEditorCellIndex& cell, cwSurveyChunk::Direction direction);
     Q_INVOKABLE void insertShotAt(const cwSurveyEditorCellIndex& cell, cwSurveyChunk::Direction direction);
+    Q_INVOKABLE bool canSplitChunkAt(const cwSurveyEditorCellIndex& cell) const;
+    Q_INVOKABLE void splitChunkAt(const cwSurveyEditorCellIndex& cell);
 
 
     QHash<int, QByteArray> roleNames() const;
@@ -221,6 +223,13 @@ private:
         FullTrim,
         PreserveLastEmptyOne
     };
+
+    struct SplitPoint {
+        cwSurveyChunk* chunk = nullptr;
+        int shotIndex = -1;
+    };
+
+    SplitPoint splitPointAt(const cwSurveyEditorCellIndex& cell) const;
 
     bool setSplayDataAt(const cwSurveyEditorCellIndex& cell,
                         cwSurveyChunk::DataRole readingRole,
