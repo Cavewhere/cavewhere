@@ -153,9 +153,6 @@ cwProject::cwProject(QObject* parent) :
     m_saveLoad->newProject();
     seedRegionUnitSystem();
 
-    connect(this, &cwProject::fileSaved, this, [this]() {
-        setModified(false);
-    });
     connect(this, &cwProject::loaded, this, [this]() {
         setModified(false);
     });
@@ -229,6 +226,7 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
         if (m_saveLoad != saveLoad) {
             return;
         }
+        ++m_mutationGeneration;
         setModified(true);
         emit localMutationOccurred();
     });
@@ -434,9 +432,10 @@ bool cwProject::save()
     }
 
     if (LoadedFromBundledArchive) {
+        const quint64 generation = m_mutationGeneration;
         auto bundledSaveFuture = m_saveLoad->saveBundledArchive(BundledArchivePath);
         SaveFuture = AsyncFuture::observe(bundledSaveFuture)
-                         .context(this, [this, bundledSaveFuture]() {
+                         .context(this, [this, bundledSaveFuture, generation]() {
                              const auto saveResult = bundledSaveFuture.result();
                              if (saveResult.hasError()) {
                                  ErrorModel->append(cwError(saveResult.errorMessage(), cwError::Fatal));
@@ -446,22 +445,23 @@ bool cwProject::save()
                              ConvertedFromSqlite = false;
                              emit fileTypeChanged();
                              m_syncHealth->refresh();
-                             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+                             QMetaObject::invokeMethod(this, [this, generation]() { completeSave(generation); }, Qt::QueuedConnection);
                          })
                          .future();
         FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
         return true;
     }
 
+    const quint64 generation = m_mutationGeneration;
     auto commitFuture = m_saveLoad->enqueueFlushAndCommit();
     SaveFuture = AsyncFuture::observe(commitFuture)
-        .context(this, [this, commitFuture]() {
+        .context(this, [this, commitFuture, generation]() {
             const auto result = commitFuture.result();
             if (result.hasError()) {
                 ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
             }
             m_syncHealth->refresh();
-            QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(this, [this, generation]() { completeSave(generation); }, Qt::QueuedConnection);
         })
         .future();
     FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
@@ -763,9 +763,10 @@ bool cwProject::saveAs(QString newFilename)
             }
         }
 
+        const quint64 generation = m_mutationGeneration;
         auto saveAsBundledFuture = m_saveLoad->saveBundledArchive(newFilename);
         SaveFuture = AsyncFuture::observe(saveAsBundledFuture)
-                         .context(this, [this, saveAsBundledFuture, newFilename]() {
+                         .context(this, [this, saveAsBundledFuture, newFilename, generation]() {
                              const auto saveResult = saveAsBundledFuture.result();
                              if (saveResult.hasError()) {
                                  ErrorModel->append(cwError(saveResult.errorMessage(), cwError::Fatal));
@@ -780,7 +781,7 @@ bool cwProject::saveAs(QString newFilename)
                              emit filenameChanged(filename());
                              emit fileTypeChanged();
                              m_syncHealth->refresh();
-                             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+                             QMetaObject::invokeMethod(this, [this, generation]() { completeSave(generation); }, Qt::QueuedConnection);
                          })
                          .future();
         FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
@@ -829,15 +830,16 @@ bool cwProject::saveAs(QString newFilename)
     // in git before fileSaved fires. Without a commit all files are untracked, and a later
     // discardChanges() (git reset --hard HEAD + cleanUntracked) would erase the entire project.
     // SaveFuture tracks the commit so waitSaveToFinish() / shutdown waits for it.
+    const quint64 generation = m_mutationGeneration;
     auto commitFuture = m_saveLoad->enqueueFlushAndCommit();
     SaveFuture = AsyncFuture::observe(commitFuture)
-        .context(this, [this, commitFuture]() {
+        .context(this, [this, commitFuture, generation]() {
             const auto result = commitFuture.result();
             if (result.hasError()) {
                 ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
             }
             m_syncHealth->refresh();
-            QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(this, [this, generation]() { completeSave(generation); }, Qt::QueuedConnection);
         })
         .future();
     FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
@@ -1752,6 +1754,16 @@ cwFutureManagerToken cwProject::futureManagerToken() const {
 bool cwProject::modified() const
 {
     return m_modified;
+}
+
+void cwProject::completeSave(quint64 savedGeneration)
+{
+    // A mutation that lands after the save was enqueued may be missing from
+    // what was written, so it keeps the project modified.
+    if (savedGeneration == m_mutationGeneration) {
+        setModified(false);
+    }
+    emit fileSaved();
 }
 
 void cwProject::setModified(bool modified)

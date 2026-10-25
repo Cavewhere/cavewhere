@@ -404,3 +404,116 @@ TEST_CASE("The attach's longest event-loop stall grows no faster than its batch"
     REQUIRE(small > 0);
     CHECK(static_cast<double>(large) / static_cast<double>(small) <= kMaxGrowthRatio);
 }
+
+namespace {
+
+//! Records modified() at each fileSaved, in order.
+void watchFileSaved(QList<bool>* modifiedAtFileSaved, cwProject* project, QObject* context)
+{
+    QObject::connect(project, &cwProject::fileSaved, context, [modifiedAtFileSaved, project]() {
+        modifiedAtFileSaved->append(project->modified());
+    });
+}
+
+//! Runs \a save once, on the turn after the fill first shows part of its
+//! tree; \a savedMidFill is true when the fill was still running then and
+//! the save was accepted.
+void saveMidFill(cwSurveyNode* parent, QObject* context, const AttachFuture* future,
+                 bool* savedMidFill, const std::function<bool()>& save)
+{
+    onPartialTree(parent, kBooks, context, [context, future, savedMidFill, save](cwSurveyNode*) {
+        QMetaObject::invokeMethod(context, [future, savedMidFill, save]() {
+            *savedMidFill = !future->isFinished() && save();
+        }, Qt::QueuedConnection);
+    });
+}
+
+void saveAndSettle(SavedProjectFixture* fixture)
+{
+    REQUIRE(fixture->project->save());
+    fixture->project->waitSaveToFinish();
+    QCoreApplication::processEvents();
+}
+
+} // namespace
+
+TEST_CASE("A Save pressed mid-fill leaves the project modified until the fill's rows are saved",
+          "[AttachFill][Save]")
+{
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString entry = writeProject(sourceDir, kBooks, kSurveysPerBook);
+
+    auto fixture = makeProject(QStringLiteral("fill-save"));
+    drainPipelines(fixture.get());
+    cwProject* project = fixture->project;
+    REQUIRE_FALSE(project->modified());
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    watchFileSaved(&modifiedAtFileSaved, project, &context);
+
+    AttachFuture future;
+    bool savedMidFill = false;
+    saveMidFill(regionRoot(fixture.get()), &context, &future, &savedMidFill,
+                [project]() { return project->save(); });
+
+    future = managerOf(fixture.get())->attachSource(regionRoot(fixture.get()), entry);
+    waitForAttach(future);
+    requireSucceeded(future);
+    drainPipelines(fixture.get());
+
+    REQUIRE(savedMidFill);
+    REQUIRE(modifiedAtFileSaved.size() == 1);
+    // Batches landed after the save began, so the save may not cover them.
+    CHECK(modifiedAtFileSaved.at(0));
+    CHECK(project->modified());
+
+    // A Save after the fill covers every row and clears the indicator.
+    saveAndSettle(fixture.get());
+    REQUIRE(modifiedAtFileSaved.size() == 2);
+    CHECK_FALSE(modifiedAtFileSaved.at(1));
+    CHECK_FALSE(project->modified());
+    checkGeneratedShape(future.result().value().root.data(), kBooks, kSurveysPerBook);
+}
+
+TEST_CASE("A Save As to a bundle mid-fill leaves the project modified after the fill",
+          "[AttachFill][Save]")
+{
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString entry = writeProject(sourceDir, kBooks, kSurveysPerBook);
+
+    auto fixture = makeProject(QStringLiteral("fill-save-as"));
+    drainPipelines(fixture.get());
+    cwProject* project = fixture->project;
+    REQUIRE_FALSE(project->modified());
+    const QString bundlePath =
+        QDir(fixture->tempDir.path()).filePath(QStringLiteral("fill-save-as-bundle.cw"));
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    watchFileSaved(&modifiedAtFileSaved, project, &context);
+
+    AttachFuture future;
+    bool savedMidFill = false;
+    saveMidFill(regionRoot(fixture.get()), &context, &future, &savedMidFill,
+                [project, bundlePath]() { return project->saveAs(bundlePath); });
+
+    future = managerOf(fixture.get())->attachSource(regionRoot(fixture.get()), entry);
+    waitForAttach(future);
+    requireSucceeded(future);
+    drainPipelines(fixture.get());
+
+    REQUIRE(savedMidFill);
+    REQUIRE(modifiedAtFileSaved.size() == 1);
+    // Batches landed after the Save As was enqueued, so the bundle may be
+    // missing rows; the indicator asks for another Save before the project closes.
+    CHECK(modifiedAtFileSaved.at(0));
+    CHECK(project->modified());
+
+    saveAndSettle(fixture.get());
+    REQUIRE(modifiedAtFileSaved.size() == 2);
+    CHECK_FALSE(modifiedAtFileSaved.at(1));
+    CHECK_FALSE(project->modified());
+}
