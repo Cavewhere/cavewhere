@@ -1755,8 +1755,9 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             if(passA.errorCode == Monad::ResultBase::NoError
                && passA.escapedRoot
                && passA.pointCount > 0) {
-                qInfo() << "cwPointOctreeBuilder: reprojection pushed points outside the provisional root of"
-                        << request.path << "- chunking again with the measured bounds";
+                cw::profile::write(lcProfileLoad(),
+                                   QStringLiteral("build retry: reprojection pushed points outside the provisional root of %1, chunking again with the measured bounds")
+                                       .arg(request.path));
 
                 //Pass A appends, so a surviving part file would be counted twice
                 for(const QVector<ChunkPart>& parts : std::as_const(passA.parts)) {
