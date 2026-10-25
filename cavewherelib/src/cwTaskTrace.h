@@ -14,7 +14,6 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
-#include <MarkScope/Profiler.h>
 
 class cwRootData;
 class QObject;
@@ -30,6 +29,10 @@ struct cwTaskContext
     quint64 generation = 0;
     cwTaskContextCounters* counters = nullptr;
 };
+
+#if CAVEWHERE_TASK_TRACE
+
+#include <MarkScope/Profiler.h>
 
 //! RAII thread-local context tag. Scopes nest: the destructor restores the previous context.
 class CAVEWHERE_LIB_EXPORT cwTaskContextScope
@@ -228,5 +231,131 @@ public:
 private:
     qint64 m_quietSinceMs = -1;
 };
+
+#else
+
+//! Built without task tracing: every type below keeps the traced build's signatures and does nothing
+
+class cwTaskContextScope
+{
+public:
+    explicit cwTaskContextScope(const QString&, quint64 = 0) {}
+    explicit cwTaskContextScope(const cwTaskContext&) {}
+    ~cwTaskContextScope() {}
+    cwTaskContextScope(const cwTaskContextScope&) = delete;
+    cwTaskContextScope& operator=(const cwTaskContextScope&) = delete;
+
+    static QString current() { return QStringLiteral("untagged"); }
+    static cwTaskContext currentContext() { return cwTaskContext(); }
+
+    template <typename Function>
+    static auto wrap(Function&& f)
+    {
+        return std::forward<Function>(f);
+    }
+};
+
+class cwTaskChargeScope
+{
+public:
+    explicit cwTaskChargeScope(qint64) {}
+    ~cwTaskChargeScope() {}
+    cwTaskChargeScope(const cwTaskChargeScope&) = delete;
+    cwTaskChargeScope& operator=(const cwTaskChargeScope&) = delete;
+};
+
+class cwTaskInterval
+{
+public:
+    explicit cwTaskInterval(const QString&, qint64 = 0, qint64 = 0) {}
+    ~cwTaskInterval() {}
+    cwTaskInterval(const cwTaskInterval&) = delete;
+    cwTaskInterval& operator=(const cwTaskInterval&) = delete;
+
+    static QString metadata(const cwTaskContext&, const QString&, qint64, qint64) { return QString(); }
+};
+
+class cwTaskSubmission
+{
+public:
+    cwTaskSubmission() {}
+    cwTaskSubmission(cwTaskSubmission&&) noexcept {}
+    ~cwTaskSubmission() {}
+    cwTaskSubmission(const cwTaskSubmission&) = delete;
+    cwTaskSubmission& operator=(const cwTaskSubmission&) = delete;
+    cwTaskSubmission& operator=(cwTaskSubmission&&) = delete;
+
+    class Run
+    {
+    public:
+        explicit Run(cwTaskSubmission&) {}
+        ~Run() {}
+        Run(const Run&) = delete;
+        Run& operator=(const Run&) = delete;
+    };
+};
+
+class cwTaskBatch
+{
+public:
+    cwTaskBatch(const QString&, qsizetype) {}
+    ~cwTaskBatch() {}
+
+    void finish() {}
+    cwTaskBatch(const cwTaskBatch&) = delete;
+    cwTaskBatch& operator=(const cwTaskBatch&) = delete;
+};
+
+struct cwTaskMemorySample
+{
+    quint64 footprint = 0;
+    quint64 resident = 0;
+    std::optional<quint64> gpu;
+    std::optional<quint64> available;
+
+    QString message() const { return QString(); }
+};
+
+class cwTaskTrace
+{
+public:
+    struct ContextCounts
+    {
+        QString context;
+        int queued;
+        int running;
+    };
+
+    cwTaskTrace() = delete;
+
+    static QList<ContextCounts> contextCounts() { return {}; }
+    static std::optional<cwTaskMemorySample> memorySample() { return std::nullopt; }
+    static void dropped(const QString&, quint64) {}
+    static void traceOperation(const QString&, const QFuture<void>&, const QObject*) {}
+    static void start(cwRootData*, bool) {}
+};
+
+//! Without the idle watcher, the state never reads as quiet
+struct cwTaskQuietState
+{
+    bool projectLoaded = false;
+    bool coordinatorRunning = false;
+    bool automaticUpdate = false;
+    bool needsUpdate = false;
+    int futureCount = 0;
+    int activeThreadCount = 0;
+    int queuedTaskCount = 0;
+    int runningTaskCount = 0;
+
+    bool isQuiet() const { return false; }
+};
+
+class cwTaskIdleWindow
+{
+public:
+    bool update(const cwTaskQuietState&, qint64) { return false; }
+};
+
+#endif // CAVEWHERE_TASK_TRACE
 
 #endif // CWTASKTRACE_H

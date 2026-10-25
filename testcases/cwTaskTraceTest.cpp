@@ -1,3 +1,5 @@
+#if CAVEWHERE_TASK_TRACE
+
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 
@@ -548,3 +550,5 @@ TEST_CASE("A charged interval carries its byte count in the metadata", "[cwTaskT
         CHECK(cwTaskInterval::metadata(context, QStringLiteral("run"), kWaitUs, 0) == unchargedMetadata);
     }
 }
+
+#endif // CAVEWHERE_TASK_TRACE

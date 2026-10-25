@@ -39,7 +39,12 @@
 #include "cwRenderingSettings.h"
 #include "cwTaskTrace.h"
 
+//Qt includes
+#include <QTimer>
+
 //std includes
+#include <cstdio>
+#include <cstdlib>
 #include <memory>
 
 //QQuickGit includes
@@ -167,7 +172,15 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
         enableProfileLogging();
     }
 
+#if CAVEWHERE_TASK_TRACE
     cwTaskTrace::start(rootData, parser.isSet(profileTasksQuitOption));
+#else
+    if (parser.isSet(profileTasksQuitOption)) {
+        //The runner waits for this build to quit on idle, which it never will, so leave right away
+        fputs("--profile-tasks-quit: CaveWhere was built without task tracing\n", stderr);
+        QTimer::singleShot(0, &a, []() { QCoreApplication::exit(EXIT_FAILURE); });
+    }
+#endif
 
     // Before the project loads, so the first frame it draws already renders
     // under the overrides.

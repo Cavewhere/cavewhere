@@ -106,6 +106,7 @@ jobs:
         run: |
           cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
           -DBUILD_TESTING=OFF \
+          -DCAVEWHERE_TASK_TRACE=OFF \
           -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.11.1/${{ matrix.qt_dir }}/lib \
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
 

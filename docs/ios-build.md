@@ -181,8 +181,12 @@ sticks in the cache until you override it again (or reset to `auto`).
    git tag 2026.4.2
    git push --tags
    ```
-2. From a clean checkout at that tag, reconfigure CMake. The configure log
-   should include:
+2. From a clean checkout at that tag, reconfigure CMake with task tracing
+   compiled out, so the shipped app runs without the signpost sampler:
+   ```bash
+   cmake -DCAVEWHERE_TASK_TRACE=OFF ...
+   ```
+   The configure log should include:
    ```
    -- CaveWhere marketing version: 2026.4.2 (build 1)
    ```
@@ -197,7 +201,7 @@ strictly greater than all previous uploads for the same `CFBundleShortVersionStr
 Override explicitly for every archive:
 
 ```bash
-cmake -DCAVEWHERE_BUILD_NUMBER=<N+1> ...
+cmake -DCAVEWHERE_BUILD_NUMBER=<N+1> -DCAVEWHERE_TASK_TRACE=OFF ...
 ```
 
 The value must be dot-separated non-negative integers, ≤ 18 characters.
