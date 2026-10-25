@@ -148,7 +148,7 @@ jobs:
 
       - name: Configure the Project with CMake
         run: |
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt" -DCMAKE_TOOLCHAIN_FILE="build/conan_toolchain.cmake" -S . -B build
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCAVEWHERE_TASK_TRACE=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt" -DCMAKE_TOOLCHAIN_FILE="build/conan_toolchain.cmake" -S . -B build
 
       - name: Build Windows Installer
         run: cmake --build build --target windowsInstaller --parallel

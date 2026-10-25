@@ -306,6 +306,17 @@ if(IOS)
     list(APPEND cavewherelib_CPP_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/cwClipboard_ios.mm")
 endif()
 
+if(CAVEWHERE_TASK_TRACE)
+    target_compile_definitions(cavewherelib PUBLIC CAVEWHERE_TASK_TRACE=1)
+    if(APPLE)
+        list(APPEND cavewherelib_CPP_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/cwTaskTraceApple.mm")
+        target_link_libraries(cavewherelib PRIVATE "-framework Metal")
+    endif()
+else()
+    target_compile_definitions(cavewherelib PUBLIC CAVEWHERE_TASK_TRACE=0)
+    list(REMOVE_ITEM cavewherelib_CPP_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/cwTaskTrace.cpp")
+endif()
+
 # file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
 # target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
 
@@ -454,12 +465,14 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders_lineplot"
 # Second EDL.frag variant: same source, compiled with MSAA=1 so it samples the
 # multisample offscreen textures per-sample. Aliased to a distinct .qsb name
 # (:/shaders/EDL_MSAA.frag.qsb) that cwEDLEffect loads when the offscreen is MSAA.
-# gl_SampleID needs sample-variable support, so target GLSL 410 / GLSL ES 320
+# gl_SampleID needs sample-variable support, so target GLSL 400 / GLSL ES 320
 # (the legacy 120/150/100es targets reject it) and shader models that have it
-# (HLSL SM5, MSL 1.2); Vulkan SPIR-V is always emitted.
+# (HLSL SM5, MSL 1.2); Vulkan SPIR-V is always emitted. 400, not 410: the RHI
+# OpenGL backend only picks a GLSL version at or below the context's, and
+# virtualized drivers (virgl under Parallels) stop at a 4.0 context.
 qt_add_shaders(cavewherelib "cavewherelib_shaders_msaa"
     PREFIX "/"
-    GLSL "410,320es"
+    GLSL "400,320es"
     HLSL 50
     MSL 12
     DEFINES "MSAA=1"

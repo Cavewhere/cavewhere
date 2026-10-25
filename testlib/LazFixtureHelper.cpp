@@ -336,6 +336,13 @@ QString utmZoneWkt(int zone, int centralMeridian)
         .arg(centralMeridian);
 }
 
+QDir makeGisLayersDir(const QTemporaryDir& tempDir)
+{
+    const QString gisLayersPath = QDir(tempDir.path()).filePath(cwLazLayerModel::folderName());
+    QDir().mkpath(gisLayersPath);
+    return QDir(gisLayersPath);
+}
+
 QString writeMinimalLaz(const QString& path, const QString& wktCS)
 {
     const QVector<QVector3D> points = {

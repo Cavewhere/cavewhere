@@ -2907,7 +2907,8 @@ MainWindowTest {
             // innermost named item, and padding it reaches back over the cell.
             let quote = null;
             tryVerify(() => {
-                let root = findVisibleByName(rootId.mainWindow,
+                // The message is a Popup, so it lives in the window's overlay
+                let root = findVisibleByName(rootId.parent,
                                              "errorBox" + box.objectName);
                 quote = root ? findVisibleByName(root, "errorText") : null;
                 return quote !== null && quote.width > 0;

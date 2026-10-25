@@ -17,7 +17,7 @@
 
 //Our includes
 #include "cwLabel3dItem.h"
-#include "cwCollisionRectKdTree.h"
+#include "cwCollisionRectGrid.h"
 #include "cwBillboardOverlayItem.h"
 class cwLabel3dGroup;
 
@@ -45,7 +45,7 @@ private:
 
     //For rendering labels
     QQmlComponent* m_component;
-    cwCollisionRectKdTree m_labelKdTree;
+    cwCollisionRectGrid m_labelGrid;
     QSizeF m_averageLabelSize = QSizeF(80.0, 14.0);
 
     void updateGroup(cwLabel3dGroup* group);

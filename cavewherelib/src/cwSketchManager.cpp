@@ -30,6 +30,7 @@ Q_LOGGING_CATEGORY(lcSketchManager, "cw.sketch.manager")
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwConcurrent.h"
+#include "cwTaskTrace.h"
 #include "cwPenStrokeModel.h"
 #include "cwProject.h"
 #include "cwRegionTreeModel.h"
@@ -454,6 +455,7 @@ void cwSketchManager::submitRender(cwSketch* sketch)
 
     pipeline->restarter->restart(
         [snapshot, key, dir, edgePixels, cancelToken]() -> QFuture<QByteArray> {
+            cwTaskContextScope traceScope(QStringLiteral("sketch"));
             return cwConcurrent::run(
                 [snapshot, key, dir, edgePixels, cancelToken]
                 (QPromise<QByteArray>& promise) {

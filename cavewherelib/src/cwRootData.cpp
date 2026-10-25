@@ -25,6 +25,7 @@
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
 #include "cwLazLayersSceneNode.h"
+#include "cwLazLayerModel.h"
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwPageSelectionModel.h"
@@ -553,6 +554,9 @@ void cwRootData::shutdownBlocking()
     //cwRootData destroyed without a graceful exit. Either way it has to precede
     //the two waits below, each of which pumps the event loop.
     updateCoordinator()->beginShutdown();
+
+    //Quitting waits for the running LAZ build only; the queued ones never start.
+    project()->cavingRegion()->lazLayers()->cancelQueuedBuilds();
 
     futureManagerModel()->waitForFinished();
     project()->waitSaveToFinish();

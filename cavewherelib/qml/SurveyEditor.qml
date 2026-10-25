@@ -294,6 +294,12 @@ QQ.Item {
                         trip: currentTrip
                         Layout.fillWidth: true
                     }
+
+                    IgnoredWarningsSection {
+                        trip: clipArea.currentTrip
+                        surveyEditorModel: editorModel
+                        Layout.fillWidth: true
+                    }
                 }
 
                 BreakLine { }
@@ -301,6 +307,13 @@ QQ.Item {
                 CalibrationEditor {
                     Layout.fillWidth: true
                     calibration: currentTrip === null ? null : clipArea.currentTrip.calibration
+                }
+
+                BreakLine { }
+
+                TripSettingsEditor {
+                    trip: clipArea.currentTrip
+                    Layout.fillWidth: true
                 }
 
                 BreakLine { }
@@ -455,6 +468,8 @@ QQ.Item {
                 visible: false
                 listViewIndex: -1
                 chunk: null
+                lrudVisible: clipArea.currentCalibration === null || clipArea.currentCalibration.lruds
+                splaysVisible: clipArea.currentCalibration === null || clipArea.currentCalibration.splays
             }
 
 

@@ -4,12 +4,16 @@ import QtQuick.Layouts
 import QtQuick.Controls as QC
 QQ.Item {
     id: overviewId
+    objectName: "surveyErrorOverview"
 
     property Trip trip: null
 
-    // property var _chunkToWatch: [] //Array of chunks to watch
     property int _numWarnings: trip.errorModel.warningCount
     property int _numErrors: trip.errorModel.fatalCount
+
+    readonly property int iconSize: 16
+    readonly property int horizontalPadding: 20
+    readonly property int verticalPadding: 10
 
     implicitWidth: borderRectangle.width
     implicitHeight: borderRectangle.height
@@ -21,8 +25,19 @@ QQ.Item {
 
         border.width: 1
         radius: 3
-        width: layoutId.width + 20
-        height: layoutId.height + 10
+        width: layoutId.width + overviewId.horizontalPadding
+        height: layoutId.height + overviewId.verticalPadding
+
+        // The caret is a hint; the whole badge opens the same menu
+        QQ.TapHandler {
+            enabled: menuButtonId.visible
+            onTapped: (eventPoint) => {
+                const local = menuButtonId.mapFromItem(borderRectangle, eventPoint.position)
+                if (!menuButtonId.contains(local)) {
+                    menuButtonId.clicked()
+                }
+            }
+        }
 
         RowLayout {
             id: layoutId
@@ -32,19 +47,37 @@ QQ.Item {
                 id: stopImage
                 source: "qrc:icons/svg/stopSignError.svg"
                 visible: overviewId._numErrors > 0
-                sourceSize: Qt.size(16, 16)
+                sourceSize: Qt.size(overviewId.iconSize, overviewId.iconSize)
             }
 
             QQ.Image {
                 id: warningImage
                 source: "qrc:icons/svg/warning.svg"
                 visible: overviewId._numWarnings > 0
-                sourceSize: Qt.size(16, 16)
+                sourceSize: Qt.size(overviewId.iconSize, overviewId.iconSize)
             }
 
             QC.Label {
                 id: errorText
+                objectName: "overviewText"
             }
+
+            ContextMenuButton {
+                id: menuButtonId
+                objectName: "tripWarningsMenuButton"
+
+                visible: overviewId._numWarnings > 0
+                focusPolicy: Qt.NoFocus
+                menu: tripWarningsMenuComponent
+            }
+        }
+    }
+
+    QQ.Component {
+        id: tripWarningsMenuComponent
+
+        TripWarningsMenu {
+            trip: overviewId.trip
         }
     }
 

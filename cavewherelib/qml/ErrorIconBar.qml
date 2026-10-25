@@ -97,6 +97,10 @@ QQ.Item {
         onTriggered: popoverId.close()
     }
 
+    // A clean trip or cave shows nothing here, so the name sits flush
+    visible: itemId.errorModel !== null
+             && (itemId.errorModel.fatalCount > 0 || itemId.errorModel.warningCount > 0)
+
     RowLayout {
         id: layoutId
 
@@ -115,13 +119,6 @@ QQ.Item {
             source: "qrc:icons/svg/warning.svg"
             sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
             visible: itemId.warningCount > 0
-        }
-
-        QQ.Image {
-            objectName: "noErrorBadge"
-            source: "qrc:icons/good.png"
-            sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
-            visible: !itemId.hasErrors
         }
     }
 

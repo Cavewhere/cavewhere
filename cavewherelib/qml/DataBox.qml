@@ -26,6 +26,20 @@ SurveyEditorCell {
     readonly property bool startsChunkOnSpace: dataBox.model !== null
                                                && dataBox.model.isChunkCell(dataBox.cellRole)
     readonly property ErrorModel errorModel: dataValue.errorModel
+
+    // A cell whose warnings are all ignored keeps a muted marker so it can be reopened
+    readonly property int errorAppearance: {
+        if(errorModel === null) {
+            return DataBox.NoErrorAppearance
+        } else if(errorModel.fatalCount > 0) {
+            return DataBox.FatalAppearance
+        } else if(errorModel.warningCount > 0) {
+            return DataBox.WarningAppearance
+        } else if(errorModel.ignoredWarningCount > 0) {
+            return DataBox.IgnoredAppearance
+        }
+        return DataBox.NoErrorAppearance
+    }
     required property QC.ButtonGroup errorButtonGroup
 
     //The index informantion from cwSurveyEditorModel
@@ -44,6 +58,13 @@ SurveyEditorCell {
     readonly property ShadowEditorHost _shadowEditor:
         (WindowOverlay.overlay as AppOverlay)?.shadowEditor ?? null
 
+    enum ErrorAppearance {
+        NoErrorAppearance,
+        FatalAppearance,
+        WarningAppearance,
+        IgnoredAppearance
+    }
+
     signal enteredPressed();
     signal deletePressed();
 
@@ -61,24 +82,28 @@ SurveyEditorCell {
         state = 'MiddleTyping';
     }
 
-    function errorImageSource(errorType) {
-        switch(errorType) {
-        case CwError.Fatal:
+    function errorImageSource(appearance) {
+        switch(appearance) {
+        case DataBox.FatalAppearance:
             return "qrc:icons/svg/stopSignError.svg";
-        case CwError.Warning:
+        case DataBox.WarningAppearance:
             return "qrc:icons/svg/warning.svg"
+        case DataBox.IgnoredAppearance:
+            return "qrc:icons/svg/warningIgnored.svg"
         default:
             return "";
         }
     }
 
-    function errorBorderColor(errorType) {
-        function errorColor(errorType) {
-            switch(errorType) {
-            case CwError.Fatal:
+    function errorBorderColor(appearance) {
+        function errorColor(appearance) {
+            switch(appearance) {
+            case DataBox.FatalAppearance:
                 return "#960800";
-            case CwError.Warning:
+            case DataBox.WarningAppearance:
                 return "#FF7600"
+            case DataBox.IgnoredAppearance:
+                return Theme.border
             default:
                 return "black";
             }
@@ -86,22 +111,11 @@ SurveyEditorCell {
 
         //This simulates highlight. The error box will overdraw
         //and cover the databox highlighting
-        let color = errorColor(errorType)
+        let color = errorColor(appearance)
         if(dataBox.highlightVisible) {
             return Qt.darker(color);
         }
         return color
-    }
-
-    function errorAppearance(func) {
-        if(errorModel !== null) {
-            if(errorModel.fatalCount > 0) {
-                return func(CwError.Fatal);
-            } else if(errorModel.warningCount > 0) {
-                return func(CwError.Warning);
-            }
-        }
-        return ""
     }
 
     //! Starts the trip's next chunk, or focuses the empty one it already has
@@ -209,7 +223,7 @@ SurveyEditorCell {
 
         QQ.Loader {
             id: errorBorderLoaderId
-            property bool shouldBeVisible: dataBox.errorModel !== null && (dataBox.errorModel.fatalCount > 0 || dataBox.errorModel.warningCount > 0)
+            property bool shouldBeVisible: dataBox.errorAppearance !== DataBox.NoErrorAppearance
 
             active: shouldBeVisible
             anchors.fill: parent
@@ -224,7 +238,7 @@ SurveyEditorCell {
                 anchors.fill: parent
                 anchors.margins: 1
                 border.width: 1
-                border.color: dataBox.errorAppearance(dataBox.errorBorderColor)
+                border.color: dataBox.errorBorderColor(dataBox.errorAppearance)
                 color: Theme.transparent
                 visible: errorBorderLoaderId.shouldBeVisible || errorIcon.checked
 
@@ -259,8 +273,9 @@ SurveyEditorCell {
                     }
 
                     QQ.Image {
+                        objectName: "errorIconImage"
                         anchors.centerIn: parent
-                        source: dataBox.errorAppearance(dataBox.errorImageSource)
+                        source: dataBox.errorImageSource(dataBox.errorAppearance)
                         sourceSize: Qt.size(errorIcon.implicitWidth - 4, errorIcon.implicitHeight - 4)
                     }
                     onClicked: {
@@ -281,6 +296,7 @@ SurveyEditorCell {
                     visible: errorIcon.checked
                     errors:  dataBox.errorModel !== null ? dataBox.errorModel.errors : null
                     errorIcon: errorIcon
+                    trip: dataBox.model.trip
                     quoteBoxObjectName: "errorBox" + dataBox.objectName
                 }
             }

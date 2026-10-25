@@ -1342,14 +1342,13 @@ MainWindowTest {
 
             tryVerify(() => findChild(warnedBar, "warningBadge").visible, 5000,
                       "a node with a warning shows the warning badge")
-            verify(!findChild(warnedBar, "noErrorBadge").visible)
 
             verify(!findChild(cleanBar, "warningBadge").visible,
                    "a node without a warning has no warning badge")
             verify(!findChild(cleanBar, "fatalBadge").visible,
                    "and no fatal badge")
-            verify(findChild(cleanBar, "noErrorBadge").visible,
-                   "it keeps the good icon instead")
+            verify(!cleanBar.visible,
+                   "a clean node hides the bar so its name sits flush")
 
             const popover = findChild(warnedBar, "errorPopover")
             verify(popover !== null, "the badges carry a popover")

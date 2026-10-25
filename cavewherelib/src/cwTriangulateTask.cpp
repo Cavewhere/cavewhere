@@ -12,6 +12,10 @@
 #include "utils/cwTriangulate.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwConcurrent.h"
+#include "cwTaskTrace.h"
+#include "cwMemoryBudget.h"
+#include "cwMipMath.h"
+#include "cwRenderBudgets.h"
 
 //Utils includes
 #include "utils/Forsyth.h"
@@ -47,6 +51,25 @@ namespace {
     //How often the morph loop reports; every point would lock the tree far
     //more often than a bar can show
     constexpr int kMorphProgressStride = 256;
+
+    //The pipeline's share of the memory ledger: four whole 124 MiB notes
+    //decoding at once
+    constexpr qint64 kScrapDecodeBudgetBytes = 512 * cw::budgets::kBytesPerMegabyte;
+
+    //What a scrap is charged when its note's size is unknown: one large note
+    constexpr qint64 kUnknownNoteDecodeBytes = 128 * cw::budgets::kBytesPerMegabyte;
+
+    struct ScrapInput {
+        int index = 0;
+        cwTriangulateInData data;
+    };
+
+    //A scrap's crop decodes its whole note, so that decode is its weight
+    qint64 scrapWeight(const ScrapInput& input)
+    {
+        const qint64 bytes = cw::mip::mipLevelBytes(QRhiTexture::RGBA8, input.data.noteImage().originalSize());
+        return bytes > 0 ? bytes : kUnknownNoteDecodeBytes;
+    }
 }
 
 void cwTriangulateTask::setScrapData(QList<cwTriangulateInData> scraps) {
@@ -68,24 +91,33 @@ void cwTriangulateTask::setProgressRoot(cwProgressNodePtr root)
     m_progressRoot = std::move(root);
 }
 
-QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
+AsyncFuture::Limited<cwTriangulatedData> cwTriangulateTask::triangulate(QObject* context)
 {
     Q_ASSERT(!Scraps.isEmpty());
 
-    cwTextureUploadTask::Format format = Format;
+    const cwTextureUploadTask::Format format = Format;
+    const QDir dataRootDir = DataRootDir;
+    const cwProgressNodePtr progressRoot = m_progressRoot;
 
+    //Called on admission, after this task may be gone, so it captures copies only
     auto triangulateScrap
-        = [this, format](const cwTriangulateInData& scrap,
-                         const cwProgressNodePtr& scrapNode)->QFuture<cwTriangulatedData>
+        = [dataRootDir, format, progressRoot](const ScrapInput& input)->QFuture<cwTriangulatedData>
     {
+        const cwTriangulateInData& scrap = input.data;
 
-        auto cropFuture = cropScrap(scrap, DataRootDir, format, scrapNode);
-        auto dataRootDir = DataRootDir;
+        cwProgressNodePtr scrapNode;
+        if(progressRoot) {
+            scrapNode = progressRoot->addChild(QStringLiteral("Scrap %1").arg(input.index + 1));
+            scrapNode->expectChildren(kScrapSteps);
+        }
+
+        //The crop is the chain's first task, so it carries the scrap's weight for calibration
+        auto cropFuture = cropScrap(scrap, dataRootDir, format, scrapNode);
 
         return AsyncFuture::observe(cropFuture)
             //DONT use "this" in .subscribe lambda capture, this object will be destroyed before the lambda is called
             //USING this will cause UB!
-            .subscribe([dataRootDir, cropFuture, scrap, scrapNode]()
+            .subscribe(cwTaskContextScope::wrap([dataRootDir, cropFuture, scrap, scrapNode]()
                      {
                          const auto croppedResult = cropFuture.result();
 
@@ -123,8 +155,7 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
 
                          return AsyncFuture::observe(uploadFuture)
                              .subscribe(
-                                 [scrap, cropFuture, uploadFuture, scrapNode]() {
-
+                                 cwTaskContextScope::wrap([scrap, cropFuture, uploadFuture, scrapNode]() {
                                      return cwConcurrent::run([scrap, cropFuture, uploadFuture, scrapNode]()
                                                               {
                                                                   cwProgressScope scope(scrapNode);
@@ -133,25 +164,19 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
                                                                                              uploadFuture.result().image,
                                                                                              scrapNode);
                                                               });
-                                 }).future();
+                                 })).future();
 
-                     }).future();
+                     })).future();
     };
 
-    QList<QFuture<cwTriangulatedData>> futures;
-    futures.reserve(Scraps.size());
-
+    QList<ScrapInput> inputs;
+    inputs.reserve(Scraps.size());
     for(int i = 0; i < Scraps.size(); i++) {
-        cwProgressNodePtr scrapNode;
-        if(m_progressRoot) {
-            scrapNode = m_progressRoot->addChild(QStringLiteral("Scrap %1").arg(i + 1));
-            scrapNode->expectChildren(kScrapSteps);
-        }
-
-        futures.append(triangulateScrap(Scraps.at(i), scrapNode));
+        inputs.append({i, Scraps.at(i)});
     }
 
-    return futures;
+    return cwMemoryBudget::limitedOnPool(
+        context, inputs, std::move(triangulateScrap), scrapWeight, kScrapDecodeBudgetBytes);
 }
 
 QFuture<cwCropImageTask::Result> cwTriangulateTask::cropScrap(const cwTriangulateInData &scrap,

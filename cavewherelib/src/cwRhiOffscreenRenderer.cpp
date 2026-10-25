@@ -437,17 +437,18 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
     if (cloudVisible) {
         m_frame.ensureEdlOffscreen(m_edl, rhi, size, p.sampleCount);
     }
-    const bool offscreenEdlActive = cloudVisible && m_edl.valid();
-
     // The offscreen effect composites into m_target. The helper re-inits whenever that
     // target's rpDesc changes (a size/sample-count rebuild) or the input sample count
-    // changes; then keep its tuning fresh each render.
-    if (offscreenEdlActive && m_edl.effect) {
+    // changes; then keep its tuning fresh each render. Only an effect whose pipeline
+    // built may take the routing: otherwise the composite is skipped and the tile
+    // comes back empty.
+    if (cloudVisible && m_edl.valid()) {
         m_frame.ensureEffectInitialized(m_edl, rhi, m_target.rpDesc.get(), sampleCount);
         // Per-job EDL when the job overrides it; otherwise the scene's live tuning.
         static_cast<cwEDLEffect*>(m_edl.effect.get())
             ->setParameters(p.edlOverride.value_or(m_frame.edlParameters()));
     }
+    const bool offscreenEdlActive = cloudVisible && cwRhiFrameRenderer::edlReady(m_edl);
 
     // Route passes to the offscreen targets (EDL split when active, else flat into
     // m_target). Mutating the routing here is safe: the live passes are already recorded,

@@ -8,6 +8,7 @@
 //Our includes
 #include "cwTask.h"
 #include "cwDebug.h"
+#include "cwTaskTrace.h"
 
 //Qt includes
 #include <QMutexLocker>
@@ -344,6 +345,7 @@ void cwTask::run()
 
     //Run the task
     emit started();
+    cwTaskInterval interval(name());
     runTask();
 }
 

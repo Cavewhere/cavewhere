@@ -9,6 +9,7 @@
 #define CWEDLSETTINGS_H
 
 //Qt includes
+#include <QColor>
 #include <QObject>
 #include <QQmlEngine>
 
@@ -33,6 +34,7 @@ class CAVEWHERE_LIB_EXPORT cwEDLSettings : public QObject
     Q_PROPERTY(float strength READ strength WRITE setStrength NOTIFY strengthChanged)
     Q_PROPERTY(float maxDarken READ maxDarken WRITE setMaxDarken NOTIFY maxDarkenChanged)
     Q_PROPERTY(float radius READ radius WRITE setRadius NOTIFY radiusChanged)
+    Q_PROPERTY(QColor outlineColor READ outlineColor WRITE setOutlineColor NOTIFY outlineColorChanged)
 
 public:
     explicit cwEDLSettings(QObject* parent = nullptr);
@@ -46,12 +48,16 @@ public:
     float radius() const { return m_data.radiusPx; }
     void setRadius(float radius);
 
+    QColor outlineColor() const { return m_data.outlineColor; }
+    void setOutlineColor(const QColor& outlineColor);
+
     EdlParametersData parameters() const { return m_data; }
 
 signals:
     void strengthChanged();
     void maxDarkenChanged();
     void radiusChanged();
+    void outlineColorChanged();
 
     // Any parameter changed — cwScene listens to schedule a repaint.
     void changed();

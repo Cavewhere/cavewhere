@@ -9,6 +9,12 @@ if [[ -z "$1" || -z "$2" || -z "$3" || -z "$4" ]]; then
     exit 1
 fi
 
+# Runs from the build directory. A release ships with task tracing compiled out.
+if ! grep -q "^CAVEWHERE_TASK_TRACE:BOOL=OFF$" CMakeCache.txt 2>/dev/null; then
+    echo "Error: configure this build with -DCAVEWHERE_TASK_TRACE=OFF before packaging a release."
+    exit 1
+fi
+
 version=`git describe`
 macdeployqt_path=$1
 email=$2

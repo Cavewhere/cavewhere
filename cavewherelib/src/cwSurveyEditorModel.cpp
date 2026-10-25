@@ -249,6 +249,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                 disconnectChunkSignals(chunk);
             }
             disconnect(m_trip, nullptr, this, nullptr);
+            disconnect(m_trip->calibrations(), nullptr, this, nullptr);
         }
 
         m_trip = trip;
@@ -323,6 +324,9 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
 
             connect(m_trip, &cwTrip::parentCaveChanged, this,
                     &cwSurveyEditorModel::syncFixStationSignals);
+
+            connect(m_trip->calibrations(), &cwTripCalibration::splaysChanged, this,
+                    &cwSurveyEditorModel::collapseHiddenSplays);
 
             // Connect signals for all existing chunks.
             const auto chunks = m_trip->chunks();
@@ -2026,7 +2030,64 @@ cwSurveyEditorCellIndex cwSurveyEditorModel::nextCell(const cwSurveyEditorCellIn
                                                       bool frontSights,
                                                       bool backSights) const
 {
-    return nextCellIndex(currentCell, key, frontSights, backSights);
+    //A hidden column keeps its place in the chain, so the walk carries on
+    //through it the way the key was already going
+    auto next = nextCellIndex(currentCell, key, frontSights, backSights);
+    while(isCellValid(next) && isColumnHidden(next.cellRole())) {
+        next = nextCellIndex(next, key, frontSights, backSights);
+    }
+    return next;
+}
+
+bool cwSurveyEditorModel::lrudsShown() const
+{
+    return m_trip.isNull() || m_trip->calibrations()->hasLruds();
+}
+
+bool cwSurveyEditorModel::splaysShown() const
+{
+    return m_trip.isNull() || m_trip->calibrations()->hasSplays();
+}
+
+bool cwSurveyEditorModel::isColumnHidden(cwSurveyEditorCellIndex::CellRole role) const
+{
+    switch(role) {
+    case cwSurveyEditorCellIndex::StationLeftCell:
+    case cwSurveyEditorCellIndex::StationRightCell:
+    case cwSurveyEditorCellIndex::StationUpCell:
+    case cwSurveyEditorCellIndex::StationDownCell:
+        return !lrudsShown();
+    case cwSurveyEditorCellIndex::StationSplaysCell:
+        return !splaysShown();
+    default:
+        return false;
+    }
+}
+
+/**
+ * The trip stopped showing splays, so every open cluster closes. A cluster
+ * stays closed when the column comes back, the way a freshly opened trip shows
+ * it.
+ */
+void cwSurveyEditorModel::collapseHiddenSplays()
+{
+    if(splaysShown()) {
+        return;
+    }
+
+    cancelSplayMove();
+
+    const auto chunks = m_trip->chunks();
+    for(cwSurveyChunk* chunk : chunks) {
+        const auto* expanded = expandedSplays(chunk);
+        if(expanded == nullptr) {
+            continue;
+        }
+        const QList<int> stationIndices = expanded->keys();
+        for(int stationIndex : stationIndices) {
+            collapseSplays(chunk, stationIndex);
+        }
+    }
 }
 
 int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) const
@@ -2146,7 +2207,7 @@ void cwSurveyEditorModel::toggleSplaysExpanded(const cwSurveyEditorRowIndex& row
  */
 void cwSurveyEditorModel::expandSplays(cwSurveyChunk* chunk, int stationIndex)
 {
-    if(chunk == nullptr || splayRowCount(chunk, stationIndex) > 0) {
+    if(chunk == nullptr || !splaysShown() || splayRowCount(chunk, stationIndex) > 0) {
         return;
     }
 

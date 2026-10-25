@@ -17,6 +17,9 @@
 #include <rhi/qrhi.h>
 #include <QSize>
 
+// Std includes
+#include <cstddef>
+
 /**
  * @brief Eye-Dome Lighting composite.
  *
@@ -45,6 +48,7 @@ public:
                     QRhiBuffer* globalUBO,
                     quint32 globalUBOStride,
                     int inputSampleCount) override;
+    bool isReady() const override { return m_pipeline != nullptr; }
     // Drop the cached SRB and texture-pointer identities so the next apply()
     // rebuilds bindings. cwRhiScene calls this when the offscreen textures are
     // recreated (resize) while the effect is preserved — otherwise ensureBindings
@@ -66,15 +70,22 @@ public:
     void setParameters(const EdlParametersData& parameters);
 
 private:
-    // std140 layout: float, float, vec2 (8-byte aligned at offset 8), float
-    // (offset 16) = 20 bytes, block-padded to 32. strength is the slope of the
-    // shared darkening transfer function; maxDarken is its ceiling.
+    // std140 layout, byte-identical to EdlBlock in EDL.frag: float, float, vec2
+    // (8-byte aligned at offset 8), float (offset 16), three pad floats, then
+    // vec4 outlineColor on its 16-byte boundary at offset 32 = 48 bytes.
+    // strength is the slope of the shared darkening transfer function;
+    // maxDarken is its ceiling; outlineColor is what the border darkens toward.
     struct EdlUniform {
         float strength = 1.0f;
         float textureYFlip = 0.0f;
         float sampleOffset[2] = {0.0f, 0.0f};
         float maxDarken = 0.0f;
+        float padding[3] = {0.0f, 0.0f, 0.0f};
+        float outlineColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
     };
+    static_assert(offsetof(EdlUniform, outlineColor) == 32,
+                  "outlineColor must start on the std140 vec4 boundary");
+    static_assert(sizeof(EdlUniform) == 48, "EdlUniform must match EdlBlock in EDL.frag");
 
     bool createPipeline(QRhiRenderPassDescriptor* outputRPDesc);
     bool ensureBindings(QRhiTexture* sceneColor, QRhiTexture* cloudColor, QRhiTexture* depth);
@@ -86,6 +97,9 @@ private:
     // Recompute sampleOffset from m_radiusPx and the last-seen viewport/DPR.
     // No-op until a valid frame state has been seen.
     void recomputeSampleOffset();
+
+    // Copy the staged outline color into m_uniformData.
+    void updateOutlineColor();
 
     QRhi* m_rhi = nullptr;
     QRhiBuffer* m_globalUBO = nullptr;       // owned by cwRhiScene

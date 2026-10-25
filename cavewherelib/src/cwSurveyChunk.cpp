@@ -14,6 +14,7 @@
 #include "cwDebug.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
+#include "cwError.h"
 #include "cwCompassValidator.h"
 #include "cwDistanceValidator.h"
 #include "cwClinoValidator.h"
@@ -32,6 +33,7 @@
 #include <array>
 #include <functional>
 #include <math.h>
+#include <optional>
 
 namespace {
 //The three readings a splay carries. A splay is a front sight with no
@@ -64,6 +66,116 @@ bool isVerticalClinoReading(const cwClinoReading& reading)
     }
 
     return qAbs(qAbs(value) - 90.0) < 0.001;
+}
+
+int toInt(cwErrorTypeId id)
+{
+    return static_cast<int>(id);
+}
+
+//Gives a warning its stable id and derives its suppression from the cell's ignored set
+void stampWarning(cwError& error, cwErrorTypeId id, const QSet<int>& ignored)
+{
+    error.setErrorTypeId(toInt(id));
+    error.setSupressed(ignored.contains(toInt(id)));
+}
+
+cwErrorTypeId missingLrudId(cwSurveyChunk::DataRole role)
+{
+    switch(role) {
+    case cwSurveyChunk::StationLeftRole:
+        return cwErrorTypeId::SurveyMissingLeft;
+    case cwSurveyChunk::StationRightRole:
+        return cwErrorTypeId::SurveyMissingRight;
+    case cwSurveyChunk::StationUpRole:
+        return cwErrorTypeId::SurveyMissingUp;
+    case cwSurveyChunk::StationDownRole:
+        return cwErrorTypeId::SurveyMissingDown;
+    default:
+        return cwErrorTypeId::None;
+    }
+}
+
+cwErrorTypeId missingReadingId(cwSurveyChunk::DataRole role)
+{
+    switch(role) {
+    case cwSurveyChunk::ShotCompassRole:
+        return cwErrorTypeId::SurveyMissingCompass;
+    case cwSurveyChunk::ShotBackCompassRole:
+        return cwErrorTypeId::SurveyMissingBackCompass;
+    case cwSurveyChunk::ShotClinoRole:
+        return cwErrorTypeId::SurveyMissingClino;
+    case cwSurveyChunk::ShotBackClinoRole:
+        return cwErrorTypeId::SurveyMissingBackClino;
+    default:
+        return cwErrorTypeId::None;
+    }
+}
+
+cwErrorTypeId disagreementId(cwSurveyChunk::DataRole frontSightRole)
+{
+    return frontSightRole == cwSurveyChunk::ShotCompassRole
+               ? cwErrorTypeId::SurveyCompassDisagreement
+               : cwErrorTypeId::SurveyClinoDisagreement;
+}
+
+//The cell that carries a survey warning id, or nothing for ids the chunk doesn't produce
+std::optional<cwSurveyChunk::DataRole> roleForWarningId(int id)
+{
+    switch(static_cast<cwErrorTypeId>(id)) {
+    case cwErrorTypeId::SurveyMissingLeft:
+        return cwSurveyChunk::StationLeftRole;
+    case cwErrorTypeId::SurveyMissingRight:
+        return cwSurveyChunk::StationRightRole;
+    case cwErrorTypeId::SurveyMissingUp:
+        return cwSurveyChunk::StationUpRole;
+    case cwErrorTypeId::SurveyMissingDown:
+        return cwSurveyChunk::StationDownRole;
+    case cwErrorTypeId::SurveyMissingCompass:
+    case cwErrorTypeId::SurveyCompassDisagreement:
+        return cwSurveyChunk::ShotCompassRole;
+    case cwErrorTypeId::SurveyMissingBackCompass:
+        return cwSurveyChunk::ShotBackCompassRole;
+    case cwErrorTypeId::SurveyMissingClino:
+    case cwErrorTypeId::SurveyClinoDisagreement:
+        return cwSurveyChunk::ShotClinoRole;
+    case cwErrorTypeId::SurveyMissingBackClino:
+        return cwSurveyChunk::ShotBackClinoRole;
+    default:
+        return std::nullopt;
+    }
+}
+
+//The ignored ids an edit to role's cell clears. A back reading also clears
+//the disagreement, which sits on its frontsight partner
+QSet<int> idsClearedByEdit(cwSurveyChunk::DataRole role)
+{
+    switch(role) {
+    case cwSurveyChunk::StationLeftRole:
+    case cwSurveyChunk::StationRightRole:
+    case cwSurveyChunk::StationUpRole:
+    case cwSurveyChunk::StationDownRole:
+        return {toInt(missingLrudId(role))};
+    case cwSurveyChunk::ShotCompassRole:
+    case cwSurveyChunk::ShotBackCompassRole:
+        return {toInt(missingReadingId(role)), toInt(cwErrorTypeId::SurveyCompassDisagreement)};
+    case cwSurveyChunk::ShotClinoRole:
+    case cwSurveyChunk::ShotBackClinoRole:
+        return {toInt(missingReadingId(role)), toInt(cwErrorTypeId::SurveyClinoDisagreement)};
+    default:
+        return {};
+    }
+}
+
+bool matchesIds(int id, const QList<int>& ids)
+{
+    return ids.isEmpty() || ids.contains(id);
+}
+
+//A warning that sits on a survey cell, so a station or shot can carry it as ignored
+bool isIgnorableWarning(const cwError& error)
+{
+    return error.type() == cwError::Warning && roleForWarningId(error.errorTypeId()).has_value();
 }
 
 //A splay whose clino reads up, down, or ±90 points straight at the ceiling or
@@ -179,6 +291,8 @@ void cwSurveyChunk::setParentTrip(cwTrip* trip) {
                        this, &cwSurveyChunk::updateCompassClinoErrors);
             disconnect(ParentTrip->calibrations(), &cwTripCalibration::backSightsChanged,
                        this, &cwSurveyChunk::updateCompassClinoErrors);
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::lrudsChanged,
+                       this, &cwSurveyChunk::updateLrudErrors);
         }
 
         ParentTrip = trip;
@@ -205,9 +319,12 @@ void cwSurveyChunk::setParentTrip(cwTrip* trip) {
                     this, &cwSurveyChunk::updateCompassClinoErrors);
             connect(ParentTrip->calibrations(), &cwTripCalibration::backSightsChanged,
                        this, &cwSurveyChunk::updateCompassClinoErrors);
+            connect(ParentTrip->calibrations(), &cwTripCalibration::lrudsChanged,
+                       this, &cwSurveyChunk::updateLrudErrors);
         }
 
         updateCompassClinoErrors();
+        updateLrudErrors();
 
         emit parentTripChanged();
     }
@@ -993,6 +1110,11 @@ void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, cons
     QString dataString = data.toString();
     cwStation& station = d.stations[index];
 
+    const QSet<int> clearedIds = idsClearedByEdit(role);
+    if(!clearedIds.isEmpty() && stationData(role, index).toString() != dataString) {
+        station.setIgnoredWarnings(station.ignoredWarnings() - clearedIds);
+    }
+
     switch (role) {
     case StationNameRole:
         station.setName(dataString);
@@ -1038,6 +1160,11 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
     }
 
     cwShot& shot = d.shots[index];
+
+    const QSet<int> clearedIds = idsClearedByEdit(role);
+    if(!clearedIds.isEmpty() && shotData(role, index).toString() != data.toString()) {
+        shot.setIgnoredWarnings(shot.ignoredWarnings() - clearedIds);
+    }
 
     switch(role) {
     case ShotDistanceRole:
@@ -1252,6 +1379,7 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index, bool 
         cellModel->setParentModel(ErrorModel);
         CellErrorModels.insert(cellIndex, cellModel);
         isNewModel = true;
+        connectIgnoredWriteThrough(cellModel, role, index);
     } else {
         cellModel = CellErrorModels.value(cellIndex, nullptr);
     }
@@ -1574,10 +1702,12 @@ QList<cwError> cwSurveyChunk::checkLRUDError(cwSurveyChunk::DataRole role, int i
         break;
     }
     case cwDistanceReading::State::Empty: {
-        if(!stationName.isEmpty()) {
+        const bool tripHasLruds = parentTrip() == nullptr || parentTrip()->calibrations()->hasLruds();
+        if(!stationName.isEmpty() && tripHasLruds) {
             cwError error;
             error.setType(cwError::Warning);
             error.setMessage(QString("Missing \"%1\" for station \"%2\"").arg(direction, stationName));
+            stampWarning(error, missingLrudId(role), d.stations.at(index).ignoredWarnings());
             errors.append(error);
         }
         break;
@@ -1701,6 +1831,9 @@ QList<cwError> cwSurveyChunk::checkDataError(DataRole role, int index) const
         }
 
         error.setMessage(QString("Missing \"%1\" from shot \"%2\" ➔ \"%3\"").arg(roleName, fromStation, toStation));
+        if(error.type() == cwError::Warning) {
+            stampWarning(error, missingReadingId(role), d.shots.at(index).ignoredWarnings());
+        }
         errors.append(error);
     } else if(!value.isNull()) {
         Q_ASSERT(value.canConvert<cwReading>());
@@ -1802,6 +1935,7 @@ QList<cwError> cwSurveyChunk::checkWithTolerance(cwSurveyChunk::DataRole frontSi
         cwError error;
         error.setMessage(QString("Frontsight and backsight differs by %1%2").arg(differance).arg(units));
         error.setType(cwError::Warning);
+        stampWarning(error, disagreementId(frontSightRole), d.shots.at(index).ignoredWarnings());
         errors.append(error);
     }
 
@@ -2067,6 +2201,165 @@ void cwSurveyChunk::updateCompassClinoErrors()
 void cwSurveyChunk::clearErrors()
 {
     ErrorModel->errors()->clear();
+}
+
+void cwSurveyChunk::setWarningIgnored(int index, cwSurveyChunk::DataRole role, int errorTypeId, bool ignored)
+{
+    //Returns whether the carrier's set changed
+    const auto updateCarrier = [errorTypeId, ignored](auto& carrier) {
+        QSet<int> ids = carrier.ignoredWarnings();
+        if(ids.contains(errorTypeId) == ignored) {
+            return false;
+        }
+        if(ignored) {
+            ids.insert(errorTypeId);
+        } else {
+            ids.remove(errorTypeId);
+        }
+        carrier.setIgnoredWarnings(ids);
+        return true;
+    };
+
+    bool changed = false;
+    if(isStationRole(role) && stationIndexCheck(index)) {
+        changed = updateCarrier(d.stations[index]);
+    } else if(isShotRole(role) && shotIndexCheck(index)) {
+        changed = updateCarrier(d.shots[index]);
+    }
+
+    if(!changed) {
+        return;
+    }
+
+    //The carrier is already up to date, so the write-through this triggers stays quiet
+    if(cwErrorModel* cellModel = errorsAt(index, role)) {
+        cwErrorListModel* list = cellModel->errors();
+        for(int row = 0; row < list->size(); ++row) {
+            if(list->at(row).errorTypeId() == errorTypeId) {
+                list->setData(list->index(row),
+                              ignored,
+                              static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+            }
+        }
+    }
+
+    emit ignoredWarningsChanged(role, index);
+}
+
+int cwSurveyChunk::ignoreWarnings(const QList<int>& ids)
+{
+    struct PendingIgnore {
+        int index;
+        DataRole role;
+        int errorTypeId;
+    };
+
+    QList<PendingIgnore> pendingIgnores;
+    for(auto iter = CellErrorModels.constBegin(); iter != CellErrorModels.constEnd(); ++iter) {
+        const QList<cwError> errors = iter.value()->errors()->toList();
+        for(const cwError& error : errors) {
+            if(isIgnorableWarning(error)
+                && !error.suppressed()
+                && matchesIds(error.errorTypeId(), ids))
+            {
+                pendingIgnores.append({iter.key().index(),
+                                       static_cast<DataRole>(iter.key().role()),
+                                       error.errorTypeId()});
+            }
+        }
+    }
+
+    for(const PendingIgnore& pending : std::as_const(pendingIgnores)) {
+        setWarningIgnored(pending.index, pending.role, pending.errorTypeId, true);
+    }
+    return pendingIgnores.size();
+}
+
+int cwSurveyChunk::clearIgnoredWarnings(const QList<int>& ids)
+{
+    int cleared = 0;
+    const auto clearCarrier = [&](int index, const QSet<int>& ignored) {
+        for(int id : ignored) {
+            const auto role = roleForWarningId(id);
+            if(role.has_value() && matchesIds(id, ids)) {
+                setWarningIgnored(index, *role, id, false);
+                ++cleared;
+            }
+        }
+    };
+
+    for(int i = 0; i < d.stations.size(); ++i) {
+        clearCarrier(i, d.stations.at(i).ignoredWarnings());
+    }
+    for(int i = 0; i < d.shots.size(); ++i) {
+        clearCarrier(i, d.shots.at(i).ignoredWarnings());
+    }
+    return cleared;
+}
+
+int cwSurveyChunk::warningCountForTypeId(int errorTypeId) const
+{
+    int count = 0;
+    for(const cwErrorModel* cellModel : CellErrorModels) {
+        const QList<cwError> errors = cellModel->errors()->toList();
+        count += static_cast<int>(std::count_if(errors.cbegin(), errors.cend(), [errorTypeId](const cwError& error) {
+            return error.type() == cwError::Warning
+                   && !error.suppressed()
+                   && error.errorTypeId() == errorTypeId;
+        }));
+    }
+    return count;
+}
+
+int cwSurveyChunk::ignorableWarningCount() const
+{
+    int count = 0;
+    for(const cwErrorModel* cellModel : CellErrorModels) {
+        const QList<cwError> errors = cellModel->errors()->toList();
+        count += static_cast<int>(std::count_if(errors.cbegin(), errors.cend(), [](const cwError& error) {
+            return isIgnorableWarning(error) && !error.suppressed();
+        }));
+    }
+    return count;
+}
+
+void cwSurveyChunk::connectIgnoredWriteThrough(cwErrorModel* cellModel, DataRole role, int index)
+{
+    cwErrorListModel* list = cellModel->errors();
+    connect(list, &cwErrorListModel::dataChanged, this,
+            [this, list, role, index](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QList<int>& roles) {
+        if(!roles.contains(static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole))) {
+            return;
+        }
+        for(int row = topLeft.row(); row <= bottomRight.row(); ++row) {
+            const cwError error = list->at(row);
+            if(isIgnorableWarning(error)) {
+                setWarningIgnored(index, role, error.errorTypeId(), error.suppressed());
+            }
+        }
+    });
+}
+
+void cwSurveyChunk::updateLrudErrors()
+{
+    for(int i = 0; i < d.stations.size(); ++i) {
+        checkForError(StationLeftRole, i);
+        checkForError(StationRightRole, i);
+        checkForError(StationUpRole, i);
+        checkForError(StationDownRole, i);
+    }
+}
+
+cwSurveyChunkCell cwSurveyChunk::cellIndexForErrorModel(cwErrorModel* errorModel) const
+{
+    if(errorModel == nullptr) {
+        return {};
+    }
+    const CellIndex cell = CellErrorModels.key(errorModel);
+    if(cell.index() < 0) {
+        return {};
+    }
+    return cwSurveyChunkCell(cell.index(), static_cast<DataRole>(cell.role()));
 }
 
 /**

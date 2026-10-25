@@ -11,11 +11,13 @@
 //Qt includes
 #include <QSharedDataPointer>
 #include <QUuid>
+#include <QSet>
 
 //Our includes
 #include "cwGlobals.h"
 #include "cwDistanceReading.h"
 #include "cwShotMeasurement.h"
+enum class cwErrorTypeId : int;
 
 class CAVEWHERE_LIB_EXPORT cwStation {
 
@@ -32,36 +34,41 @@ public:
     cwStation(const cwStation& station);
     cwStation(QString name);
 
-    QUuid id() const { return Data->id; }
-    void setId(const QUuid id) { Data->id = id; }
+    QUuid id() const { return m_data->m_id; }
+    void setId(const QUuid id) { m_data->m_id = id; }
 
     QString name() const;
     bool setName(QString Name);
 
     cwDistanceReading left() const;
-    void setLeft(const cwDistanceReading& left) { Data->m_left = left; }
+    void setLeft(const cwDistanceReading& left) { m_data->m_left = left; }
 
     cwDistanceReading right() const;
-    void setRight(const cwDistanceReading& right) { Data->m_right = right; }
+    void setRight(const cwDistanceReading& right) { m_data->m_right = right; }
 
     cwDistanceReading up() const;
-    void setUp(const cwDistanceReading& up) { Data->m_up = up; }
+    void setUp(const cwDistanceReading& up) { m_data->m_up = up; }
 
     cwDistanceReading down() const;
-    void setDown(const cwDistanceReading& down) { Data->m_down = down; }
+    void setDown(const cwDistanceReading& down) { m_data->m_down = down; }
 
     // Splays are wall shots taken from this station with no named destination.
     // Front sights only — a splay is never backsighted.
     QList<cwShotMeasurement> splays() const;
-    void setSplays(const QList<cwShotMeasurement>& splays) { Data->m_splays = splays; }
-    void addSplay(const cwShotMeasurement& splay) { Data->m_splays.append(splay); }
-    const cwShotMeasurement& splayAt(int index) const { return Data->m_splays.at(index); }
-    int splayCount() const { return Data->m_splays.size(); }
+    void setSplays(const QList<cwShotMeasurement>& splays) { m_data->m_splays = splays; }
+    void addSplay(const cwShotMeasurement& splay) { m_data->m_splays.append(splay); }
+    const cwShotMeasurement& splayAt(int index) const { return m_data->m_splays.at(index); }
+    int splayCount() const { return m_data->m_splays.size(); }
+
+    // cwErrorTypeId values the user ignored on this station's cells (#174)
+    QSet<int> ignoredWarnings() const;
+    void setIgnoredWarnings(const QSet<int>& ids);
+    bool isWarningIgnored(cwErrorTypeId id) const;
 
     void setData(QVariant data, DataRoles role);
     QVariant data(DataRoles role) const;
 
-    bool isValid() const { return !Data->Name.isEmpty(); }
+    bool isValid() const { return !m_data->m_name.isEmpty(); }
 
     bool operator ==(const cwStation& station) const;
     bool operator !=(const cwStation& station) const;
@@ -79,9 +86,9 @@ private:
         PrivateData();
         PrivateData(QString name);
 
-        QUuid id;
+        QUuid m_id;
 
-        QString Name;
+        QString m_name;
 
         cwDistanceReading m_left;
         cwDistanceReading m_right;
@@ -89,26 +96,28 @@ private:
         cwDistanceReading m_down;
 
         QList<cwShotMeasurement> m_splays;
+
+        QSet<int> m_ignoredWarnings;
     };
 
-    QSharedDataPointer<PrivateData> Data;
+    QSharedDataPointer<PrivateData> m_data;
 };
 
 inline size_t qHash(const cwStation& station) {
     return qHash(cwStation::canonicalKey(station.name()));
 }
 
-inline QString cwStation::name() const { return Data->Name; }
-inline cwDistanceReading cwStation::left() const { return Data->m_left; }
-inline cwDistanceReading cwStation::right() const { return Data->m_right; }
-inline cwDistanceReading cwStation::up() const { return Data->m_up; }
-inline cwDistanceReading cwStation::down() const { return Data->m_down; }
-inline QList<cwShotMeasurement> cwStation::splays() const { return Data->m_splays; }
+inline QString cwStation::name() const { return m_data->m_name; }
+inline cwDistanceReading cwStation::left() const { return m_data->m_left; }
+inline cwDistanceReading cwStation::right() const { return m_data->m_right; }
+inline cwDistanceReading cwStation::up() const { return m_data->m_up; }
+inline cwDistanceReading cwStation::down() const { return m_data->m_down; }
+inline QList<cwShotMeasurement> cwStation::splays() const { return m_data->m_splays; }
 
 inline bool cwStation::operator ==(const cwStation &station) const
 {
     //Matches qHash(), which hashes the canonical key, so QSet/QHash stay consistent
-    return canonicalKey(Data->Name) == canonicalKey(station.name());
+    return canonicalKey(m_data->m_name) == canonicalKey(station.name());
 }
 
 inline bool cwStation::operator !=(const cwStation &station) const

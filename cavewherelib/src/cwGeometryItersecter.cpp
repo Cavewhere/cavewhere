@@ -16,6 +16,7 @@
 #include "cwConcurrent.h"
 #include "cwProgressReporter.h"
 #include "cwTask.h"
+#include "cwTaskTrace.h"
 
 //Std limits
 #include <algorithm>
@@ -2508,6 +2509,8 @@ cwGeometryItersecter::BvhData::rebuildTopLevel() const
 
 QFuture<void> cwGeometryItersecter::launchBuildJob()
 {
+    cwTaskContextScope traceScope(QStringLiteral("intersect"));
+
     // Snapshot Nodes + the sub-BVH cache + the dirty set. QList/QHash are
     // implicitly shared, so these are cheap header copies that pin the
     // worker's view stable against UI-thread mutations during the build.

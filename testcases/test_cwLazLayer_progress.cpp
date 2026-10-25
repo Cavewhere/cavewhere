@@ -16,6 +16,7 @@
 #include "cwPointOctreeManifest.h"
 
 #include "LazFixtureHelper.h"
+#include "cwBuildBudgetOverride.h"
 #include "ProfileLogCapture.h"
 
 namespace {
@@ -23,31 +24,6 @@ QString octreeJobName(const QString& lazPath)
 {
     return QStringLiteral("Building point cloud octree: %1").arg(QFileInfo(lazPath).baseName());
 }
-
-// The build memory budget the profiling runner asks the layer for, and what a
-// megabyte of it is worth
-constexpr const char* kBuildMemoryBudgetVariable = "CW_BUILD_MEMORY_BUDGET_MB";
-constexpr int kOverrideBudgetMegabytes = 64;
-constexpr qint64 kBytesPerMebibyte = 1024 * 1024;
-
-// Sets the override for as long as it lives, so a failing check still leaves
-// the environment the way the rest of the suite found it.
-class BuildBudgetOverride
-{
-public:
-    explicit BuildBudgetOverride(int megabytes)
-    {
-        qputenv(kBuildMemoryBudgetVariable, QByteArray::number(megabytes));
-    }
-
-    ~BuildBudgetOverride()
-    {
-        qunsetenv(kBuildMemoryBudgetVariable);
-    }
-
-    BuildBudgetOverride(const BuildBudgetOverride&) = delete;
-    BuildBudgetOverride& operator=(const BuildBudgetOverride&) = delete;
-};
 
 // True where the build the layer ran logged @a budgetBytes as its pass B budget
 bool builtWithBudget(const QString& lazPath, QTemporaryDir& cacheDir, qint64 budgetBytes)
@@ -491,9 +467,9 @@ TEST_CASE("cwLazLayer: CW_BUILD_MEMORY_BUDGET_MB is the build's memory budget",
         QTemporaryDir cacheDir;
         REQUIRE(cacheDir.isValid());
 
-        const BuildBudgetOverride override(kOverrideBudgetMegabytes);
+        const cwBuildBudgetOverride override;
 
         REQUIRE(builtWithBudget(path, cacheDir,
-                                qint64(kOverrideBudgetMegabytes) * kBytesPerMebibyte));
+                                override.budgetBytes()));
     }
 }

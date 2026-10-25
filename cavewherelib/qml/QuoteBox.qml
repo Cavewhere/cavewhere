@@ -24,6 +24,11 @@ Item {
     property bool triangleOnRight: false
     property Item pointAtObject
     property point pointAtObjectPosition
+    // The drawn box in this item's coordinates. The item itself is zero-sized
+    // at the triangle's tip, so a host that needs real bounds, like a Popup,
+    // sizes itself from this
+    readonly property rect bodyRect: Qt.rect(shapePath.boxTopLeft.x, 0,
+                                             childrenContainer.width, shapePath.boxBottomRight.y)
 
     // Reading every ancestor's x/y makes this a genuine binding, so any of
     // them moving re-fires it. pointAtObjectChanged alone can't see that:

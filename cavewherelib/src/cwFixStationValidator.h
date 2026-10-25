@@ -106,6 +106,13 @@ class CAVEWHERE_LIB_EXPORT cwFixStationValidator : public QObject
     Q_PROPERTY(QList<cwFixStationWarning> fixStationWarnings READ fixStationWarnings NOTIFY fixStationWarningsChanged FINAL)
     Q_PROPERTY(QStringList fixStationWarningMessages READ fixStationWarningMessages NOTIFY fixStationWarningsChanged FINAL)
 
+    //! The stable errorTypeIds this validator pushes onto a cave's errorModel —
+    //! the fix-station warning kinds (FixStationOutlier,
+    //! FixStationDomain, FixStationReference). A fix-station badge binds a
+    //! cave's errorModel to just these so it stays distinct from the all-warnings
+    //! page banner. Constant: the id set is fixed at compile time.
+    Q_PROPERTY(QList<int> fixStationErrorTypeIds READ fixStationErrorTypeIds CONSTANT FINAL)
+
 public:
     //! One reprojected fix station plus the provenance needed to attribute a
     //! warning back to the owning node and row.

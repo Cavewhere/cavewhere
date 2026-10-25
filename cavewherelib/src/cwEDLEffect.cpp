@@ -8,8 +8,15 @@
 // Our includes
 #include "cwEDLEffect.h"
 
+#include <QDebug>
+
 #include <algorithm>
 #include <cmath>
+
+namespace {
+// The composite is opaque, so the outline's alpha is fixed rather than themed.
+constexpr float kOpaqueAlpha = 1.0f;
+}
 
 cwEDLEffect::cwEDLEffect()
 {
@@ -64,6 +71,7 @@ void cwEDLEffect::initialize(QRhi* rhi,
     m_uniformData.textureYFlip = rhi->isYUpInFramebuffer() ? 0.0f : 1.0f;
     m_uniformData.strength = m_parameters.value().strength / m_logDepthNormalizer;
     m_uniformData.maxDarken = m_parameters.value().maxDarken;
+    updateOutlineColor();
     m_uniformsDirty = true;
 
     // initialize() runs on first use and again whenever the sample count changes
@@ -128,6 +136,7 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
         m_inputSampleCount > 1 ? QStringLiteral(":/shaders/EDL_MSAA.frag.qsb")
                                : QStringLiteral(":/shaders/EDL.frag.qsb"));
     if (!vs.isValid() || !fs.isValid()) {
+        qWarning() << "EDL shaders failed to load (input sample count" << m_inputSampleCount << ")";
         return false;
     }
 
@@ -177,7 +186,13 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
 
     m_pipeline->setShaderResourceBindings(m_layout);
     m_pipeline->setRenderPassDescriptor(outputRPDesc);
-    return m_pipeline->create();
+    if (!m_pipeline->create()) {
+        qWarning() << "EDL composite pipeline failed to build (input sample count"
+                   << m_inputSampleCount << "output sample count" << m_outputSampleCount
+                   << "); point clouds draw without eye-dome lighting";
+        return false;
+    }
+    return true;
 }
 
 bool cwEDLEffect::ensureBindings(QRhiTexture* sceneColor, QRhiTexture* cloudColor, QRhiTexture* depth)
@@ -294,10 +309,20 @@ void cwEDLEffect::updateUniformData(const FrameUniformContext& ctx)
 
     if (parametersChanged) {
         m_uniformData.maxDarken = m_parameters.value().maxDarken;
+        updateOutlineColor();
     }
 
     m_parameters.resetChanged();
     m_uniformsDirty = true;
+}
+
+void cwEDLEffect::updateOutlineColor()
+{
+    const QColor& color = m_parameters.value().outlineColor;
+    m_uniformData.outlineColor[0] = color.redF();
+    m_uniformData.outlineColor[1] = color.greenF();
+    m_uniformData.outlineColor[2] = color.blueF();
+    m_uniformData.outlineColor[3] = kOpaqueAlpha;
 }
 
 void cwEDLEffect::recomputeSampleOffset()

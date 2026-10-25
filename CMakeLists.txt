@@ -125,6 +125,8 @@ find_package(libgit2)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+option(CAVEWHERE_TASK_TRACE "Emit os_signpost task tracing and the task sampler" ON)
+
 #Add address sanitizer for clang build only
 option(ASAN_ENABLED "Enable AddressSanitizer on macOS Debug builds" ON)
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND ASAN_ENABLED)

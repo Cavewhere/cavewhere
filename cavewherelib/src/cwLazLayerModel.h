@@ -74,6 +74,14 @@ public:
     int count() const { return m_layers.size(); }
     const QList<cwLazLayer*>& layers() const { return m_layers; }
 
+    //! The one admission window every layer's octree build waits in, so the
+    //! project builds one octree at a time.
+    AsyncFuture::Limiter* buildLimiter() const { return m_buildLimiter; }
+
+    //! Drop every build still waiting for its turn and start no new one, for
+    //! this model's remaining life; the running one finishes.
+    void cancelQueuedBuilds();
+
     void setFutureManagerToken(const cwFutureManagerToken& token);
     cwFutureManagerToken futureManagerToken() const { return m_futureManagerToken; }
 
@@ -149,6 +157,8 @@ private:
     //! behind.
     void updateHeaderProbeInFlight(cwLazLayer* layer, bool inFlight);
 
+    AsyncFuture::Limiter* m_buildLimiter = nullptr;
+    bool m_startsBuilds = true;
     QList<cwLazLayer*> m_layers;
     QSet<cwLazLayer*> m_probingLayers;
     cwFutureManagerToken m_futureManagerToken;

@@ -24,6 +24,7 @@
 #include <QScopeGuard>
 #include <QElapsedTimer>
 #include <QMatrix4x4>
+#include <QOffscreenSurface>
 #include <QSet>
 #include <QSize>
 #include <QString>
@@ -50,6 +51,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <concepts>
 #include <functional>
 #include <iostream>
@@ -64,6 +66,7 @@
 //Our includes
 #include "cwAppearanceOverride.h"
 #include "cwCoordinateTransform.h"
+#include "cwEDLEffect.h"
 #include "cwFrustum.h"
 #include "cwLazClipOperation.h"
 #include "cwLazLoader.h"
@@ -677,6 +680,13 @@ namespace {
         void setEdlEnabled(bool enabled) { m_edlEnabled = enabled; }
         bool edlEnabled() const { return m_edlEnabled; }
 
+        //! The EDL tuning the following frames composite with, held on the
+        //! frame renderer the way cwRhiScene feeds the live one
+        void setEdlParameters(const EdlParametersData& parameters)
+        {
+            frameRenderer()->setEdlParameters(parameters);
+        }
+
         //! Draws the following frames through perspectiveProjection() instead
         //! of orthoProjection(), at the same world height.
         void setPerspective(bool perspective) { m_perspective = perspective; }
@@ -770,6 +780,8 @@ namespace {
                                                          m_live.renderPassDescriptor.get(),
                                                          sampleCount);
                 REQUIRE(m_edl.valid());
+                static_cast<cwEDLEffect*>(m_edl.effect.get())
+                    ->setParameters(frameRenderer()->edlParameters());
                 edl = &m_edl;
             }
 
@@ -921,13 +933,33 @@ namespace {
 
             if (m_readbackEnabled) {
                 //An offscreen frame is complete when endOffscreenFrame returns
-                m_colorPixels = readback.data;
+                m_colorPixels = topDownRows(readback);
                 m_colorSize = readback.pixelSize;
-                m_compositePixels = compositeReadback.data;
+                m_compositePixels = topDownRows(compositeReadback);
                 m_compositeSize = compositeReadback.pixelSize;
             }
-            m_spriteSizePixels = probeReadback.data;
+            m_spriteSizePixels = topDownRows(probeReadback);
             m_spriteSizeSize = probeReadback.pixelSize;
+        }
+
+        //! The readback's rows ordered top of the picture first. A backend whose
+        //! framebuffer is y up (OpenGL) reads back bottom row first; every
+        //! pixel the fixture hands out counts rows from the top like Metal does.
+        QByteArray topDownRows(const QRhiReadbackResult& readback) const
+        {
+            if (!m_rhi->isYUpInFramebuffer() || readback.pixelSize.isEmpty()) {
+                return readback.data;
+            }
+            constexpr int kBytesPerPixel = 4;
+            const int rowBytes = readback.pixelSize.width() * kBytesPerPixel;
+            const int rows = readback.pixelSize.height();
+            QByteArray flipped(readback.data.size(), Qt::Uninitialized);
+            for (int row = 0; row < rows; row++) {
+                std::memcpy(flipped.data() + row * rowBytes,
+                            readback.data.constData() + (rows - 1 - row) * rowBytes,
+                            rowBytes);
+            }
+            return flipped;
         }
 
         //! Draws every following frame a second time, in the sprite size view,
@@ -1435,10 +1467,34 @@ namespace {
         if (rhi) {
             return rhi;
         }
+#elif defined(Q_OS_LINUX)
+        // The OpenGL backend needs a surface for its context to run on; the
+        // fallback surface outlives every QRhi made here.
+        static std::unique_ptr<QOffscreenSurface> fallbackSurface(
+            QRhiGles2InitParams::newFallbackSurface());
+        QRhiGles2InitParams initParams;
+        initParams.fallbackSurface = fallbackSurface.get();
+        std::unique_ptr<QRhi> rhi(QRhi::create(QRhi::OpenGLES2, &initParams));
+        if (rhi) {
+            return rhi;
+        }
 #endif
         SKIP("A real QRhi backend is required to watch GPU buffer lifetimes; "
-             "this test runs on Metal");
+             "this test runs on Metal and OpenGL");
         return {};
+    }
+
+    // For a test whose expected pixels were pinned from a Metal run: another
+    // backend's point rasterization lands a few pixels differently, which is
+    // noise against a pin, not a regression.
+    std::unique_ptr<QRhi> makeMetalPinnedRhiOrSkip()
+    {
+        std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+        if (rhi && rhi->backend() != QRhi::Metal) {
+            SKIP("The expected pixels are pinned from the Metal backend");
+            return {};
+        }
+        return rhi;
     }
 
     // Renders until a view inflated to @a inflation has stepped all the way back
@@ -6030,8 +6086,8 @@ namespace {
         const double ndcX = clip.x() / clip.w();
         const double ndcY = clip.y() / clip.w();
         const QSize size = fixture.colorSize();
-        // A y-up framebuffer reads back bottom row first
-        const double row = rhi->isYUpInFramebuffer() ? (ndcY + 1.0) * 0.5 : (1.0 - ndcY) * 0.5;
+        // The fixture's pixels count rows from the top on every backend
+        const double row = (1.0 - ndcY) * 0.5;
         return QPointF((ndcX + 1.0) * 0.5 * size.width(), row * size.height());
     }
 
@@ -6311,11 +6367,13 @@ namespace {
         return pose;
     }
 
-    //! The row, counted from the top of the picture, @a pixel sits on. A
-    //! backend whose framebuffer is y up reads back bottom row first.
+    //! The row, counted from the top of the picture, @a pixel sits on. The
+    //! fixture's pixels already count rows from the top on every backend.
     int rowFromTop(QRhi* rhi, const QPoint& pixel, QSize size)
     {
-        return rhi->isYUpInFramebuffer() ? size.height() - 1 - pixel.y() : pixel.y();
+        Q_UNUSED(rhi);
+        Q_UNUSED(size);
+        return pixel.y();
     }
 
     //! The topmost and bottommost rows, counted from the top, @a pixels reach
@@ -6338,6 +6396,14 @@ namespace {
     //! border's outer neighbors are the clear depth, so each of them darkens it
     //! to the ceiling.
     constexpr double kMinEdlEdgeContrast = 32.0;
+    //! The dark theme's EDL outline (Theme.viewBackground.edlOutline)
+    const QColor kDarkThemeOutline = QColor(0x8a, 0x96, 0xa3);
+    //! A border pixel the black outline darkened below this gray is one EDL
+    //! outlined: more than half its color came from the outline.
+    constexpr int kOutlinedGrayCeiling = 128;
+    //! How much lighter a gray outline leaves an outlined pixel than a black
+    //! one. More than half of ~145 gray mixes in, so the lift clears this.
+    constexpr double kMinOutlineLift = 40.0;
 
     //! True when every pixel within @a radius of @a pixel is lit in @a lit
     bool surroundedByLit(const PixelMask& lit, const QPoint& pixel, int radius)
@@ -6563,6 +6629,84 @@ TEST_CASE("EDL shades the plane's edges and leaves its flat pass as it was",
     fixture.renderFrame();
     CHECK(fixture.compositeImage().isNull());
     CHECK(fixture.frameImage() == flat);
+}
+
+TEST_CASE("EDL draws the plane's outline in the outline color and leaves its shading alone",
+          "[PointCloudStreaming][PointCloudEval][cwEDLEffect]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kTargetDimension);
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kPlaneSweepHighHeight);
+    fixture.setEdlEnabled(true);
+    fixture.renderUntilQuiet();
+
+    const QImage defaultComposite = fixture.compositeImage();
+    REQUIRE_FALSE(defaultComposite.isNull());
+    const PixelMask lit = litMask(fixture);
+    const QVector<QPoint> litPixels = fixture.litPixels();
+    REQUIRE_FALSE(litPixels.isEmpty());
+
+    const auto compositeWithOutline = [&](const QColor& outline) {
+        EdlParametersData parameters;
+        parameters.outlineColor = outline;
+        fixture.setEdlParameters(parameters);
+        fixture.renderFrame();
+        return fixture.compositeImage();
+    };
+
+    //Going gray and back to black restores the default picture
+    const QImage grayComposite = compositeWithOutline(kDarkThemeOutline);
+    const QImage blackComposite = compositeWithOutline(QColor(Qt::black));
+    CHECK(blackComposite == defaultComposite);
+    REQUIRE(grayComposite.size() == blackComposite.size());
+
+    //Off the plane the background passes through untouched
+    int backgroundMismatches = 0;
+    for (int y = 0; y < blackComposite.height(); y++) {
+        for (int x = 0; x < blackComposite.width(); x++) {
+            if (!lit.at(x, y) && grayComposite.pixel(x, y) != blackComposite.pixel(x, y)) {
+                backgroundMismatches++;
+            }
+        }
+    }
+    CHECK(backgroundMismatches == 0);
+
+    int insideMismatches = 0;
+    int darkerEdges = 0;
+    double blackOutlineSum = 0.0;
+    double grayOutlineSum = 0.0;
+    int outlineCount = 0;
+    for (const QPoint& pixel : litPixels) {
+        const QRgb black = blackComposite.pixel(pixel);
+        const QRgb gray = grayComposite.pixel(pixel);
+        if (surroundedByLit(lit, pixel, kEdlNeighborhoodPx)) {
+            //The shape cue has no border neighbor here, so the outline
+            //color has nothing to say
+            if (gray != black) {
+                insideMismatches++;
+            }
+        } else {
+            if (qGray(gray) < qGray(black)) {
+                darkerEdges++;
+            }
+            if (qGray(black) < kOutlinedGrayCeiling) {
+                blackOutlineSum += qGray(black);
+                grayOutlineSum += qGray(gray);
+                outlineCount++;
+            }
+        }
+    }
+    REQUIRE(outlineCount > 0);
+
+    const double blackOutlineMean = blackOutlineSum / outlineCount;
+    const double grayOutlineMean = grayOutlineSum / outlineCount;
+    INFO("black outline mean " << blackOutlineMean << ", gray outline mean "
+         << grayOutlineMean << " over " << outlineCount << " outlined px");
+    CHECK(insideMismatches == 0);
+    CHECK(darkerEdges == 0);
+    CHECK(grayOutlineMean - blackOutlineMean >= kMinOutlineLift);
 }
 
 namespace {
@@ -7952,10 +8096,11 @@ namespace {
         return shaderHash({QStringLiteral(":/shaders/EDL.vert.qsb"),
                            QStringLiteral(":/shaders/EDL.frag.qsb"),
                            QStringLiteral(":/shaders/EDL_MSAA.frag.qsb")})
-               + QStringLiteral(",strength=%1,maxDarken=%2,radiusPx=%3")
+               + QStringLiteral(",strength=%1,maxDarken=%2,radiusPx=%3,outline=%4")
                      .arg(double(parameters.strength), 0, 'g', 9)
                      .arg(double(parameters.maxDarken), 0, 'g', 9)
                      .arg(double(parameters.radiusPx), 0, 'g', 9)
+                     .arg(parameters.outlineColor.name(QColor::HexArgb))
                      .toUtf8();
     }
 
@@ -9641,8 +9786,6 @@ namespace {
         REQUIRE(probe.size() == view.target);
         const double maxPointSizePx =
             Access::liveAppearanceUniform(fixture.backend()).maxPointSizePx;
-        const bool yUp = fixture.rhi()->isYUpInFramebuffer();
-
         struct TileSides {
             double narrowest = std::numeric_limits<double>::max();
             double widest = 0.0;
@@ -9652,8 +9795,9 @@ namespace {
             //RGBA8888, so a pixel's red is its first byte
             constexpr int kBytesPerPixel = 4;
             const uchar* pixels = probe.constScanLine(row);
-            //The twin's rows count up from the bottom, as clip y does
-            const int y = yUp ? row : probe.height() - 1 - row;
+            //The twin's rows count up from the bottom, as clip y does; the
+            //fixture's count down from the top on every backend
+            const int y = probe.height() - 1 - row;
             for (int x = 0; x < probe.width(); x++) {
                 const uchar* pixel = pixels + x * kBytesPerPixel;
                 if (pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0) {
@@ -11798,7 +11942,7 @@ TEST_CASE("A cold start on a tile holds the orbit's worst pose until quiet",
 TEST_CASE("Zooming out until quiet leaves the holes bounded",
           "[PointCloudStreaming][HoleMetric]")
 {
-    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const std::unique_ptr<QRhi> rhi = makeMetalPinnedRhiOrSkip();
 
     SECTION("a plane at one sprite per cell measures the sizing rule alone") {
         const QVector<float> heights = zoomOutHeights(kPlaneSweepLowHeight,
@@ -12519,7 +12663,7 @@ TEST_CASE("Under grid spacing the plane's boundary path lights what it lit befor
         0.19978, 0.19961, 0.20000, 0.20055};
     constexpr double kLoggedPrecision = 0.5e-5;
 
-    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const std::unique_ptr<QRhi> rhi = makeMetalPinnedRhiOrSkip();
     EvalPath path = planeBoundaryPath(rhi.get(), kHalfHdTargetSize);
     path.poses.resize(kSweptPoseCount);
 
@@ -14923,7 +15067,7 @@ TEST_CASE("Under Grow a departing child's points stay lit on every frame of its 
 TEST_CASE("Under Grow a departure holds the lit pixels its children and their ancestor draw, where Cover dips",
           "[PointCloudStreaming]")
 {
-    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const std::unique_ptr<QRhi> rhi = makeMetalPinnedRhiOrSkip();
 
     const Departure grow =
         departure(rhi.get(), cw::pointcloud::RevealMode::Grow, kDepartureCoverage);
@@ -15639,7 +15783,7 @@ TEST_CASE("Under grid and measured spacing the plane's boundary path lights what
                 {0.19978, 0.19961, 0.20000, 0.20055}}};
     constexpr double kLoggedPrecision = 0.5e-5;
 
-    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const std::unique_ptr<QRhi> rhi = makeMetalPinnedRhiOrSkip();
     EvalPath path = planeBoundaryPath(rhi.get(), kHalfHdTargetSize);
     path.poses.resize(kSweptPoseCount);
 
@@ -16281,7 +16425,7 @@ TEST_CASE("M3 reads Local's sprites the way the twin sizes them: a cloud coded u
 TEST_CASE("M3 reads only the sprites drawn on top: a sparser plane hidden under a dense one adds no seam under any source",
           "[PointCloudStreaming]")
 {
-    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const std::unique_ptr<QRhi> rhi = makeMetalPinnedRhiOrSkip();
     using cw::pointcloud::SpacingSource;
 
     //The sparse plane sits in leaves of its own, shallower than the dense

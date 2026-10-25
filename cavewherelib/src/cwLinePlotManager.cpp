@@ -9,6 +9,7 @@
 #include "cwLinePlotManager.h"
 #include "cwRestarterTracking.h"
 #include "cwCavernRunner.h"
+#include "cwTaskTrace.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
 #include "cwCave.h"
@@ -728,6 +729,7 @@ void cwLinePlotManager::startSolveAfterScan()
         publishAttachedFixWarnings(externalInputs);
         auto input = cwLinePlotTask::buildInput(Region.data(), externalInputs);
         m_memberViewsMovedSinceSnapshot = false;
+        cwTaskContextScope traceScope(QStringLiteral("lineplot"));
         auto worker = cwLinePlotTask::run(std::move(input));
         m_solveWorker = worker;
 

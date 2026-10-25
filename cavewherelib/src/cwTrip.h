@@ -85,6 +85,11 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(double appliedDeclination READ appliedDeclination NOTIFY appliedDeclinationChanged FINAL)
     Q_PROPERTY(DeclinationOrigin declinationOrigin READ declinationOrigin NOTIFY appliedDeclinationChanged FINAL)
 
+    // Whether any station in the trip holds LRUD text / any splay. They drive
+    // the Settings section's column checkboxes (#174)
+    Q_PROPERTY(bool hasLrudData READ hasLrudData NOTIFY hasLrudDataChanged)
+    Q_PROPERTY(bool hasSplayData READ hasSplayData NOTIFY hasSplayDataChanged)
+
 public:
     //! Where appliedDeclination() comes from.
     enum DeclinationOrigin {
@@ -379,6 +384,25 @@ public:
     cwTripData data() const;
     void setData(const cwTripData& data);
 
+    // Ignores the trip's survey-chunk warnings whose ids are in errorTypeIds
+    // (empty = all kinds). Returns how many were newly ignored.
+    Q_INVOKABLE int ignoreAllWarnings(const QList<int>& errorTypeIds = {});
+
+    // Shows again the ignored warnings, every one or only those whose ids are in errorTypeIds.
+    // Returns how many were cleared.
+    Q_INVOKABLE int clearIgnoredWarnings();
+    Q_INVOKABLE int clearIgnoredWarnings(const QList<int>& errorTypeIds);
+
+    // Current unsuppressed warning count for one kind across the trip's chunks
+    Q_INVOKABLE int warningCountForTypeId(int errorTypeId) const;
+
+    // Current unsuppressed warnings that ignoreAllWarnings() can ignore; the
+    // trip's own declination warning is excluded
+    Q_INVOKABLE int ignorableWarningCount() const;
+
+    bool hasLrudData() const { return m_hasLrudData; }
+    bool hasSplayData() const { return m_hasSplayData; }
+
 signals:
     void nameChanged();
     void idChanged();
@@ -393,6 +417,8 @@ signals:
     void parentNodeChanged();
     void parentCaveChanged();
     void externalCenterlineChanged();
+    void hasLrudDataChanged();
+    void hasSplayDataChanged();
 
     void sourcePathChanged();
 
@@ -557,6 +583,16 @@ private:
 
 
     void updateKeywordMetadata();
+
+    void connectColumnData(cwSurveyChunk* chunk);
+    void scheduleColumnDataUpdate();
+    void updateColumnData();
+
+    bool m_hasLrudData = false;
+    bool m_hasSplayData = false;
+    // Collapses a burst of chunk edits into one hasLrudData/hasSplayData
+    // recompute on the next event-loop turn
+    bool m_columnDataPending = false;
 };
 
 // Q_DECLARE_METATYPE(cwTrip*)

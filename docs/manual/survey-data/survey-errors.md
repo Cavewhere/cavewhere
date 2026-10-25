@@ -2,7 +2,7 @@
 title: Fix Survey Errors
 summary: What CaveWhere's errors and warnings mean, which ones stop the cave plotting, and how to fix each one.
 problem: Find the bad reading that's stopping your cave from plotting — or the one that plots fine and is quietly wrong.
-keywords: [error, warning, fatal, survey error, duplicate station, missing station, backsight, tolerance, unconnected, blunder]
+keywords: [error, warning, fatal, ignore warning, survey error, duplicate station, missing station, backsight, tolerance, unconnected, blunder]
 related: [enter-survey-data.md, calibration.md, ../loop-closure/check-loop-closure.md, ../concepts/glossary.md]
 ---
 
@@ -44,10 +44,9 @@ the cave's trip table and beside the cave in the cave list. You never have to
 open a trip to learn whether it needs attention, and a project you last touched
 a year ago tells you where you left off.
 
-You can **suppress** a warning once you have checked it and satisfied yourself:
-the popup puts a checkbox beside each one, and ticking it strikes the message
-through. Errors carry no such checkbox, because nothing plots until the data
-says something.
+You can **ignore** a warning once you have checked it and satisfied yourself.
+See [Ignore warnings](#ignore-warnings) below. Errors can't be ignored, because
+nothing plots until the data says something.
 
 ## Errors
 
@@ -156,13 +155,63 @@ An LRUD sits empty. Only a warning, since the survey line does not need it, but
 the passage gets no width or height there, so anything drawing passage shape has
 nothing to work with.
 
+## Ignore warnings
+
+Some warnings you will never fix. A trip imported from an old Survex or Compass
+file often has no LRUDs, and the book went in the bin years ago. Every station
+then carries four "Missing" warnings, and the real problems drown in them.
+
+Ignoring a warning says "I have seen this, and the value stands". An ignored
+warning stops counting toward the trip's total, and CaveWhere saves it with the
+project, so it stays ignored next time you open the file. You can ignore one
+warning, one kind, or the whole trip.
+
+**One warning.** Click the cell's badge. Each warning in the popup has a
+checkbox. Tick it and the message is struck through. The cell keeps a gray
+triangle badge, so you can click it later and change your mind.
+
+**Every warning of one kind.** The same popup has a link under the messages:
+**Ignore all similar warnings in this trip (*n*)**. Click it on a missing-Left
+warning and CaveWhere ignores every missing-Left warning in the trip. The other
+kinds stay as they are, so a missing Right still shows up.
+
+**Every warning in the trip.** The warning total at the top of the trip has a
+small arrow. Click it, or anywhere on the total, and choose
+**Ignore all *n* warnings**. **Show all *n* ignored warnings** in the same menu puts
+them all back. Once you ignore every warning the arrow goes away, and so does
+the total if the trip has no errors. The ignored line under it brings them back.
+
+**Review what you ignored.** Ignore-all on an imported trip can bury a 40°
+backsight disagreement under 300 missing LRUDs. Under the warning total, a gray
+line reads "*n* ignored warnings". Click it and they open, grouped by kind
+with the rare ones first: Backsight disagreement, Missing backsight, Missing
+reading, then Missing LRUD. Each group starts shut. Open one, untick a row to
+bring that warning back, or click its message to jump to the cell and fix the
+reading. **Show *n*** on a group's header puts the whole group back;
+**Show all** brings back the whole trip.
+
+Ignore-all works one trip at a time, on purpose. A button for the whole cave
+would let you bury warnings you've never looked at. It also leaves errors alone,
+and the trip's declination warning, which you fix in
+[Calibration](calibration.md) rather than on a cell.
+
+**Changing the value brings the warning back.** You ignored that reading, not
+whatever the cell holds later. Edit the cell and CaveWhere forgets you ignored
+it; if the new value still looks wrong, the warning returns. Editing either half of a frontsight/backsight pair
+brings back an ignored disagreement between them. Renaming a station keeps its
+ignored warnings, and so does typing the same value back in.
+
+For a trip with no LRUDs or no splays at all, I'd hide the column in the trip's
+Settings section instead (see [Hide the LRUD or Splays column](calibration.md#hide-the-lrud-or-splays-column)). CaveWhere then stops producing those warnings, even
+for stations you add later.
+
 ## A warning is not always wrong
 
 Warnings are judgment calls, and CaveWhere lets you overrule them. A 3°
 foresight/backsight split beside a large iron deposit may be the best reading
-that cave will ever give up. Check it, satisfy yourself, and suppress it.
+that cave will ever give up. Check it, satisfy yourself, and ignore it.
 
 Leaving warnings lying around unread is the thing to avoid. The check earns its
 value by making an unexpected warning stand out, and it cannot stand out with
 forty others already on the trip. I clear a trip's warnings before I leave it,
-even the ones I intend to suppress.
+even the ones I intend to ignore.

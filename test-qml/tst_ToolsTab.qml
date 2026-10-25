@@ -9,6 +9,9 @@ QQ.Item {
     width: 320
     height: 600
 
+    // Tall enough options push the drawer past its height, so it scrolls.
+    property int optionsHeight: 40
+
     BaseTurnTableInteraction { id: defaultInteractionId; anchors.fill: parent }
     BaseTurnTableInteraction { id: pickInteractionId; anchors.fill: parent }
     BaseTurnTableInteraction { id: clipInteractionId; anchors.fill: parent }
@@ -26,7 +29,7 @@ QQ.Item {
         QQ.Rectangle {
             objectName: "toolsTabTestContent"
             implicitWidth: 120
-            implicitHeight: 40
+            implicitHeight: rootId.optionsHeight
             color: "red"
         }
     }
@@ -81,6 +84,7 @@ QQ.Item {
 
         function init() {
             managerId.activeDefaultInteraction()
+            rootId.optionsHeight = 40
             toolsTabId.toolModel = [pickToolId, lengthToolId, clipToolId]
         }
 
@@ -151,6 +155,31 @@ QQ.Item {
 
             tryVerify(() => managerId.activeInteraction === defaultInteractionId, 2000,
                       "closing the card disarmed back to the default interaction")
+        }
+
+        // The card sits in line in the drawer's scrolling column here, rather than
+        // floating over the view, so the wheel over it scrolls the drawer.
+        function test_wheelOverTheOptionsCardScrollsTheDrawer() {
+            rootId.optionsHeight = 1000
+            clipInteractionId.activate()
+            let card = findChild(toolsTabId, "toolsTabOptionsCard")
+            tryVerify(() => card.visible, 2000)
+
+            let flickable = findChild(toolsTabId, "toolsTabScrollView").contentItem
+            tryVerify(() => flickable.contentHeight > flickable.height, 2000,
+                      "the drawer scrolls")
+            waitForRendering(toolsTabId)
+
+            const point = card.mapToItem(rootId, card.width / 2, card.height / 2)
+            const y = Math.min(point.y, rootId.height - 1)
+            const startY = flickable.contentY
+            mouseMove(rootId, point.x, y)
+            for (let i = 0; i < 5; ++i) {
+                mouseWheel(rootId, point.x, y, 0, -120)
+            }
+
+            tryVerify(() => flickable.contentY > startY, 2000,
+                      "the wheel over the card scrolled the drawer")
         }
 
         // Pages that publish no tools reach this drawer too, and an empty tab

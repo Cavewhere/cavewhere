@@ -942,12 +942,12 @@ cwTurnTableViewState clampViewState(const cwTurnTableViewState& state) {
 }
 
 // Scalar linear interpolation.
-inline double lerp(double a, double b, double t) {
+inline double lerpLinear(double a, double b, double t) {
     return a + (b - a) * t;
 }
 
 // Component-wise linear interpolation for QVector3D.
-inline QVector3D lerp(const QVector3D& a, const QVector3D& b, double t) {
+inline QVector3D lerpLinear(const QVector3D& a, const QVector3D& b, double t) {
     return a + (b - a) * static_cast<float>(t);
 }
 
@@ -1166,14 +1166,14 @@ void cwBaseTurnTableInteraction::onStateAnimTick(const QVariant& value)
             || Camera->projection().type() == cwProjection::PerspectiveFrustum;
 
     cwTurnTableViewState s;
-    s.center = lerp(m_stateAnimStart.center, m_stateAnimTarget.center, t);
+    s.center = lerpLinear(m_stateAnimStart.center, m_stateAnimTarget.center, t);
     s.azimuth = lerpAzimuth(m_stateAnimStart.azimuth, m_stateAnimTarget.azimuth, t);
-    s.pitch = lerp(m_stateAnimStart.pitch, m_stateAnimTarget.pitch, t);
+    s.pitch = lerpLinear(m_stateAnimStart.pitch, m_stateAnimTarget.pitch, t);
     s.distance = isPerspective
-                 ? lerp(m_stateAnimStart.distance, m_stateAnimTarget.distance, t)
+                 ? lerpLinear(m_stateAnimStart.distance, m_stateAnimTarget.distance, t)
                  : m_stateAnimTarget.distance;
-    s.zoomScale = lerp(m_stateAnimStart.zoomScale, m_stateAnimTarget.zoomScale, t);
-    s.eyeOffset = lerp(m_stateAnimStart.eyeOffset, m_stateAnimTarget.eyeOffset, t);
+    s.zoomScale = lerpLinear(m_stateAnimStart.zoomScale, m_stateAnimTarget.zoomScale, t);
+    s.eyeOffset = lerpLinear(m_stateAnimStart.eyeOffset, m_stateAnimTarget.eyeOffset, t);
 
     setViewState(s);
 }

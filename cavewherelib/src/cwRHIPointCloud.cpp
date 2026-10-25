@@ -223,7 +223,10 @@ void cwRHIPointCloud::initializeResources(const ResourceUpdateData& data)
         { kNodeConstantsBytes, QRhiVertexInputBinding::PerInstance, kInstanceStepRate }
     });
     m_inputLayout.setAttributes({
-        { kPointsBinding, 0, QRhiVertexInputAttribute::UShort4, 0 },        // qpos
+        // Four uint16 lanes read as two uint32 words (PointCloud.vert unpacks
+        // them): the OpenGL backend only takes 32-bit integer formats down the
+        // integer attribute path.
+        { kPointsBinding, 0, QRhiVertexInputAttribute::UInt2, 0 },          // qposPacked
         { kNodeConstantsBinding, 1, QRhiVertexInputAttribute::Float4, 0 },  // nodeOriginScale
         { kNodeConstantsBinding, 2, QRhiVertexInputAttribute::Float,
           kNodeFloorOffset },                                               // nodeFloor
@@ -1901,7 +1904,11 @@ bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
 
         record->pipeline->setShaderResourceBindings(record->layout);
         record->pipeline->setRenderPassDescriptor(key.renderPass);
-        record->pipeline->create();
+        if (!record->pipeline->create()) {
+            qWarning() << "Point cloud pipeline failed to build (shaders"
+                       << key.vertexShader << key.fragmentShader
+                       << "sample count" << key.sampleCount << ")";
+        }
 
         return record;
     };
@@ -2109,7 +2116,10 @@ bool cwRHIPointCloud::ensureNodeBoxPipeline(const RenderData& data)
 
         record->pipeline->setShaderResourceBindings(record->layout);
         record->pipeline->setRenderPassDescriptor(key.renderPass);
-        record->pipeline->create();
+        if (!record->pipeline->create()) {
+            qWarning() << "Point cloud node box pipeline failed to build (sample count"
+                       << key.sampleCount << ")";
+        }
         return record;
     };
 

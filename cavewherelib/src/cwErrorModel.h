@@ -26,6 +26,7 @@ class CAVEWHERE_LIB_EXPORT cwErrorModel : public QObject
 
     Q_PROPERTY(int fatalCount READ fatalCount NOTIFY fatalCountChanged)
     Q_PROPERTY(int warningCount READ warningCount NOTIFY warningCountChanged)
+    Q_PROPERTY(int ignoredWarningCount READ ignoredWarningCount NOTIFY ignoredWarningCountChanged)
     Q_PROPERTY(cwErrorListModel* errors READ errors CONSTANT)
 
 public:
@@ -34,6 +35,7 @@ public:
 
     int fatalCount() const;
     int warningCount() const;
+    int ignoredWarningCount() const;
 
     void setParentModel(cwErrorModel* parent);
     cwErrorModel *parentModel() const;
@@ -47,17 +49,22 @@ public:
 signals:
     void fatalCountChanged();
     void warningCountChanged();
+    void ignoredWarningCountChanged();
+
+    void childModelAdded(cwErrorModel* child);
+    void childModelRemoved(cwErrorModel* child);
 
 private:
-    mutable int FatalCount; //!< Cached values for FatalCount
-    mutable int WarningCount; //!< Cached values for WaringCount
+    mutable int m_fatalCount; //!< Cached count of fatal errors
+    mutable int m_warningCount; //!< Cached count of warnings
+    mutable int m_ignoredWarningCount; //!< Cached count of ignored warnings
 
-    mutable bool FatalWaringCountUptoDate;
+    mutable bool m_countsUpToDate;
 
-    cwErrorListModel* Errors;
-    QList<cwErrorModel*> ChildModels;
+    cwErrorListModel* m_errors;
+    QList<cwErrorModel*> m_childModels;
 
-    QPointer<cwErrorModel> Parent;
+    QPointer<cwErrorModel> m_parent;
 
     void addChildModel(cwErrorModel* model);
     void removeChildModel(cwErrorModel* model);

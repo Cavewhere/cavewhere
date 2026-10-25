@@ -148,6 +148,7 @@ The `leg` array alternates between station rows and shot rows:
 ```protobuf
 message StationShot {
     optional string id = 1;              // UUID
+    repeated int32 ignoredWarnings = 2; // cwErrorTypeId values the user ignored (sorted)
 
     // Station fields (populated on station rows)
     optional string name = 100;          // Station name (e.g., "A1")
@@ -186,8 +187,33 @@ message TripCalibration {
     optional bool correctedClinoFrontsight = 13;
     optional bool frontSights = 10;
     optional bool backSights = 11;
+    optional bool auto_declination = 15;
+    optional bool lruds = 16;            // Trip records LRUDs (absent = true)
+    optional bool splays = 17;           // Trip records splays (absent = true)
 }
 ```
+
+`ignoredWarnings` holds the survey warnings ignored on that station or shot,
+as stable `cwErrorTypeId` numbers:
+
+| Id | Warning |
+|----|---------|
+| 4 | Missing Left |
+| 5 | Missing Right |
+| 6 | Missing Up |
+| 7 | Missing Down |
+| 8 | Missing compass on an LRUD-only shot |
+| 9 | Missing back compass |
+| 10 | Missing clino on an LRUD-only shot |
+| 11 | Missing back clino |
+| 12 | Compass frontsight-backsight disagreement (on the frontsight cell) |
+| 13 | Clino frontsight-backsight disagreement (on the frontsight cell) |
+
+Ids 1-3 are fix-station warnings and never appear here. Each number keeps its
+meaning forever; new ids are appended with the next number. Writers sort the list so `.cwproj`
+diffs stay stable; readers ignore ids they don't know. `lruds = false` or
+`splays = false` hides that column and, for LRUDs, stops the missing-LRUD
+warnings. Files without fields 16/17 load with both columns on.
 
 #### Team
 

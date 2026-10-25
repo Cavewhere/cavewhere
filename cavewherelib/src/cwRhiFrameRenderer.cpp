@@ -231,19 +231,22 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
     if (cloudVisible) {
         ensureEdlOffscreen(m_edlOffscreen, rhi, m_viewportSize, swapchainSampleCount);
     }
-    const bool edlActive = cloudVisible && m_edlOffscreen.valid();
-
-    setupPassRouting(renderer ? renderer->renderTarget() : nullptr,
-                     edlActive ? &m_edlOffscreen : nullptr);
 
     // Initialize (or re-init) the live EDL effect for the swap-chain target. The
     // effect needs the swap-chain sample count (cwRenderingSettings::sampleCount via
     // cw3dRegionViewer), so this is deferred to render() where the swap-chain rpDesc
     // first exists. The helper owns the init-key bookkeeping and re-inits only when
-    // the output target or the effective input sample count changes.
+    // the output target or the effective input sample count changes. It runs before
+    // the routing is settled: an effect whose pipeline failed to build (a driver
+    // without a usable shader variant) draws nothing, so its offscreen inputs must
+    // not take the scene away from the swap chain.
     if (swapchainRPDesc) {
         ensureEffectInitialized(m_edlOffscreen, rhi, swapchainRPDesc, swapchainSampleCount);
     }
+    const bool edlActive = cloudVisible && edlReady(m_edlOffscreen);
+
+    setupPassRouting(renderer ? renderer->renderTarget() : nullptr,
+                     edlActive ? &m_edlOffscreen : nullptr);
 
     cwRHIObject::RenderData renderData{cb, renderer, m_updateFlags, swapchainRPDesc, swapchainSampleCount};
 
@@ -545,6 +548,11 @@ void cwRhiFrameRenderer::ensureEffectInitialized(EdlOffscreen& edl, QRhi* rhi,
     edl.effectOutputRpDesc = outputRpDesc;
     edl.effectOutputSampleCount = outputSampleCount;
     edl.effectInputSampleCount = edl.sampleCount;
+}
+
+bool cwRhiFrameRenderer::edlReady(const EdlOffscreen& edl)
+{
+    return edl.valid() && edl.effect->isReady();
 }
 
 bool cwRhiFrameRenderer::anyCloudVisible() const

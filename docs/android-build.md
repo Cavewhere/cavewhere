@@ -301,6 +301,14 @@ Because of this, `CMakeLists.txt` applies two stricter rules on Android:
    uploads, pick the next unused integer greater than every previous
    upload. The value sticks in `CMakeCache.txt` across reconfigures.
 
+Play Store builds also pass `-DCAVEWHERE_TASK_TRACE=OFF`, which compiles the
+task tracing out so the shipped app runs without the signpost sampler. The
+option defaults to `ON` for development builds and sticks in `CMakeCache.txt`
+like the build number:
+```bash
+cmake -DCAVEWHERE_BUILD_NUMBER=<N> -DCAVEWHERE_TASK_TRACE=OFF ...
+```
+
 ## Troubleshooting
 
 ### `linuxdeploy not found` during configure

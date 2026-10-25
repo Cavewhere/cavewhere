@@ -25,6 +25,7 @@
 #include "cwNoteTranformation.h"
 #include "cwRegionTreeModel.h"
 #include "cwTriangulateLiDARTask.h"
+#include "cwTaskTrace.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwGridConvergence.h"
@@ -637,6 +638,7 @@ QFuture<void> cwNoteLiDARManager::runBatch()
     m_restarter.restart([this, notes, inputs]() {
         m_runGeneration++;
         const quint64 generation = m_runGeneration;
+        cwTaskContextScope traceScope(QStringLiteral("lidar"), generation);
 
         //One tree, and one row, per run. A restart abandons the previous run's
         //row rather than letting it hang around unfed.
@@ -654,7 +656,8 @@ QFuture<void> cwNoteLiDARManager::runBatch()
             m_futureManagerToken.addJob(cwFuture(progressRoot->future(), kLiDARJobName, progressRoot));
         }
 
-        const auto futures = cwTriangulateLiDARTask::triangulate(inputs, progressRoot);
+        const auto limited = cwTriangulateLiDARTask::triangulate(this, inputs, progressRoot);
+        const auto& futures = limited.items;
         Q_ASSERT(futures.size() == notes.size());
 
         for (int i = 0; i < futures.size(); i++) {
@@ -664,6 +667,7 @@ QFuture<void> cwNoteLiDARManager::runBatch()
             AsyncFuture::observe(futures.at(i))
                 .context(this, [this, note = notes.at(i), i, generation, future = futures.at(i)]() {
                     if (generation != m_runGeneration) {
+                        cwTaskTrace::dropped(QStringLiteral("lidar"), generation);
                         return;
                     }
 

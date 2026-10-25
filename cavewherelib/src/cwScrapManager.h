@@ -76,6 +76,14 @@ public:
         QFuture<cwTriangulatedData> data;
     };
 
+    //One run's scraps, plus the limited() run behind them: limited.all settles
+    //when every scrap settles. A run stops when this manager is destroyed; a
+    //caller that keeps the run can stop it sooner with limited.cancel().
+    struct TriangulatedScrapRun {
+        QList<TriangulatedScrapResult> scraps;
+        AsyncFuture::Limited<cwTriangulatedData> limited;
+    };
+
     // Snapshot of data the sketch-scrap derivation pipeline produced for one
     // outline — exposed so the sketch view can overlay it for debugging.
     struct SketchScrapDebugStation {
@@ -117,8 +125,8 @@ public:
 
     QList<cwScrap*> dirtyScraps() const;
 
-    QList<TriangulatedScrapResult> triangulateScraps(const QList<cwScrap*>& scraps,
-                                                     const cwProgressNodePtr& progressRoot = {}) const;
+    TriangulatedScrapRun triangulateScraps(const QList<cwScrap*>& scraps,
+                                           const cwProgressNodePtr& progressRoot = {});
 
     cwTriangulateWarping* warpingSettings() const { return m_warpingSettings; }
 

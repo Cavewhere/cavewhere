@@ -34,6 +34,8 @@
 #include "cwProgressNode.h"
 #include "cwStreamedTexture.h"
 #include "asyncfuture.h"
+#include "cwThreadCountRestorer.h"
+#include "LimitedRunTestHelper.h"
 
 //Qt includes
 #include <QFileInfo>
@@ -133,7 +135,7 @@ TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateT
         cwScrap* scrap = note->scrap(0);
         REQUIRE(scrap != nullptr);
 
-        auto results = root->scrapManager()->triangulateScraps({scrap});
+        auto results = root->scrapManager()->triangulateScraps({scrap}).scraps;
         root->futureManagerModel()->waitForFinished();
         REQUIRE(AsyncFuture::waitForFinished(results.first().data));
         REQUIRE(results.size() == 1);
@@ -242,7 +244,8 @@ static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
     task.setScrapData({inData});
     task.setDataRootDir(tempDir);
     task.setFormatType(cwTextureUploadTask::OpenGL_RGBA);
-    auto futures = task.triangulate();
+    QObject context;
+    auto futures = task.triangulate(&context).items;
     REQUIRE(futures.size() == 1);
     REQUIRE(AsyncFuture::waitForFinished(futures.first()));
     REQUIRE(futures.first().resultCount() == 1);
@@ -403,7 +406,8 @@ TEST_CASE("A triangulation fills the progress tree it was given",
     task.setFormatType(cwTextureUploadTask::OpenGL_RGBA);
     task.setProgressRoot(root);
 
-    auto futures = task.triangulate();
+    QObject context;
+    auto futures = task.triangulate(&context).items;
     REQUIRE(futures.size() == 1);
     REQUIRE(AsyncFuture::waitForFinished(futures.first()));
     REQUIRE(futures.first().resultCount() == 1);
@@ -416,4 +420,106 @@ TEST_CASE("A triangulation fills the progress tree it was given",
     CHECK(values.size() > 1);
     CHECK(std::is_sorted(values.begin(), values.end()));
     CHECK(values.last() == root->future().progressMaximum());
+}
+
+namespace {
+    constexpr int kTwoScraps = 2;
+
+    //A cold data root of the test's own, so neither scrap finds its crop cached
+    QDir coldDataRootDir(const QString& testName)
+    {
+        QDir dir(QDir::temp().filePath(
+            QStringLiteral("cwTriangulateTask-%1-%2").arg(testName).arg(QCoreApplication::applicationPid())));
+        dir.removeRecursively();
+        dir.mkpath(QStringLiteral("."));
+        return dir;
+    }
+
+    //Two copies of one scrap on a one-thread pool, so the limit is one
+    struct TwoScrapRun {
+        cwThreadCountRestorer threadCount{kSingleThread};
+        QObject context;
+        cwProgressNodePtr root = cwProgressNode::createRoot(QStringLiteral("Updating Scraps"));
+        cwTriangulateTask task;
+
+        explicit TwoScrapRun(const QString& testName)
+        {
+            const QString imagePath = QDir(testDatasetDir())
+                                          .filePath(QStringLiteral("scrap-image-no-rotation.jpg"));
+            REQUIRE(QFileInfo::exists(imagePath));
+            const cwTriangulateInData inData = scrapInDataForImage(imagePath);
+
+            root->expectChildren(kTwoScraps);
+            task.setScrapData({inData, inData});
+            task.setDataRootDir(coldDataRootDir(testName));
+            task.setFormatType(cwTextureUploadTask::OpenGL_RGBA);
+            task.setProgressRoot(root);
+        }
+    };
+}
+
+TEST_CASE("A limit of one delivers both scraps, in order, one at a time",
+          "[cwTriangulateTask]")
+{
+    // The pool's thread count is the window's width, so on one thread a scrap
+    // is admitted only once the one before it has settled. A scrap's progress
+    // node grows when it is admitted and is handed back when its geometry is
+    // done, so the root holds at most one scrap at any point.
+    TwoScrapRun run(QStringLiteral("limit-one"));
+
+    const auto limited = run.task.triangulate(&run.context);
+    const QList<QFuture<cwTriangulatedData>>& futures = limited.items;
+    REQUIRE(futures.size() == kTwoScraps);
+
+    QList<int> settledOrder;
+    for(int i = 0; i < futures.size(); i++) {
+        AsyncFuture::observe(futures.at(i)).context(&run.context, [&settledOrder, i]() {
+            settledOrder.append(i);
+        });
+    }
+
+    qsizetype peakActiveScraps = run.root->activeChildren().size();
+    REQUIRE(spinUntilSettled(futures, [&]() {
+        peakActiveScraps = std::max(peakActiveScraps, run.root->activeChildren().size());
+    }));
+    QCoreApplication::processEvents();
+
+    CHECK(peakActiveScraps == kSingleThread);
+    CHECK(settledOrder == QList<int>({0, 1}));
+    for(const QFuture<cwTriangulatedData>& future : futures) {
+        REQUIRE(future.isFinished());
+        REQUIRE(future.resultCount() == 1);
+        CHECK_FALSE(future.result().isNull());
+    }
+    CHECK(limited.all.isFinished());
+}
+
+TEST_CASE("A scrap is launched only when it is admitted", "[cwTriangulateTask]")
+{
+    // Every scrap's future exists before its turn, but the launcher (the crop,
+    // the decode, the scrap's progress node) runs only on admission. On one
+    // thread the second scrap's launch waits until the first has settled.
+    TwoScrapRun run(QStringLiteral("launch-on-admission"));
+    const QString secondScrap = QStringLiteral("Scrap 2");
+
+    const QList<QFuture<cwTriangulatedData>> futures = run.task.triangulate(&run.context).items;
+    REQUIRE(futures.size() == kTwoScraps);
+
+    // Both futures are observable before the second is admitted...
+    CHECK_FALSE(isSettled(futures.at(0)));
+    CHECK_FALSE(isSettled(futures.at(1)));
+
+    // ...and only the first has launched.
+    CHECK(hasActiveChild(run.root, QStringLiteral("Scrap 1")));
+    bool secondLaunchedBeforeFirstSettled = hasActiveChild(run.root, secondScrap);
+
+    REQUIRE(spinUntilSettled(futures, [&]() {
+        if(!isSettled(futures.at(0)) && hasActiveChild(run.root, secondScrap)) {
+            secondLaunchedBeforeFirstSettled = true;
+        }
+    }));
+
+    CHECK_FALSE(secondLaunchedBeforeFirstSettled);
+    CHECK(futures.at(1).isFinished());
+    CHECK(futures.at(1).resultCount() == 1);
 }

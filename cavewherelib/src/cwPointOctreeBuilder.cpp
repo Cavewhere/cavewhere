@@ -27,6 +27,7 @@
 
 //Our includes
 #include "cwConcurrent.h"
+#include "cwTaskTrace.h"
 #include "cwCoordinateTransform.h"
 #include "cwGeoPoint.h"
 #include "cwLazLoader.h"
@@ -1668,6 +1669,7 @@ std::optional<cwPointOctreeManifest> cwPointOctreeBuilder::cachedManifest(const 
 
 QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request& request)
 {
+    cwTaskContextScope traceScope(QStringLiteral("octree"));
     return cwConcurrent::run(
         [request](QPromise<Result>& promise)
         {

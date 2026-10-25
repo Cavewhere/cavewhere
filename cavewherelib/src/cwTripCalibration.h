@@ -23,7 +23,7 @@
 class cwTrip;
 class cwCave;
 
-class cwTripCalibrationData {
+class CAVEWHERE_LIB_EXPORT cwTripCalibrationData {
 public:
     cwTripCalibrationData();
     cwTripCalibrationData(const cwTripCalibrationData &other);
@@ -72,6 +72,16 @@ public:
     inline bool hasBackSights() const { return d->m_BackSights; }
     inline void setBackSights(bool value) { d->m_BackSights = value; }
 
+    // Whether the trip records LRUDs / splays (#174)
+    bool hasLruds() const;
+    void setLruds(bool value);
+
+    bool hasSplays() const;
+    void setSplays(bool value);
+
+    bool operator==(const cwTripCalibrationData& other) const;
+    bool operator!=(const cwTripCalibrationData& other) const { return !operator==(other); }
+
 private:
     // The PrivateData class encapsulates the actual data and inherits QSharedData
     class PrivateData : public QSharedData {
@@ -91,6 +101,8 @@ private:
             , m_DistanceUnit(cwUnits::Meters)
             , m_FrontSights(true)
             , m_BackSights(true)
+            , m_Lruds(true)
+            , m_Splays(true)
         {}
 
         PrivateData(const PrivateData &other)
@@ -109,6 +121,8 @@ private:
             , m_DistanceUnit(other.m_DistanceUnit)
             , m_FrontSights(other.m_FrontSights)
             , m_BackSights(other.m_BackSights)
+            , m_Lruds(other.m_Lruds)
+            , m_Splays(other.m_Splays)
         {}
 
         bool m_CorrectedCompassBacksight;
@@ -125,6 +139,8 @@ private:
         cwUnits::LengthUnit m_DistanceUnit;
         bool m_FrontSights;
         bool m_BackSights;
+        bool m_Lruds;
+        bool m_Splays;
     };
 
     QSharedDataPointer<PrivateData> d;
@@ -181,6 +197,8 @@ class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
     Q_PROPERTY(QStringList supportedUnits READ supportedUnits NOTIFY supportedUnitsChanged)
     Q_PROPERTY(bool frontSights READ hasFrontSights WRITE setFrontSights NOTIFY frontSightsChanged)
     Q_PROPERTY(bool backSights READ hasBackSights WRITE setBackSights NOTIFY backSightsChanged)
+    Q_PROPERTY(bool lruds READ hasLruds WRITE setLruds NOTIFY lrudsChanged)
+    Q_PROPERTY(bool splays READ hasSplays WRITE setSplays NOTIFY splaysChanged)
 
 public:
     explicit cwTripCalibration(QObject *parent = nullptr);
@@ -200,6 +218,8 @@ public:
     cwUnits::LengthUnit distanceUnit() const { return m_data.distanceUnit(); }
     bool hasFrontSights() const { return m_data.hasFrontSights(); }
     bool hasBackSights() const { return m_data.hasBackSights(); }
+    bool hasLruds() const { return m_data.hasLruds(); }
+    bool hasSplays() const { return m_data.hasSplays(); }
 
     // Resolved value (cached). Returns auto when autoDeclination is true and
     // resolveAuto() succeeds; manual otherwise.
@@ -228,6 +248,8 @@ public:
     void setDistanceUnit(cwUnits::LengthUnit value);
     void setFrontSights(bool value);
     void setBackSights(bool value);
+    void setLruds(bool value);
+    void setSplays(bool value);
 
     QStringList supportedUnits() const;
 
@@ -267,6 +289,8 @@ signals:
     void supportedUnitsChanged();
     void frontSightsChanged();
     void backSightsChanged();
+    void lrudsChanged();
+    void splaysChanged();
     void calibrationsChanged();
 
 private:

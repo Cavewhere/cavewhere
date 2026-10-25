@@ -2,6 +2,7 @@
 #define LAZFIXTUREHELPER_H
 
 #include <QByteArray>
+#include <QDir>
 #include <QMetaObject>
 #include <QString>
 #include <QStringList>
@@ -145,6 +146,13 @@ bool writeSyntheticGeoLazFile(const QString& outPath,
  * cavewhere-test processes run in parallel.
  */
 QString tempLazPath(QTemporaryDir& dir, const QString& tag);
+
+/**
+ * Create a fresh GIS Layers subdir under @a tempDir, so model tests can drop
+ * .laz files into the folder and call rescan() to observe model changes
+ * without spinning up cwRootData/cwProject.
+ */
+QDir makeGisLayersDir(const QTemporaryDir& tempDir);
 
 /**
  * Write a small (5-point) synthetic .laz at @a path. Returns the same path

@@ -1,12 +1,17 @@
 //Our inculdes
 #include "cwJobSettings.h"
 #include "cwTask.h"
+#include "cwMemoryBudget.h"
+#include "cwRenderBudgets.h"
 
 //Qt includes
 #include <QThreadPool>
 #include <QSettings>
 #include <QThread>
 #include <QCoreApplication>
+
+//Std includes
+#include <algorithm>
 
 cwJobSettings* cwJobSettings::Settings = nullptr;
 
@@ -17,6 +22,15 @@ cwJobSettings::cwJobSettings(QObject* parent) :
     int threadCount = settings.value(threadCountKey(), QThread::idealThreadCount()).toInt();
     setThreadCountPrivate(threadCount);
     AutomaticUpdate = settings.value(automaticUpdateKey(), AutomaticUpdate).toBool();
+    m_memoryBudgetMb = std::max(settings.value(memoryBudgetMbKey(), m_memoryBudgetMb).toInt(), 0);
+    applyMemoryBudget();
+}
+
+void cwJobSettings::applyMemoryBudget()
+{
+    if(auto* budget = cwMemoryBudget::instance()) {
+        budget->setCapOverrideBytes(static_cast<qint64>(m_memoryBudgetMb) * cw::budgets::kBytesPerMegabyte);
+    }
 }
 
 void cwJobSettings::setThreadCountPrivate(int count)
@@ -51,6 +65,7 @@ cwJobSettings *cwJobSettings::instance()
 void cwJobSettings::initialize()
 {
     cwTask::initilizeThreadPool();
+    cwMemoryBudget::initialize();
     if(Settings == nullptr) {
         Settings = new cwJobSettings(QCoreApplication::instance());
     }
@@ -71,11 +86,44 @@ void cwJobSettings::setAutomaticUpdate(bool automaticUpdate) {
     }
 }
 
+int cwJobSettings::memoryBudgetMb() const
+{
+    return m_memoryBudgetMb;
+}
+
+void cwJobSettings::setMemoryBudgetMb(int memoryBudgetMb)
+{
+    memoryBudgetMb = std::max(memoryBudgetMb, 0);
+    if(m_memoryBudgetMb == memoryBudgetMb) {
+        return;
+    }
+    m_memoryBudgetMb = memoryBudgetMb;
+    QSettings settings;
+    settings.setValue(memoryBudgetMbKey(), m_memoryBudgetMb);
+    applyMemoryBudget();
+    emit memoryBudgetMbChanged();
+    emit isAtDefaultsChanged();
+}
+
+int cwJobSettings::resolvedMemoryBudgetMb() const
+{
+    if(auto* budget = cwMemoryBudget::instance()) {
+        return static_cast<int>(budget->capBytes() / cw::budgets::kBytesPerMegabyte);
+    }
+    return m_memoryBudgetMb;
+}
+
+int cwJobSettings::totalMemoryMb() const
+{
+    return static_cast<int>(cwMemoryBudget::totalBytes() / cw::budgets::kBytesPerMegabyte);
+}
+
 bool cwJobSettings::isAtDefaults() const {
-    return threadCount() == idleThreadCount() && automaticUpdate();
+    return threadCount() == idleThreadCount() && automaticUpdate() && memoryBudgetMb() == 0;
 }
 
 void cwJobSettings::resetToDefaults() {
     setThreadCount(idleThreadCount());
     setAutomaticUpdate(true);
+    setMemoryBudgetMb(0);
 }

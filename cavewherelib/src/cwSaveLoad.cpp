@@ -16,6 +16,7 @@
 #include "cwLead.h"
 #include "cwRegionIOTask.h"
 #include "cwConcurrent.h"
+#include "cwTaskTrace.h"
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
 #include "cwCavingRegion.h"
@@ -1641,6 +1642,7 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
 
 QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
 {
+    cwTaskContextScope traceScope(QStringLiteral("load"));
     // qDebug() << "---- Loading: " << filename;
     const quint64 loadGeneration = d->operationGeneration;
     const auto canceledResult = []() {
@@ -1653,7 +1655,8 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
 
     auto oldJobs = saveFlushImpl();
 
-    QFuture<ResultBase> future = oldJobs.then(this, [this, filename, loadGeneration, canceledResult](ResultBase flushResult) {
+    //The continuations run after traceScope closes, so each reinstalls the load context
+    QFuture<ResultBase> future = oldJobs.then(this, cwTaskContextScope::wrap([this, filename, loadGeneration, canceledResult](ResultBase flushResult) {
         if (flushResult.hasError()) {
             return AsyncFuture::completed(flushResult);
         }
@@ -1686,7 +1689,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
             d->futureToken.addJob(projectDataFuture, QStringLiteral("Loading"));
 
             return AsyncFuture::observe(projectDataFuture)
-                    .context(this, [this, projectDataFuture, filename, loadGeneration, canceledResult]() {
+                    .context(this, cwTaskContextScope::wrap([this, projectDataFuture, filename, loadGeneration, canceledResult]() {
                 return mbind(projectDataFuture, [this, projectDataFuture, filename, loadGeneration, canceledResult](const ResultBase&) {
                     if (d->operationGeneration != loadGeneration
                             || d->retiring
@@ -1740,7 +1743,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
 
                     return ResultBase();
                 });
-            }).future();
+            })).future();
         };
 
         // LFS hydration is not attempted during load — it would
@@ -1748,7 +1751,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
         // Missing files are detected post-load and surfaced via
         // cwProject::lfsFilesNeedSync; the user syncs explicitly.
         return continueLoad();
-    }).unwrap();
+    })).unwrap();
     return future;
 }
 
@@ -5096,6 +5099,7 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         connect(chunk, &cwSurveyChunk::removed, this, saveTrip);
 
         connect(chunk, &cwSurveyChunk::dataChanged, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::ignoredWarningsChanged, this, saveTrip);
         connect(chunk, &cwSurveyChunk::stationSplaysChanged, this, saveTrip);
     };
 
@@ -5179,6 +5183,8 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         connect(cal, &cwTripCalibration::supportedUnitsChanged, this, saveTrip);
         connect(cal, &cwTripCalibration::frontSightsChanged, this, saveTrip);
         connect(cal, &cwTripCalibration::backSightsChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::lrudsChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::splaysChanged, this, saveTrip);
     }
 
     // parentCaveChanged intentionally omitted (no re-parenting)
@@ -6005,6 +6011,7 @@ void trackPhasedProgress(QObject* context,
 
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
 {
+    cwTaskContextScope traceScope(QStringLiteral("git"));
     d->lastSyncReport.reset();
 
     if (!syncEnabled()) {
@@ -6220,12 +6227,14 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
 
     (*scheduleAttempt)(0);
 
+    cwTaskTrace::traceOperation(QStringLiteral("sync"), syncDeferred->future(), this);
     return syncDeferred->future();
 }
 
 QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& operationLabel,
                                                                 const GitOperationFn& gitOp)
 {
+    cwTaskContextScope traceScope(QStringLiteral("git"));
     d->lastSyncReport.reset();
 
     if (!syncEnabled()) {
@@ -6368,6 +6377,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
                               operationLabel);
     }
 
+    cwTaskTrace::traceOperation(QStringLiteral("reconcile"), checkoutDeferred->future(), this);
     return checkoutDeferred->future();
 }
 

@@ -205,7 +205,7 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
         auto scrapManager = rootData->scrapManager();
         REQUIRE(scrapManager != nullptr);
 
-        auto triangulationResults = scrapManager->triangulateScraps(note->scraps());
+        auto triangulationResults = scrapManager->triangulateScraps(note->scraps()).scraps;
         for(auto& result : triangulationResults) {
             AsyncFuture::waitForFinished(result.data);
         }

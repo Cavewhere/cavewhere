@@ -8,9 +8,15 @@
 #version 440 core
 
 // One octree node's points, quantized to uint16 per axis inside the node's
-// cube (cw::octree::quantize). w is the point's native spacing code
-// (cw::octree::encodeLocalSpacing), read only under spacingSource Local.
-layout(location = 0) in uvec4 qpos;
+// cube (cw::octree::quantize), read as two uint32 words: x and y in the
+// first, z and the point's native spacing code (cw::octree::encodeLocalSpacing,
+// read only under spacingSource Local) in the second, low half first. Two
+// 32-bit words rather than four 16-bit lanes because the RHI OpenGL backend
+// feeds 16-bit formats through the float attribute path, which leaves an
+// integer input undefined; 32-bit integer formats take the integer path on
+// every backend. main() unpacks them into qpos.
+layout(location = 0) in uvec2 qposPacked;
+uvec4 qpos;
 
 // Per instance, one per node: the node cube's min corner and the world size of
 // one quantization step (nodeSize / cw::octree::kQuantMax). The whole node
@@ -358,6 +364,9 @@ out gl_PerVertex {
 
 void main(void)
 {
+    qpos = uvec4(qposPacked.x & 0xFFFFu, qposPacked.x >> 16u,
+                 qposPacked.y & 0xFFFFu, qposPacked.y >> 16u);
+
     vec3 vVertex = nodeOriginScale.xyz + vec3(qpos.xyz) * nodeOriginScale.w;
 
     gl_Position = viewProjectionMatrix * vec4(vVertex, 1.0);

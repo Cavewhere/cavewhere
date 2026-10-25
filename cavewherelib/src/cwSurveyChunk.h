@@ -18,6 +18,7 @@
 class cwErrorModel;
 class cwTrip;
 class cwCave;
+class cwSurveyChunkCell;
 //Qt
 #include <QObject>
 #include <QList>
@@ -132,6 +133,27 @@ public:
     cwSurveyChunkData data() const;
     void setData(const cwSurveyChunkData& data);
 
+    // Mark or clear one warning kind on one cell. Writes the station/shot set,
+    // flips the matching cell-model row, emits ignoredWarningsChanged.
+    Q_INVOKABLE void setWarningIgnored(int index, cwSurveyChunk::DataRole role, int errorTypeId, bool ignored);
+
+    // Every current, unsuppressed Warning in this chunk whose id is in `ids`
+    // (empty = all kinds). Returns how many were newly ignored.
+    int ignoreWarnings(const QList<int>& ids = {});
+
+    // Shows again the chunk's ignored warnings whose ids are in `ids` (empty = all kinds).
+    // Returns how many were cleared.
+    int clearIgnoredWarnings(const QList<int>& ids = {});
+
+    // Current unsuppressed warning count for one kind in this chunk
+    int warningCountForTypeId(int errorTypeId) const;
+
+    // Current unsuppressed warnings in this chunk that ignoreWarnings() can ignore
+    int ignorableWarningCount() const;
+
+    // The cell that owns errorModel, for jumping from a listed warning to its cell
+    Q_INVOKABLE cwSurveyChunkCell cellIndexForErrorModel(cwErrorModel* errorModel) const;
+
 signals:
     void parentTripChanged();
 
@@ -149,6 +171,9 @@ signals:
     void shotsRemoved(int beginIndex, int endIndex);
 
     void dataChanged(cwSurveyChunk::DataRole mainRole, int index);
+
+    //! The ignored warnings on one cell changed. Saved, but no recompute follows
+    void ignoredWarningsChanged(cwSurveyChunk::DataRole role, int index);
 
     void stationSplaysChanged(int index);
 
@@ -188,6 +213,9 @@ private:
     public:
         CellIndex() : Index(-1), Role(-1) {}
         CellIndex(int index, int role) : Index(index), Role(role) {}
+
+        int index() const { return Index; }
+        int role() const { return Role; }
 
         bool operator<(const CellIndex& other) const {
             if(Index == other.Index) {
@@ -275,15 +303,38 @@ private:
     void updateErrors();
     bool isClinoDownOrUp(cwSurveyChunk::DataRole role, int index) const;
     bool isClinoDownOrUpHelper(cwSurveyChunk::DataRole role, int index) const;
+    void connectIgnoredWriteThrough(cwErrorModel* cellModel, DataRole role, int index);
 
 private slots:
     void updateCompassErrors();
     void updateClinoErrors();
     void updateCompassClinoErrors();
+    void updateLrudErrors();
 
 };
 
 Q_DECLARE_METATYPE(cwSurveyChunk*)
+
+//! One cell of a chunk: a station or shot index and the role of its box
+class CAVEWHERE_LIB_EXPORT cwSurveyChunkCell {
+    Q_GADGET
+    QML_VALUE_TYPE(surveyChunkCell)
+    Q_PROPERTY(int index READ index CONSTANT)
+    Q_PROPERTY(cwSurveyChunk::DataRole role READ role CONSTANT)
+    Q_PROPERTY(bool valid READ isValid CONSTANT)
+
+public:
+    cwSurveyChunkCell() = default;
+    cwSurveyChunkCell(int index, cwSurveyChunk::DataRole role) : m_index(index), m_role(role) {}
+
+    int index() const { return m_index; }
+    cwSurveyChunk::DataRole role() const { return m_role; }
+    bool isValid() const { return m_index >= 0; }
+
+private:
+    int m_index = -1;
+    cwSurveyChunk::DataRole m_role = cwSurveyChunk::StationNameRole;
+};
 
 /**
   \brief Gets the parent trip for this chunk

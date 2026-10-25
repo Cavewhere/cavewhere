@@ -49,6 +49,7 @@
 #include <QThreadPool>
 #include <QEventLoop>
 #include "cwSignalSpy.h"
+#include "cwThreadCountRestorer.h"
 
 //Std includes
 #include <algorithm>
@@ -803,7 +804,7 @@ TEST_CASE("V6 conversion with landscape EXIF coords applies rotation", "[cwScrap
     CHECK(station0.y() == Catch::Approx(0.340).margin(0.02));
 
     // Triangulate and verify it completes
-    auto results = rootData->scrapManager()->triangulateScraps({scrap});
+    auto results = rootData->scrapManager()->triangulateScraps({scrap}).scraps;
     rootData->futureManagerModel()->waitForFinished();
     REQUIRE(!results.isEmpty());
     REQUIRE(AsyncFuture::waitForFinished(results.first().data));
@@ -1248,7 +1249,7 @@ namespace {
     //Pumps the event loop until the pipeline is done and its row has gone. The
     //detail line is polled on a timer, so a run has to be watched, never waited
     //out in a nested loop.
-    void pumpUntilScrapsSettle(cwRootData* rootData, cwScrapManager* scrapManager)
+    bool pumpUntilScrapsSettle(cwRootData* rootData, cwScrapManager* scrapManager)
     {
         constexpr int kRunTimeoutMs = 120000;
         constexpr int kPollWaitMs = 2;
@@ -1261,6 +1262,8 @@ namespace {
             QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
                                             kPollWaitMs);
         }
+        return scrapManager->updateState() == cwUpdatable::State::Clean
+               && rootData->futureManagerModel()->rowCount() == 0;
     }
 }
 
@@ -1384,4 +1387,29 @@ TEST_CASE("Renaming a cave re-marks the scraps of trips in its nested nodes",
     coordinator->setAutomaticUpdate(true);
     rootData->futureManagerModel()->waitForFinished();
     scrapManager->waitForFinish();
+}
+
+TEST_CASE("A scrap run reaches completion on a one-thread pool", "[cwScrapManager]") {
+    // The one-thread invariant: a pool worker never waits on its own pool's work
+    // without releasing its slot, so a one-thread pool still finishes every scrap.
+    // The run is polled under a deadline, so a hang fails here instead of stalling.
+    requireAutomaticUpdatesEnabled();
+    cwThreadCountRestorer threadCount(kSingleThread);
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto scrapManager = rootData->scrapManager();
+    REQUIRE(scrapManager != nullptr);
+    auto renderItems = rootData->regionSceneManager()->items();
+    REQUIRE(renderItems != nullptr);
+
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+    REQUIRE(pumpUntilScrapsSettle(rootData.get(), scrapManager));
+
+    computeAllScraps(scrapManager);
+    REQUIRE(pumpUntilScrapsSettle(rootData.get(), scrapManager));
+    scrapManager->waitForFinish();
+
+    REQUIRE(scrapManager->renderScrapCount() > 0);
+    CHECK(deliveredScrapCount(renderItems) == scrapManager->renderScrapCount());
 }

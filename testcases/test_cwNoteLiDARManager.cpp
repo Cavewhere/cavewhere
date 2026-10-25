@@ -45,6 +45,7 @@
 #include "cwUpdateCoordinator.h"
 #include "cwProject.h"
 #include "SurveyTreeTestHelper.h"
+#include "cwThreadCountRestorer.h"
 
 TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation", "[cwNoteLiDARManager][Issue371]")
 {
@@ -1263,4 +1264,24 @@ TEST_CASE("Renaming a cave re-runs the LiDAR notes of trips in its nested nodes"
 
     CHECK(noteWasUpdated);
     project.pumpUntilSettled();
+}
+
+TEST_CASE("A LiDAR run reaches completion on a one-thread pool", "[cwNoteLiDARManager]")
+{
+    // The one-thread invariant: a pool worker never waits on its own pool's work
+    // without releasing its slot, so a one-thread pool still delivers every note.
+    // The run is polled under a deadline, so a hang fails here instead of stalling.
+    cwThreadCountRestorer threadCount(kSingleThread);
+    LiDARProject project;
+
+    cwNoteLiDARStation station;
+    station.setName(QStringLiteral("6"));
+    station.setPositionOnNote(QVector3D(0.19147f, -0.720703f, -2.15723f));
+    project.note()->addStation(station);
+
+    REQUIRE(project.pumpUntilSettled());
+    project.manager()->waitForFinish();
+    QCoreApplication::processEvents();
+
+    CHECK_FALSE(project.manager()->renderItemIds(project.note()).isEmpty());
 }

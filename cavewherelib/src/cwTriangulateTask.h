@@ -20,6 +20,7 @@
 #include "cwTriangulateWarpingData.h"
 #include "cwCropImageTask.h"
 #include "cwProgressNode.h"
+#include "asyncfuture.h"
 
 //Qt include
 #include <QPolygonF>
@@ -63,8 +64,12 @@ public:
     //a null root leaves the task untracked.
     void setProgressRoot(cwProgressNodePtr root);
 
-    //Outputs of the task
-    QList<QFuture<cwTriangulatedData> > triangulate() const;
+    //Outputs of the task. Scraps are admitted through a window bounded by the
+    //pool's thread count and a decode budget; each item future exists, in input
+    //order, before its scrap is admitted. `all` settles when every scrap
+    //settles, and canceling it stops admission and cancels every scrap. Call
+    //from context's thread; destroying context cancels every scrap.
+    AsyncFuture::Limited<cwTriangulatedData> triangulate(QObject* context);
 
     static QVector3D morphPoint(const QList<cwTriangulateStation>& visibleStations,
                                 const QMatrix4x4 &toWorldCoords,

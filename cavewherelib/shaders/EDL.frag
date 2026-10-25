@@ -39,7 +39,10 @@
 // cloud↔opaque edge of the same depth gap darken identically — the silhouette
 // reads the same regardless of what the cloud borders. strength is the slope
 // (depth sensitivity); maxDarken is the ceiling; an edge reaches full dark once
-// the gap exceeds maxDarken/strength.
+// the gap exceeds maxDarken/strength. The two cues accumulate separately: the
+// shape cue scales the cloud color, and the border cue blends toward
+// outlineColor so the outline stays visible on a dark background. A black
+// outlineColor gives the plain product of both darkenings.
 //
 // Neighbors are classified cloud vs non-cloud by the cloud texture's alpha
 // (cloud is opaque, everything else is transparent).
@@ -79,6 +82,13 @@ layout(std140, binding = 1) uniform EdlBlock {
     // Ceiling on per-neighbor darkening — the darkness an edge reaches at a large
     // depth gap, shared by the far-side and border cases.
     float maxDarken;
+    // Explicit std140 padding so outlineColor starts on its 16-byte boundary;
+    // keeps this block byte-identical to cwEDLEffect::EdlUniform.
+    float padding0;
+    float padding1;
+    float padding2;
+    // What the border cue darkens toward (rgb; alpha fixed at 1).
+    vec4 outlineColor;
 };
 
 #if MSAA
@@ -175,7 +185,8 @@ void main()
         vec2( 0.707,  0.707), vec2(-0.707,  0.707),
         vec2( 0.707, -0.707), vec2(-0.707, -0.707));
 
-    float response = 0.0;
+    float shapeResponse = 0.0;
+    float borderResponse = 0.0;
     for (int i = 0; i < 8; ++i) {
 #if MSAA
         ivec2 ncoord = center + ivec2(round(dirs[i] * sampleOffset.x));
@@ -185,15 +196,17 @@ void main()
         float logZi = log2(linearDepthFromNear(FETCH_DEPTH(ncoord)) + 1e-6);
         // Far side for a closer cloud neighbor, near side for a farther non-cloud
         // neighbor — one shared transfer function either way.
-        float g = (FETCH_CLOUD(ncoord).a > kCloudAlphaThreshold)
-                  ? (logZ0 - logZi)
-                  : (logZi - logZ0);
-        response += min(max(0.0, g) * strength, maxDarken);
+        if (FETCH_CLOUD(ncoord).a > kCloudAlphaThreshold) {
+            shapeResponse += min(max(0.0, logZ0 - logZi) * strength, maxDarken);
+        } else {
+            borderResponse += min(max(0.0, logZi - logZ0) * strength, maxDarken);
+        }
     }
 
     // Average over the 8 taps.
-    float shade = exp(-response / 8.0);
+    vec3 shaded = cloud.rgb * exp(-shapeResponse / 8.0);
+    float outlineWeight = 1.0 - exp(-borderResponse / 8.0);
 
     // The cloud is opaque where present, so it fully covers the scene here.
-    fragColor = vec4(cloud.rgb * shade, 1.0);
+    fragColor = vec4(mix(shaded, outlineColor.rgb, outlineWeight), 1.0);
 }
