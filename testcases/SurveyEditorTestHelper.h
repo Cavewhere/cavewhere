@@ -38,6 +38,16 @@ inline cwShotMeasurement splayWithDistance(const QString& distance)
     return makeSplay(distance, QStringLiteral("90"), QStringLiteral("5"));
 }
 
+//An empty name gives an empty station
+inline QList<cwStation> namedStations(const QStringList& names)
+{
+    QList<cwStation> stations;
+    for(const auto& name : names) {
+        stations.append(name.isEmpty() ? cwStation() : cwStation(name));
+    }
+    return stations;
+}
+
 inline QStringList stationNames(const cwSurveyChunk* chunk)
 {
     QStringList names;

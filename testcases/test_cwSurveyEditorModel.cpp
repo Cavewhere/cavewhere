@@ -1744,36 +1744,16 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
 
 namespace {
 
-QList<cwStation> namedStations(const QStringList& names)
-{
-    QList<cwStation> stations;
-    for(const auto& name : names) {
-        stations.append(name.isEmpty() ? cwStation() : cwStation(name));
-    }
-    return stations;
-}
-
 /**
- * One chunk in a trip, shown in the editor with the keyboard on its first
- * station, so the chunk carries the virtual trailing rows when its last station
- * is named.
+ * A trip shown in the editor, with row helpers shared by the split and merge
+ * fixtures.
  */
-struct EditorSplitFixture {
-    EditorSplitFixture(const QStringList& names, const QList<cwShot>& shots)
-        : chunk(new cwSurveyChunk())
+struct EditorTripFixture {
+    void show(cwSurveyChunk* focusChunk)
     {
-        chunk->setData(cwSurveyChunkData{QUuid::createUuid(), namedStations(names), shots});
-        trip.addChunk(chunk);
         model.setTrip(&trip);
-        model.setFocusedCell(cell(chunk, 0, cwSurveyEditorCellIndex::StationNameCell));
+        model.setFocusedCell(cell(focusChunk, 0, cwSurveyEditorCellIndex::StationNameCell));
         rowTally.restart();
-    }
-
-    //Five named stations, A1 to A5, with readings on every shot
-    static EditorSplitFixture fiveStations()
-    {
-        return EditorSplitFixture({"A1", "A2", "A3", "A4", "A5"},
-                                  {readingShot(), readingShot(), readingShot(), readingShot()});
     }
 
     cwSurveyEditorCellIndex cell(cwSurveyChunk* inChunk, int indexInChunk, cwSurveyEditorCellIndex::CellRole role) const
@@ -1808,9 +1788,32 @@ struct EditorSplitFixture {
     }
 
     cwTrip trip;
-    cwSurveyChunk* chunk;
     cwSurveyEditorModel model;
     SurveyEditorRowTally rowTally {&model};
+};
+
+/**
+ * One chunk in a trip, shown in the editor with the keyboard on its first
+ * station, so the chunk carries the virtual trailing rows when its last station
+ * is named.
+ */
+struct EditorSplitFixture : EditorTripFixture {
+    EditorSplitFixture(const QStringList& names, const QList<cwShot>& shots)
+        : chunk(new cwSurveyChunk())
+    {
+        chunk->setData(cwSurveyChunkData{QUuid::createUuid(), namedStations(names), shots});
+        trip.addChunk(chunk);
+        show(chunk);
+    }
+
+    //Five named stations, A1 to A5, with readings on every shot
+    static EditorSplitFixture fiveStations()
+    {
+        return EditorSplitFixture({"A1", "A2", "A3", "A4", "A5"},
+                                  {readingShot(), readingShot(), readingShot(), readingShot()});
+    }
+
+    cwSurveyChunk* chunk;
 };
 
 }
@@ -2040,4 +2043,250 @@ TEST_CASE("cwSurveyEditorModel canSplitChunkAt answers for real split points onl
         fixture.model.splitChunkAt(shotCell);
         CHECK(fixture.trip.chunkCount() == 1);
     }
+}
+
+namespace {
+
+/**
+ * Two chunks in a trip, shown in the editor with the keyboard on the upper
+ * chunk's first station.
+ */
+struct EditorMergeFixture : EditorTripFixture {
+    EditorMergeFixture(const QStringList& upperNames, const QList<cwShot>& upperShots,
+                       const QStringList& lowerNames, const QList<cwShot>& lowerShots)
+        : upper(new cwSurveyChunk()),
+          lower(new cwSurveyChunk())
+    {
+        upper->setData(cwSurveyChunkData{QUuid::createUuid(), namedStations(upperNames), upperShots});
+        lower->setData(cwSurveyChunkData{QUuid::createUuid(), namedStations(lowerNames), lowerShots});
+        trip.addChunk(upper);
+        trip.addChunk(lower);
+        show(upper);
+    }
+
+    //A1 to A3, then A3 to A5, with readings on every shot
+    static EditorMergeFixture threeAndThree()
+    {
+        return EditorMergeFixture({"A1", "A2", "A3"}, {readingShot(), readingShot()},
+                                  {"A3", "A4", "A5"}, {readingShot(), readingShot()});
+    }
+
+    int splayRow(cwSurveyChunk* inChunk, int stationIndex, int splayIndex) const
+    {
+        return model.toModelRow(cwSurveyEditorRowIndex(inChunk, stationIndex, splayIndex, cwSurveyEditorRowIndex::SplayRow));
+    }
+
+    bool splaysExpanded(cwSurveyChunk* inChunk, int stationIndex) const
+    {
+        return model.index(stationRow(inChunk, stationIndex)).data(cwSurveyEditorModel::StationSplaysExpandedRole).toBool();
+    }
+
+    cwSurveyChunk* upper;
+    cwSurveyChunk* lower;
+};
+
+}
+
+TEST_CASE("cwSurveyEditorModel merging a split pair restores the chunk",
+          "[cwSurveyEditorModel][MergeChunk]")
+{
+    const bool fromBelow = GENERATE(true, false);
+    INFO("merge with chunk above from the lower chunk: " << fromBelow);
+
+    auto fixture = EditorSplitFixture::fiveStations();
+    REQUIRE(fixture.model.rowCount() == 12);
+
+    fixture.model.splitChunkAt(fixture.cell(fixture.chunk, 2, cwSurveyEditorCellIndex::ShotDistanceCell));
+    REQUIRE(fixture.trip.chunkCount() == 2);
+    fixture.checkRowCount(14);
+    auto* newChunk = fixture.trip.chunk(1);
+    //The split leaves the keyboard on the new chunk's A3
+    REQUIRE(fixture.model.focusedRowIndex().chunk() == newChunk);
+
+    if(fromBelow) {
+        CHECK(fixture.model.canMergeWithAbove(newChunk));
+        fixture.model.mergeWithAbove(newChunk);
+    } else {
+        CHECK(fixture.model.canMergeWithBelow(fixture.chunk));
+        fixture.model.mergeWithBelow(fixture.chunk);
+    }
+
+    REQUIRE(fixture.trip.chunkCount() == 1);
+    CHECK(fixture.trip.chunk(0) == fixture.chunk);
+    CHECK(stationNames(fixture.chunk) == QStringList({"A1", "A2", "A3", "A4", "A5"}));
+    CHECK(fixture.stationNameAt(fixture.chunk, 4) == QStringLiteral("A5"));
+
+    //One title row and the A3 copy go; the virtual rows follow the focus up
+    fixture.checkRowCount(12);
+    CHECK(fixture.hasVirtualRows(fixture.chunk));
+
+    //The keyboard stays on A3, now addressed in the surviving chunk
+    const auto focused = fixture.model.focusedRowIndex();
+    CHECK(focused.chunk() == fixture.chunk);
+    CHECK(focused.indexInChunk() == 2);
+    CHECK(focused.rowType() == cwSurveyEditorRowIndex::StationRow);
+    CHECK(fixture.model.focusedRole() == static_cast<int>(cwSurveyEditorCellIndex::StationNameCell));
+    CHECK(fixture.model.focusedRow() == fixture.stationRow(fixture.chunk, 2));
+}
+
+TEST_CASE("cwSurveyEditorModel merging trims the upper chunk's trailing empty row first",
+          "[cwSurveyEditorModel][MergeChunk]")
+{
+    EditorMergeFixture fixture({"A1", "A2", "A3", ""}, {readingShot(), readingShot(), cwShot()},
+                               {"A3", "A4"}, {readingShot()});
+    //Upper: title, four stations, three shots. Lower: title, two stations, a shot
+    REQUIRE(fixture.model.rowCount() == 8 + 4);
+    REQUIRE_FALSE(fixture.hasVirtualRows(fixture.upper));
+
+    CHECK(fixture.model.canMergeWithBelow(fixture.upper));
+    CHECK(fixture.model.canMergeWithAbove(fixture.lower));
+
+    fixture.model.mergeWithBelow(fixture.upper);
+
+    REQUIRE(fixture.trip.chunkCount() == 1);
+    CHECK(stationNames(fixture.upper) == QStringList({"A1", "A2", "A3", "A4"}));
+    CHECK(fixture.upper->shotCount() == 3);
+    CHECK(fixture.upper->isValid());
+
+    //Title, four stations, three shots, and the virtual rows of the focused chunk
+    fixture.checkRowCount(8 + 2);
+    CHECK(fixture.hasVirtualRows(fixture.upper));
+
+    //Focus in the upper chunk stays where it was
+    CHECK(fixture.model.focusedRowIndex().chunk() == fixture.upper);
+    CHECK(fixture.model.focusedRow() == fixture.stationRow(fixture.upper, 0));
+}
+
+TEST_CASE("cwSurveyEditorModel merging keeps splay clusters open on the moved stations",
+          "[cwSurveyEditorModel][MergeChunk]")
+{
+    auto fixture = EditorMergeFixture::threeAndThree();
+    fixture.upper->setStationSplays(2, {splayWithDistance(QStringLiteral("1"))});
+    fixture.lower->setStationSplays(0, {splayWithDistance(QStringLiteral("2")), splayWithDistance(QStringLiteral("3"))});
+    fixture.lower->setStationSplays(1, {splayWithDistance(QStringLiteral("4")), splayWithDistance(QStringLiteral("5"))});
+
+    //Upper: title, three stations, two shots and the virtual rows. Lower: title,
+    //three stations, two shots
+    REQUIRE(fixture.model.rowCount() == 8 + 6);
+    fixture.rowTally.restart();
+
+    //The joined chunk: title, five stations, four shots and the virtual rows
+    constexpr int kMergedRows = 12;
+
+    SECTION("A cluster on a lower station moves to its new index") {
+        fixture.model.toggleSplaysExpanded(cwSurveyEditorRowIndex(fixture.lower, 1, cwSurveyEditorRowIndex::StationRow));
+        //Two splays and the blank row under them
+        fixture.checkRowCount(14 + 3);
+
+        fixture.model.mergeWithBelow(fixture.upper);
+
+        REQUIRE(fixture.trip.chunkCount() == 1);
+        const int a4 = 3;
+        REQUIRE(stationNames(fixture.upper).value(a4) == QStringLiteral("A4"));
+        CHECK(fixture.splaysExpanded(fixture.upper, a4));
+        CHECK(fixture.splayRow(fixture.upper, a4, 0) >= 0);
+        CHECK(fixture.splayRow(fixture.upper, a4, 1) >= 0);
+        CHECK_FALSE(fixture.splaysExpanded(fixture.upper, 2));
+        fixture.checkRowCount(kMergedRows + 3);
+    }
+
+    SECTION("A cluster on the lower tie opens on the upper tie with every splay") {
+        fixture.model.toggleSplaysExpanded(cwSurveyEditorRowIndex(fixture.lower, 0, cwSurveyEditorRowIndex::StationRow));
+        fixture.checkRowCount(14 + 3);
+
+        fixture.model.mergeWithAbove(fixture.lower);
+
+        REQUIRE(fixture.trip.chunkCount() == 1);
+        REQUIRE(fixture.upper->stationSplayCount(2) == 3);
+        CHECK(fixture.splaysExpanded(fixture.upper, 2));
+        CHECK(fixture.splayRow(fixture.upper, 2, 0) >= 0);
+        CHECK(fixture.splayRow(fixture.upper, 2, 2) >= 0);
+        CHECK_FALSE(fixture.splaysExpanded(fixture.upper, 3));
+        //Three splays and the blank row under them
+        fixture.checkRowCount(kMergedRows + 4);
+    }
+}
+
+TEST_CASE("cwSurveyEditorModel merging moves focus from the lower chunk onto the upper one",
+          "[cwSurveyEditorModel][MergeChunk]")
+{
+    auto fixture = EditorMergeFixture::threeAndThree();
+
+    //Shot 1 of the lower chunk runs A4 to A5, which is shot 3 once joined
+    fixture.model.setFocusedCell(fixture.cell(fixture.lower, 1, cwSurveyEditorCellIndex::ShotCompassCell));
+    REQUIRE(fixture.model.focusedRowIndex().chunk() == fixture.lower);
+    fixture.rowTally.restart();
+
+    fixture.model.mergeWithBelow(fixture.upper);
+
+    REQUIRE(fixture.trip.chunkCount() == 1);
+    const auto focused = fixture.model.focusedRowIndex();
+    CHECK(focused.chunk() == fixture.upper);
+    CHECK(focused.indexInChunk() == 3);
+    CHECK(focused.rowType() == cwSurveyEditorRowIndex::ShotRow);
+    CHECK(fixture.model.focusedRole() == static_cast<int>(cwSurveyEditorCellIndex::ShotCompassCell));
+
+    //Title, five stations, four shots, and the virtual rows of the focused chunk
+    fixture.checkRowCount(12);
+    CHECK(fixture.hasVirtualRows(fixture.upper));
+}
+
+TEST_CASE("cwSurveyEditorModel canMergeWith answers only for a neighbor with a matching tie",
+          "[cwSurveyEditorModel][MergeChunk]")
+{
+    auto fixture = EditorMergeFixture::threeAndThree();
+
+    //The pair does merge, so the refusals below are the rule and not the stub
+    REQUIRE(fixture.model.canMergeWithBelow(fixture.upper));
+    REQUIRE(fixture.model.canMergeWithAbove(fixture.lower));
+
+    CHECK_FALSE(fixture.model.canMergeWithAbove(fixture.upper));
+    CHECK_FALSE(fixture.model.canMergeWithBelow(fixture.lower));
+    CHECK_FALSE(fixture.model.canMergeWithAbove(nullptr));
+    CHECK_FALSE(fixture.model.canMergeWithBelow(nullptr));
+
+    SECTION("A chunk from another trip has no neighbor here") {
+        auto other = EditorMergeFixture::threeAndThree();
+        CHECK_FALSE(fixture.model.canMergeWithBelow(other.upper));
+        CHECK_FALSE(fixture.model.canMergeWithAbove(other.lower));
+    }
+
+    SECTION("A tie that differs refuses the merge") {
+        auto data = fixture.lower->data();
+        data.stations.replace(0, cwStation(QStringLiteral("B3")));
+        fixture.lower->setData(data);
+        fixture.rowTally.restart();
+
+        CHECK_FALSE(fixture.model.canMergeWithBelow(fixture.upper));
+        CHECK_FALSE(fixture.model.canMergeWithAbove(fixture.lower));
+
+        fixture.model.mergeWithBelow(fixture.upper);
+        fixture.model.mergeWithAbove(fixture.lower);
+        CHECK(fixture.trip.chunkCount() == 2);
+        CHECK(stationNames(fixture.upper) == QStringList({"A1", "A2", "A3"}));
+        fixture.checkRowCount(fixture.model.rowCount());
+    }
+
+    SECTION("Without a trip nothing merges") {
+        fixture.model.setTrip(nullptr);
+        CHECK_FALSE(fixture.model.canMergeWithBelow(fixture.upper));
+        fixture.model.mergeWithBelow(fixture.upper);
+        CHECK(fixture.trip.chunkCount() == 2);
+    }
+}
+
+TEST_CASE("cwSurveyEditorModel merging cancels a splay move from the lower chunk",
+          "[cwSurveyEditorModel][MergeChunk]")
+{
+    auto fixture = EditorMergeFixture::threeAndThree();
+    fixture.lower->setStationSplays(1, {splayWithDistance(QStringLiteral("1"))});
+    fixture.model.toggleSplaysExpanded(cwSurveyEditorRowIndex(fixture.lower, 1, cwSurveyEditorRowIndex::StationRow));
+
+    fixture.model.startSplayMove(cwSurveyEditorRowIndex(fixture.lower, 1, 0, cwSurveyEditorRowIndex::SplayRow), true);
+    REQUIRE(fixture.model.splayMoveActive());
+
+    fixture.model.mergeWithBelow(fixture.upper);
+
+    CHECK(fixture.trip.chunkCount() == 1);
+    CHECK_FALSE(fixture.model.splayMoveActive());
 }

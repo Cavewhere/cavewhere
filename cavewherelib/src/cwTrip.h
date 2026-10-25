@@ -108,6 +108,9 @@ public:
     Q_INVOKABLE void removeChunk(cwSurveyChunk* chunk);
     bool canSplitChunk(cwSurveyChunk* chunk, int shotIndex) const;
     cwSurveyChunk* splitChunk(cwSurveyChunk* chunk, int shotIndex);
+    bool canMergeChunks(int upperIndex) const;
+    static bool isTie(const QString& upperLastName, const QString& lowerFirstName);
+    void mergeChunks(int upperIndex);
 
     int chunkCount() const;
     Q_INVOKABLE cwSurveyChunk* chunk(int i) const;

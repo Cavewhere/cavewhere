@@ -136,6 +136,9 @@ public:
     // Drops stations firstStationIndex..end and the shots that end on them
     void removeTail(int firstStationIndex);
 
+    // Appends shots and the stations they end on: shots[k] runs from the station before stations[k] to stations[k]
+    void appendTail(const QList<cwStation>& stations, const QList<cwShot>& shots);
+
     // Mark or clear one warning kind on one cell. Writes the station/shot set,
     // flips the matching cell-model row, emits ignoredWarningsChanged.
     Q_INVOKABLE void setWarningIgnored(int index, cwSurveyChunk::DataRole role, int errorTypeId, bool ignored);

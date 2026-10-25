@@ -144,6 +144,22 @@ QQ.Loader {
 
             QC.MenuSeparator { }
 
+            MergeChunkMenuItem {
+                objectName: "shotMenuMergeChunkAbove"
+                model: shotMenuLoader.model
+                chunk: dataValue.chunk
+                direction: SurveyChunk.Above
+                removePreview: shotMenuLoader.removePreview
+            }
+
+            MergeChunkMenuItem {
+                objectName: "shotMenuMergeChunkBelow"
+                model: shotMenuLoader.model
+                chunk: dataValue.chunk
+                direction: SurveyChunk.Below
+                removePreview: shotMenuLoader.removePreview
+            }
+
             RemoveChunkMenuItem {
                 objectName: "shotMenuRemoveChunk"
                 chunk: dataValue.chunk

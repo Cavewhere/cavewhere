@@ -217,6 +217,14 @@ gets dropped instead of moved, and the new block starts at the station below it.
 Hover the item and a line marks where the cut would go. Like **Remove Chunk**,
 the split has no undo.
 
+**Merge with chunk above** and **Merge with chunk below** join a block to its
+neighbor in the same trip. They work only when the two blocks share a tie
+station: the upper block ends on the station the lower one starts on, so A3 and
+a3 match, A3 and A4 do not. The joined block keeps the upper copy of that
+station. Any LRUD it lacks comes from the lower copy, and the lower copy's
+splays get added to its own. Hover the item and CaveWhere strikes through the
+block that goes away. A merge has no undo either.
+
 ## Exclude a distance from the total
 
 Select a Distance cell and a caret button appears in its top-right corner, only

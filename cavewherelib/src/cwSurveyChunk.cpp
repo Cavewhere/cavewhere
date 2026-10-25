@@ -2362,6 +2362,24 @@ void cwSurveyChunk::removeTail(int firstStationIndex)
     updateErrors();
 }
 
+void cwSurveyChunk::appendTail(const QList<cwStation>& stations, const QList<cwShot>& shots)
+{
+    if(d.stations.isEmpty() || stations.isEmpty() || stations.size() != shots.size()) {
+        return;
+    }
+
+    const int stationBegin = d.stations.size();
+    const int shotBegin = d.shots.size();
+    const int count = stations.size();
+
+    d.stations.append(stations);
+    d.shots.append(shots);
+
+    emit added(stationBegin, stationBegin + count - 1, shotBegin, shotBegin + count - 1);
+
+    updateErrors();
+}
+
 /**
   \brief Removes a station and a shot from the chunk
 

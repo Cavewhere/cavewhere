@@ -1177,6 +1177,110 @@ void cwSurveyEditorModel::splitChunkAt(const cwSurveyEditorCellIndex& cell)
     setFocusedCell(cellIndex(row, cwSurveyEditorCellIndex::StationNameCell));
 }
 
+/**
+ * True when mergeWithAbove() would join \a chunk onto the chunk above it. The
+ * answer is for the chunks as they stand after the trim the merge runs first
+ */
+bool cwSurveyEditorModel::canMergeWithAbove(cwSurveyChunk* chunk) const
+{
+    return canMergePair(neighborChunk(chunk, -1), chunk);
+}
+
+/**
+ * True when mergeWithBelow() would join the chunk below \a chunk onto it. The
+ * answer is for the chunks as they stand after the trim the merge runs first
+ */
+bool cwSurveyEditorModel::canMergeWithBelow(cwSurveyChunk* chunk) const
+{
+    return canMergePair(chunk, neighborChunk(chunk, 1));
+}
+
+void cwSurveyEditorModel::mergeWithAbove(cwSurveyChunk* chunk)
+{
+    mergePair(neighborChunk(chunk, -1), chunk);
+}
+
+void cwSurveyEditorModel::mergeWithBelow(cwSurveyChunk* chunk)
+{
+    mergePair(chunk, neighborChunk(chunk, 1));
+}
+
+/**
+ * The chunk \a step places from \a chunk in the trip, or nullptr when there is
+ * none
+ */
+cwSurveyChunk* cwSurveyEditorModel::neighborChunk(cwSurveyChunk* chunk, int step) const
+{
+    if(chunk == nullptr || m_trip.isNull()) {
+        return nullptr;
+    }
+
+    const QList<cwSurveyChunk*> chunks = m_trip->chunks();
+    const int index = chunks.indexOf(chunk);
+    if(index < 0) {
+        return nullptr;
+    }
+    return chunks.value(index + step, nullptr);
+}
+
+bool cwSurveyEditorModel::canMergePair(cwSurveyChunk* upper, cwSurveyChunk* lower) const
+{
+    if(upper == nullptr || lower == nullptr
+            || upper->stationCount() == 0 || lower->stationCount() == 0) {
+        return false;
+    }
+
+    return cwTrip::isTie(upper->station(lastStationAfterTrim(upper)).name(), lower->station(0).name());
+}
+
+void cwSurveyEditorModel::mergePair(cwSurveyChunk* upper, cwSurveyChunk* lower)
+{
+    if(!canMergePair(upper, lower)) {
+        return;
+    }
+
+    //The editor's trailing working row would otherwise stand in for the tie
+    trim(upper, FullTrim);
+    trim(lower, FullTrim);
+
+    const int upperIndex = m_trip->chunks().indexOf(upper);
+    if(!m_trip->canMergeChunks(upperIndex)) {
+        return;
+    }
+
+    const int offset = upper->stationCount() - 1;
+    const int upperTieSplayCount = upper->stationSplayCount(offset);
+    const QList<int> openLowerStations = m_expandedSplays.value(lower).keys();
+    const cwSurveyEditorRowIndex focused = focusedRowIndex();
+    const auto focusedCellRole = m_focusedCellRole;
+
+    //The virtual rows move up while the lower chunk is still in the trip
+    if(m_focusedChunk == lower) {
+        setFocusedChunk(upper);
+    }
+
+    m_trip->mergeChunks(upperIndex);
+
+    //Each cluster opens as an insert of its own, after the rows it hangs under exist
+    for(const int stationIndex : openLowerStations) {
+        expandSplays(upper, stationIndex + offset);
+    }
+
+    if(focused.chunk() == lower) {
+        cwSurveyEditorRowIndex moved = focused;
+        moved.setChunk(upper);
+        moved.setIndexInChunk(focused.indexInChunk() + offset);
+        if(focused.rowType() == cwSurveyEditorRowIndex::SplayRow && focused.indexInChunk() == 0) {
+            moved.setSplayIndex(focused.splayIndex() + upperTieSplayCount);
+        }
+
+        const int row = toModelRow(moved);
+        if(row >= 0) {
+            setFocusedCell(cellIndex(row, focusedCellRole));
+        }
+    }
+}
+
 void cwSurveyEditorModel::insertStationAt(const cwSurveyEditorCellIndex& cell,
                                           cwSurveyChunk::Direction direction)
 {
@@ -3085,6 +3189,19 @@ void cwSurveyEditorModel::trim(cwSurveyChunk* chunk, TrimType trimType)
         break;
     }
     }
+}
+
+/**
+ * The index of \a chunk's last station once trim(FullTrim) has run, which keeps
+ * stations 0 and 1 and every station that is not empty
+ */
+int cwSurveyEditorModel::lastStationAfterTrim(cwSurveyChunk* chunk)
+{
+    int stationIndex = chunk->stationCount() - 1;
+    while(stationIndex > 1 && isStationShotEmpty(chunk, stationIndex)) {
+        --stationIndex;
+    }
+    return stationIndex;
 }
 
 bool cwSurveyEditorModel::isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex)

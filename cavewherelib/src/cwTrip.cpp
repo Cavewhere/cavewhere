@@ -380,6 +380,85 @@ cwSurveyChunk* cwTrip::splitChunk(cwSurveyChunk* chunk, int shotIndex)
 }
 
 /**
+  True when chunk \a upperIndex and the one below it share a tie station: the
+  upper chunk's last station and the lower chunk's first station, per isTie().
+  */
+bool cwTrip::canMergeChunks(int upperIndex) const
+{
+    if(upperIndex < 0 || upperIndex >= Chunks.size() - 1) {
+        return false;
+    }
+
+    const cwSurveyChunk* upper = Chunks.at(upperIndex);
+    const cwSurveyChunk* lower = Chunks.at(upperIndex + 1);
+    if(upper->stationCount() == 0 || lower->stationCount() == 0) {
+        return false;
+    }
+
+    return isTie(upper->station(upper->stationCount() - 1).name(), lower->station(0).name());
+}
+
+/**
+  True when both names are non-empty and match in any case
+  */
+bool cwTrip::isTie(const QString& upperLastName, const QString& lowerFirstName)
+{
+    return !upperLastName.isEmpty()
+           && !lowerFirstName.isEmpty()
+           && upperLastName.compare(lowerFirstName, Qt::CaseInsensitive) == 0;
+}
+
+/**
+  Joins chunk \a upperIndex + 1 onto chunk \a upperIndex and removes it.
+
+  The upper chunk keeps its id and its copy of the tie station. Each LRUD the
+  upper copy lacks comes from the lower copy, and the lower copy's splays
+  follow the upper copy's. Does nothing when canMergeChunks() refuses.
+  */
+void cwTrip::mergeChunks(int upperIndex)
+{
+    if(!canMergeChunks(upperIndex)) {
+        return;
+    }
+
+    cwSurveyChunk* upper = Chunks.at(upperIndex);
+    const cwSurveyChunk* lower = Chunks.at(upperIndex + 1);
+
+    const int tieIndex = upper->stationCount() - 1;
+    cwStation tie = upper->station(tieIndex);
+    const cwStation lowerTie = lower->station(0);
+
+    using Reading = cwDistanceReading (cwStation::*)() const;
+    using SetReading = void (cwStation::*)(const cwDistanceReading&);
+    bool tieChanged = false;
+    const auto fillEmpty = [&](Reading reading, SetReading setReading) {
+        if((tie.*reading)().state() == cwDistanceReading::State::Empty
+                && (lowerTie.*reading)().state() != cwDistanceReading::State::Empty) {
+            (tie.*setReading)((lowerTie.*reading)());
+            tieChanged = true;
+        }
+    };
+    fillEmpty(&cwStation::left, &cwStation::setLeft);
+    fillEmpty(&cwStation::right, &cwStation::setRight);
+    fillEmpty(&cwStation::up, &cwStation::setUp);
+    fillEmpty(&cwStation::down, &cwStation::setDown);
+
+    if(lowerTie.splayCount() > 0) {
+        tie.setSplays(tie.splays() + lowerTie.splays());
+        tieChanged = true;
+    }
+
+    if(tieChanged) {
+        upper->setStation(tie, tieIndex);
+    }
+
+    //The tail lands in the upper chunk before the lower one goes, so listeners
+    //always see every shot somewhere
+    upper->appendTail(lower->stations().mid(1), lower->shots());
+    removeChunks(upperIndex + 1, upperIndex + 1);
+}
+
+/**
   \brief Set chunks for the group
 
   This will reparent all the chunks to this object

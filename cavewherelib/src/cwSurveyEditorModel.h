@@ -131,6 +131,10 @@ public:
     Q_INVOKABLE void insertShotAt(const cwSurveyEditorCellIndex& cell, cwSurveyChunk::Direction direction);
     Q_INVOKABLE bool canSplitChunkAt(const cwSurveyEditorCellIndex& cell) const;
     Q_INVOKABLE void splitChunkAt(const cwSurveyEditorCellIndex& cell);
+    Q_INVOKABLE bool canMergeWithAbove(cwSurveyChunk* chunk) const;
+    Q_INVOKABLE bool canMergeWithBelow(cwSurveyChunk* chunk) const;
+    Q_INVOKABLE void mergeWithAbove(cwSurveyChunk* chunk);
+    Q_INVOKABLE void mergeWithBelow(cwSurveyChunk* chunk);
 
 
     QHash<int, QByteArray> roleNames() const;
@@ -230,6 +234,9 @@ private:
     };
 
     SplitPoint splitPointAt(const cwSurveyEditorCellIndex& cell) const;
+    cwSurveyChunk* neighborChunk(cwSurveyChunk* chunk, int step) const;
+    bool canMergePair(cwSurveyChunk* upper, cwSurveyChunk* lower) const;
+    void mergePair(cwSurveyChunk* upper, cwSurveyChunk* lower);
 
     bool setSplayDataAt(const cwSurveyEditorCellIndex& cell,
                         cwSurveyChunk::DataRole readingRole,
@@ -271,6 +278,7 @@ private:
     void invalidateStationFixed();
     void syncFocusedCellSignals();
     static bool isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex);
+    static int lastStationAfterTrim(cwSurveyChunk* chunk);
     static void trim(cwSurveyChunk* chunk, TrimType trimType);
     static void trim(cwSurveyChunk* chunk);
     cwSurveyEditorCellIndex nextCellIndex(const cwSurveyEditorCellIndex& currentCell,
