@@ -106,10 +106,11 @@ cwFixStationValidator::cwFixStationValidator(cwCavingRegion* region) :
     }
 
     // A node joining or leaving anywhere in the tree rewires the per-node fix-station
-    // connections and re-attributes. The frame moving reprojects every fix, so
-    // an outlier under the old frame may cease to be one under the new.
+    // connections and re-attributes, once per event-loop turn. The frame moving
+    // reprojects every fix, so an outlier under the old frame may cease to be
+    // one under the new.
     connect(m_region->rootNode(), &cwSurveyNode::subtreeChanged,
-            this, [this] { syncNodeConnections(); revalidate(); });
+            this, &cwFixStationValidator::markNodeConnectionsStale);
     connect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
             this, &cwFixStationValidator::revalidate);
     // The network decides which fix references are broken. These two signals
@@ -283,9 +284,19 @@ QString stationNameFor(cwSurveyNode* node, const QUuid& fixId)
 
 } // namespace
 
+cwCave* cwFixStationValidator::firstOutlierCave() const
+{
+    return m_firstOutlierCave.data();
+}
+
 void cwFixStationValidator::revalidate()
 {
     m_revalidatePending = false;
+    // A direct pass in the stale window covers the queued one, so it must see
+    // the live tree too.
+    if (m_nodeConnectionsStale) {
+        syncNodeConnections();
+    }
     {
         const QScopedValueRollback revalidating(m_isRevalidating, true);
         revalidateNodes();
@@ -310,11 +321,31 @@ void cwFixStationValidator::runPendingRevalidate()
     }
 }
 
+void cwFixStationValidator::markNodeConnectionsStale()
+{
+    m_nodeConnectionsStale = true;
+    m_treeChangedSinceRebuild = true;
+    scheduleRevalidate();
+}
+
+void cwFixStationValidator::forgetNode(QObject* node)
+{
+    const auto isDestroyedNode = [node](const cwSurveyNode* tracked) {
+        return static_cast<const QObject*>(tracked) == node;
+    };
+    m_connectedNodes.removeIf(isDestroyedNode);
+    m_nodesWithWarning.removeIf(isDestroyedNode);
+}
+
 void cwFixStationValidator::rebuildFixStationWarnings()
 {
     if (m_isRevalidating || m_region == nullptr) {
         return;
     }
+    // A move keeps every line the same but changes which ones sit under a
+    // node, so fixStationWarningMessagesUnder() readers need the signal too.
+    const bool treeChanged = m_treeChangedSinceRebuild;
+    m_treeChangedSinceRebuild = false;
     if (m_nodesWithWarning.isEmpty() && m_fixStationWarnings.isEmpty()) {
         return;
     }
@@ -335,7 +366,8 @@ void cwFixStationValidator::rebuildFixStationWarnings()
         }
     }
 
-    if (m_fixStationWarnings == warnings && m_fixStationWarningMessages == messages) {
+    if (m_fixStationWarnings == warnings && m_fixStationWarningMessages == messages
+        && !treeChanged) {
         return;
     }
     m_fixStationWarnings = warnings;
@@ -539,12 +571,13 @@ QHash<cwSurveyNode*, cwFixStationValidator::NodeWarning> cwFixStationValidator::
 
 void cwFixStationValidator::syncNodeConnections()
 {
+    m_nodeConnectionsStale = false;
     const QList<cwSurveyNode*> current = m_region ? m_region->rootNode()->allNodes() : QList<cwSurveyNode*>();
     const QSet<cwSurveyNode*> currentSet(current.begin(), current.end());
 
-    // Nodes that left the region: still alive here (a removed node outlives its
-    // removal via the undo command), so tear down its connection and clear its
-    // warning before it can be destroyed.
+    // Nodes that left the region: every node still in m_connectedNodes is alive,
+    // because forgetNode() drops destroyed ones, so tear down its connection and
+    // clear its warning here.
     for (auto it = m_connectedNodes.begin(); it != m_connectedNodes.end();) {
         cwSurveyNode* node = *it;
         if (!currentSet.contains(node)) {
@@ -570,6 +603,8 @@ void cwFixStationValidator::syncNodeConnections()
             || m_connectedNodes.contains(node)) {
             continue;
         }
+        connect(node, &QObject::destroyed,
+                this, &cwFixStationValidator::forgetNode, Qt::UniqueConnection);
         cwFixStationModel* model = node->fixStations();
         connect(model, &cwFixStationModel::countChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
@@ -630,7 +665,7 @@ void cwFixStationValidator::setSummary(const QString& message, int count, cwSurv
         emit outlierCountChanged();
     }
     auto* cave = qobject_cast<cwCave*>(node);
-    if (m_firstOutlierCave != cave) {
+    if (m_firstOutlierCave.data() != cave) {
         m_firstOutlierCave = cave;
         emit firstOutlierCaveChanged();
     }

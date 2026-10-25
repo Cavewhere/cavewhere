@@ -28,6 +28,8 @@
 
 //Qt includes
 #include <QCoreApplication>
+#include <QEvent>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QUuid>
 
@@ -569,6 +571,7 @@ TEST_CASE("revalidate clears the warning when its cave leaves the region",
     // clear its warning while the cave is still alive (it outlives removal via the
     // undo command's deleteLater), without disturbing the surviving cave.
     region.removeCave(1);
+    QCoreApplication::processEvents();
 
     CHECK(doomedCave->errorModel()->warningCount() == 0);
     CHECK(keepCave->errorModel()->warningCount() == 0);
@@ -594,6 +597,7 @@ TEST_CASE("revalidate raises no warning across caves entered in different CSs",
     // Raw WGS84 degrees sit ~4000 km from the UTM eastings/northings above.
     wgsCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("W1"), QStringLiteral("EPSG:4326"), -111.0, 37.871, 2700.0));
+    QCoreApplication::processEvents();
 
     CHECK(utmCave->errorModel()->warningCount() == 0);
     CHECK(wgsCave->errorModel()->warningCount() == 0);
@@ -717,6 +721,7 @@ TEST_CASE("revalidate flags a fix outside its CS's valid domain",
     REQUIRE(badCave != nullptr);
     badCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+    QCoreApplication::processEvents();
 
     REQUIRE(badCave->errorModel()->warningCount() == 1);
     // These messages are assembled by choosing between two whole sentences, so
@@ -742,6 +747,7 @@ TEST_CASE("revalidate flags a lone domain-bad fix on a project with no frame",
     REQUIRE(cave != nullptr);
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+    QCoreApplication::processEvents();
     REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
 
     REQUIRE(cave->errorModel()->warningCount() == 1);
@@ -823,6 +829,7 @@ TEST_CASE("revalidate attributes a whole bad cave to Part A, not Part B",
         makeFix(QStringLiteral("B1"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
     badCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B2"), QStringLiteral("EPSG:32613"), 1478100.0, 4430100.0, 1656.0));
+    QCoreApplication::processEvents();
 
     // Part A flags the bad cave; the good cave is clean. Two offenders in one
     // cave, so the plural wording — one sentence naming both, not one each.
@@ -899,6 +906,7 @@ TEST_CASE("revalidate does not flag two legitimately distant caves",
         makeFix(QStringLiteral("E1"), QStringLiteral("EPSG:32613"), 700000.0, 4430000.0, 1655.0));
     eastCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("E2"), QStringLiteral("EPSG:32613"), 700100.0, 4430100.0, 1656.0));
+    QCoreApplication::processEvents();
 
     CHECK(westCave->errorModel()->warningCount() == 0);
     CHECK(eastCave->errorModel()->warningCount() == 0);
@@ -1389,6 +1397,7 @@ struct DomainBadSubNode {
         REQUIRE(upperLevel != nullptr);
         upperLevel->fixStations()->appendFixStation(
             makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+        QCoreApplication::processEvents();
         REQUIRE(upperLevel->errorModel()->errors()->warningMessages().size() == 1);
     }
 };
@@ -1439,6 +1448,7 @@ TEST_CASE("the project-wide fix-station warnings name the node each one sits on"
 
     SECTION("a node leaving the region takes its warning with it") {
         project.cave->removeNode(project.cave->indexOfNode(project.upperLevel));
+        QCoreApplication::processEvents();
         CHECK(validator->fixStationWarningMessages().isEmpty());
     }
 }
@@ -1452,6 +1462,7 @@ TEST_CASE("the project-wide fix-station warnings list nodes in tree order",
     REQUIRE(otherCave != nullptr);
     otherCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+    QCoreApplication::processEvents();
 
     //Pre-order, not name order: Deep Hole's section comes before the cave added
     //after it.
@@ -1497,6 +1508,7 @@ TEST_CASE("a node's fix-station warnings cover the node and its descendants",
     SECTION("a sibling branch keeps its own warning to itself") {
         sibling->fixStations()->appendFixStation(
             makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+        QCoreApplication::processEvents();
 
         const QStringList underSibling = validator->fixStationWarningMessagesUnder(sibling);
         REQUIRE(underSibling.size() == 1);
@@ -1526,10 +1538,171 @@ TEST_CASE("a node's fix-station warnings cover the node and its descendants",
 
     SECTION("moving the sub-node carries its warning to the new ancestor") {
         REQUIRE(sibling->moveHere(project.upperLevel));
+        QCoreApplication::processEvents();
 
         CHECK(validator->fixStationWarningMessagesUnder(project.cave).isEmpty());
         const QStringList underSibling = validator->fixStationWarningMessagesUnder(sibling);
         REQUIRE(underSibling.size() == 1);
         CHECK(underSibling.at(0).startsWith(QStringLiteral("Upper Level: ")));
     }
+}
+
+namespace {
+
+constexpr int kBudgetNodeCount = 12;
+constexpr int kBudgetSmallNodeCount = 40;
+constexpr int kBudgetLargeNodeCount = kBudgetSmallNodeCount * 4;
+constexpr int kBudgetStallRepeats = 3;
+
+// Four times the nodes in one turn is one pass over four times the nodes; a
+// pass for each node grows about sixteenfold.
+constexpr double kMaxBudgetStallGrowth = 4.0;
+
+constexpr double kDomainBadEasting = 1478000.0;
+constexpr double kDomainNorthing = 4430000.0;
+constexpr double kDomainElevation = 1655.0;
+constexpr double kOutlierEasting = 500150.0;
+constexpr double kOutlierNorthing = 5194000.0;
+constexpr double kOutlierElevation = 2708.0;
+
+//! A detached cave whose one fix (B) has a transposed leading digit, so it
+//! raises a domain warning wherever it joins.
+cwCave* makeDomainBadCave()
+{
+    auto* cave = new cwCave();
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"),
+                kDomainBadEasting, kDomainNorthing, kDomainElevation));
+    return cave;
+}
+
+//! A cave appended to \a region whose one fix sits ~1000 km north of the frame
+//! appendGoodFixes anchors.
+cwCave* addOutlierCave(cwCavingRegion& region, const QString& name)
+{
+    region.addCave();
+    cwCave* cave = region.cave(region.caveCount() - 1);
+    REQUIRE(cave != nullptr);
+    cave->setName(name);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), kOutlierEasting, kOutlierNorthing, kOutlierElevation));
+    return cave;
+}
+
+//! The shortest of kBudgetStallRepeats main-thread stalls of removing \a nodes
+//! domain-bad caves in one turn.
+qint64 measureRemovalStall(int nodes)
+{
+    qint64 shortest = std::numeric_limits<qint64>::max();
+    for (int repeat = 0; repeat < kBudgetStallRepeats; ++repeat) {
+        cwCavingRegion region;
+        for (int i = 0; i < nodes; ++i) {
+            region.addCave(makeDomainBadCave());
+        }
+        QCoreApplication::processEvents();
+        REQUIRE(region.fixStationValidator()->fixStationWarningMessages().size() == nodes);
+
+        const qint64 stall = longestMainThreadStall([&region]() {
+            while (region.caveCount() > 0) {
+                region.removeCave(region.caveCount() - 1);
+            }
+        });
+        shortest = std::min(shortest, stall);
+        QCoreApplication::processEvents();
+        REQUIRE(region.fixStationValidator()->fixStationWarningMessages().isEmpty());
+    }
+    return shortest;
+}
+
+} // namespace
+
+TEST_CASE("nodes joining in one turn revalidate once",
+          "[cwFixStationValidator][Budget]")
+{
+    cwCavingRegion region;
+    cwFixStationValidator* validator = region.fixStationValidator();
+    REQUIRE(validator != nullptr);
+    QSignalSpy changed(validator, &cwFixStationValidator::fixStationWarningsChanged);
+
+    for (int i = 0; i < kBudgetNodeCount; ++i) {
+        region.addCave(makeDomainBadCave());
+    }
+    QCoreApplication::processEvents();
+
+    CHECK(changed.count() == 1);
+    CHECK(validator->fixStationWarningMessages().size() == kBudgetNodeCount);
+}
+
+TEST_CASE("nodes leaving in one turn revalidate once",
+          "[cwFixStationValidator][Budget]")
+{
+    cwCavingRegion region;
+    cwFixStationValidator* validator = region.fixStationValidator();
+    REQUIRE(validator != nullptr);
+    for (int i = 0; i < kBudgetNodeCount; ++i) {
+        region.addCave(makeDomainBadCave());
+    }
+    QCoreApplication::processEvents();
+    REQUIRE(validator->fixStationWarningMessages().size() == kBudgetNodeCount);
+
+    QSignalSpy changed(validator, &cwFixStationValidator::fixStationWarningsChanged);
+    while (region.caveCount() > 0) {
+        region.removeCave(region.caveCount() - 1);
+    }
+    QCoreApplication::processEvents();
+
+    CHECK(changed.count() == 1);
+    CHECK(validator->fixStationWarningMessages().isEmpty());
+}
+
+TEST_CASE("deleting the first outlier's cave leaves no dangling summary",
+          "[cwFixStationValidator][Budget]")
+{
+    cwCavingRegion region;
+    region.addCave();
+    cwCave* goodCave = region.cave(0);
+    REQUIRE(goodCave != nullptr);
+    appendGoodFixes(goodCave);
+
+    QPointer<cwCave> firstOutlier = addOutlierCave(region, QStringLiteral("First Sink"));
+    QPointer<cwCave> nextOutlier = addOutlierCave(region, QStringLiteral("Next Sink"));
+    QCoreApplication::processEvents();
+
+    cwFixStationValidator* validator = region.fixStationValidator();
+    REQUIRE(validator != nullptr);
+    REQUIRE(validator->firstOutlierCave() == firstOutlier.data());
+
+    // Destroy the cave before the queued pass can run: removal with no undo
+    // stack deletes it on the next deferred-delete sweep.
+    region.removeCave(region.indexOf(firstOutlier.data()));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    REQUIRE(firstOutlier.isNull());
+
+    CHECK(validator->firstOutlierCave() == nullptr);
+    QCoreApplication::processEvents();
+    CHECK(validator->firstOutlierCave() == nextOutlier.data());
+
+    // With no outlier left, the summary stays empty through the pass.
+    region.removeCave(region.indexOf(nextOutlier.data()));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    REQUIRE(nextOutlier.isNull());
+
+    CHECK(validator->firstOutlierCave() == nullptr);
+    QCoreApplication::processEvents();
+    CHECK(validator->firstOutlierCave() == nullptr);
+    CHECK(validator->outlierCount() == 0);
+}
+
+TEST_CASE("removing nodes in one turn stalls in time linear in the nodes",
+          "[cwFixStationValidator][Budget]")
+{
+    const qint64 small = measureRemovalStall(kBudgetSmallNodeCount);
+    const qint64 large = measureRemovalStall(kBudgetLargeNodeCount);
+
+    INFO("small: " << kBudgetSmallNodeCount << " nodes, " << small << " ms stall");
+    INFO("large: " << kBudgetLargeNodeCount << " nodes, " << large << " ms stall");
+    REQUIRE(small > 0);
+    const double growth = double(large) / double(small);
+    INFO("growth " << growth);
+    CHECK(growth <= kMaxBudgetStallGrowth);
 }

@@ -23,6 +23,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
+#include <QCoreApplication>
 #include <QSignalSpy>
 #include <QUndoStack>
 
@@ -255,6 +256,8 @@ TEST_CASE("A node warning on a fix opens the fix's row, wherever the row moves",
     cave->fixStations()->appendFixStation(utm13NFix(QStringLiteral("H"), 478010.0));
     // A transposed leading digit puts this fix outside UTM 13N's valid domain.
     cave->fixStations()->appendFixStation(utm13NFix(QStringLiteral("BAD"), 1478000.0));
+    // The validator picks up the new cave on its queued pass.
+    QCoreApplication::processEvents();
 
     cwNodeWarningModel model;
     model.setNode(cave);

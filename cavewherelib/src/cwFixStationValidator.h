@@ -160,7 +160,7 @@ public:
 
     QString warningMessage() const { return m_warningMessage; }
     int outlierCount() const { return m_outlierCount; }
-    cwCave* firstOutlierCave() const { return m_firstOutlierCave; }
+    cwCave* firstOutlierCave() const;
 
     //! The errorTypeIds this validator pushes onto a node's errorModel: the
     //! fix-station warning kinds.
@@ -190,14 +190,21 @@ private:
     //! revalidate()'s body: writes every node's warning rows.
     void revalidateNodes();
 
-    //! Queue one revalidate() for this event-loop turn: an attach or a scan
-    //! apply relists the attached fixes of every node it touches, and each
-    //! pass walks the whole region. A synchronous revalidate() in between
-    //! covers the queued one, which then does nothing.
+    //! Queue one revalidate() for this event-loop turn: a tree edit, an attach
+    //! or a scan apply touches many nodes, and each pass walks the whole
+    //! region. A synchronous revalidate() in between covers the queued one,
+    //! which then does nothing.
     void scheduleRevalidate();
     void runPendingRevalidate();
 
+    //! A node joined or left the tree: the next revalidate() rewires the
+    //! per-node connections first.
+    void markNodeConnectionsStale();
     void syncNodeConnections();
+    //! Drops a destroyed node from the tracking sets by pointer value alone, so
+    //! a node destroyed before the queued pass leaves no dangling pointer for
+    //! syncNodeConnections() to tear down.
+    void forgetNode(QObject* node);
 
     //! Collects fixStationWarnings() from the nodes' error lists. Also runs on a
     //! suppression, which changes a list without a revalidate().
@@ -236,10 +243,9 @@ private:
     QString m_warningMessage;
     int m_outlierCount = 0;
 
-    //! The cave named in m_warningMessage. Raw pointer, kept consistent by
-    //! revalidate() running synchronously whenever caves change — QML never
-    //! observes it between a cave's removal and the refresh.
-    cwCave* m_firstOutlierCave = nullptr;
+    //! The cave named in m_warningMessage. Null once that cave is destroyed,
+    //! until the queued pass names the next one.
+    QPointer<cwCave> m_firstOutlierCave;
 
     //! Nodes whose fixStations we hold live connections to, so a node leaving the
     //! region can be torn down (and its warning cleared) before it is destroyed.
@@ -260,6 +266,8 @@ private:
 
     //! Whether a scheduleRevalidate() is still waiting for its turn.
     bool m_revalidatePending = false;
+    bool m_nodeConnectionsStale = false;
+    bool m_treeChangedSinceRebuild = false;
 };
 
 #endif // CWFIXSTATIONVALIDATOR_H
