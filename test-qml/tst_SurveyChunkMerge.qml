@@ -73,55 +73,17 @@ MainWindowTest {
                         context.editorModel.rowIndex(chunk, -1, SurveyEditorRowIndex.TitleRow))
         }
 
-        function cell(context, row, cellRole) {
-            const item = surveyTableId.rowItem(this, context, row)
-            let found = null
-            tryVerify(() => {
-                found = findChild(item, "dataBox." + row + "." + cellRole)
-                return found !== null
-            }, 5000, "row " + row + " should have cell " + cellRole)
-            return found
-        }
-
-        // Right-clicks the cell and returns its menu once the loader has built it
-        function openMenu(context, row, cellRole, loaderName) {
-            const cellItem = cell(context, row, cellRole)
-            mouseClick(cellItem, cellItem.width / 2, cellItem.height / 2, Qt.RightButton)
-
-            const loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + cellRole
-                    + "->" + loaderName
-            let loader = null
-            tryVerify(() => {
-                loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
-                return loader !== null && loader.item !== null
-            }, 5000, loaderName + " should build its menu")
-            tryVerify(() => loader.item.opened, 5000, loaderName + " should be open")
-            return loader.item
-        }
-
-        function closeMenu(menu) {
-            menu.close()
-            tryVerify(() => !menu.visible, 5000, "the menu should close")
-        }
-
-        function mergeItem(menu, objectName, text) {
-            const item = findChild(menu, objectName)
-            verify(item !== null, "the menu should offer " + objectName)
-            compare(item.text, text)
-            return item
-        }
-
         function test_shotMenuOffersBothMergeItems() {
             const context = gotoSurveyTable()
 
-            const menu = openMenu(context, shotRow(context, context.chunk, 0),
-                                  SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
-            const above = mergeItem(menu, "shotMenuMergeChunkAbove", "Merge with chunk above")
-            const below = mergeItem(menu, "shotMenuMergeChunkBelow", "Merge with chunk below")
+            const menu = surveyTableId.openMenu(this, context, shotRow(context, context.chunk, 0),
+                                                SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
+            const above = surveyTableId.menuItem(this, menu, "shotMenuMergeChunkAbove", "Merge with chunk above")
+            const below = surveyTableId.menuItem(this, menu, "shotMenuMergeChunkBelow", "Merge with chunk below")
 
             verify(!above.enabled, "the first chunk has no chunk above it")
             verify(below.enabled, "the chunk below starts with the tie station A2")
-            closeMenu(menu)
+            surveyTableId.closeMenu(this, menu)
         }
 
         function test_shotMenuMergeBelowRemovesTheLowerTitleRow() {
@@ -129,12 +91,12 @@ MainWindowTest {
             const lower = context.lower
             verify(titleRow(context, lower) > titleRow(context, context.chunk))
 
-            const menu = openMenu(context, shotRow(context, context.chunk, 0),
-                                  SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
-            const below = mergeItem(menu, "shotMenuMergeChunkBelow", "Merge with chunk below")
+            const menu = surveyTableId.openMenu(this, context, shotRow(context, context.chunk, 0),
+                                                SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
+            const below = surveyTableId.menuItem(this, menu, "shotMenuMergeChunkBelow", "Merge with chunk below")
             verify(below.enabled, "the tie matches")
 
-            closeMenu(menu)
+            surveyTableId.closeMenu(this, menu)
             below.triggered()
 
             tryCompare(context.trip, "chunkCount", 1)
@@ -157,14 +119,14 @@ MainWindowTest {
             const context = gotoSurveyTable()
             const lower = context.lower
 
-            const menu = openMenu(context, stationRow(context, lower, 1),
-                                  SurveyEditorCellIndex.StationNameCell, "stationMenuLoader")
-            const above = mergeItem(menu, "stationMenuMergeChunkAbove", "Merge with chunk above")
-            const below = mergeItem(menu, "stationMenuMergeChunkBelow", "Merge with chunk below")
+            const menu = surveyTableId.openMenu(this, context, stationRow(context, lower, 1),
+                                                SurveyEditorCellIndex.StationNameCell, "stationMenuLoader")
+            const above = surveyTableId.menuItem(this, menu, "stationMenuMergeChunkAbove", "Merge with chunk above")
+            const below = surveyTableId.menuItem(this, menu, "stationMenuMergeChunkBelow", "Merge with chunk below")
             verify(above.enabled, "the chunk above ends with the tie station A2")
             verify(!below.enabled, "the last chunk has no chunk below it")
 
-            closeMenu(menu)
+            surveyTableId.closeMenu(this, menu)
             above.triggered()
 
             tryCompare(context.trip, "chunkCount", 1)
@@ -176,10 +138,10 @@ MainWindowTest {
             const model = context.editorModel
             const row = shotRow(context, context.chunk, 0)
 
-            let menu = openMenu(context, row, SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
-            let below = mergeItem(menu, "shotMenuMergeChunkBelow", "Merge with chunk below")
+            let menu = surveyTableId.openMenu(this, context, row, SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
+            let below = surveyTableId.menuItem(this, menu, "shotMenuMergeChunkBelow", "Merge with chunk below")
             verify(below.enabled, "the tie matches before the rename")
-            closeMenu(menu)
+            surveyTableId.closeMenu(this, menu)
 
             // The menu's loader stays built, so reopening it must ask again
             const lowerTieRow = stationRow(context, context.lower, 0)
@@ -187,10 +149,10 @@ MainWindowTest {
             tryVerify(() => context.lower.data(SurveyChunk.StationNameRole, 0) === "B2",
                       5000, "the lower chunk should start at B2")
 
-            menu = openMenu(context, row, SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
-            below = mergeItem(menu, "shotMenuMergeChunkBelow", "Merge with chunk below")
+            menu = surveyTableId.openMenu(this, context, row, SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
+            below = surveyTableId.menuItem(this, menu, "shotMenuMergeChunkBelow", "Merge with chunk below")
             verify(!below.enabled, "A2 and B2 are different names")
-            closeMenu(menu)
+            surveyTableId.closeMenu(this, menu)
 
             compare(context.trip.chunkCount, 2)
         }

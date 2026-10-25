@@ -160,6 +160,20 @@ QQ.Loader {
                 removePreview: shotMenuLoader.removePreview
             }
 
+            MoveChunkMenuItem {
+                objectName: "shotMenuMoveChunkUp"
+                model: shotMenuLoader.model
+                chunk: dataValue.chunk
+                direction: SurveyChunk.Above
+            }
+
+            MoveChunkMenuItem {
+                objectName: "shotMenuMoveChunkDown"
+                model: shotMenuLoader.model
+                chunk: dataValue.chunk
+                direction: SurveyChunk.Below
+            }
+
             RemoveChunkMenuItem {
                 objectName: "shotMenuRemoveChunk"
                 chunk: dataValue.chunk

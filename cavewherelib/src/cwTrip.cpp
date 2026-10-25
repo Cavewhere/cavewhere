@@ -458,6 +458,27 @@ void cwTrip::mergeChunks(int upperIndex)
     removeChunks(upperIndex + 1, upperIndex + 1);
 }
 
+bool cwTrip::canMoveChunk(int from, int to) const
+{
+    const auto inRange = [this](int i) { return i >= 0 && i < Chunks.size(); };
+    return from != to && inRange(from) && inRange(to);
+}
+
+/**
+ * Moves the chunk at \a from so it sits at \a to afterward, the way QList::move
+ * does. The chunk itself is unchanged
+ */
+void cwTrip::moveChunk(int from, int to)
+{
+    if(!canMoveChunk(from, to)) {
+        return;
+    }
+
+    emit chunksAboutToBeMoved(from, to);
+    Chunks.move(from, to);
+    emit chunksMoved(from, to);
+}
+
 /**
   \brief Set chunks for the group
 

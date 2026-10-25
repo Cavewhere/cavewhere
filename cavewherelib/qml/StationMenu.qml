@@ -229,6 +229,20 @@ QQ.Loader {
                 removePreview: stationMenuLoader.removePreview
             }
 
+            MoveChunkMenuItem {
+                objectName: "stationMenuMoveChunkUp"
+                model: stationMenuLoader.model
+                chunk: dataValue.chunk
+                direction: SurveyChunk.Above
+            }
+
+            MoveChunkMenuItem {
+                objectName: "stationMenuMoveChunkDown"
+                model: stationMenuLoader.model
+                chunk: dataValue.chunk
+                direction: SurveyChunk.Below
+            }
+
             RemoveChunkMenuItem {
                 objectName: "stationMenuRemoveChunk"
                 chunk: dataValue.chunk

@@ -225,6 +225,9 @@ station. Any LRUD it lacks comes from the lower copy, and the lower copy's
 splays get added to its own. Hover the item and CaveWhere strikes through the
 block that goes away. A merge has no undo either.
 
+**Move chunk up** and **Move chunk down** swap a block with its neighbor in the
+trip, and the cell you were on keeps the focus.
+
 ## Exclude a distance from the total
 
 Select a Distance cell and a caret button appears in its top-right corner, only

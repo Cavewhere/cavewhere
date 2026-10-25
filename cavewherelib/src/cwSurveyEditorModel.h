@@ -135,6 +135,10 @@ public:
     Q_INVOKABLE bool canMergeWithBelow(cwSurveyChunk* chunk) const;
     Q_INVOKABLE void mergeWithAbove(cwSurveyChunk* chunk);
     Q_INVOKABLE void mergeWithBelow(cwSurveyChunk* chunk);
+    Q_INVOKABLE bool canMoveChunkUp(cwSurveyChunk* chunk) const;
+    Q_INVOKABLE bool canMoveChunkDown(cwSurveyChunk* chunk) const;
+    Q_INVOKABLE void moveChunkUp(cwSurveyChunk* chunk);
+    Q_INVOKABLE void moveChunkDown(cwSurveyChunk* chunk);
 
 
     QHash<int, QByteArray> roleNames() const;
@@ -222,6 +226,7 @@ private:
 
     //For bookkeeping on row removal
     RemoveToken m_removeToken;
+    bool m_moveRowsStarted = false;
 
     enum TrimType {
         FullTrim,
@@ -235,6 +240,7 @@ private:
 
     SplitPoint splitPointAt(const cwSurveyEditorCellIndex& cell) const;
     cwSurveyChunk* neighborChunk(cwSurveyChunk* chunk, int step) const;
+    void moveChunkBy(cwSurveyChunk* chunk, int step);
     bool canMergePair(cwSurveyChunk* upper, cwSurveyChunk* lower) const;
     void mergePair(cwSurveyChunk* upper, cwSurveyChunk* lower);
 

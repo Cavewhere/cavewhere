@@ -60,47 +60,14 @@ MainWindowTest {
                         context.editorModel.rowIndex(chunk, -1, SurveyEditorRowIndex.TitleRow))
         }
 
-        function cell(context, row, cellRole) {
-            const item = surveyTableId.rowItem(this, context, row)
-            let found = null
-            tryVerify(() => {
-                found = findChild(item, "dataBox." + row + "." + cellRole)
-                return found !== null
-            }, 5000, "row " + row + " should have cell " + cellRole)
-            return found
-        }
-
-        // Right-clicks the cell and returns its menu once the loader has built it
-        function openMenu(context, row, cellRole, loaderName) {
-            const cellItem = cell(context, row, cellRole)
-            mouseClick(cellItem, cellItem.width / 2, cellItem.height / 2, Qt.RightButton)
-
-            const loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + cellRole
-                    + "->" + loaderName
-            let loader = null
-            tryVerify(() => {
-                loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
-                return loader !== null && loader.item !== null
-            }, 5000, loaderName + " should build its menu")
-            tryVerify(() => loader.item.opened, 5000, loaderName + " should be open")
-            return loader.item
-        }
-
-        function splitItem(menu, objectName) {
-            const item = findChild(menu, objectName)
-            verify(item !== null, "the menu should offer " + objectName)
-            compare(item.text, "Split chunk here")
-            return item
-        }
-
         function test_shotMenuSplitsTheChunk() {
             const context = gotoSurveyTable()
             const model = context.editorModel
             compare(context.trip.chunkCount, 1)
 
-            const menu = openMenu(context, shotRow(context, splitShot),
-                                  SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
-            const item = splitItem(menu, "shotMenuSplitChunk")
+            const menu = surveyTableId.openMenu(this, context, shotRow(context, splitShot),
+                                                SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
+            const item = surveyTableId.menuItem(this, menu, "shotMenuSplitChunk", "Split chunk here")
             verify(item.enabled, "a shot past the first should be a split point")
 
             menu.close()
@@ -122,9 +89,9 @@ MainWindowTest {
         function test_shotMenuSplitIsDisabledOnTheFirstShot() {
             const context = gotoSurveyTable()
 
-            const menu = openMenu(context, shotRow(context, 0),
-                                  SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
-            const item = splitItem(menu, "shotMenuSplitChunk")
+            const menu = surveyTableId.openMenu(this, context, shotRow(context, 0),
+                                                SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
+            const item = surveyTableId.menuItem(this, menu, "shotMenuSplitChunk", "Split chunk here")
             verify(!item.enabled, "splitting at the first shot would leave an empty chunk")
 
             // A split point exists further down, so the item is disabled for
@@ -138,9 +105,9 @@ MainWindowTest {
         function test_stationMenuSplitsAtTheShotBelow() {
             const context = gotoSurveyTable()
 
-            const menu = openMenu(context, surveyTableId.stationRow(context, splitShot),
-                                  SurveyEditorCellIndex.StationNameCell, "stationMenuLoader")
-            const item = splitItem(menu, "stationMenuSplitChunk")
+            const menu = surveyTableId.openMenu(this, context, surveyTableId.stationRow(context, splitShot),
+                                                SurveyEditorCellIndex.StationNameCell, "stationMenuLoader")
+            const item = surveyTableId.menuItem(this, menu, "stationMenuSplitChunk", "Split chunk here")
             verify(item.enabled, "A2 has a shot below it to split at")
 
             menu.close()
@@ -153,8 +120,8 @@ MainWindowTest {
 
         function test_splitPreviewDrawsADividerUnderTheShot() {
             const context = gotoSurveyTable()
-            const distanceCell = cell(context, shotRow(context, splitShot),
-                                      SurveyEditorCellIndex.ShotDistanceCell)
+            const distanceCell = surveyTableId.cell(this, context, shotRow(context, splitShot),
+                                                    SurveyEditorCellIndex.ShotDistanceCell)
             const preview = distanceCell.removePreview
             verify(preview !== null)
 

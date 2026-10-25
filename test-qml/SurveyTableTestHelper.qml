@@ -102,4 +102,42 @@ QQ.QtObject {
         }, 5000, "row " + row + " should have a delegate")
         return item
     }
+
+    function cell(testCase, context, row, cellRole) {
+        const item = rowItem(testCase, context, row)
+        let found = null
+        testCase.tryVerify(() => {
+            found = testCase.findChild(item, "dataBox." + row + "." + cellRole)
+            return found !== null
+        }, 5000, "row " + row + " should have cell " + cellRole)
+        return found
+    }
+
+    // Right-clicks the cell and returns its menu once the loader has built it
+    function openMenu(testCase, context, row, cellRole, loaderName) {
+        const cellItem = cell(testCase, context, row, cellRole)
+        testCase.mouseClick(cellItem, cellItem.width / 2, cellItem.height / 2, Qt.RightButton)
+
+        const loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + cellRole
+                + "->" + loaderName
+        let loader = null
+        testCase.tryVerify(() => {
+            loader = ObjectFinder.findObjectByChain(helperId.mainWindow, loaderPath)
+            return loader !== null && loader.item !== null
+        }, 5000, loaderName + " should build its menu")
+        testCase.tryVerify(() => loader.item.opened, 5000, loaderName + " should be open")
+        return loader.item
+    }
+
+    function closeMenu(testCase, menu) {
+        menu.close()
+        testCase.tryVerify(() => !menu.visible, 5000, "the menu should close")
+    }
+
+    function menuItem(testCase, menu, objectName, text) {
+        const item = testCase.findChild(menu, objectName)
+        testCase.verify(item !== null, "the menu should offer " + objectName)
+        testCase.compare(item.text, text)
+        return item
+    }
 }

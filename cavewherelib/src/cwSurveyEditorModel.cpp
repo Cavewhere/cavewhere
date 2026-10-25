@@ -46,6 +46,9 @@ cwSurveyEditorModel::cwSurveyEditorModel()
     connect(this, &QAbstractItemModel::modelReset, this, [this]() {
         syncFocusedCellSignals();
     });
+    connect(this, &QAbstractItemModel::rowsMoved, this, [this]() {
+        syncFocusedCellSignals();
+    });
 }
 
 void cwSurveyEditorModel::disconnectChunkSignals(cwSurveyChunk* chunk)
@@ -320,6 +323,25 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                         Q_UNUSED(begin);
                         Q_UNUSED(end);
                         endRemoveRows();
+                    });
+
+            // Rows are counted in the order before the move, so this runs on the about-to signal
+            connect(m_trip, &cwTrip::chunksAboutToBeMoved, this,
+                    [this, modelRowRange](int from, int to) {
+                        const auto source = modelRowRange(from, from);
+                        const auto target = modelRowRange(to, to);
+                        const int destination = to > from ? target.end + 1 : target.begin;
+                        m_moveRowsStarted = beginMoveRows(QModelIndex(), source.begin, source.end,
+                                                          QModelIndex(), destination);
+                        Q_ASSERT(m_moveRowsStarted);
+                    });
+
+            connect(m_trip, &cwTrip::chunksMoved, this,
+                    [this]() {
+                        if(m_moveRowsStarted) {
+                            m_moveRowsStarted = false;
+                            endMoveRows();
+                        }
                     });
 
             connect(m_trip, &cwTrip::parentCaveChanged, this,
@@ -1203,6 +1225,38 @@ void cwSurveyEditorModel::mergeWithAbove(cwSurveyChunk* chunk)
 void cwSurveyEditorModel::mergeWithBelow(cwSurveyChunk* chunk)
 {
     mergePair(chunk, neighborChunk(chunk, 1));
+}
+
+bool cwSurveyEditorModel::canMoveChunkUp(cwSurveyChunk* chunk) const
+{
+    return neighborChunk(chunk, -1) != nullptr;
+}
+
+bool cwSurveyEditorModel::canMoveChunkDown(cwSurveyChunk* chunk) const
+{
+    return neighborChunk(chunk, 1) != nullptr;
+}
+
+void cwSurveyEditorModel::moveChunkUp(cwSurveyChunk* chunk)
+{
+    moveChunkBy(chunk, -1);
+}
+
+void cwSurveyEditorModel::moveChunkDown(cwSurveyChunk* chunk)
+{
+    moveChunkBy(chunk, 1);
+}
+
+void cwSurveyEditorModel::moveChunkBy(cwSurveyChunk* chunk, int step)
+{
+    if(chunk == nullptr || m_trip.isNull()) {
+        return;
+    }
+
+    const int from = m_trip->chunks().indexOf(chunk);
+    if(m_trip->canMoveChunk(from, from + step)) {
+        m_trip->moveChunk(from, from + step);
+    }
 }
 
 /**

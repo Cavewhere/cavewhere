@@ -48,6 +48,18 @@ inline QList<cwStation> namedStations(const QStringList& names)
     return stations;
 }
 
+//A new chunk of the named stations with readings on every shot
+inline cwSurveyChunk* chunkWithNames(const QStringList& names)
+{
+    auto chunk = new cwSurveyChunk();
+    QList<cwShot> shots;
+    for(int i = 1; i < names.size(); ++i) {
+        shots.append(readingShot());
+    }
+    chunk->setData(cwSurveyChunkData{QUuid::createUuid(), namedStations(names), shots});
+    return chunk;
+}
+
 inline QStringList stationNames(const cwSurveyChunk* chunk)
 {
     QStringList names;

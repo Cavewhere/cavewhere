@@ -13,9 +13,16 @@
 #include "cwProject.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwRootData.h"
+#include "cwSaveLoad.h"
+#include "cwFutureManagerModel.h"
+#include "Account.h"
+#include <asyncfuture.h>
 
 //Qt includes
+#include <QCoreApplication>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 
 //Test includes
 #include "SpyChecker.h"
@@ -2289,4 +2296,298 @@ TEST_CASE("cwSurveyEditorModel merging cancels a splay move from the lower chunk
 
     CHECK(fixture.trip.chunkCount() == 1);
     CHECK_FALSE(fixture.model.splayMoveActive());
+}
+
+namespace {
+
+/**
+ * Three chunks in a trip, A1 to A3, then B1 to B2, then C1 to C3, shown in the
+ * editor with the keyboard on A1. A carries the virtual rows, so its rows are
+ * the title, three stations, two shots and two virtual rows.
+ */
+struct EditorMoveFixture : EditorTripFixture {
+    EditorMoveFixture()
+        : a(chunkWithNames({"A1", "A2", "A3"})),
+          b(chunkWithNames({"B1", "B2"})),
+          c(chunkWithNames({"C1", "C2", "C3"}))
+    {
+        trip.addChunk(a);
+        trip.addChunk(b);
+        trip.addChunk(c);
+        show(a);
+    }
+
+    int titleRow(cwSurveyChunk* inChunk) const
+    {
+        return model.toModelRow(cwSurveyEditorRowIndex(inChunk, -1, cwSurveyEditorRowIndex::TitleRow));
+    }
+
+    int splayRow(cwSurveyChunk* inChunk, int stationIndex, int splayIndex) const
+    {
+        return model.toModelRow(cwSurveyEditorRowIndex(inChunk, stationIndex, splayIndex, cwSurveyEditorRowIndex::SplayRow));
+    }
+
+    cwSurveyChunk* chunkAt(int row) const
+    {
+        return rowData(row, cwSurveyEditorModel::ChunkRole).value<cwSurveyChunk*>();
+    }
+
+    QString stationNameAtRow(int row) const
+    {
+        return rowData(row, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value();
+    }
+
+    cwSurveyChunk* a;
+    cwSurveyChunk* b;
+    cwSurveyChunk* c;
+};
+
+constexpr int kFocusedARows = 8;
+constexpr int kBRows = 4;
+constexpr int kCRows = 6;
+constexpr int kMoveFixtureRows = kFocusedARows + kBRows + kCRows;
+
+//The one rowsMoved a move announces, read as start, end and destination rows
+struct AnnouncedMove {
+    int start = -1;
+    int end = -1;
+    int destination = -1;
+    bool rootParents = false;
+
+    bool operator==(const AnnouncedMove& other) const = default;
+};
+
+AnnouncedMove announcedMove(const QSignalSpy& spy)
+{
+    REQUIRE(spy.size() == 1);
+    const auto call = spy.at(0);
+    return AnnouncedMove {
+        call.at(1).toInt(),
+        call.at(2).toInt(),
+        call.at(4).toInt(),
+        !call.at(0).toModelIndex().isValid() && !call.at(3).toModelIndex().isValid()
+    };
+}
+
+}
+
+TEST_CASE("cwSurveyEditorModel moving a chunk announces its rows as one move",
+          "[cwSurveyEditorModel][MoveChunk]")
+{
+    EditorMoveFixture fixture;
+    REQUIRE(fixture.model.rowCount() == kMoveFixtureRows);
+    REQUIRE(fixture.hasVirtualRows(fixture.a));
+
+    QSignalSpy movedSpy(&fixture.model, &QAbstractItemModel::rowsMoved);
+    QSignalSpy insertedSpy(&fixture.model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy removedSpy(&fixture.model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy resetSpy(&fixture.model, &QAbstractItemModel::modelReset);
+
+    SECTION("Down: A's title row through its virtual rows land below B") {
+        fixture.model.moveChunkDown(fixture.a);
+
+        REQUIRE(fixture.trip.chunks() == QList<cwSurveyChunk*>({fixture.b, fixture.a, fixture.c}));
+        CHECK(announcedMove(movedSpy) == AnnouncedMove {0, kFocusedARows - 1, kFocusedARows + kBRows, true});
+
+        //B's rows come first now, and A's read A
+        CHECK(fixture.chunkAt(0) == fixture.b);
+        CHECK(fixture.stationNameAtRow(1) == QStringLiteral("B1"));
+        CHECK(fixture.chunkAt(kBRows) == fixture.a);
+        CHECK(fixture.stationNameAtRow(kBRows + 1) == QStringLiteral("A1"));
+        CHECK(fixture.titleRow(fixture.a) == kBRows);
+        CHECK(fixture.hasVirtualRows(fixture.a));
+    }
+
+    SECTION("Up: B's rows land above A") {
+        fixture.model.moveChunkUp(fixture.b);
+
+        REQUIRE(fixture.trip.chunks() == QList<cwSurveyChunk*>({fixture.b, fixture.a, fixture.c}));
+        CHECK(announcedMove(movedSpy) == AnnouncedMove {kFocusedARows, kFocusedARows + kBRows - 1, 0, true});
+
+        CHECK(fixture.chunkAt(0) == fixture.b);
+        CHECK(fixture.stationRow(fixture.b, 1) == 3);
+        CHECK(fixture.stationNameAtRow(3) == QStringLiteral("B2"));
+        CHECK(fixture.chunkAt(kBRows) == fixture.a);
+        CHECK(fixture.titleRow(fixture.c) == kFocusedARows + kBRows);
+    }
+
+    CHECK(insertedSpy.isEmpty());
+    CHECK(removedSpy.isEmpty());
+    CHECK(resetSpy.isEmpty());
+    fixture.checkRowCount(kMoveFixtureRows);
+}
+
+TEST_CASE("cwSurveyEditorModel an open splay cluster moves with its chunk",
+          "[cwSurveyEditorModel][MoveChunk]")
+{
+    EditorMoveFixture fixture;
+    fixture.b->setStationSplays(1, {splayWithDistance(QStringLiteral("1")), splayWithDistance(QStringLiteral("2"))});
+    fixture.model.toggleSplaysExpanded(cwSurveyEditorRowIndex(fixture.b, 1, cwSurveyEditorRowIndex::StationRow));
+
+    //Two splays and the blank row under them
+    constexpr int kClusterRows = 3;
+    fixture.checkRowCount(kMoveFixtureRows + kClusterRows);
+
+    QSignalSpy movedSpy(&fixture.model, &QAbstractItemModel::rowsMoved);
+
+    fixture.model.moveChunkUp(fixture.b);
+
+    REQUIRE(fixture.trip.chunk(0) == fixture.b);
+    CHECK(announcedMove(movedSpy) == AnnouncedMove {kFocusedARows, kFocusedARows + kBRows + kClusterRows - 1, 0, true});
+
+    //Title, B1, the shot, B2, and then B2's splays
+    const int b2Row = 3;
+    CHECK(fixture.stationRow(fixture.b, 1) == b2Row);
+    CHECK(fixture.splayRow(fixture.b, 1, 0) == b2Row + 1);
+    CHECK(fixture.splayRow(fixture.b, 1, 1) == b2Row + 2);
+    CHECK(fixture.chunkAt(b2Row + 1) == fixture.b);
+    CHECK(fixture.model.index(b2Row).data(cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
+    CHECK(fixture.titleRow(fixture.a) == kBRows + kClusterRows);
+    fixture.checkRowCount(kMoveFixtureRows + kClusterRows);
+}
+
+TEST_CASE("cwSurveyEditorModel focus follows a moved chunk",
+          "[cwSurveyEditorModel][MoveChunk][focus]")
+{
+    EditorMoveFixture fixture;
+
+    SECTION("Focus inside the moved chunk") {
+        //B takes the virtual rows from A: A is six rows, B is six
+        fixture.model.setFocusedCell(fixture.cell(fixture.b, 1, cwSurveyEditorCellIndex::StationNameCell));
+        REQUIRE(fixture.hasVirtualRows(fixture.b));
+        REQUIRE(fixture.model.focusedRow() == 6 + 3);
+        fixture.rowTally.restart();
+
+        QSignalSpy focusedRowSpy(&fixture.model, &cwSurveyEditorModel::focusedRowChanged);
+        QSignalSpy focusedRoleSpy(&fixture.model, &cwSurveyEditorModel::focusedRoleChanged);
+
+        fixture.model.moveChunkUp(fixture.b);
+
+        REQUIRE(fixture.trip.chunk(0) == fixture.b);
+        const auto focused = fixture.model.focusedRowIndex();
+        CHECK(focused.chunk() == fixture.b);
+        CHECK(focused.indexInChunk() == 1);
+        CHECK(focused.rowType() == cwSurveyEditorRowIndex::StationRow);
+        CHECK(fixture.model.focusedRole() == static_cast<int>(cwSurveyEditorCellIndex::StationNameCell));
+        CHECK(fixture.model.focusedRow() == 3);
+        CHECK(fixture.model.focusedRow() == fixture.stationRow(fixture.b, 1));
+        CHECK(focusedRowSpy.count() == 1);
+        CHECK(focusedRoleSpy.count() == 0);
+        CHECK(fixture.hasVirtualRows(fixture.b));
+        fixture.checkRowCount(kMoveFixtureRows);
+    }
+
+    SECTION("Focus in a chunk the move pushes down") {
+        //A3 sits on row 5, under A's title, A1, a shot, A2 and a shot
+        fixture.model.setFocusedCell(fixture.cell(fixture.a, 2, cwSurveyEditorCellIndex::StationNameCell));
+        REQUIRE(fixture.model.focusedRow() == 5);
+
+        QSignalSpy focusedRowSpy(&fixture.model, &cwSurveyEditorModel::focusedRowChanged);
+
+        fixture.model.moveChunkUp(fixture.b);
+
+        REQUIRE(fixture.trip.chunk(0) == fixture.b);
+        const auto focused = fixture.model.focusedRowIndex();
+        CHECK(focused.chunk() == fixture.a);
+        CHECK(focused.indexInChunk() == 2);
+        CHECK(fixture.model.focusedRow() == kBRows + 5);
+        CHECK(focusedRowSpy.count() == 1);
+        fixture.checkRowCount(kMoveFixtureRows);
+    }
+}
+
+TEST_CASE("cwSurveyEditorModel canMoveChunk answers only for a chunk with a neighbor that way",
+          "[cwSurveyEditorModel][MoveChunk]")
+{
+    EditorMoveFixture fixture;
+
+    //The middle chunk moves both ways, so the refusals below are the rule and not the stub
+    REQUIRE(fixture.model.canMoveChunkUp(fixture.b));
+    REQUIRE(fixture.model.canMoveChunkDown(fixture.b));
+    CHECK(fixture.model.canMoveChunkDown(fixture.a));
+    CHECK(fixture.model.canMoveChunkUp(fixture.c));
+
+    CHECK_FALSE(fixture.model.canMoveChunkUp(fixture.a));
+    CHECK_FALSE(fixture.model.canMoveChunkDown(fixture.c));
+    CHECK_FALSE(fixture.model.canMoveChunkUp(nullptr));
+    CHECK_FALSE(fixture.model.canMoveChunkDown(nullptr));
+
+    QSignalSpy movedSpy(&fixture.model, &QAbstractItemModel::rowsMoved);
+
+    SECTION("The ends stay put") {
+        fixture.model.moveChunkUp(fixture.a);
+        fixture.model.moveChunkDown(fixture.c);
+        fixture.model.moveChunkUp(nullptr);
+        CHECK(fixture.trip.chunks() == QList<cwSurveyChunk*>({fixture.a, fixture.b, fixture.c}));
+        CHECK(movedSpy.isEmpty());
+    }
+
+    SECTION("A chunk from another trip has no place here") {
+        EditorMoveFixture other;
+        CHECK_FALSE(fixture.model.canMoveChunkUp(other.b));
+        CHECK_FALSE(fixture.model.canMoveChunkDown(other.b));
+        fixture.model.moveChunkUp(other.b);
+        CHECK(fixture.trip.chunks() == QList<cwSurveyChunk*>({fixture.a, fixture.b, fixture.c}));
+        CHECK(other.trip.chunks() == QList<cwSurveyChunk*>({other.a, other.b, other.c}));
+        CHECK(movedSpy.isEmpty());
+    }
+
+    SECTION("Without a trip nothing moves") {
+        fixture.model.setTrip(nullptr);
+        CHECK_FALSE(fixture.model.canMoveChunkUp(fixture.b));
+        CHECK_FALSE(fixture.model.canMoveChunkDown(fixture.b));
+        fixture.model.moveChunkDown(fixture.b);
+        CHECK(fixture.trip.chunks() == QList<cwSurveyChunk*>({fixture.a, fixture.b, fixture.c}));
+    }
+}
+
+TEST_CASE("cwSurveyEditorModel a moved chunk keeps its place through a save and reload",
+          "[cwSurveyEditorModel][MoveChunk][cwSaveLoad]")
+{
+    constexpr int kLoadWaitMs = 10000;
+
+    auto root = std::make_unique<cwRootData>();
+    root->account()->setName(QStringLiteral("Test User"));
+    root->account()->setEmail(QStringLiteral("test@example.com"));
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    auto* a = chunkWithNames({"A1", "A2"});
+    auto* b = chunkWithNames({"B1", "B2"});
+    auto* c = chunkWithNames({"C1", "C2"});
+    trip->addChunk(a);
+    trip->addChunk(b);
+    trip->addChunk(c);
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    REQUIRE(project->saveAs(saveDir.filePath(QStringLiteral("move-chunk-%1.cwproj")
+                                                 .arg(QCoreApplication::applicationPid()))));
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    cwSurveyEditorModel model;
+    model.setTrip(trip);
+    REQUIRE(model.canMoveChunkDown(a));
+    model.moveChunkDown(a);
+    REQUIRE(trip->chunks() == QList<cwSurveyChunk*>({b, a, c}));
+    project->waitSaveToFinish();
+
+    auto loadFuture = cwSaveLoad::loadAll(project->filename());
+    REQUIRE(AsyncFuture::waitForFinished(loadFuture, kLoadWaitMs));
+    REQUIRE_FALSE(loadFuture.result().hasError());
+
+    const auto& caves = loadFuture.result().value().region.caves;
+    REQUIRE(caves.size() == 1);
+    REQUIRE(caves.first().trips.size() == 1);
+
+    QList<QUuid> loadedOrder;
+    for(const auto& chunkData : caves.first().trips.first().chunks) {
+        loadedOrder.append(chunkData.id);
+    }
+    CHECK(loadedOrder == QList<QUuid>({b->id(), a->id(), c->id()}));
 }

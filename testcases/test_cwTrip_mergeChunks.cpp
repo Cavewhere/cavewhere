@@ -45,17 +45,6 @@ QStringList splayDistances(const cwStation& station)
     return distances;
 }
 
-cwSurveyChunk* chunkWithNames(const QStringList& names)
-{
-    auto chunk = new cwSurveyChunk();
-    QList<cwShot> shots;
-    for(int i = 1; i < names.size(); ++i) {
-        shots.append(readingShot());
-    }
-    chunk->setData(cwSurveyChunkData{QUuid::createUuid(), namedStations(names), shots});
-    return chunk;
-}
-
 /**
  * A trip of three chunks: A1 to A3, then a3 to A5, then C1 to C2. The tie
  * station is A3 in the upper chunk and a3 in the lower one. The upper copy has
