@@ -94,6 +94,7 @@ signals:
 
 private:
     void setStatus(cwSyncStatus status);
+    void composeStatus();
     void scheduleRemoteStatusRefresh(bool hasLocalChanges,
                                      const QString& remoteName,
                                      const QString& branchName,

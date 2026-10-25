@@ -201,9 +201,30 @@ namespace {
         "+proj=tmerc +lat_0=80 +lon_0=-84 +k=1 +x_0=0 +y_0=0 "
         "+datum=WGS84 +units=m +no_defs +type=crs");
 
-    //Pass A owns the first half of the progress bar and pass B the second
-    constexpr double kPassAProgressFraction = 0.10;
+    //Pass A owns about the first ninth of the progress bar and pass B about
+    //the next eight ninths; pass C owns the node estimate after them
+    constexpr double kPassAProgressFraction = 0.05;
     constexpr double kPassBProgressFraction = 0.55;
+
+    //kPassBPointWeight in the builder: pass B's share of the bar per point,
+    //where pass A's is one
+    constexpr qint64 kPassBPointWeight = 8;
+
+    //Under kChunkTargetPoints, so the build is one chunk, and big enough that
+    //pass B runs through several of its progress polls
+    constexpr int kOneChunkProgressPointCount = 1900000;
+    //A bar that moves only once per chunk shows at most one value inside pass B
+    constexpr int kMinDistinctPassBValues = 2;
+
+    //The progress range's node estimate for a chunk depth: every cell down to it
+    qint64 nodeCountEstimateFor(int depth)
+    {
+        qint64 estimate = kChildCount;
+        for(int level = 0; level < depth; level++) {
+            estimate *= kChildCount;
+        }
+        return estimate;
+    }
 
     constexpr int kCancelPollMs = 1;
 
@@ -1189,6 +1210,69 @@ TEST_CASE("cwPointOctreeBuilder: the build shows up as a job and finishes its pr
     REQUIRE(manager.rowCount() == 0);
 }
 
+TEST_CASE("cwPointOctreeBuilder: the progress range gives pass B eight times pass A's share per point",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-progress-range"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget
+    };
+
+    QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
+    REQUIRE_FALSE(waitForBuild(future).hasError());
+
+    const int depth = cwPointOctreeBuilder::chunkDepthFor(kPassagePointCount, kTwoLevelChunkTarget);
+    const qint64 expectedMaximum = qint64(kPassagePointCount)
+                                   + kPassBPointWeight * qint64(kPassagePointCount)
+                                   + nodeCountEstimateFor(depth);
+
+    CHECK(qint64(future.progressMaximum()) == expectedMaximum);
+    CHECK(future.progressValue() == future.progressMaximum());
+}
+
+TEST_CASE("cwPointOctreeBuilder: a one chunk build moves its progress bar more than once inside pass B",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-progress-steps"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kOneChunkProgressPointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path()
+    };
+
+    const int depth = cwPointOctreeBuilder::chunkDepthFor(kOneChunkProgressPointCount);
+    REQUIRE(depth == 0);
+
+    //The future keeps every value it is set to, while its progress signal is
+    //throttled, so polling the value sees each step pass B's poll loop takes
+    QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
+    QSet<int> values;
+    while(!future.isFinished()) {
+        values.insert(future.progressValue());
+        QThread::msleep(kCancelPollMs);
+    }
+    REQUIRE_FALSE(waitForBuild(future).hasError());
+
+    //Pass B sits between the end of pass A and the start of pass C's node estimate
+    const qint64 passAEnd = kOneChunkProgressPointCount;
+    const qint64 passBEnd = qint64(future.progressMaximum()) - nodeCountEstimateFor(depth);
+    const auto insidePassB = std::count_if(values.cbegin(), values.cend(), [&](int value) {
+        return qint64(value) > passAEnd && qint64(value) < passBEnd;
+    });
+
+    INFO("Distinct values inside pass B: " << insidePassB << " of " << values.size());
+    CHECK(insidePassB >= kMinDistinctPassBValues);
+}
+
 TEST_CASE("cwPointOctreeBuilder: the decode worker count never changes the bytes it writes",
           "[PointOctree][PointOctreeBuilder]") {
     QTemporaryDir tempDir;
@@ -1253,7 +1337,7 @@ TEST_CASE("cwPointOctreeBuilder: a cancel in either pass leaves no manifest and 
         .decodeWorkerCount = kEvenWorkerCount
     };
 
-    //Pass A owns the first half of the bar, so these cancel in one pass each
+    //Pass A owns about the first ninth of the bar, so these cancel in one pass each
     const double fraction = GENERATE(kPassAProgressFraction, kPassBProgressFraction);
 
     QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
@@ -1832,8 +1916,8 @@ TEST_CASE("cwPointOctreeBuilder: a cancel in the split step leaves no manifest a
 
     QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
 
-    //Pass A writes its line as the split starts and the split writes its own
-    //only once it is through, so a cancel between the two lands in the split
+    //Pass A writes its line as the split starts, so a cancel after it lands in
+    //the split
     while(!future.isFinished() && !log.hasLineContaining(QStringLiteral("build passA"))) {
         QThread::msleep(kCancelPollMs);
     }
@@ -1841,10 +1925,12 @@ TEST_CASE("cwPointOctreeBuilder: a cancel in the split step leaves no manifest a
     future.cancel();
     future.waitForFinished();
 
-    //A build that split everything before the cancel reached it proves nothing
-    //about cancelling the split, so say so
+    //A split line carries its cells= field only when it ran to the end, so a
+    //build that split everything before the cancel reached it proves nothing
+    //about cancelling the split, and says so
     REQUIRE(log.hasLineContaining(QStringLiteral("build passA")));
-    REQUIRE_FALSE(log.hasLineContaining(QStringLiteral("build split")));
+    REQUIRE(log.hasLineContaining(QStringLiteral("build split")));
+    REQUIRE_FALSE(log.hasLineContaining(QStringLiteral("cells=")));
 
     //QPromise drops a result added after the cancel, so a delivered one is the only one to check
     const QList<cwPointOctreeBuilder::Result> results = future.results();

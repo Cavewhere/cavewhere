@@ -29,6 +29,8 @@
 #include "CaveWhereLibExport.h"
 class cwRenderObject;
 class cwRenderBillboards;
+class cwRenderSpriteBillboards;
+class cwRenderTextBillboards;
 class cwCamera;
 class cwShaderDebugger;
 class cwSceneCommand;
@@ -64,15 +66,32 @@ public:
     void removeItem(cwRenderObject* item);
     void updateItem(cwRenderObject* item);
 
-    // The one billboard layer shared by every overlay in this scene (leads,
-    // station labels, future overlays). Lazily created and parented to the scene
-    // the first time it's requested. Sharing one layer means all billboards sort
-    // back-to-front together, so an overlapping lead and label can't bite each
-    // other (#538). Callers still drive its window via setWindow(); the scene
-    // doesn't know the hosting QQuickWindow. Invariant: every overlay sharing
-    // this layer must live in the same QQuickWindow — they each push setWindow()
-    // (last writer wins), which stays a no-op only while they agree.
+    // The one item billboard layer (QQuickItem content, one renderer per
+    // billboard) shared by every overlay in this scene. Lazily created and
+    // parented to the scene the first time it's requested, either directly or
+    // by textBillboardLayer(), which pulls it in to pin the draw order. An empty
+    // layer costs no per-item renderer. Sharing one layer means all its
+    // billboards sort back-to-front together (#538). Callers still drive its
+    // window via setWindow(); the scene doesn't know the hosting
+    // QQuickWindow. Invariant: every overlay sharing this layer must live in the
+    // same QQuickWindow — they each push setWindow() (last writer wins), which
+    // stays a no-op only while they agree.
     cwRenderBillboards* billboardLayer();
+
+    // The one sprite billboard layer (lead markers: one instanced draw of one
+    // shared prototype texture) shared by every overlay in this scene, mirroring
+    // billboardLayer(). Its depth follows the marker's silhouette, so the layers
+    // drawn after it blend through the marker's transparent pixels.
+    cwRenderSpriteBillboards* spriteBillboardLayer();
+
+    // The one text billboard layer (station labels) shared by every overlay in
+    // this scene, mirroring billboardLayer(). The item and sprite layers are
+    // registered before it whichever is requested first, so leads draw before
+    // labels in the Overlay pass: a label's glyphs depth-test against the lead
+    // markers already drawn, showing through their transparent pixels and hidden
+    // by their ink, and the text layer's own quad-depth post-pass clips nothing
+    // because it runs last.
+    cwRenderTextBillboards* textBillboardLayer();
 
     void setCamera(cwCamera* camera);
     cwCamera *camera() const;
@@ -174,6 +193,8 @@ private:
     // The shared billboard overlay layer (see billboardLayer()); a render object
     // parented to the scene, created on first request.
     cwRenderBillboards* m_billboardLayer = nullptr;
+    cwRenderSpriteBillboards* m_spriteBillboardLayer = nullptr;
+    cwRenderTextBillboards* m_textBillboardLayer = nullptr;
 
     // Offscreen render requests queued from the GUI thread, drained onto the
     // render thread by cwRhiScene::synchroize() (a friend). shared_ptr so the

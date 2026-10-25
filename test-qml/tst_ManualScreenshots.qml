@@ -1403,8 +1403,8 @@ MainWindowTest {
 
             let syncButton = findByName(rootId.mainWindow, "syncButton");
             verify(syncButton, "found the sync button in the link bar");
-            verify(!syncButton.hasRemote,
-                   "the demo project has no remote, so the button shows the set-up icon");
+            tryVerify(() => !syncButton.hasRemote, 5000,
+                      "the demo project has no remote, so the button shows the set-up icon");
 
             highlightOverlayId.target = syncButton;
             settle();

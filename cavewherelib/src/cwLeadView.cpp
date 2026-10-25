@@ -45,6 +45,15 @@ cwLeadView::cwLeadView(QQuickItem *parent) :
 {
 }
 
+cwLeadView::~cwLeadView()
+{
+    // The scene's layer outlives this view; release the prototype so the layer
+    // drops its subscene and texture of it.
+    if(!m_spriteLayer.isNull()) {
+        m_spriteLayer->setSprites({});
+    }
+}
+
 /**
 * @brief cwLeadView::regionModel
 * @return The regionModel that this leadView looks for leads in
@@ -425,13 +434,23 @@ QQuickItem* cwLeadView::createItem()
     item->setParent(this);
     // Q_ASSERT(item->parent() == this);
 
-    // The marker draws in the on-demand 3D pass, so its fade/visibility changes
-    // must request a frame. Mirror the label pattern: re-render the billboards
-    // when the content item's opacity or visibility changes.
-    QQuickItem* content = item->property("billboardContent").value<QQuickItem*>();
-    if(content != nullptr) {
-        connect(content, &QQuickItem::opacityChanged, this, &cwLeadView::requestBillboardRender);
-        connect(content, &QQuickItem::visibleChanged, this, &cwLeadView::requestBillboardRender);
+    // The lead's sprite instance carries the marker's opacity and effective
+    // visibility, so re-set it when either changes (a completed lead fades, a
+    // keyword filter or the view's own visibility hides it).
+    QQuickItem* marker = item->property("marker").value<QQuickItem*>();
+    if(marker != nullptr) {
+        const auto updateMarker = [this, item]() { updateMarkerBillboard(item); };
+        connect(marker, &QQuickItem::opacityChanged, this, updateMarker);
+        connect(marker, &QQuickItem::visibleChanged, this, updateMarker);
+
+        // spriteIndex is declared in QML, so its notifier is only reachable
+        // through the meta-object.
+        const QMetaObject* markerMeta = marker->metaObject();
+        const int signalIndex = markerMeta->indexOfSignal("spriteIndexChanged()");
+        if(signalIndex >= 0) {
+            const int slotIndex = staticMetaObject.indexOfSlot("markerSpriteIndexChanged()");
+            connect(marker, markerMeta->method(signalIndex), this, staticMetaObject.method(slotIndex));
+        }
     }
 
     return item;
@@ -505,13 +524,113 @@ void cwLeadView::scrapsRemoved(QModelIndex parent, int begin, int end)
 
 
 /**
+ * @brief cwLeadView::sprites
+ * @return The atlas slots every lead marker can draw, in LeadSprite order.
+ */
+QQmlListProperty<QQuickItem> cwLeadView::sprites() {
+    return QQmlListProperty<QQuickItem>(this, nullptr,
+                                        &cwLeadView::appendSprite,
+                                        &cwLeadView::spriteCount,
+                                        &cwLeadView::spriteAt,
+                                        &cwLeadView::clearSprites);
+}
+
+void cwLeadView::appendSprite(QQmlListProperty<QQuickItem>* list, QQuickItem* sprite) {
+    auto view = static_cast<cwLeadView*>(list->object);
+    view->m_sprites.append(sprite);
+    if(view->m_sprites.size() == 1 && sprite != nullptr) {
+        // Slot 0's size is the marker size LeadPoint's tap target follows.
+        connect(sprite, &QQuickItem::widthChanged, view, &cwLeadView::spriteSizeChanged);
+        connect(sprite, &QQuickItem::heightChanged, view, &cwLeadView::spriteSizeChanged);
+    }
+    view->spritesEdited();
+}
+
+qsizetype cwLeadView::spriteCount(QQmlListProperty<QQuickItem>* list) {
+    return static_cast<cwLeadView*>(list->object)->m_sprites.size();
+}
+
+QQuickItem* cwLeadView::spriteAt(QQmlListProperty<QQuickItem>* list, qsizetype index) {
+    return static_cast<cwLeadView*>(list->object)->m_sprites.at(index);
+}
+
+void cwLeadView::clearSprites(QQmlListProperty<QQuickItem>* list) {
+    auto view = static_cast<cwLeadView*>(list->object);
+    if(!view->m_sprites.isEmpty() && !view->m_sprites.at(0).isNull()) {
+        QQuickItem* sizeSource = view->m_sprites.at(0);
+        disconnect(sizeSource, &QQuickItem::widthChanged, view, &cwLeadView::spriteSizeChanged);
+        disconnect(sizeSource, &QQuickItem::heightChanged, view, &cwLeadView::spriteSizeChanged);
+    }
+    view->m_sprites.clear();
+    view->spritesEdited();
+}
+
+void cwLeadView::spritesEdited() {
+    m_spritesEdited = true;
+    // QML assigns a list as a clear plus one append per item; while the
+    // component is being created, componentComplete hands over the whole list once.
+    if(!isComponentComplete()) {
+        return;
+    }
+    pushSpritesToLayer();
+    emit spritesChanged();
+    emit spriteSizeChanged();
+}
+
+/**
+ * @brief cwLeadView::spriteSize
+ * @return Slot 0's size in logical pixels; empty without a slot.
+ */
+QSizeF cwLeadView::spriteSize() const {
+    if(m_sprites.isEmpty() || m_sprites.at(0).isNull()) {
+        return QSizeF();
+    }
+    const QQuickItem* sprite = m_sprites.at(0);
+    return QSizeF(sprite->width(), sprite->height());
+}
+
+void cwLeadView::pushSpritesToLayer() {
+    cwRenderSpriteBillboards* layer = ensureRenderSpriteBillboards();
+    if(layer == nullptr) {
+        return;
+    }
+
+    if(m_spriteLayer == layer && !m_spritesEdited) {
+        return;
+    }
+
+    if(!m_spriteLayer.isNull() && m_spriteLayer != layer) {
+        m_spriteLayer->setSprites({});
+    }
+    m_spriteLayer = layer;
+    m_spritesEdited = false;
+
+    // A destroyed sprite drops out, so the layer sees a list without nulls.
+    QList<QQuickItem*> sprites;
+    sprites.reserve(m_sprites.size());
+    for(const QPointer<QQuickItem>& sprite : std::as_const(m_sprites)) {
+        if(!sprite.isNull()) {
+            sprites.append(sprite.data());
+        }
+    }
+    layer->setSprites(sprites);
+}
+
+void cwLeadView::componentComplete() {
+    cwBillboardOverlayItem::componentComplete();
+    spritesEdited();
+}
+
+/**
 * @brief cwLeadView::repositionBillboards
 *
-* The base calls this on every scene/camera/window/visibility change. Leads have
-* a 2D hit item per lead in addition to the billboard, so we reproject through
-* updateItemPositions().
+* The base calls this on every scene/camera/window/visibility change. The sprite
+* layer may have become reachable (a scene or window arrived), so the prototype
+* is pushed first; then every lead's 2D hit item and sprite instance are
+* reprojected through updateItemPositions().
 */
 void cwLeadView::repositionBillboards() {
+    pushSpritesToLayer();
     updateItemPositions();
 }
 
@@ -519,8 +638,8 @@ void cwLeadView::repositionBillboards() {
  * @brief cwLeadView::updateItemPositions
  *
  * Projects every lead's world position to screen (placing the invisible 2D hit
- * item) and registers/updates its billboard for the occluded draw. The hit item
- * and the billboard share the camera, so the tap target sits under the marker.
+ * item) and registers/updates its sprite instance for the occluded draw. The hit
+ * item and the instance share the camera, so the tap target sits under the marker.
  */
 void cwLeadView::updateItemPositions() {
     if(camera() == nullptr || !isVisible()) {
@@ -549,9 +668,11 @@ void cwLeadView::updateItemPositions() {
 /**
  * @brief cwLeadView::addOrUpdateBillboard
  *
- * Registers (or refreshes) a lead's question-mark marker as a depth-occluded
- * billboard. The content is the LeadPoint's billboardContent sub-item, so the
- * 2D QuoteBox popup (a sibling) stays an un-occluded overlay.
+ * Registers (or refreshes) a lead's sprite instance for the occluded draw. The
+ * LeadPoint's marker item supplies the instance's opacity and effective
+ * visibility: a completed lead fades, and a lead hidden by a keyword filter or
+ * by this view hiding stays in the layer but out of the draw. The 2D QuoteBox
+ * popup is a sibling of the marker, so it stays an un-occluded overlay.
  */
 void cwLeadView::addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* item, const QVector3D& worldPosition) {
     if(item == nullptr) {
@@ -561,8 +682,47 @@ void cwLeadView::addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* 
         return;
     }
 
-    QQuickItem* content = item->property("billboardContent").value<QQuickItem*>();
-    setBillboard(entry.billboardHandles.at(index), content, worldPosition, kLeadDepthBias);
+    QQuickItem* marker = item->property("marker").value<QQuickItem*>();
+    const float opacity = marker != nullptr ? float(marker->opacity()) : 1.0f;
+    const bool visible = marker != nullptr ? marker->isVisible() : item->isVisible();
+    const QVariant spriteIndex = marker != nullptr ? marker->property("spriteIndex") : QVariant();
+    const int slot = spriteIndex.isValid() ? spriteIndex.toInt() : int(OpenSprite);
+    setSpriteBillboard(entry.billboardHandles.at(index), worldPosition, kLeadDepthBias, opacity, visible, slot);
+}
+
+/**
+ * @brief cwLeadView::updateMarkerBillboard
+ *
+ * Re-sets one lead's instance from its marker. The LeadPoint's scrap and
+ * pointIndex properties locate its entry and handle; an item already removed
+ * from its scrap (teardown in flight) is left alone.
+ */
+void cwLeadView::updateMarkerBillboard(QQuickItem* item) {
+    auto positionItem = qobject_cast<cwPositionItem*>(item);
+    if(positionItem == nullptr) {
+        return;
+    }
+
+    cwScrap* scrap = item->property("scrap").value<cwScrap*>();
+    const auto entryIt = m_leadItems.find(scrap);
+    if(entryIt == m_leadItems.end()) {
+        return;
+    }
+
+    ScrapEntry& entry = entryIt->second;
+    const int index = item->property("pointIndex").toInt();
+    if(index < 0 || index >= entry.items.size() || entry.items.at(index) != item) {
+        return;
+    }
+
+    addOrUpdateBillboard(entry, index, item, positionItem->position3D());
+}
+
+void cwLeadView::markerSpriteIndexChanged() {
+    auto marker = qobject_cast<QQuickItem*>(sender());
+    if(marker != nullptr) {
+        updateMarkerBillboard(marker->parentItem());
+    }
 }
 
 /**

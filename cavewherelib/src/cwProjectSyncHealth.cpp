@@ -1,17 +1,24 @@
 #include "cwProjectSyncHealth.h"
 #include "cwRemoteAuthProvider.h"
+#include "cwProfileLog.h"
+#include "cwProfilePhase.h"
 
 #include "GitRemoteInfo.h"
 #include "GitRepository.h"
 
 #include "asyncfuture.h"
 #include <algorithm>
+#include <chrono>
+
+namespace {
+constexpr std::chrono::minutes kPollInterval{5};
+}
 
 cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
     QObject(parent),
     m_remoteStatusRestarter(this)
 {
-    m_pollTimer.setInterval(5 * 60 * 1000);
+    m_pollTimer.setInterval(kPollInterval);
     connect(&m_pollTimer, &QTimer::timeout, this, &cwProjectSyncHealth::refresh);
 
     // The Restarter coalesces a burst of refresh() calls into a single run and
@@ -83,7 +90,7 @@ void cwProjectSyncHealth::setRemoteName(const QString& name)
     }
     m_remoteName = name;
     emit remoteNameChanged();
-    refresh();
+    composeStatus();
 }
 
 QQuickGit::GitRepository* cwProjectSyncHealth::repository() const
@@ -116,7 +123,7 @@ void cwProjectSyncHealth::setRepository(QQuickGit::GitRepository* repository)
         m_modifiedCountConnection = connect(m_repository,
                                             &QQuickGit::GitRepository::modifiedFileCountChanged,
                                             this,
-                                            &cwProjectSyncHealth::refresh);
+                                            &cwProjectSyncHealth::composeStatus);
         m_headBranchConnection = connect(m_repository,
                                          &QQuickGit::GitRepository::headBranchNameChanged,
                                          this,
@@ -146,6 +153,31 @@ void cwProjectSyncHealth::refresh()
 {
     if (m_repository == nullptr) {
         m_pollTimer.stop();
+        composeStatus();
+        return;
+    }
+
+    if (!m_pollTimer.isActive()) {
+        m_pollTimer.start();
+    }
+
+    cwProfilePhase walk(lcProfileLoad(), QStringLiteral("project"), QStringLiteral("gitStatus"));
+    const QPointer<QQuickGit::GitRepository> requested = m_repository;
+    AsyncFuture::observe(m_repository->checkStatusAsync())
+        .context(this, [this, requested, walk]() mutable {
+            // The walk belongs to a repository that has since been replaced.
+            if (requested.isNull() || requested != m_repository) {
+                return;
+            }
+            walk.addField(QStringLiteral("modified"), m_repository->modifiedFileCount());
+            walk.finish();
+            composeStatus();
+        });
+}
+
+void cwProjectSyncHealth::composeStatus()
+{
+    if (m_repository == nullptr) {
         setStatus(cwSyncStatus{
             .m_hasLocalChanges = false,
             .m_aheadCount = 0,
@@ -155,11 +187,6 @@ void cwProjectSyncHealth::refresh()
         return;
     }
 
-    if (!m_pollTimer.isActive()) {
-        m_pollTimer.start();
-    }
-
-    m_repository->checkStatus();
     const bool localChanges = m_repository->modifiedFileCount() > 0;
     const QVector<QQuickGit::GitRemoteInfo> configuredRemotes = m_repository->remotes();
     if (configuredRemotes.isEmpty()) {

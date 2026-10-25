@@ -10,10 +10,11 @@
 
 //Qt includes
 #include <QQuickItem>
-#include <QQmlComponent>
 #include <QMatrix4x4>
 #include <QSizeF>
 #include <QQmlEngine>
+#include <QFont>
+#include <QColor>
 
 //Our includes
 #include "cwLabel3dItem.h"
@@ -28,12 +29,33 @@ class cwLabel3dView : public cwBillboardOverlayItem
     Q_OBJECT
     QML_NAMED_ELEMENT(Label3dView)
 
+    // The station label style, forwarded to the shared text layer. The layer
+    // holds one style per scene, so the last label view to set it wins; this is
+    // consistent only while every label view in a scene uses the same style.
+    Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged)
+    Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
+    Q_PROPERTY(QColor outlineColor READ outlineColor WRITE setOutlineColor NOTIFY outlineColorChanged)
+
 public:
     explicit cwLabel3dView(QQuickItem *parent = 0);
     ~cwLabel3dView();
 
     void addGroup(cwLabel3dGroup* group);
     void removeGroup(cwLabel3dGroup* group);
+
+    QFont font() const;
+    void setFont(const QFont& font);
+
+    QColor color() const;
+    void setColor(const QColor& color);
+
+    QColor outlineColor() const;
+    void setOutlineColor(const QColor& outlineColor);
+
+signals:
+    void fontChanged();
+    void colorChanged();
+    void outlineColorChanged();
 
 public slots:
 
@@ -43,17 +65,19 @@ protected:
 private:
     QSet<cwLabel3dGroup*> m_labelGroups;
 
-    //For rendering labels
-    QQmlComponent* m_component;
     cwCollisionRectGrid m_labelGrid;
     QSizeF m_averageLabelSize = QSizeF(80.0, 14.0);
 
+    QFont m_font;
+    QColor m_color = Qt::white;
+    QColor m_outlineColor = Qt::black;
+
     void updateGroup(cwLabel3dGroup* group);
     void updateGroupPositions(cwLabel3dGroup* group);
-    QQuickItem* labelItem(cwLabel3dGroup* group, int labelIndex);
-    QQuickItem* acquireLabelItem(cwLabel3dGroup* group, int labelIndex);
-    void releaseLabelItem(cwLabel3dGroup* group, int labelIndex);
-    void addOrUpdateBillboard(cwLabel3dGroup* group, int labelIndex, QQuickItem* item);
+    cwRenderTextBillboards* textLayer();
+    bool applyStyle();
+    void restyle();
+    void releaseBillboards();
 private slots:
     void updatePositions();
 

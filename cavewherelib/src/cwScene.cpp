@@ -10,6 +10,8 @@
 #include "cwScene.h"
 #include "cwRenderObject.h"
 #include "cwRenderBillboards.h"
+#include "cwRenderSpriteBillboards.h"
+#include "cwRenderTextBillboards.h"
 #include "cwDebug.h"
 #include "cwRHIObject.h"
 #include "cwCamera.h"
@@ -115,6 +117,28 @@ cwRenderBillboards* cwScene::billboardLayer()
         m_billboardLayer->setScene(this);
     }
     return m_billboardLayer;
+}
+
+cwRenderSpriteBillboards* cwScene::spriteBillboardLayer()
+{
+    if (m_spriteBillboardLayer == nullptr) {
+        m_spriteBillboardLayer = new cwRenderSpriteBillboards(this);
+        m_spriteBillboardLayer->setScene(this);
+    }
+    return m_spriteBillboardLayer;
+}
+
+cwRenderTextBillboards* cwScene::textBillboardLayer()
+{
+    if (m_textBillboardLayer == nullptr) {
+        // Registration order is gather order, so the item and sprite layers are
+        // registered first to draw before this one.
+        billboardLayer();
+        spriteBillboardLayer();
+        m_textBillboardLayer = new cwRenderTextBillboards(this);
+        m_textBillboardLayer->setScene(this);
+    }
+    return m_textBillboardLayer;
 }
 
 /**

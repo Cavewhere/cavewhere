@@ -20,6 +20,9 @@
 #include "cwFutureManagerModel.h"
 #include "cwRootData.h"
 #include "cwUpdatable.h"
+#include "cwCamera.h"
+#include "cwScene.h"
+#include "cwRenderTextBillboards.h"
 
 //Test helpers
 #include "ExternalCenterlineTestHelpers.h"
@@ -36,6 +39,10 @@
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QVector3D>
+#include <QMatrix4x4>
+#include <QQuickItem>
+#include <QQuickWindow>
+#include <QTextLayout>
 #include <algorithm>
 #include <functional>
 #include <memory>
@@ -916,4 +923,151 @@ TEST_CASE("A nested Survex source's drained labels match each trip's solved stat
     CHECK(solvedTrips >= 2 * kTreeFiles);
     CHECK(labeledGroupCount(host->labelView) == solvedTrips);
     CHECK(sortedGroupSignatures(host->labelView) == sortedTripSignatures(region));
+}
+
+namespace {
+constexpr int kLabelViewportWidth = 800;
+constexpr int kLabelViewportHeight = 600;
+
+// Meters per pixel for the ortho camera: the fixture's stations sit 10 m apart,
+// which puts them 200 px apart on screen, far enough that no two collide in the
+// declutter grid.
+constexpr double kLabelZoomScale = 0.05;
+
+// A distinct view per call (cwCamera::setViewMatrix ignores an unchanged
+// matrix), centered on @a center and looking down -z.
+QMatrix4x4 viewLookingAt(const QVector3D& center, float nudge)
+{
+    QMatrix4x4 view;
+    view.translate(-center.x() + nudge, -center.y(), -center.z());
+    return view;
+}
+
+// Centroid of every label the view holds, so the camera frames the fixture
+// wherever the solver put its stations.
+QVector3D labelCentroid(cwKeywordItemModel& keywordModel)
+{
+    QVector3D sum;
+    int count = 0;
+    for (int i = 0; i < keywordModel.rowCount(); ++i) {
+        cwLabel3dGroup* group = groupForKeywordItem(keywordModel.item(i));
+        if (group == nullptr) {
+            continue;
+        }
+        for (const cwLabel3dItem& label : group->labels()) {
+            sum += label.position();
+            ++count;
+        }
+    }
+    return count > 0 ? sum / float(count) : QVector3D();
+}
+
+QStringList placedTexts(const cwRenderTextBillboards* layer)
+{
+    QStringList texts;
+    for (const cwRenderTextBillboards::RenderSlot& slot : layer->buildRenderSlots()) {
+        texts.append(slot.layout ? slot.layout->text() : QString());
+    }
+    texts.sort();
+    return texts;
+}
+
+cwLabel3dGroup* groupWithStation(cwKeywordItemModel& keywordModel, const QString& stationName)
+{
+    for (int i = 0; i < keywordModel.rowCount(); ++i) {
+        cwLabel3dGroup* group = groupForKeywordItem(keywordModel.item(i));
+        if (group == nullptr) {
+            continue;
+        }
+        for (const cwLabel3dItem& label : group->labels()) {
+            if (label.text() == stationName) {
+                return group;
+            }
+        }
+    }
+    return nullptr;
+}
+}
+
+TEST_CASE("cwLabel3dView draws placed station labels through the shared text layer",
+          "[cwLinePlotLabelView][cwLabel3dView]")
+{
+    TwoTripFixture f = makeTwoTripFixture();
+
+    // Outlive the view, as in production (see the keyword test above).
+    cwKeywordItemModel keywordModel;
+    cwScene scene;
+    cwCamera camera;
+    camera.setViewport(QRect(0, 0, kLabelViewportWidth, kLabelViewportHeight));
+    camera.setZoomScale(kLabelZoomScale);
+    camera.setProjection(camera.orthoProjectionDefault());
+
+    QQmlEngine engine;
+    QQuickWindow window;
+    window.resize(kLabelViewportWidth, kLabelViewportHeight);
+
+    const QString rootQml = QStringLiteral(
+        "import QtQuick\n"
+        "import cavewherelib\n"
+        "Item {\n"
+        "  width: %1; height: %2\n"
+        "  LinePlotLabelView { objectName: \"labelView\"; anchors.fill: parent }\n"
+        "}\n").arg(kLabelViewportWidth).arg(kLabelViewportHeight);
+
+    QQmlComponent component(&engine);
+    component.setData(rootQml.toUtf8(), QUrl());
+    std::unique_ptr<QObject> root(component.create());
+    REQUIRE(root != nullptr);
+    auto* rootItem = qobject_cast<QQuickItem*>(root.get());
+    REQUIRE(rootItem != nullptr);
+    rootItem->setParentItem(window.contentItem());
+
+    auto labelView = root->findChild<cwLinePlotLabelView*>("labelView");
+    REQUIRE(labelView != nullptr);
+    REQUIRE(labelView->window() == &window);
+
+    labelView->setScene(&scene);
+    labelView->setCamera(&camera);
+    labelView->setKeywordItemModel(&keywordModel);
+    labelView->setRegion(f.region.get());
+
+    // Frame the stations: one full declutter pass over every group, the
+    // per-frame path.
+    const QVector3D center = labelCentroid(keywordModel);
+    camera.setViewMatrix(viewLookingAt(center, 0.0f));
+
+    // Labels are text billboards now, not QQuickItems under the view.
+    CHECK(labelView->childItems().isEmpty());
+
+    cwRenderTextBillboards* layer = scene.textBillboardLayer();
+    REQUIRE(layer != nullptr);
+
+    SECTION("every station is placed once; the shared junction station only once")
+    {
+        CHECK(layer->billboardCount() == 3);
+        CHECK(placedTexts(layer) == QStringList({QStringLiteral("a1"),
+                                                 QStringLiteral("a2"),
+                                                 QStringLiteral("a3")}));
+        CHECK(placedTexts(layer).count(QStringLiteral("a2")) == 1);
+    }
+
+    SECTION("hiding a trip by keyword visibility removes its text billboards")
+    {
+        cwLabel3dGroup* tripAGroup = groupWithStation(keywordModel, QStringLiteral("a1"));
+        REQUIRE(tripAGroup != nullptr);
+
+        const int before = layer->billboardCount();
+        const bool invoked = QMetaObject::invokeMethod(tripAGroup, "setVisible",
+                                                       Q_ARG(bool, false));
+        REQUIRE(invoked);
+
+        CHECK(layer->billboardCount() < before);
+        CHECK_FALSE(placedTexts(layer).contains(QStringLiteral("a1")));
+
+        // On the next pass trip B still labels its own stations, including the
+        // junction it shares with the hidden trip.
+        camera.setViewMatrix(viewLookingAt(center, 1.0f));
+        CHECK(placedTexts(layer) == QStringList({QStringLiteral("a2"),
+                                                 QStringLiteral("a3")}));
+    }
 }
