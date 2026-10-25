@@ -562,6 +562,9 @@ TEST_CASE("Editing splays makes the project dirty", "[SplayShot]") {
     REQUIRE(tempDir.isValid());
 
     auto root = std::make_unique<cwRootData>();
+    // The clean save below commits, which needs an account.
+    root->account()->setName(QStringLiteral("Splay Tester"));
+    root->account()->setEmail(QStringLiteral("splay.tester@example.com"));
     auto project = root->project();
 
     auto region = project->cavingRegion();

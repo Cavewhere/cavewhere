@@ -14,6 +14,7 @@
 #include <QString>
 #include <QVariantMap>
 #include <QObject>
+#include <QDir>
 #include <QTemporaryDir>
 #include <QQmlEngine>
 #include <QCoreApplication>
@@ -96,6 +97,11 @@ int CAVEWHERE_TESTLIB_EXPORT initBareRepo(const QString& path);
  * event loop.
  */
 bool CAVEWHERE_TESTLIB_EXPORT isProjectModified(cwProject* project);
+
+/**
+ * Counts the .cwtrip files under \a root, skipping the project's .cw_trash/.
+ */
+qsizetype CAVEWHERE_TESTLIB_EXPORT tripFileCountUnder(const QDir& root);
 
 /**
  * @brief fileToProject

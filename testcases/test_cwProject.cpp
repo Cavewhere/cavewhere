@@ -14168,3 +14168,56 @@ TEST_CASE("Every local mutation notice advances the local mutation epoch",
     CHECK(saveLoad->localMutationEpoch() - epochBefore
           == static_cast<quint64>(mutationSpy.count()));
 }
+
+TEST_CASE("A .cwproj Save whose commit fails keeps the project modified and emits no fileSaved",
+          "[cwProject][Save]")
+{
+    SaveReceiptFixture f(QStringLiteral("commit-fails.cwproj"));
+    f.cave->addTrip();
+    f.cave->trip(1)->setName(QStringLiteral("Locked Trip"));
+    f.settle();
+    REQUIRE(f.project->modified());
+
+    const QDir projectDir = QFileInfo(f.project->filename()).absoluteDir();
+    const auto headBefore = headOidForRepository(projectDir.absolutePath());
+    REQUIRE(headBefore.has_value());
+
+    // A leftover index.lock makes the commit's index write fail at once. The
+    // sync health worker takes the lock for an instant, so retry until ours
+    // is the one created.
+    const QString lockPath = projectDir.filePath(QStringLiteral(".git/index.lock"));
+    REQUIRE(QTest::qWaitFor([&lockPath]() {
+        QFile lock(lockPath);
+        return lock.open(QIODevice::WriteOnly | QIODevice::NewOnly);
+    }, kSaveReceiptWaitMs));
+    auto lockGuard = qScopeGuard([&lockPath]() { QFile::remove(lockPath); });
+
+    f.project->errorModel()->clear();
+    QSignalSpy fileSavedSpy(f.project, &cwProject::fileSaved);
+
+    REQUIRE(f.project->save());
+    f.settle();
+
+    CHECK(fileSavedSpy.count() == 0);
+    CHECK(f.project->modified());
+    REQUIRE(f.project->errorModel()->count() == 1);
+    CHECK(f.project->errorModel()->at(0).type() == cwError::Fatal);
+    CHECK(tripFileCountUnder(projectDir) == 2);
+    const auto headAfterFailure = headOidForRepository(projectDir.absolutePath());
+    REQUIRE(headAfterFailure.has_value());
+    CHECK(git_oid_cmp(&headBefore.value(), &headAfterFailure.value()) == 0);
+
+    REQUIRE(QFile::remove(lockPath));
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+
+    REQUIRE(f.project->save());
+    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    CHECK_FALSE(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+    const auto headAfterRetry = headOidForRepository(projectDir.absolutePath());
+    REQUIRE(headAfterRetry.has_value());
+    CHECK(git_oid_cmp(&headBefore.value(), &headAfterRetry.value()) != 0);
+}

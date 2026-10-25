@@ -384,6 +384,10 @@ inline std::unique_ptr<SavedProjectFixture> makeNewProject(const QString& caveNa
     REQUIRE(fixture->tempDir.isValid());
 
     fixture->rootData = std::make_unique<cwRootData>();
+    // A .cwproj Save commits; without an account the commit fails and the
+    // project stays modified.
+    fixture->rootData->account()->setName(QStringLiteral("Fixture Tester"));
+    fixture->rootData->account()->setEmail(QStringLiteral("fixture.tester@example.com"));
     fixture->project = fixture->rootData->project();
 
     auto region = fixture->project->cavingRegion();

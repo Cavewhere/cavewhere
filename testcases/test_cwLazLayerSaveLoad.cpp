@@ -728,6 +728,9 @@ TEST_CASE("cwLazLayer .cwlaz: external .laz delete dirties the project",
     const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("extdel")));
 
     auto root = std::make_unique<cwRootData>();
+    // The clean save below commits, which needs an account.
+    root->account()->setName(QStringLiteral("Laz Tester"));
+    root->account()->setEmail(QStringLiteral("laz.tester@example.com"));
     auto* project = root->project();
     REQUIRE(addLazAndWait(root.get(), {externalLaz}));
     REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
@@ -1504,6 +1507,9 @@ TEST_CASE("cwLazLayer retarget: Save As keeps layer objects and their point data
     const QString lazB = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("rtgB")));
 
     auto root = std::make_unique<cwRootData>();
+    // The clean save below commits, which needs an account.
+    root->account()->setName(QStringLiteral("Laz Tester"));
+    root->account()->setEmail(QStringLiteral("laz.tester@example.com"));
     auto* project = root->project();
     auto* lazLayers = project->cavingRegion()->lazLayers();
     addLazAndWait(root.get(), {lazA, lazB});
@@ -1578,6 +1584,9 @@ TEST_CASE("cwLazLayer retarget: file missing at the new root drops only that row
     const QString lazB = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("partB")));
 
     auto root = std::make_unique<cwRootData>();
+    // The clean save below commits, which needs an account.
+    root->account()->setName(QStringLiteral("Laz Tester"));
+    root->account()->setEmail(QStringLiteral("laz.tester@example.com"));
     auto* project = root->project();
     auto* lazLayers = project->cavingRegion()->lazLayers();
     addLazAndWait(root.get(), {lazA, lazB});

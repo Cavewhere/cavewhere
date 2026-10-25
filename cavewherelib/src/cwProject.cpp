@@ -455,13 +455,13 @@ bool cwProject::save()
     SaveFuture = AsyncFuture::observe(commitFuture)
         .context(this, [this, commitFuture]() {
             const auto result = commitFuture.result();
-            cwSaveLoad::SaveReceipt receipt;
+            m_syncHealth->refresh();
             if (result.hasError()) {
                 ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
-            } else {
-                receipt = result.value();
+                return;
             }
-            m_syncHealth->refresh();
+
+            const cwSaveLoad::SaveReceipt receipt = result.value();
             QMetaObject::invokeMethod(this, [this, receipt]() { completeSave(receipt); }, Qt::QueuedConnection);
         })
         .future();
@@ -831,17 +831,19 @@ bool cwProject::saveAs(QString newFilename)
     // in git before fileSaved fires. Without a commit all files are untracked, and a later
     // discardChanges() (git reset --hard HEAD + cleanUntracked) would erase the entire project.
     // SaveFuture tracks the commit so waitSaveToFinish() / shutdown waits for it.
+    // A failed commit returns before completeSave, so the project stays modified and the user
+    // is asked to save again.
     auto commitFuture = m_saveLoad->enqueueFlushAndCommit();
     SaveFuture = AsyncFuture::observe(commitFuture)
         .context(this, [this, commitFuture]() {
             const auto result = commitFuture.result();
-            cwSaveLoad::SaveReceipt receipt;
+            m_syncHealth->refresh();
             if (result.hasError()) {
                 ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
-            } else {
-                receipt = result.value();
+                return;
             }
-            m_syncHealth->refresh();
+
+            const cwSaveLoad::SaveReceipt receipt = result.value();
             QMetaObject::invokeMethod(this, [this, receipt]() { completeSave(receipt); }, Qt::QueuedConnection);
         })
         .future();

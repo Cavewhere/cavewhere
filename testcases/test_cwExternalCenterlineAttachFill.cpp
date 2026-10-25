@@ -21,7 +21,6 @@
 #include <asyncfuture.h>
 
 // Qt
-#include <QDirIterator>
 #include <QMetaObject>
 #include <QPersistentModelIndex>
 #include <QPointer>
@@ -435,20 +434,6 @@ struct SaveCoverage {
     qsizetype tripFilesOnDisk = 0;
 };
 
-qsizetype tripFilesUnder(const QDir& root)
-{
-    const QString trashSegment = QStringLiteral("/.cw_trash/");
-    qsizetype count = 0;
-    QDirIterator it(root.absolutePath(), {QStringLiteral("*.cwtrip")}, QDir::Files,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        if (!it.next().contains(trashSegment)) {
-            ++count;
-        }
-    }
-    return count;
-}
-
 //! Records, at each fileSaved, the trips in the tree. A .cwproj project also
 //! records the trip files in its project directory.
 void watchSaveCoverage(QList<SaveCoverage>* coverage, cwProject* project, QObject* context,
@@ -459,7 +444,7 @@ void watchSaveCoverage(QList<SaveCoverage>* coverage, cwProject* project, QObjec
         SaveCoverage saved;
         saved.tripsInTree = project->cavingRegion()->rootNode()->allTrips().size();
         if (countFilesOnDisk) {
-            saved.tripFilesOnDisk = tripFilesUnder(projectRootOf(project));
+            saved.tripFilesOnDisk = tripFileCountUnder(projectRootOf(project));
         }
         coverage->append(saved);
     });

@@ -1271,6 +1271,20 @@ void addTokenManager(cwProject *project)
     project->setFutureManagerToken(model->token());
 }
 
+qsizetype tripFileCountUnder(const QDir& root)
+{
+    const QString trashSegment = QStringLiteral("/.cw_trash/");
+    qsizetype count = 0;
+    QDirIterator it(root.absolutePath(), {QStringLiteral("*.cwtrip")}, QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        if (!it.next().contains(trashSegment)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 bool isProjectModified(cwProject* project)
 {
     project->waitSaveToFinish();
