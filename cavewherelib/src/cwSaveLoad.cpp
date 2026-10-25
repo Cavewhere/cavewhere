@@ -1804,6 +1804,28 @@ QFuture<Result<cwSaveLoad::SaveReceipt>> cwSaveLoad::saveFlushWithReceipt()
             .future();
 }
 
+QFuture<ResultBase> cwSaveLoad::enqueueSyncFlush(const std::shared_ptr<ReconcileAttemptState>& attemptState)
+{
+    return d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this, attemptState]() {
+        return saveFlushWithReceipt().then([attemptState](const Result<SaveReceipt>& flushResult) -> ResultBase {
+            if (!flushResult.hasError()) {
+                attemptState->flushEpoch = flushResult.value().mutationEpoch;
+            }
+            return flushResult;
+        });
+    });
+}
+
+void cwSaveLoad::publishSyncFlushStamp(const ReconcileAttemptState& attemptState)
+{
+    // The flushed tree is committed, so the stamp answers whether the working
+    // tree holds every mutation even when a later step of the sync fails.
+    // The full report replaces this one once it is built.
+    SyncReport report;
+    report.mutationEpoch = attemptState.flushEpoch;
+    d->lastSyncReport = report;
+}
+
 ResultBase cwSaveLoad::finishSaveFlush()
 {
     const QString pendingErrors = d->takePendingSaveJobErrors();
@@ -6114,11 +6136,12 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
             return;
         }
 
+        // A retry's report stays absent until its own commit lands, so a
+        // failed retry commit leaves the project modified.
+        d->lastSyncReport.reset();
         auto attemptState = std::make_shared<ReconcileAttemptState>();
 
-        auto saveFlushFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this]() {
-            return saveFlushImpl();
-        });
+        auto saveFlushFuture = enqueueSyncFlush(attemptState);
 
         auto syncPrepareFuture = d->enqueueOperation(
                     this,
@@ -6139,6 +6162,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
             if (commitResult.hasError()) {
                 return AsyncFuture::completed(commitResult);
             }
+            publishSyncFlushStamp(*attemptState);
             const auto postCommitHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
 
             if (!hasRemoteConfigured(repo)) {
@@ -6220,6 +6244,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                     }
 
                     attemptState->report = reportFuture.result();
+                    attemptState->report->mutationEpoch = attemptState->flushEpoch;
                     d->lastSyncReport = attemptState->report;
                     if (!attemptState->report.has_value()) {
                         return ResultBase(QStringLiteral("Sync report is unavailable."));
@@ -6318,9 +6343,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
     // tree; see the window in sync().
     d->selfWrite.begin();
 
-    auto saveFlushFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this]() {
-        return saveFlushImpl();
-    });
+    auto saveFlushFuture = enqueueSyncFlush(attemptState);
 
     auto checkoutPrepareFuture = d->enqueueOperation(
                 this,
@@ -6341,6 +6364,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
             return AsyncFuture::completed(ResultBase(
                                               QStringLiteral("Working directory must be clean before checkout and reconcile.")));
         }
+        publishSyncFlushStamp(*attemptState);
 
         const auto beforeHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
         if (beforeHeadResult.hasError()) {
@@ -6400,6 +6424,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
                 attemptState->report = reportFuture.result();
                 if (attemptState->report.has_value()) {
                     attemptState->report->diagnostics.append(operationLabel);
+                    attemptState->report->mutationEpoch = attemptState->flushEpoch;
                 }
                 d->lastSyncReport = attemptState->report;
                 if (!attemptState->report.has_value()) {

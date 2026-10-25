@@ -631,6 +631,10 @@ void cwProject::waitForSyncToFinish()
 
 void cwProject::completeSyncOperation(const Monad::ResultBase& result)
 {
+    const auto report = m_saveLoad->lastSyncReport();
+    const bool flushCoveredEveryMutation = report
+        && report->mutationEpoch == m_saveLoad->localMutationEpoch();
+
     if (result.hasError()) {
         if (result.errorCodeTo<cwSaveLoad::SyncErrorCode>() == cwSaveLoad::SyncErrorCode::HttpAuthFailed) {
             emit syncAuthFailed();
@@ -639,17 +643,23 @@ void cwProject::completeSyncOperation(const Monad::ResultBase& result)
         }
         ErrorModel->append(cwError(result.errorMessage(), cwError::Warning));
         m_syncHealth->refresh();
-        // Sync flushes and commits before pushing, so the working tree may be
-        // clean even on push failure.
-        setModified(false);
+        // A report is present once the sync committed its flush, so a matching
+        // stamp proves the committed tree holds every mutation even when the
+        // pull or push failed.
+        if (flushCoveredEveryMutation) {
+            setModified(false);
+        }
         emit syncFinished();
         return;
     }
-    auto report = m_saveLoad->lastSyncReport();
-    bool bundleNeedsResave = LoadedFromBundledArchive
+    const bool bundleNeedsResave = LoadedFromBundledArchive
         && report
         && report->pullState != cwSaveLoad::SyncReport::PullState::AlreadyUpToDate;
-    setModified(bundleNeedsResave);
+    if (bundleNeedsResave) {
+        setModified(true);
+    } else if (flushCoveredEveryMutation) {
+        setModified(false);
+    }
     m_syncHealth->refresh();
     emit syncFinished();
 }

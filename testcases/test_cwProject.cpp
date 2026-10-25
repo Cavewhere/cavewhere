@@ -8535,7 +8535,11 @@ TEST_CASE("cwProject sync blocks pulled newer project version", "[cwProject]") {
     CHECK(syncError.type() == cwError::Warning);
     CHECK(syncError.message().contains(QStringLiteral("Project file version")));
     CHECK(syncError.message().contains(QStringLiteral("newer than supported version")));
-    CHECK_FALSE(project->lastSyncReport().has_value());
+    // The sync's commit landed, so the report carries the flush's stamp, and
+    // the rejected pull left its heads unset.
+    const auto syncReport = project->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    CHECK(syncReport->afterHead.isEmpty());
 
     const git_oid finalRemoteHead = remoteHeadOid(remoteRepoPath);
     CHECK(git_oid_cmp(&expectedRemoteHead, &finalRemoteHead) == 0);
@@ -13878,19 +13882,19 @@ struct SaveReceiptFixture {
     cwSaveLoad* saveLoad() const { return project->saveLoad(); }
 };
 
-//! Records modified() at each fileSaved, in order.
-void recordModifiedAtFileSaved(QList<bool>* modifiedAtFileSaved, cwProject* project,
-                               QObject* context)
+//! Records modified() at each emission of \a signal, in order.
+void recordModifiedAt(void (cwProject::*signal)(), QList<bool>* recorded, cwProject* project,
+                      QObject* context)
 {
-    QObject::connect(project, &cwProject::fileSaved, context, [modifiedAtFileSaved, project]() {
-        modifiedAtFileSaved->append(project->modified());
+    QObject::connect(project, signal, context, [recorded, project]() {
+        recorded->append(project->modified());
     });
 }
 
-bool waitForFileSavedCount(const QList<bool>& modifiedAtFileSaved, int count)
+bool waitForRecordedCount(const QList<bool>& recorded, int count)
 {
-    return QTest::qWaitFor([&modifiedAtFileSaved, count]() {
-        return modifiedAtFileSaved.size() >= count;
+    return QTest::qWaitFor([&recorded, count]() {
+        return recorded.size() >= count;
     }, kSaveReceiptWaitMs);
 }
 
@@ -13934,7 +13938,7 @@ TEST_CASE("A Save covers a mutation made on its own turn while the save jobs dra
 
     QObject context;
     QList<bool> modifiedAtFileSaved;
-    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
 
     // The rename puts its jobs on the save pool; the save and the date edit
     // on the same turn join that drain.
@@ -13942,7 +13946,7 @@ TEST_CASE("A Save covers a mutation made on its own turn while the save jobs dra
     REQUIRE(f.project->save());
     f.trip->setDate(receiptDateTime(kReceiptTripDate));
 
-    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
     CHECK_FALSE(modifiedAtFileSaved.at(0));
     f.settle();
     CHECK_FALSE(f.project->modified());
@@ -13958,13 +13962,13 @@ TEST_CASE("A Save As to a bundle covers a mutation made on its own turn while th
 
     QObject context;
     QList<bool> modifiedAtFileSaved;
-    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
 
     f.cave->setName(QStringLiteral("Renamed Cave"));
     REQUIRE(f.project->saveAs(bundlePath));
     f.trip->setDate(receiptDateTime(kReceiptTripDate));
 
-    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
     CHECK_FALSE(modifiedAtFileSaved.at(0));
     f.settle();
     CHECK_FALSE(f.project->modified());
@@ -13982,7 +13986,7 @@ TEST_CASE("A mutation made after a Save's drain keeps the project modified",
 
     QObject context;
     QList<bool> modifiedAtFileSaved;
-    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
 
     // The rename's own automatic flush settles first, so the slot below
     // fires on the save's flush rather than on one the save's drain follows.
@@ -14005,7 +14009,7 @@ TEST_CASE("A mutation made after a Save's drain keeps the project modified",
 
     REQUIRE(f.project->save());
 
-    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
     REQUIRE(mutatedAfterDrain);
     CHECK(modifiedAtFileSaved.at(0));
     f.settle();
@@ -14022,14 +14026,14 @@ TEST_CASE("A Save with no concurrent mutation clears the modified bit",
 
     QObject context;
     QList<bool> modifiedAtFileSaved;
-    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
 
     f.cave->setName(QStringLiteral("Renamed Cave"));
     f.settle();
     REQUIRE(f.project->modified());
 
     REQUIRE(f.project->save());
-    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
     CHECK_FALSE(modifiedAtFileSaved.at(0));
     f.settle();
     CHECK_FALSE(f.project->modified());
@@ -14045,13 +14049,13 @@ TEST_CASE("A Save after a mutation that queued no save job clears the modified b
 
     QObject context;
     QList<bool> modifiedAtFileSaved;
-    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
 
     f.saveLoad()->reportProjectFileChangedOnDisk();
     REQUIRE(f.project->modified());
 
     REQUIRE(f.project->save());
-    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
     CHECK_FALSE(modifiedAtFileSaved.at(0));
     f.settle();
     CHECK_FALSE(f.project->modified());
@@ -14064,7 +14068,7 @@ TEST_CASE("Two Saves queued back to back each answer for their own drain",
 
     QObject context;
     QList<bool> modifiedAtFileSaved;
-    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
 
     bool secondSaveQueued = false;
     QObject::connect(f.saveLoad(), &cwSaveLoad::saveFlushCompleted, &context,
@@ -14079,7 +14083,7 @@ TEST_CASE("Two Saves queued back to back each answer for their own drain",
     f.cave->setName(QStringLiteral("Renamed Cave"));
     REQUIRE(f.project->save());
 
-    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 2));
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 2));
     REQUIRE(secondSaveQueued);
     // The date edit landed after the first drain ended and inside the second.
     CHECK(modifiedAtFileSaved.at(0));
@@ -14210,14 +14214,238 @@ TEST_CASE("A .cwproj Save whose commit fails keeps the project modified and emit
     REQUIRE(QFile::remove(lockPath));
     QObject context;
     QList<bool> modifiedAtFileSaved;
-    recordModifiedAtFileSaved(&modifiedAtFileSaved, f.project, &context);
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
 
     REQUIRE(f.project->save());
-    REQUIRE(waitForFileSavedCount(modifiedAtFileSaved, 1));
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
     CHECK_FALSE(modifiedAtFileSaved.at(0));
     f.settle();
     CHECK_FALSE(f.project->modified());
     const auto headAfterRetry = headOidForRepository(projectDir.absolutePath());
     REQUIRE(headAfterRetry.has_value());
     CHECK(git_oid_cmp(&headBefore.value(), &headAfterRetry.value()) != 0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sync receipts: a sync clears the modified bit when its flush covered every
+// local mutation.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+
+std::string lastErrorMessage(cwProject* project)
+{
+    return project->errorModel()->count() > 0
+        ? project->errorModel()->last().message().toStdString()
+        : std::string();
+}
+
+//! A SaveReceiptFixture .cwproj with a local bare remote and one finished
+//! sync behind it.
+struct SyncReceiptFixture : SaveReceiptFixture {
+    QTemporaryDir remoteRoot;
+    QString remoteRepoPath;
+
+    explicit SyncReceiptFixture(const QString& fileName)
+        : SaveReceiptFixture(fileName)
+    {
+        REQUIRE(remoteRoot.isValid());
+        remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+        REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
+        REQUIRE(project->repository()->addRemote(QStringLiteral("origin"),
+                                                 QUrl::fromLocalFile(remoteRepoPath)).isEmpty());
+
+        REQUIRE(project->sync());
+        settleSync();
+        INFO("seed sync: " << lastErrorMessage(project));
+        REQUIRE(project->errorModel()->count() == 0);
+        REQUIRE_FALSE(project->modified());
+    }
+
+    void settleSync()
+    {
+        project->waitForSyncToFinish();
+        settle();
+    }
+
+    //! Waits for the automatic flush a mutation schedules, so the next
+    //! saveFlushCompleted belongs to the sync's own flush.
+    void settleMutation(const std::function<void()>& mutate)
+    {
+        QSignalSpy flushSpy(saveLoad(), &cwSaveLoad::saveFlushCompleted);
+        mutate();
+        REQUIRE(QTest::qWaitFor([&flushSpy]() { return flushSpy.count() >= 1; },
+                                kSaveReceiptWaitMs));
+        settle();
+        REQUIRE(project->modified());
+    }
+
+    //! Clones the remote into \a cloneDir and returns the cloned project file.
+    QString cloneRemote(const QTemporaryDir& cloneDir) const
+    {
+        const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone"));
+        QQuickGit::GitRepository cloneRepository;
+        cloneRepository.setDirectory(QDir(clonePath));
+        cloneRepository.setAccount(rootData->account());
+
+        auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+        REQUIRE(AsyncFuture::waitForFinished(cloneFuture, kSaveReceiptWaitMs));
+        INFO("clone: " << cloneFuture.result().errorMessage().toStdString());
+        REQUIRE_FALSE(cloneFuture.result().hasError());
+
+        const QString relativeProjectPath
+            = project->repository()->directory().relativeFilePath(project->filename());
+        return QDir(clonePath).filePath(relativeProjectPath);
+    }
+};
+
+//! Sets the trip's late date from the first saveFlushCompleted after this
+//! call, which lands after that flush's drain ended.
+void mutateAfterNextFlushDrain(SyncReceiptFixture& f, QObject* context, bool* mutated)
+{
+    QObject::connect(f.saveLoad(), &cwSaveLoad::saveFlushCompleted, context, [&f, mutated]() {
+        if (*mutated) {
+            return;
+        }
+        *mutated = true;
+        f.trip->setDate(receiptDateTime(kReceiptLateTripDate));
+    });
+}
+
+//! Adds or removes write permission on \a path and every directory under it.
+void setDirectoryTreeWritable(const QString& path, bool writable)
+{
+    constexpr QFileDevice::Permissions kWriteBits
+        = QFileDevice::WriteOwner | QFileDevice::WriteUser;
+    QStringList directories{path};
+    QDirIterator it(path, QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        directories.append(it.next());
+    }
+    for (const QString& directory : std::as_const(directories)) {
+        const QFileDevice::Permissions permissions = QFile::permissions(directory);
+        QFile::setPermissions(directory, writable ? permissions | kWriteBits
+                                                  : permissions & ~kWriteBits);
+    }
+}
+
+} // namespace
+
+TEST_CASE("A sync covers a mutation made on its own turn while its flush drains",
+          "[Sync][cwProject]")
+{
+    SyncReceiptFixture f(QStringLiteral("sync-same-turn.cwproj"));
+
+    QObject context;
+    QList<bool> modifiedAtSyncFinished;
+    recordModifiedAt(&cwProject::syncFinished, &modifiedAtSyncFinished, f.project, &context);
+
+    // The rename puts its jobs on the save pool; the sync and the date edit
+    // on the same turn join that drain.
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    REQUIRE(f.project->sync());
+    f.trip->setDate(receiptDateTime(kReceiptTripDate));
+
+    REQUIRE(waitForRecordedCount(modifiedAtSyncFinished, 1));
+    CHECK(f.project->errorModel()->count() == 0);
+    CHECK_FALSE(modifiedAtSyncFinished.at(0));
+    f.settleSync();
+    CHECK_FALSE(f.project->modified());
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    checkReopenedHasSameTurnEdits(f.cloneRemote(cloneDir));
+}
+
+TEST_CASE("A mutation made after a sync's flush drain keeps the project modified",
+          "[Sync][cwProject]")
+{
+    SyncReceiptFixture f(QStringLiteral("sync-after-drain.cwproj"));
+    f.settleMutation([&f]() { f.cave->setName(QStringLiteral("Renamed Cave")); });
+
+    QObject context;
+    QList<bool> modifiedAtSyncFinished;
+    recordModifiedAt(&cwProject::syncFinished, &modifiedAtSyncFinished, f.project, &context);
+    bool mutatedAfterDrain = false;
+    mutateAfterNextFlushDrain(f, &context, &mutatedAfterDrain);
+
+    REQUIRE(f.project->sync());
+
+    REQUIRE(waitForRecordedCount(modifiedAtSyncFinished, 1));
+    REQUIRE(mutatedAfterDrain);
+    INFO("sync: " << lastErrorMessage(f.project));
+    CHECK(f.project->errorModel()->count() == 0);
+    CHECK(modifiedAtSyncFinished.at(0));
+    f.settleSync();
+    CHECK(f.project->modified());
+}
+
+TEST_CASE("A sync that cannot reach its remote keeps the project modified only for a mutation after its flush",
+          "[Sync][cwProject]")
+{
+    const bool mutateAfterDrain = GENERATE(false, true);
+    INFO("mutation after the flush drain: " << mutateAfterDrain);
+    SyncReceiptFixture f(QStringLiteral("sync-offline.cwproj"));
+    f.settleMutation([&f]() { f.cave->setName(QStringLiteral("Renamed Cave")); });
+
+    const QString offlineRemotePath = f.remoteRepoPath + QStringLiteral(".offline");
+    REQUIRE(QDir().rename(f.remoteRepoPath, offlineRemotePath));
+    auto restoreRemote = qScopeGuard([&f, &offlineRemotePath]() {
+        QDir().rename(offlineRemotePath, f.remoteRepoPath);
+    });
+
+    QObject context;
+    QList<bool> modifiedAtSyncFinished;
+    recordModifiedAt(&cwProject::syncFinished, &modifiedAtSyncFinished, f.project, &context);
+    bool mutatedAfterDrain = false;
+    if (mutateAfterDrain) {
+        mutateAfterNextFlushDrain(f, &context, &mutatedAfterDrain);
+    }
+
+    REQUIRE(f.project->sync());
+
+    REQUIRE(waitForRecordedCount(modifiedAtSyncFinished, 1));
+    CHECK(mutatedAfterDrain == mutateAfterDrain);
+    REQUIRE(f.project->errorModel()->count() > 0);
+    CHECK(f.project->errorModel()->last().type() == cwError::Warning);
+    CHECK(modifiedAtSyncFinished.at(0) == mutateAfterDrain);
+    f.settleSync();
+    CHECK(f.project->modified() == mutateAfterDrain);
+}
+
+TEST_CASE("A sync whose push fails keeps the project modified only for a mutation after its flush",
+          "[Sync][cwProject]")
+{
+    const bool mutateAfterDrain = GENERATE(false, true);
+    INFO("mutation after the flush drain: " << mutateAfterDrain);
+    SyncReceiptFixture f(QStringLiteral("sync-push-fails.cwproj"));
+    f.settleMutation([&f]() { f.cave->setName(QStringLiteral("Renamed Cave")); });
+
+    // A read-only remote still serves the pull, then refuses the push's objects.
+    setDirectoryTreeWritable(f.remoteRepoPath, false);
+    auto restoreRemote = qScopeGuard([&f]() {
+        setDirectoryTreeWritable(f.remoteRepoPath, true);
+    });
+
+    QObject context;
+    QList<bool> modifiedAtSyncFinished;
+    recordModifiedAt(&cwProject::syncFinished, &modifiedAtSyncFinished, f.project, &context);
+    bool mutatedAfterDrain = false;
+    if (mutateAfterDrain) {
+        mutateAfterNextFlushDrain(f, &context, &mutatedAfterDrain);
+    }
+
+    REQUIRE(f.project->sync());
+
+    REQUIRE(waitForRecordedCount(modifiedAtSyncFinished, 1));
+    CHECK(mutatedAfterDrain == mutateAfterDrain);
+    REQUIRE(f.project->errorModel()->count() > 0);
+    CHECK(f.project->errorModel()->last().type() == cwError::Warning);
+    // The pull ran, so the failure came after the full report was built.
+    const auto report = f.project->lastSyncReport();
+    REQUIRE(report.has_value());
+    CHECK_FALSE(report->afterHead.isEmpty());
+    CHECK(modifiedAtSyncFinished.at(0) == mutateAfterDrain);
+    f.settleSync();
+    CHECK(f.project->modified() == mutateAfterDrain);
 }

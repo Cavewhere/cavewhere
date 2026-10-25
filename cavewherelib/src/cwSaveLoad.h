@@ -179,6 +179,8 @@ public:
         bool hasBackendPaths = false;
         bool hasCommitDiffPaths = false;
         bool hasHydrationDeltaPaths = false;
+        //! The local mutation epoch when the sync's flush drain ended.
+        quint64 mutationEpoch = 0;
     };
 
     //! What a finished save covered: the local mutation epoch at the moment
@@ -502,6 +504,7 @@ private:
     struct ReconcileAttemptState {
         quint64 planEpoch = 0;
         quint64 localMutationPlanEpoch = 0;
+        quint64 flushEpoch = 0;
         std::optional<SyncReport> report;
         std::optional<ReconcileExternalResult> reconcileOutcome;
     };
@@ -622,6 +625,8 @@ private:
                                                         const GitOperationFn& gitOp);
     QFuture<Monad::ResultBase> saveFlushImpl();
     QFuture<Monad::Result<SaveReceipt>> saveFlushWithReceipt();
+    QFuture<Monad::ResultBase> enqueueSyncFlush(const std::shared_ptr<ReconcileAttemptState>& attemptState);
+    void publishSyncFlushStamp(const ReconcileAttemptState& attemptState);
     Monad::ResultBase finishSaveFlush();
     QFuture<Monad::ResultBase> enqueueReconcilePhase(const QFuture<Monad::ResultBase>& prepareFuture,
                                                      quint64 syncGeneration,
