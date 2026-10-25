@@ -10,8 +10,9 @@
 
 // Renders a set of text strings (station labels) as depth-occluded,
 // camera-facing billboards inside the cwRhiScene 3D pass, all of them through
-// one scene-graph renderer per frame. QQuickItem billboards (leads, future
-// interactive markers) stay on cwRenderBillboards; this layer is for bulk text
+// one scene-graph renderer per frame. Lead markers draw through
+// cwRenderSpriteBillboards (one instanced draw of one prototype) and unique
+// QQuickItem billboards through cwRenderBillboards; this layer is for bulk text
 // that needs no item, no input and no per-label renderer.
 //
 // Identity mirrors cwRenderBillboards: billboards are added, updated and removed

@@ -10,6 +10,7 @@
 #include "cwScene.h"
 #include "cwCamera.h"
 #include "cwRenderBillboards.h"
+#include "cwRenderSpriteBillboards.h"
 #include "cwRenderTextBillboards.h"
 
 //Qt includes
@@ -69,11 +70,12 @@ void cwBillboardOverlayItem::setScene(cwScene* scene) {
 
     m_scene = scene;
 
-    // The billboard layer is owned by the scene, so a scene change means a
-    // different layer: drop the old reference and (re)fetch from the new scene.
+    // The billboard layers are owned by the scene, so a scene change means
+    // different layers: drop the old references. Each is fetched again from the
+    // new scene the next time a billboard is pushed.
     m_renderBillboards = nullptr;
+    m_renderSpriteBillboards = nullptr;
     m_renderTextBillboards = nullptr;
-    ensureRenderBillboards();
 
     repositionBillboards();
     emit sceneChanged();
@@ -82,34 +84,37 @@ void cwBillboardOverlayItem::setScene(cwScene* scene) {
 /**
  * @brief cwBillboardOverlayItem::ensureRenderBillboards
  *
- * Lazily fetches the scene-owned billboard layer once both the window (from the
- * scene graph) and the scene are available. The overlay's content renders as
- * depth-occluded billboards through it instead of as 2D overlay children.
+ * Lazily fetches the scene-owned item layer once both the window (from the
+ * scene graph) and the scene are available. Called from setBillboard(), so only
+ * an overlay that draws QQuickItem content creates the per-item renderers.
  */
-void cwBillboardOverlayItem::ensureRenderBillboards() {
+cwRenderBillboards* cwBillboardOverlayItem::ensureRenderBillboards() {
     if(m_renderBillboards != nullptr) {
-        return;
+        return m_renderBillboards;
     }
 
     QQuickWindow* quickWindow = window();
     if(quickWindow == nullptr || m_scene.isNull()) {
-        return;
+        return nullptr;
     }
 
-    // One billboard layer per scene, shared with every other overlay so all
+    // One item layer per scene, shared with every other overlay so all its
     // billboards sort back-to-front together (#538).
     m_renderBillboards = m_scene->billboardLayer();
     m_renderBillboards->setWindow(quickWindow);
+    return m_renderBillboards;
 }
 
 void cwBillboardOverlayItem::itemChange(ItemChange change, const ItemChangeData& value) {
     if(change == ItemSceneChange) {
+        // The view moved to a different window (value.window is null when it
+        // left one); rebind the layers it has fetched to it. Layers it has yet
+        // to fetch bind on their first use.
         if(m_renderBillboards != nullptr) {
-            // The view moved to a different window (value.window is null when it
-            // left one); rebind the billboards and their subscenes to it.
             m_renderBillboards->setWindow(value.window);
-        } else {
-            ensureRenderBillboards();
+        }
+        if(m_renderSpriteBillboards != nullptr) {
+            m_renderSpriteBillboards->setWindow(value.window);
         }
         if(m_renderTextBillboards != nullptr) {
             m_renderTextBillboards->setWindow(value.window);
@@ -119,15 +124,9 @@ void cwBillboardOverlayItem::itemChange(ItemChange change, const ItemChangeData&
     QQuickItem::itemChange(change, value);
 }
 
-void cwBillboardOverlayItem::requestBillboardRender() {
-    if(m_renderBillboards != nullptr) {
-        m_renderBillboards->update();
-    }
-}
-
 void cwBillboardOverlayItem::setBillboard(cwBillboardHandle& handle, QQuickItem* content,
                                           const QVector3D& worldPosition, float depthBias) {
-    if(m_renderBillboards == nullptr || content == nullptr) {
+    if(content == nullptr || ensureRenderBillboards() == nullptr) {
         return;
     }
 
@@ -139,6 +138,38 @@ void cwBillboardOverlayItem::setBillboard(cwBillboardHandle& handle, QQuickItem*
 
     // Adds on first call, updates after; the handle removes it on teardown.
     handle.set(m_renderBillboards, billboard);
+}
+
+cwRenderSpriteBillboards* cwBillboardOverlayItem::ensureRenderSpriteBillboards() {
+    if(m_renderSpriteBillboards != nullptr) {
+        return m_renderSpriteBillboards;
+    }
+
+    QQuickWindow* quickWindow = window();
+    if(quickWindow == nullptr || m_scene.isNull()) {
+        return nullptr;
+    }
+
+    m_renderSpriteBillboards = m_scene->spriteBillboardLayer();
+    m_renderSpriteBillboards->setWindow(quickWindow);
+    return m_renderSpriteBillboards;
+}
+
+void cwBillboardOverlayItem::setSpriteBillboard(cwSpriteBillboardHandle& handle,
+                                                const QVector3D& worldPosition,
+                                                float depthBias, float opacity, bool visible) {
+    if(ensureRenderSpriteBillboards() == nullptr) {
+        return;
+    }
+
+    cwRenderSpriteBillboards::SpriteBillboard billboard;
+    billboard.worldPosition = worldPosition;
+    billboard.depthBias = depthBias;
+    billboard.opacity = opacity;
+    billboard.visible = visible;
+
+    // Adds on first call, updates after; the handle removes it on teardown.
+    handle.set(m_renderSpriteBillboards, billboard);
 }
 
 cwRenderTextBillboards* cwBillboardOverlayItem::ensureRenderTextBillboards() {

@@ -2,11 +2,13 @@
 #define CWRENDERBILLBOARDS_H
 
 // Renders a set of live QQuickItems as depth-occluded billboards inside the
-// cwRhiScene 3D pass (issues #535 leads / #536 station labels). Each billboard
-// is a QML item placed at a world position; it depth-tests against cave
-// geometry and the point cloud, so a label behind a wall is hidden. Built on
-// the Phase-0 encapsulation classes (cwQuickItemSubscene + cwItem2DRenderer),
-// so no private Qt API leaks through this surface.
+// cwRhiScene 3D pass (issue #535). Each billboard is a QML item placed at a
+// world position; it depth-tests against cave geometry and the point cloud, so
+// an item behind a wall is hidden. Built on the Phase-0 encapsulation classes
+// (cwQuickItemSubscene + cwItem2DRenderer), so no private Qt API leaks through
+// this surface. Kept for overlays whose every billboard is a unique item; lead
+// markers draw through cwRenderSpriteBillboards and station labels through
+// cwRenderTextBillboards, so no producer feeds this layer today.
 //
 // Identity: billboards are added/updated/removed individually by a stable
 // cwBillboardId (returned by addBillboard). The render-side renderer cache is

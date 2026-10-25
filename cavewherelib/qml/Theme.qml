@@ -433,6 +433,7 @@ QtObject {
     readonly property int popupShadowMargin: 18
     readonly property real disabledOpacity: 0.4
     readonly property real uncheckedToggleOpacity: 0.7
+    readonly property real completedLeadOpacity: 0.6
     // ---- END style tokens ----
 
     // Legacy values mapped from the previous Theme.js

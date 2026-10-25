@@ -54,10 +54,12 @@ MainWindowTest {
         function loadAndShow() {
             TestHelper.loadProjectFromFile(RootData.project,
                 TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
-            // Hide the station-label / lead billboards: they can't be atlas-batched
-            // (their inline MVP UBO collapses across tiles), so a job that draws them
-            // renders single-tile. This test exercises the multi-tile atlas path, whose
-            // real consumer (thumbnails) suppresses billboards too — so hide them here.
+            // Hide the station labels: they can't be atlas-batched (their inline
+            // MVP UBO collapses across tiles), so a job that draws them renders
+            // single-tile. This test exercises the multi-tile atlas path, whose real
+            // consumer (thumbnails) suppresses labels and leads alike, so hide both
+            // here to match it. Leads themselves batch fine: the sprite layer takes
+            // its camera from the per-tile UBO slot.
             RootData.stationsVisible = false;
             RootData.leadsVisible = false;
             // Non-uniform background so even camera-independent pixels differ under a pan.

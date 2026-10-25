@@ -1,16 +1,22 @@
-// cwScene::billboardLayer() returns the one shared overlay layer for the scene.
-// Every overlay (leads, station labels, future overlays) feeds this single layer
-// so their billboards sort back-to-front together (#538). The accessor's wiring
-// runs entirely on the GUI thread, so no QRhi is needed here. The text layer
-// (station labels) gets the same treatment, plus its draw order relative to the
-// item and sprite layers, read from the render-thread registry after a CPU-only
-// synchroize. The sprite layer (lead markers) is created only when requested and
-// registers before the text layer whichever is requested first.
+// cwScene::billboardLayer() returns the one shared item layer for the scene.
+// Every overlay that draws QQuickItem content feeds this single layer so their
+// billboards sort back-to-front together (#538); it is created when such an
+// overlay pushes a billboard, or by the text layer to pin the draw order (the
+// item layer draws first). The accessor's wiring runs entirely on the GUI
+// thread, so no QRhi is needed here. The text layer (station labels) gets the
+// same treatment, plus its draw order relative to the item and sprite layers,
+// read from the render-thread registry after a CPU-only synchroize. The sprite
+// layer (lead markers) is created only when requested and registers before the
+// text layer whichever is requested first.
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <QQuickItem>
 #include <QQuickWindow>
 
+#include <memory>
+
+#include "cwBillboardHandle.h"
 #include "cwScene.h"
 #include "cwRenderBillboards.h"
 #include "cwRenderSpriteBillboards.h"
@@ -46,6 +52,7 @@ public:
     using cwBillboardOverlayItem::renderBillboards;
     using cwBillboardOverlayItem::renderTextBillboards;
     using cwBillboardOverlayItem::ensureRenderTextBillboards;
+    using cwBillboardOverlayItem::setBillboard;
 
 protected:
     void repositionBillboards() override {}
@@ -67,6 +74,11 @@ TEST_CASE("cwScene::textBillboardLayer returns one shared, scene-owned layer", "
     cwRenderTextBillboards* layer = scene.textBillboardLayer();
     REQUIRE(layer != nullptr);
     REQUIRE(scene.textBillboardLayer() == layer);
+
+    // Requesting the text layer pulls the item and sprite layers in first, so
+    // they register (and gather) ahead of it whichever is asked for later.
+    REQUIRE(scene.findChildren<cwRenderBillboards*>().size() == 1);
+    REQUIRE(scene.findChildren<cwRenderSpriteBillboards*>().size() == 1);
 
     // A separate layer from the item layer, owned by the scene like it.
     REQUIRE(static_cast<cwRenderObject*>(layer) != static_cast<cwRenderObject*>(scene.billboardLayer()));
@@ -100,14 +112,15 @@ TEST_CASE("cwScene::textBillboardLayer is shared by every overlay in the scene",
 
 TEST_CASE("cwScene gathers the item billboard layer before the text layer", "[cwScene]")
 {
-    // The layer drawn second is clipped by the first layer's quad depth, so leads
-    // (item layer) must draw before labels (text layer) whichever overlay asked
+    // The layer drawn second is clipped by the first layer's quad depth, so item
+    // billboards must draw before labels (text layer) whichever overlay asked
     // for its layer first.
     QQuickWindow window;
+    auto content = std::make_unique<QQuickItem>(window.contentItem());
     TextLayerOverlay labelLike;
-    TextLayerOverlay leadLike;
+    TextLayerOverlay itemLike;
     labelLike.setParentItem(window.contentItem());
-    leadLike.setParentItem(window.contentItem());
+    itemLike.setParentItem(window.contentItem());
 
     cwScene scene;
     cwRhiScene rhiScene;
@@ -144,13 +157,15 @@ TEST_CASE("cwScene gathers the item billboard layer before the text layer", "[cw
 
     SECTION("through the overlays' own wiring")
     {
-        // The app's path: the label overlay attaches and fetches its text layer
-        // before the lead overlay attaches.
+        // The label overlay attaches and fetches its text layer before the
+        // item-drawing overlay pushes its first billboard.
         labelLike.setScene(&scene);
         cwRenderTextBillboards* textLayer = labelLike.ensureRenderTextBillboards();
         REQUIRE(textLayer != nullptr);
-        leadLike.setScene(&scene);
-        cwRenderBillboards* itemLayer = leadLike.renderBillboards();
+        itemLike.setScene(&scene);
+        cwBillboardHandle handle;
+        itemLike.setBillboard(handle, content.get(), QVector3D(1, 2, 3), 1.0f);
+        cwRenderBillboards* itemLayer = itemLike.renderBillboards();
         REQUIRE(itemLayer != nullptr);
 
         CwRhiSceneTestAccess::synchroize(rhiScene, &scene);

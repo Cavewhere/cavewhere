@@ -2,10 +2,12 @@
 #define CWBILLBOARDHANDLE_H
 
 // Move-only RAII owner of exactly one billboard in a shared billboard layer
-// (cwRenderBillboards for QQuickItem content, cwRenderTextBillboards for station
-// label text; see cwTextBillboardHandle.h). The layer type is a template
-// parameter so both layers share one implementation. A producer (a lead view, a
-// label view, any future overlay) holds a handle next to whatever it already
+// (cwRenderBillboards for QQuickItem content, cwRenderSpriteBillboards for
+// instances of one sprite prototype, see cwSpriteBillboardHandle.h, and
+// cwRenderTextBillboards for station label text, see cwTextBillboardHandle.h).
+// The layer type is a template parameter so all three layers share one
+// implementation. A producer (cwLeadView with sprite handles, cwLabel3dView
+// with text handles, any future overlay) holds a handle next to whatever it already
 // tracks and calls set() each update pass: the first call adds the billboard and
 // remembers its id, later calls update it (cheap — updateBillboard early-outs
 // when nothing changed). Dropping the handle

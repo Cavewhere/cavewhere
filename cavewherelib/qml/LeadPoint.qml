@@ -16,10 +16,11 @@ PositionItem {
     required property SelectionManager selectionManager; //Injected by cwLeadView
     required property LeadView leadView; //Injected by cwLeadView
 
-    // The question mark renders as a depth-occluded billboard; cwLeadView reads
-    // this to feed the 3D draw. The QuoteBox popup is a sibling, so it stays a
-    // normal 2D overlay rather than being pulled into the occluded texture.
-    property alias billboardContent: questionImage
+    // The marker's stand-in in the 2D tree. The question mark itself draws as one
+    // instance of the LeadView's sprite layer; cwLeadView reads this item's
+    // visibility and opacity for that instance. The QuoteBox popup is a sibling,
+    // so it stays a normal 2D overlay.
+    property alias marker: hitTarget
 
     z: selected ? 1 : 0
 
@@ -35,26 +36,17 @@ PositionItem {
         scrap: pointId.scrap
     }
 
-    QQ.Image {
-        id: questionImage
-        source: "qrc:/icons/question.png"
+    // Tap target sized and centered on the drawn marker, so the hit area matches
+    // the sprite. cwLeadView reads these for the lead's sprite instance; a hidden
+    // marker is also untappable. Opacity has no 2D effect on an empty item.
+    QQ.Item {
+        id: hitTarget
+        width: pointId.leadView.spriteSize.width
+        height: pointId.leadView.spriteSize.height
         anchors.centerIn: parent
 
         visible: !lead.completed || pointId.selected
-        opacity: lead.completed ? 0.6 : 1.0
-    }
-
-    // Separate tap target. questionImage is the billboard's content, which
-    // cwQuickItemSubscene pulls out of the 2D scene via refFromEffectItem(hide)
-    // — a hidden item receives no input, so the TapHandler must live on an item
-    // the billboard does NOT reference. Sized and centred on the marker so the
-    // hit area matches the drawn billboard; gated to the marker's visibility so
-    // a hidden lead isn't tappable.
-    QQ.Item {
-        id: hitTarget
-        anchors.fill: questionImage
-
-        visible: questionImage.visible
+        opacity: lead.completed ? Theme.completedLeadOpacity : 1.0
 
         QQ.TapHandler {
             gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
@@ -87,9 +79,9 @@ PositionItem {
             property bool editMode: false
 
             margin: Theme.sectionSpacing
-            pointAtObject: questionImage
-            pointAtObjectPosition: Qt.point(Math.floor(questionImage.width * .5),
-                                            questionImage.height)
+            pointAtObject: hitTarget
+            pointAtObjectPosition: Qt.point(Math.floor(hitTarget.width * .5),
+                                            hitTarget.height)
 
             QQ.Item {
                 id: popupContent

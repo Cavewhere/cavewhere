@@ -66,14 +66,16 @@ public:
     void removeItem(cwRenderObject* item);
     void updateItem(cwRenderObject* item);
 
-    // The one billboard layer shared by every overlay in this scene (leads,
-    // station labels, future overlays). Lazily created and parented to the scene
-    // the first time it's requested. Sharing one layer means all billboards sort
-    // back-to-front together, so an overlapping lead and label can't bite each
-    // other (#538). Callers still drive its window via setWindow(); the scene
-    // doesn't know the hosting QQuickWindow. Invariant: every overlay sharing
-    // this layer must live in the same QQuickWindow — they each push setWindow()
-    // (last writer wins), which stays a no-op only while they agree.
+    // The one item billboard layer (QQuickItem content, one renderer per
+    // billboard) shared by every overlay in this scene. Lazily created and
+    // parented to the scene the first time it's requested, either directly or
+    // by textBillboardLayer(), which pulls it in to pin the draw order. An empty
+    // layer costs no per-item renderer. Sharing one layer means all its
+    // billboards sort back-to-front together (#538). Callers still drive its
+    // window via setWindow(); the scene doesn't know the hosting
+    // QQuickWindow. Invariant: every overlay sharing this layer must live in the
+    // same QQuickWindow — they each push setWindow() (last writer wins), which
+    // stays a no-op only while they agree.
     cwRenderBillboards* billboardLayer();
 
     // The one sprite billboard layer (lead markers: one instanced draw of one
