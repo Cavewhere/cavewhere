@@ -44,7 +44,7 @@ Data model: `cwCavingRegion` → `cwSurveyNode` tree (`cwCave` is a thin node su
 
 **Import/export**: Compass, Survex, and Walls parsing goes through the `dewalls` submodule. Compass station names are exported uppercase — Compass is case-sensitive, CaveWhere is not. `cwSurveyNetwork` performs loop closure detection.
 
-**Solve and georeferencing**: `cwSurvexExporter` writes Survex from `cwTripData` snapshots, with splays, each fix in its own CS via `cwSurvexCS`, and `*declination auto` once per located node. Pipelines are `cwUpdatable`s driven by `cwUpdateCoordinator`: mark one as needing an update, then run it (there is no `rerunSurvex`). `cwGeoReference` + `cwLocalProjectionManager` hold the project's local frame, which is stored and read back on load as is; `cwFixStationValidator` checks fixes against it, and per-fix diagnostics live on `cwSurveyNode::fixStationDiagnostics`.
+**Solve and georeferencing**: `cwSurvexExporter` writes Survex from `cwTripData` snapshots, with splays, each fix in its own CS via `cwSurvexCS`, `*declination auto` once per located node, and a fallback `*fix` on an unfixed block only when no written tie joins it to an anchored one. Pipelines are `cwUpdatable`s driven by `cwUpdateCoordinator`: mark one as needing an update, then run it (there is no `rerunSurvex`). `cwGeoReference` + `cwLocalProjectionManager` hold the project's local frame, which is stored and read back on load as is; `cwFixStationValidator` checks fixes against it, and per-fix diagnostics live on `cwSurveyNode::fixStationDiagnostics`.
 
 **UI**: `cwPageSelectionModel` routes pages; `cwKeywordItemModel` / `cwKeywordFilterPipelineModel` drive hierarchical keyword search.
 

@@ -18,7 +18,7 @@ Two things break until you place it:
 
 - **Add a second cave and they overlap.** Every un-georeferenced cave anchors at
   the *same* local origin, so a project with several caves piles them on top of
-  each other in the 3D view.
+  each other in the 3D view. A tie between two caves joins them instead.
 - **[Auto declination](../survey-data/declination.md#let-cavewhere-work-it-out-auto)
   stays unavailable.** IGRF-14 needs a location, and without a fixed station
   there is nothing to compute from.

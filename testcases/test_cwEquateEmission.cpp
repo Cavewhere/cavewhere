@@ -28,6 +28,8 @@
 #include "cwEquateModel.h"
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineManager.h"
+#include "cwFixStation.h"
+#include "cwFixStationModel.h"
 #include "cwLinePlotManager.h"
 #include "cwShot.h"
 #include "cwStation.h"
@@ -199,6 +201,143 @@ void checkCoincident(const cwStationPositionLookup& lookup, const QString& first
     CHECK(a.x() == Catch::Approx(b.x()).margin(0.001));
     CHECK(a.y() == Catch::Approx(b.y()).margin(0.001));
     CHECK(a.z() == Catch::Approx(b.z()).margin(0.001));
+}
+
+// Every leg these tests shoot is this long.
+constexpr double kLegLength = 10.0;
+constexpr double kLengthMargin = 0.01;
+
+// survex_bare.svx fixes a1 here, with no *cs, and shoots a1-a2 5 m north.
+constexpr double kBareFixEasting = 100.0;
+
+// passage.svx's P1-P2 leg; the file fixes nothing.
+constexpr double kPassageFirstLeg = 6.5;
+
+// A point inside UTM zone 13N, away from the origin.
+const QString kUtmCS = QStringLiteral("EPSG:32613");
+constexpr double kUtmEasting = 478000.0;
+constexpr double kUtmNorthing = 4430000.0;
+constexpr double kUtmElevation = 1655.0;
+// A float holds a coordinate near kUtmNorthing to the nearest 0.5 m, so a leg
+// solved there measures within that of its length.
+constexpr double kUtmLengthMargin = 0.5;
+
+void checkLegLength(const cwStationPositionLookup& lookup, const QString& from, const QString& to,
+                    double expected = kLegLength, double margin = kLengthMargin)
+{
+    INFO(from.toStdString() << " to " << to.toStdString());
+    REQUIRE(lookup.hasPosition(from));
+    REQUIRE(lookup.hasPosition(to));
+    CHECK((lookup.position(to) - lookup.position(from)).length()
+          == Catch::Approx(expected).margin(margin));
+}
+
+void checkAt(const cwStationPositionLookup& lookup, const QString& station, const QVector3D& expected)
+{
+    INFO(station.toStdString());
+    REQUIRE(lookup.hasPosition(station));
+    const QVector3D position = lookup.position(station);
+    CHECK(position.x() == Catch::Approx(expected.x()).margin(0.001));
+    CHECK(position.y() == Catch::Approx(expected.y()).margin(0.001));
+    CHECK(position.z() == Catch::Approx(expected.z()).margin(0.001));
+}
+
+//! \a lines one per line, in the form Catch prints.
+std::string joinedLines(const QStringList& lines)
+{
+    return lines.join(QLatin1Char('\n')).toStdString();
+}
+
+//! Every *fix line the driver writes, trimmed, one per line in order.
+std::string fixLines(const QString& driver)
+{
+    QStringList lines;
+    for (const QString& rawLine : driver.split(QLatin1Char('\n'))) {
+        const QString line = rawLine.trimmed();
+        if (line.startsWith(QStringLiteral("*fix "))) {
+            lines.append(line);
+        }
+    }
+    return joinedLines(lines);
+}
+
+//! The text of the block "*begin <label>" opens, through its "*end <label>".
+QString blockText(const QString& driver, const QString& label)
+{
+    const QString escaped = QRegularExpression::escape(label);
+    const QRegularExpression beginLine(QStringLiteral("^\\s*\\*begin %1\\b").arg(escaped),
+                                       QRegularExpression::MultilineOption);
+    const QRegularExpression endLine(QStringLiteral("^\\s*\\*end %1\\b").arg(escaped),
+                                     QRegularExpression::MultilineOption);
+    const int begin = driver.indexOf(beginLine);
+    REQUIRE(begin >= 0);
+    const int end = driver.indexOf(endLine, begin);
+    REQUIRE(end > begin);
+    return driver.mid(begin, end - begin);
+}
+
+cwFixStation utmFix(const QString& station)
+{
+    cwFixStation fix;
+    fix.setStationName(station);
+    fix.setInputCS(kUtmCS);
+    fix.setCoordinate(kUtmEasting, kUtmNorthing, kUtmElevation);
+    return fix;
+}
+
+QString utmFixLine(const QString& station)
+{
+    return QStringLiteral("*fix %1 478000.000000000 4430000.000000000 1655.000000000").arg(station);
+}
+
+QString originFixLine(const QString& station)
+{
+    return QStringLiteral("*fix %1 0 0 0").arg(station);
+}
+
+//! Two native caves, Alpha (a1 north to a2) and Beta (b1 east to b2), neither
+//! fixed and neither tied.
+struct TwoCaves {
+    cwCave* alpha = nullptr;
+    cwCave* beta = nullptr;
+};
+
+TwoCaves addTwoCaves(cwCavingRegion& region)
+{
+    TwoCaves caves;
+    caves.alpha = addEmptyCave(region, QStringLiteral("Alpha"));
+    addNativeTripWithShot(caves.alpha, QStringLiteral("Native"),
+                          QStringLiteral("a1"), QStringLiteral("a2"), kLegLength);
+    caves.beta = addEmptyCave(region, QStringLiteral("Beta"));
+    addNativeTripWithShot(caves.beta, QStringLiteral("Native"),
+                          QStringLiteral("b1"), QStringLiteral("b2"), kLegLength,
+                          QStringLiteral("90.0"));
+    return caves;
+}
+
+//! The region driver written block by block, as exportRegion does, keeping
+//! the exporter's errors for every node, written or not.
+QString driverKeepingErrors(const cwCavingRegion& region,
+                            const cwSurvexExporterRegion::Options& options,
+                            QStringList& errors)
+{
+    const cwCavingRegionData regionData = region.data();
+    const cwSurvexExporterCaveTask::DriverTree tree(regionData.caves, cwScopeLabels(regionData),
+                                                    options.excludedExternalOwners,
+                                                    regionData.equates);
+    const cwSurvexExporterCaveTask::AnchorPlan plan(tree, options.externalFixedStations);
+    cwSurvexExporterCaveTask task;
+    task.setExportOptions(options);
+
+    QString driver;
+    QTextStream stream(&driver);
+    for (const cwCaveData& node : regionData.caves) {
+        REQUIRE(task.writeNode(stream, node, tree, plan));
+    }
+    cwSurvexExporterCaveTask::writeEquates(stream, tree.equates(), tree);
+    stream.flush();
+    errors = task.errors();
+    return driver;
 }
 
 } // namespace
@@ -497,6 +636,10 @@ TEST_CASE("A region equate draws stations in two caves coincident",
     CHECK(posA.x() == Catch::Approx(posB.x()).margin(0.001));
     CHECK(posA.y() == Catch::Approx(posB.y()).margin(0.001));
     CHECK(posA.z() == Catch::Approx(posB.z()).margin(0.001));
+
+    // One anchor for the tied pair, so the tie bends neither leg.
+    checkLegLength(lookupA, QStringLiteral("1"), QStringLiteral("2"));
+    checkLegLength(lookupB, QStringLiteral("x"), QStringLiteral("y"));
 }
 
 TEST_CASE("A region equate ties three caves' stations coincident in one line",
@@ -563,6 +706,10 @@ TEST_CASE("A region equate ties three caves' stations coincident in one line",
     CHECK(posA.x() == Catch::Approx(posC.x()).margin(0.001));
     CHECK(posA.y() == Catch::Approx(posC.y()).margin(0.001));
     CHECK(posA.z() == Catch::Approx(posC.z()).margin(0.001));
+
+    checkLegLength(lookupA, QStringLiteral("1"), QStringLiteral("2"));
+    checkLegLength(lookupB, QStringLiteral("x"), QStringLiteral("y"));
+    checkLegLength(lookupC, QStringLiteral("p"), QStringLiteral("q"));
 }
 
 TEST_CASE("A region equate qualifies native-node and trip handles at any depth",
@@ -692,4 +839,454 @@ TEST_CASE("Every region equate operand names a scope the driver opens",
     const cwStationPositionLookup solved = solveDriver(driverPath);
     checkCoincident(solved, QStringLiteral("big_cave_2.topo_1.simple.a2"), QStringLiteral("big_cave.2"));
     checkCoincident(solved, QStringLiteral("big_cave.topo_1.simple.a3"), QStringLiteral("big_cave_2.2"));
+}
+
+TEST_CASE("A fixed cave anchors an unfixed cave tied to it", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const TwoCaves caves = addTwoCaves(region);
+    caves.alpha->fixStations()->appendFixStation(utmFix(QStringLiteral("a1")));
+    region.equates()->appendEquate(cwEquate({nativeHandle(caves.alpha, QStringLiteral("a2")),
+                                             nativeHandle(caves.beta, QStringLiteral("b1"))}));
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, {}, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK(fixLines(driver) == joinedLines({utmFixLine(QStringLiteral("a1"))}));
+    CHECK_FALSE(blockText(driver, QStringLiteral("beta")).contains(QStringLiteral("*fix")));
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkAt(solved, QStringLiteral("alpha.a1"), QVector3D(kUtmEasting, kUtmNorthing, kUtmElevation));
+    checkLegLength(solved, QStringLiteral("alpha.a1"), QStringLiteral("alpha.a2"), kLegLength,
+                   kUtmLengthMargin);
+    checkCoincident(solved, QStringLiteral("alpha.a2"), QStringLiteral("beta.b1"));
+    checkLegLength(solved, QStringLiteral("beta.b1"), QStringLiteral("beta.b2"), kLegLength,
+                   kUtmLengthMargin);
+}
+
+TEST_CASE("Two unfixed tied caves take one fallback", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const TwoCaves caves = addTwoCaves(region);
+    region.equates()->appendEquate(cwEquate({nativeHandle(caves.alpha, QStringLiteral("a2")),
+                                             nativeHandle(caves.beta, QStringLiteral("b1"))}));
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, {}, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    // The first cave in output order keeps today's fallback.
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("a1"))}));
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkAt(solved, QStringLiteral("alpha.a1"), QVector3D());
+    checkLegLength(solved, QStringLiteral("alpha.a1"), QStringLiteral("alpha.a2"));
+    checkLegLength(solved, QStringLiteral("beta.b1"), QStringLiteral("beta.b2"));
+}
+
+TEST_CASE("An untied cave keeps its own fallback", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const TwoCaves caves = addTwoCaves(region);
+    cwCave* gamma = addEmptyCave(region, QStringLiteral("Gamma"));
+    addNativeTripWithShot(gamma, QStringLiteral("Native"),
+                          QStringLiteral("c1"), QStringLiteral("c2"), kLegLength);
+    region.equates()->appendEquate(cwEquate({nativeHandle(caves.alpha, QStringLiteral("a2")),
+                                             nativeHandle(caves.beta, QStringLiteral("b1"))}));
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, {}, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK(blockText(driver, QStringLiteral("gamma")).contains(originFixLine(QStringLiteral("c1"))));
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("a1")),
+                                           originFixLine(QStringLiteral("c1"))}));
+}
+
+TEST_CASE("Sibling caves under a folder take one fallback", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwCave* folder = addChildNode(region.rootNode(), QStringLiteral("Folder"), cwSurveyNode::Kind::Folder);
+    cwCave* alpha = addChildNode(folder, QStringLiteral("Alpha"), cwSurveyNode::Kind::Cave);
+    addNativeTripWithShot(alpha, QStringLiteral("Native"),
+                          QStringLiteral("a1"), QStringLiteral("a2"), kLegLength);
+    cwCave* beta = addChildNode(folder, QStringLiteral("Beta"), cwSurveyNode::Kind::Cave);
+    addNativeTripWithShot(beta, QStringLiteral("Native"),
+                          QStringLiteral("b1"), QStringLiteral("b2"), kLegLength, QStringLiteral("90.0"));
+    region.equates()->appendEquate(cwEquate({nativeHandle(alpha, QStringLiteral("a2")),
+                                             nativeHandle(beta, QStringLiteral("b1"))}));
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, {}, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("a1"))}));
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkLegLength(solved, QStringLiteral("folder.alpha.a1"), QStringLiteral("folder.alpha.a2"));
+    checkLegLength(solved, QStringLiteral("folder.beta.b1"), QStringLiteral("folder.beta.b2"));
+}
+
+TEST_CASE("Two attached files under an unanchored node take one origin fix", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    // passage.svx fixes nothing, so each file would take an origin fix.
+    const QStringList passageStations = {QStringLiteral("passage.p1"), QStringLiteral("passage.p2"),
+                                         QStringLiteral("passage.p3")};
+    cwCavingRegion region;
+    cwCave* alpha = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwSurvexExporterRegion::Options options;
+    QList<cwTrip*> files;
+    for (const QString& name : {QStringLiteral("East"), QStringLiteral("West")}) {
+        cwTrip* trip = addAttachedTrip(alpha, name, QStringLiteral("passage.svx"));
+        trip->setExternalStations(passageStations);
+        const QString attachDir = tempSubdir(tempRoot, name);
+        seedAttachment(attachDir, fixturePath(QStringLiteral("passage.svx")));
+        options.tripAttachmentDirs.insert(trip->id(), attachDir);
+        files.append(trip);
+    }
+    cwTrip* east = files.at(0);
+    cwTrip* west = files.at(1);
+    region.equates()->appendEquate(cwEquate({tripHandle(east, QStringLiteral("passage.p3")),
+                                             tripHandle(west, QStringLiteral("passage.p1"))}));
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, options, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("passage.p1"))}));
+    CHECK(blockText(driver, QStringLiteral("east")).contains(QStringLiteral("*fix")));
+
+    // The plan names the one file the driver fixes at the origin.
+    const cwCavingRegionData regionData = region.data();
+    const cwSurvexExporterCaveTask::DriverTree tree(regionData.caves, cwScopeLabels(regionData),
+                                                    options.excludedExternalOwners,
+                                                    regionData.equates);
+    const cwSurvexExporterCaveTask::AnchorPlan plan(tree, options.externalFixedStations);
+    CHECK(plan.originFixedOwners() == QSet<QUuid>{east->id()});
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkLegLength(solved, QStringLiteral("alpha.east.passage.p1"),
+                   QStringLiteral("alpha.east.passage.p2"), kPassageFirstLeg);
+    checkLegLength(solved, QStringLiteral("alpha.west.passage.p1"),
+                   QStringLiteral("alpha.west.passage.p2"), kPassageFirstLeg);
+}
+
+namespace {
+
+//! Alpha: a native trip n1 north to n2, and an attached survex_bare.svx that
+//! fixes its own a1 away from the origin.
+struct NativeAndSelfFixingFile {
+    cwCave* alpha = nullptr;
+    cwTrip* bare = nullptr;
+    cwSurvexExporterRegion::Options options;
+};
+
+NativeAndSelfFixingFile addNativeAndSelfFixingFile(cwCavingRegion& region, const QTemporaryDir& tempRoot)
+{
+    NativeAndSelfFixingFile setup;
+    setup.alpha = addEmptyCave(region, QStringLiteral("Alpha"));
+    addNativeTripWithShot(setup.alpha, QStringLiteral("Native"),
+                          QStringLiteral("n1"), QStringLiteral("n2"), kLegLength);
+    setup.bare = addAttachedTrip(setup.alpha, QStringLiteral("Bare"), QStringLiteral("survex_bare.svx"));
+    setup.bare->setExternalStations({QStringLiteral("a1"), QStringLiteral("a2")});
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("bare"));
+    seedAttachment(attachDir, fixturePath(QStringLiteral("survex_bare.svx")));
+    setup.options.tripAttachmentDirs.insert(setup.bare->id(), attachDir);
+    setup.options.externalFixedStations.insert(setup.bare->id(), {QStringLiteral("a1")});
+    return setup;
+}
+
+} // namespace
+
+TEST_CASE("A self-fixing file anchors the native stations tied to it", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const NativeAndSelfFixingFile setup = addNativeAndSelfFixingFile(region, tempRoot);
+    region.equates()->appendEquate(cwEquate({nativeHandle(setup.alpha, QStringLiteral("n1")),
+                                             tripHandle(setup.bare, QStringLiteral("a1"))}));
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, setup.options, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    // The file's own *fix sits inside its *include; the driver adds none.
+    CHECK(fixLines(driver).empty());
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkAt(solved, QStringLiteral("alpha.n1"), QVector3D(kBareFixEasting, 0.0f, 0.0f));
+    checkCoincident(solved, QStringLiteral("alpha.n1"), QStringLiteral("alpha.bare.a1"));
+    checkLegLength(solved, QStringLiteral("alpha.n1"), QStringLiteral("alpha.n2"));
+}
+
+TEST_CASE("An untied native trip beside a self-fixing file keeps its fallback", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const NativeAndSelfFixingFile setup = addNativeAndSelfFixingFile(region, tempRoot);
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, setup.options, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("n1"))}));
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkAt(solved, QStringLiteral("alpha.n1"), QVector3D());
+    checkAt(solved, QStringLiteral("alpha.bare.a1"), QVector3D(kBareFixEasting, 0.0f, 0.0f));
+}
+
+TEST_CASE("A tie with an operand in an excluded owner joins nothing", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const TwoCaves caves = addTwoCaves(region);
+    cwTrip* gone = addAttachedTrip(caves.beta, QStringLiteral("Gone"), QStringLiteral("passage.svx"));
+    gone->setExternalStations({QStringLiteral("passage.p1")});
+    region.equates()->appendEquate(cwEquate({nativeHandle(caves.alpha, QStringLiteral("a2")),
+                                             nativeHandle(caves.beta, QStringLiteral("b1")),
+                                             tripHandle(gone, QStringLiteral("passage.p1"))}));
+
+    cwSurvexExporterRegion::Options options;
+    options.excludedExternalOwners.insert(gone->id());
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, options, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK_FALSE(driver.contains(QStringLiteral("*equate")));
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("a1")),
+                                           originFixLine(QStringLiteral("b1"))}));
+}
+
+TEST_CASE("A tie to a station its cave lacks joins nothing", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const TwoCaves caves = addTwoCaves(region);
+    // Beta has no zz: cavern makes one up at a2, which reaches none of Beta's
+    // stations.
+    region.equates()->appendEquate(cwEquate({nativeHandle(caves.alpha, QStringLiteral("a2")),
+                                             nativeHandle(caves.beta, QStringLiteral("zz"))}));
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, {}, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK(driver.contains(QStringLiteral("*equate alpha.a2 beta.zz")));
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("a1")),
+                                           originFixLine(QStringLiteral("b1"))}));
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkLegLength(solved, QStringLiteral("alpha.a1"), QStringLiteral("alpha.a2"));
+    checkLegLength(solved, QStringLiteral("beta.b1"), QStringLiteral("beta.b2"));
+}
+
+TEST_CASE("A fix that fails validation is no anchor", "[Equate][Anchor]")
+{
+    cwCavingRegion region;
+    const TwoCaves caves = addTwoCaves(region);
+    caves.alpha->fixStations()->appendFixStation(utmFix(QStringLiteral("zz")));
+    region.equates()->appendEquate(cwEquate({nativeHandle(caves.alpha, QStringLiteral("a2")),
+                                             nativeHandle(caves.beta, QStringLiteral("b1"))}));
+
+    QStringList errors;
+    const QString driver = driverKeepingErrors(region, {}, errors);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("a1"))}));
+    CHECK(errors.count(QStringLiteral("Fix references unknown station: \"zz\"")) == 1);
+}
+
+namespace {
+
+//! Alpha holds no stations of its own; its sections North (n1 north to n2) and
+//! South (s1 east to s2) hold the survey.
+struct CaveWithSections {
+    cwCave* alpha = nullptr;
+    cwCave* north = nullptr;
+    cwCave* south = nullptr;
+};
+
+CaveWithSections addCaveWithSections(cwCavingRegion& region)
+{
+    CaveWithSections cave;
+    cave.alpha = addEmptyCave(region, QStringLiteral("Alpha"));
+    cave.north = addChildNode(cave.alpha, QStringLiteral("North"), cwSurveyNode::Kind::Folder);
+    addNativeTripWithShot(cave.north, QStringLiteral("Native"),
+                          QStringLiteral("n1"), QStringLiteral("n2"), kLegLength);
+    cave.south = addChildNode(cave.alpha, QStringLiteral("South"), cwSurveyNode::Kind::Folder);
+    addNativeTripWithShot(cave.south, QStringLiteral("Native"),
+                          QStringLiteral("s1"), QStringLiteral("s2"), kLegLength, QStringLiteral("90.0"));
+    return cave;
+}
+
+QString singleCaveText(const cwCavingRegion& region, const cwCave* cave)
+{
+    cwSurvexExporterCaveTask exporter;
+    exporter.setEquates(region.equates()->equates());
+    QString text;
+    QTextStream stream(&text);
+    REQUIRE(exporter.writeCave(stream, cave->data()));
+    stream.flush();
+    return text;
+}
+
+} // namespace
+
+TEST_CASE("The single-cave export takes one fallback for sections tied together", "[Equate][Anchor]")
+{
+    cwCavingRegion region;
+    const CaveWithSections cave = addCaveWithSections(region);
+    region.equates()->appendEquate(cwEquate({nativeHandle(cave.north, QStringLiteral("n2")),
+                                             nativeHandle(cave.south, QStringLiteral("s1"))}));
+
+    const QString text = singleCaveText(region, cave.alpha);
+    INFO("cave file:\n" << text.toStdString());
+    CHECK(fixLines(text) == joinedLines({originFixLine(QStringLiteral("n1"))}));
+}
+
+TEST_CASE("The single-cave export joins nothing through a tie that leaves the cave", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    // North and South meet only through Bravo, which the cave's file leaves out.
+    cwCavingRegion region;
+    const CaveWithSections cave = addCaveWithSections(region);
+    cwCave* bravo = addEmptyCave(region, QStringLiteral("Bravo"));
+    addNativeTripWithShot(bravo, QStringLiteral("Native"),
+                          QStringLiteral("b1"), QStringLiteral("b2"), kLegLength);
+    region.equates()->appendEquate(cwEquate({nativeHandle(cave.north, QStringLiteral("n2")),
+                                             nativeHandle(bravo, QStringLiteral("b1"))}));
+    region.equates()->appendEquate(cwEquate({nativeHandle(bravo, QStringLiteral("b2")),
+                                             nativeHandle(cave.south, QStringLiteral("s1"))}));
+
+    const QString text = singleCaveText(region, cave.alpha);
+    INFO("cave file:\n" << text.toStdString());
+    CHECK(fixLines(text) == joinedLines({originFixLine(QStringLiteral("n1")),
+                                         originFixLine(QStringLiteral("s1"))}));
+
+    // The region driver writes both ties, so the three blocks share one anchor.
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, {}, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("n1"))}));
+}
+
+namespace {
+
+//! Parent (p1 north to p2) holds a section Nested whose own fix puts n1 away
+//! from the origin; Nested shoots n1 east to n2.
+struct ParentWithFixedSection {
+    cwCave* parent = nullptr;
+    cwCave* nested = nullptr;
+};
+
+ParentWithFixedSection addParentWithFixedSection(cwCavingRegion& region)
+{
+    ParentWithFixedSection tree;
+    tree.parent = addEmptyCave(region, QStringLiteral("Parent"));
+    addNativeTripWithShot(tree.parent, QStringLiteral("Native"),
+                          QStringLiteral("p1"), QStringLiteral("p2"), kLegLength);
+    tree.nested = addChildNode(tree.parent, QStringLiteral("Nested"), cwSurveyNode::Kind::Folder);
+    tree.nested->fixStations()->appendFixStation(utmFix(QStringLiteral("n1")));
+    addNativeTripWithShot(tree.nested, QStringLiteral("Native"),
+                          QStringLiteral("n1"), QStringLiteral("n2"), kLegLength, QStringLiteral("90.0"));
+    return tree;
+}
+
+} // namespace
+
+TEST_CASE("A nested fix anchors its unfixed parent tied to it", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const ParentWithFixedSection tree = addParentWithFixedSection(region);
+    region.equates()->appendEquate(cwEquate({nativeHandle(tree.parent, QStringLiteral("p2")),
+                                             nativeHandle(tree.nested, QStringLiteral("n1"))}));
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, {}, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK(fixLines(driver) == joinedLines({utmFixLine(QStringLiteral("n1"))}));
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkAt(solved, QStringLiteral("parent.nested.n1"),
+            QVector3D(kUtmEasting, kUtmNorthing, kUtmElevation));
+    checkCoincident(solved, QStringLiteral("parent.p2"), QStringLiteral("parent.nested.n1"));
+    checkLegLength(solved, QStringLiteral("parent.p1"), QStringLiteral("parent.p2"), kLegLength,
+                   kUtmLengthMargin);
+    checkLegLength(solved, QStringLiteral("parent.nested.n1"), QStringLiteral("parent.nested.n2"),
+                   kLegLength, kUtmLengthMargin);
+}
+
+TEST_CASE("An untied nested fix leaves its parent's fallback in place", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    addParentWithFixedSection(region);
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, {}, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("p1")),
+                                           utmFixLine(QStringLiteral("n1"))}));
+}
+
+TEST_CASE("A tie to a cave's unconnected survey leaves the other cave its fallback", "[Equate][Anchor]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    // Alpha's first survey (a1 to a2) takes its fallback; its second (x1 to
+    // x2) shares no station with it and reaches Beta only through the tie.
+    cwCavingRegion region;
+    const TwoCaves caves = addTwoCaves(region);
+    addNativeTripWithShot(caves.alpha, QStringLiteral("Second"),
+                          QStringLiteral("x1"), QStringLiteral("x2"), kLegLength);
+    region.equates()->appendEquate(cwEquate({nativeHandle(caves.alpha, QStringLiteral("x2")),
+                                             nativeHandle(caves.beta, QStringLiteral("b1"))}));
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, {}, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK(fixLines(driver) == joinedLines({originFixLine(QStringLiteral("a1")),
+                                           originFixLine(QStringLiteral("b1"))}));
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkCoincident(solved, QStringLiteral("alpha.x2"), QStringLiteral("beta.b1"));
+    checkLegLength(solved, QStringLiteral("alpha.x1"), QStringLiteral("alpha.x2"));
+    checkLegLength(solved, QStringLiteral("beta.b1"), QStringLiteral("beta.b2"));
 }

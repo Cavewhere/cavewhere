@@ -60,14 +60,16 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     // its siblings, so the whole tree is needed to assign one, and the "*begin"
     // lines and the equate operands below both have to name the same ones.
     const cwSurvexExporterCaveTask::DriverTree tree(region.caves, cwScopeLabels(region),
-                                                    options.excludedExternalOwners);
+                                                    options.excludedExternalOwners,
+                                                    region.equates);
+    const cwSurvexExporterCaveTask::AnchorPlan plan(tree, options.externalFixedStations);
 
     cwSurvexExporterCaveTask nodeExporter;
     nodeExporter.setExportOptions(options);
     nodeExporter.setSidecarWriter(&sidecars);
 
     for (const cwCaveData& node : region.caves) {
-        if (!nodeExporter.writeNode(stream, node, tree, outputCS)) {
+        if (!nodeExporter.writeNode(stream, node, tree, plan, outputCS)) {
             stream.flush();
             outputFile.close();
             QString message = nodeExporter.errors().join(QStringLiteral("; "));
@@ -82,7 +84,7 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     // every fully-qualified operand is in scope. Cavern merges the tied
     // stations to one coordinate; the decode then routes each qualified name
     // back to its node.
-    cwSurvexExporterCaveTask::writeEquates(stream, region.equates, tree);
+    cwSurvexExporterCaveTask::writeEquates(stream, tree.equates(), tree);
 
     stream << "*end" << Qt::endl;
     stream.flush();

@@ -777,7 +777,8 @@ TEST_CASE("Node scope on a source root lists native trips across its subtree",
           "[Model][ScopeStations]")
 {
     // A source root's fixes reach every native trip below it, each under the
-    // label the root's block gives it, as writeFixStations accepts them.
+    // label the root's block gives it, as the exporter's fix validation
+    // accepts them.
     cwCavingRegion region;
     cwCave* root = new cwCave();
     root->setName(QStringLiteral("Root"));

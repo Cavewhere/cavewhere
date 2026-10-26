@@ -2,6 +2,7 @@
 #define CWSURVEXEXPORTERUTILS_H
 
 //Qt includes
+#include <QHash>
 #include <QList>
 #include <QSet>
 #include <QString>
@@ -304,6 +305,18 @@ QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
  * (an empty scope, or a trip's scopePrefix such as "trip1.").
  */
 QSet<QString> scopedStationKeys(const QString& scope, const QStringList& stations);
+
+//! Union-find over canonical station keys: two keys share a root exactly when
+//! cavern would join them.
+class StationKeyUnion
+{
+public:
+    QString root(const QString& key) const;
+    void join(const QString& first, const QString& second);
+
+private:
+    QHash<QString, QString> m_parents;
+};
 
 /**
  * Emit the per-cave *cs / *fix block.

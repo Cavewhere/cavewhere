@@ -1904,13 +1904,14 @@ TEST_CASE("A node fix naming a station its attached file lacks or fixes itself i
 
     const cwCavingRegionData regionData = region.data();
     const cwSurvexExporterCaveTask::DriverTree tree(regionData.caves, cwScopeLabels(regionData));
+    const cwSurvexExporterCaveTask::AnchorPlan plan(tree, options.externalFixedStations);
     cwSurvexExporterCaveTask task;
     task.setExportOptions(options);
 
     QString driver;
     QTextStream stream(&driver);
     for (const cwCaveData& node : regionData.caves) {
-        REQUIRE(task.writeNode(stream, node, tree));
+        REQUIRE(task.writeNode(stream, node, tree, plan));
     }
     stream.flush();
     INFO("driver:\n" << driver.toStdString());

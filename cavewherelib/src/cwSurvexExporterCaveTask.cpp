@@ -66,10 +66,12 @@ bool subtreeUsesAutoDeclination(const cwCaveData& node)
 
 cwSurvexExporterCaveTask::DriverTree::DriverTree(const QList<cwCaveData>& nodes,
                                                  const cwScopeLabels& labels,
-                                                 const QSet<QUuid>& excludedExternalOwners) :
+                                                 const QSet<QUuid>& excludedExternalOwners,
+                                                 const QList<cwEquate>& equates) :
     m_nodes(nodes),
     m_labels(labels),
-    m_excludedExternalOwners(excludedExternalOwners)
+    m_excludedExternalOwners(excludedExternalOwners),
+    m_equates(equates)
 {
     for (const cwCaveData& node : m_nodes) {
         index(node, false);
@@ -218,6 +220,359 @@ QString cwSurvexExporterCaveTask::DriverTree::operand(const cwStationHandle& han
                                    + handle.tail());
 }
 
+// Walks the tree in writeNodeBlock's output order, validating each written
+// node's fixes and listing the fallbacks today's top-down rule would write.
+// Then it joins stations the way cavern does (a chunk's shots, each attached
+// file taken as one piece, every written tie) and keeps a fallback only for a
+// group of stations that no real fix and no earlier fallback reaches.
+class cwSurvexExporterCaveTask::AnchorPlan::Builder
+{
+public:
+    Builder(AnchorPlan& plan, const DriverTree& tree,
+            const QHash<QUuid, QStringList>& externalFixedStations) :
+        m_plan(plan),
+        m_tree(tree),
+        m_externalFixedStations(externalFixedStations)
+    {
+    }
+
+    void build()
+    {
+        for (const cwCaveData& node : m_tree.nodes()) {
+            walkNode(node, false);
+        }
+        joinTies();
+        chooseFallbacks();
+    }
+
+private:
+    // The station keys validation accepts for one node, relative to the
+    // node's block.
+    struct NodeStations {
+        //! Each chunk's valid stations: its shots join them.
+        QList<QStringList> chunkKeys;
+        QString firstValidStation;
+        QString firstValidKey;
+        //! Keyed by the attached file's owner: a trip, or the node itself.
+        QHash<QUuid, QSet<QString>> fileKeys;
+    };
+
+    // A fallback today's top-down rule writes, unless its group has an anchor.
+    struct Fallback {
+        QUuid blockId;
+        QString station;
+        //! The station's region-qualified canonical key.
+        QString key;
+        bool attachedFile = false;
+    };
+
+    AnchorPlan& m_plan;
+    const DriverTree& m_tree;
+    const QHash<QUuid, QStringList>& m_externalFixedStations;
+    cwSurvexExporterUtils::StationKeyUnion m_stations;
+    //! Region-qualified keys of stations a real fix holds in place.
+    QList<QString> m_realAnchors;
+    //! In output order.
+    QList<Fallback> m_fallbacks;
+
+    template<typename Keys>
+    void joinAll(const QString& prefix, const Keys& keys)
+    {
+        if (keys.isEmpty()) {
+            return;
+        }
+        const QString first = prefix + *keys.cbegin();
+        for (const QString& key : keys) {
+            m_stations.join(first, prefix + key);
+        }
+    }
+
+    void joinChunks(const QString& prefix, const QList<QStringList>& chunkKeys)
+    {
+        for (const QStringList& keys : chunkKeys) {
+            joinAll(prefix, keys);
+        }
+    }
+
+    // An attached file is one piece: cavern may still find it split, but
+    // nothing short of solving it tells.
+    void addFile(const QString& prefix, const QUuid& ownerId, const QString& scope,
+                 QSet<QString> keys)
+    {
+        const QSet<QString> fixedKeys = cwSurvexExporterUtils::scopedStationKeys(
+            scope, m_externalFixedStations.value(ownerId));
+        keys.unite(fixedKeys);
+        joinAll(prefix, keys);
+        if (!fixedKeys.isEmpty()) {
+            m_realAnchors.append(prefix + *fixedKeys.cbegin());
+        }
+    }
+
+    void walkNode(const cwCaveData& node, bool anchoredAbove)
+    {
+        if (!m_tree.emits(node.id)) {
+            return;
+        }
+
+        NodeStations stations;
+        const NodeFixes fixes = validate(node, stations);
+        m_plan.m_fixes.insert(node.id, fixes);
+        const QString prefix = cwStation::canonicalKey(m_tree.labels().prefix(node.id));
+        for (const cwFixStation& fix : fixes.kept) {
+            m_realAnchors.append(prefix + cwStation::canonicalKey(fix.stationName().trimmed()));
+        }
+        joinChunks(prefix, stations.chunkKeys);
+
+        if (!node.externalCenterline.isEmpty()) {
+            walkSourcedRoot(node, prefix, fixes, stations, anchoredAbove);
+            return;
+        }
+
+        const bool takesFallback = !anchoredAbove && fixes.kept.isEmpty()
+                                   && !stations.firstValidStation.isEmpty();
+        if (takesFallback) {
+            m_fallbacks.append({node.id, stations.firstValidStation,
+                                prefix + stations.firstValidKey, false});
+        }
+        const bool anchored = anchoredAbove || !fixes.kept.isEmpty() || takesFallback;
+
+        for (const cwTripData& trip : node.trips) {
+            if (trip.externalCenterline.isEmpty()
+                || m_tree.excludedExternalOwners().contains(trip.id)) {
+                continue;
+            }
+            const QString tripScope = cwTrip::scopePrefix(trip, m_tree.labels(), node.id);
+            addFile(prefix, trip.id, tripScope, stations.fileKeys.value(trip.id));
+            if (!anchored) {
+                addFileFallback(trip.id, prefix + cwStation::canonicalKey(tripScope),
+                                trip.externalCenterline, trip.externalStations);
+            }
+        }
+
+        for (const cwCaveData& child : node.nodes) {
+            walkNode(child, anchored);
+        }
+    }
+
+    void addFileFallback(const QUuid& ownerId, const QString& scopeKey,
+                         const cwExternalCenterline& centerline, const QStringList& externalStations)
+    {
+        const QString origin = originStation(centerline, externalStations,
+                                             m_externalFixedStations.value(ownerId));
+        if (!origin.isEmpty()) {
+            m_fallbacks.append({ownerId, origin, scopeKey + cwStation::canonicalKey(origin), true});
+        }
+    }
+
+    // A sourced root is one block: its *include, whose stations include every
+    // derived trip's, and its subtree's native trips.
+    void walkSourcedRoot(const cwCaveData& root, const QString& prefix, const NodeFixes& fixes,
+                         const NodeStations& stations, bool anchoredAbove)
+    {
+        QSet<QString> fileKeys = stations.fileKeys.value(root.id);
+        addDerivedStations(root, fileKeys);
+        addFile(prefix, root.id, QString(), fileKeys);
+        if (!anchoredAbove && fixes.kept.isEmpty()) {
+            addFileFallback(root.id, prefix, root.externalCenterline, root.externalStations);
+        }
+    }
+
+    // A derived trip's stations, relative to the root's block, named as
+    // DriverTree::operand names them.
+    void addDerivedStations(const cwCaveData& node, QSet<QString>& keys) const
+    {
+        const cwScopeLabels& labels = m_tree.labels();
+        for (const cwTripData& trip : node.trips) {
+            if (trip.sourcePath.isEmpty()) {
+                continue;
+            }
+            keys.unite(cwSurvexExporterUtils::scopedStationKeys(
+                labels.cavernPath(node.id) + cwTrip::scopePrefix(trip, labels, node.id),
+                trip.externalStations));
+        }
+        for (const cwCaveData& child : node.nodes) {
+            addDerivedStations(child, keys);
+        }
+    }
+
+    // Validates \a node's fixes against the station names its block knows
+    // (writeFixStations' doc comment), filling \a stations with those names.
+    NodeFixes validate(const cwCaveData& node, NodeStations& stations) const
+    {
+        const cwScopeLabels& labels = m_tree.labels();
+        QSet<QString> stationNamesLower;
+        const auto addChunkStations = [&](const cwTripData& trip, const QString& tripScope) {
+            for (const cwSurveyChunkData& chunk : trip.chunks) {
+                QStringList& chunkKeys = stations.chunkKeys.emplaceBack();
+                for (const cwStation& station : chunk.stations) {
+                    if (station.isValid()) {
+                        const QString key = cwStation::canonicalKey(tripScope + station.name());
+                        chunkKeys.append(key);
+                        stationNamesLower.insert(key);
+                        if (stations.firstValidStation.isEmpty()) {
+                            stations.firstValidStation = station.name();
+                            stations.firstValidKey = key;
+                        }
+                    }
+                }
+            }
+        };
+        if (isSourceRoot(node)) {
+            // Every native trip of the subtree sits under its label in the
+            // root's block, so the root's fixes may name any of them.
+            for (const DriverTree::SourcedTrip& sourced : m_tree.sourcedNativeTrips(node.id)) {
+                addChunkStations(*sourced.trip,
+                                 cwTrip::scopePrefix(*sourced.trip, labels, sourced.node->id));
+            }
+        } else {
+            for (const cwTripData& trip : node.trips) {
+                // Empty for a native trip in a native node.
+                const QString tripScope = trip.externalCenterline.isEmpty()
+                    ? cwTrip::scopePrefix(trip, labels, node.id)
+                    : QString();
+                addChunkStations(trip, tripScope);
+            }
+        }
+
+        // The stations the attached files fix themselves, under the same keys,
+        // each with the name of the file that fixes it.
+        QHash<QString, QString> fileFixedStations;
+        // The stations of attached Compass .mak files, under the same keys,
+        // each with its owner and the owner's scope: a fix on one is written
+        // inside the Survex the .mak is translated into, where its case is kept.
+        struct MakOwner {
+            QUuid ownerId;
+            QString scope;
+        };
+        QHash<QString, MakOwner> makStationOwners;
+        const auto addFileStations = [&](const QUuid& ownerId, const QString& scope,
+                                         const cwExternalCenterline& centerline,
+                                         const QStringList& fileStations) {
+            const QSet<QString> stationKeys =
+                cwSurvexExporterUtils::scopedStationKeys(scope, fileStations);
+            stations.fileKeys.insert(ownerId, stationKeys);
+            stationNamesLower.unite(stationKeys);
+            if (cwCompassMakFile::isMakFile(centerline.entryFile())) {
+                for (const QString& key : stationKeys) {
+                    makStationOwners.insert(key, {ownerId, scope});
+                }
+            }
+            const QString fileName = QFileInfo(centerline.entryFile()).fileName();
+            const QSet<QString> fixedKeys = cwSurvexExporterUtils::scopedStationKeys(
+                scope, m_externalFixedStations.value(ownerId));
+            for (const QString& key : fixedKeys) {
+                fileFixedStations.insert(key, fileName);
+            }
+        };
+
+        for (const cwTripData& trip : node.trips) {
+            if (trip.externalCenterline.isEmpty()
+                || m_tree.excludedExternalOwners().contains(trip.id)) {
+                continue;
+            }
+            addFileStations(trip.id, cwTrip::scopePrefix(trip, labels, node.id),
+                            trip.externalCenterline, trip.externalStations);
+        }
+        addFileStations(node.id, QString(), node.externalCenterline, node.externalStations);
+
+        NodeFixes fixes;
+        const QList<cwFixStation> validFixes = cwSurvexExporterUtils::validateFixStations(
+            node.fixStations, stationNamesLower, fixes.errors);
+
+        // Cavern rejects a second fix on a station at different coordinates
+        // (error 46) and fails the whole run, so the file's own fix stays in
+        // force and the node's is dropped.
+        fixes.kept.reserve(validFixes.size());
+        for (const cwFixStation& fix : validFixes) {
+            const auto fixingFile =
+                fileFixedStations.constFind(cwStation::canonicalKey(fix.stationName().trimmed()));
+            if (fixingFile == fileFixedStations.constEnd()) {
+                fixes.kept.append(fix);
+            } else {
+                fixes.errors.append(cwFixStationDiagnostics::fileFixCollisionMessage(
+                    fixingFile.value(), fix.stationName().trimmed()));
+            }
+        }
+
+        for (const cwFixStation& fix : std::as_const(fixes.kept)) {
+            const QString name = fix.stationName().trimmed();
+            const auto makOwner = makStationOwners.constFind(cwStation::canonicalKey(name));
+            if (makOwner == makStationOwners.constEnd()) {
+                fixes.direct.append(fix);
+                continue;
+            }
+            cwFixStation inFileScope = fix;
+            inFileScope.setStationName(name.mid(makOwner->scope.size()));
+            fixes.makFixes[makOwner->ownerId].append(inFileScope);
+        }
+        return fixes;
+    }
+
+    // Joins the operands of every tie writeEquateLine writes. An operand that
+    // names no station of its block joins nothing: cavern creates that
+    // station rather than reach the block through it.
+    void joinTies()
+    {
+        for (const cwEquate& equate : m_tree.equates()) {
+            if (!equate.isValid()) {
+                continue;
+            }
+            const QList<cwStationHandle> handles = equate.stations();
+            QStringList operands;
+            operands.reserve(handles.size());
+            for (const cwStationHandle& handle : handles) {
+                const QString operand = m_tree.operand(handle);
+                if (operand.isEmpty()) {
+                    operands.clear();
+                    break;
+                }
+                operands.append(cwStation::canonicalKey(operand));
+            }
+            for (const QString& operand : std::as_const(operands)) {
+                m_stations.join(operands.first(), operand);
+            }
+        }
+    }
+
+    void chooseFallbacks()
+    {
+        QSet<QString> anchoredGroups;
+        for (const QString& anchor : std::as_const(m_realAnchors)) {
+            anchoredGroups.insert(m_stations.root(anchor));
+        }
+        for (const Fallback& fallback : std::as_const(m_fallbacks)) {
+            const QString group = m_stations.root(fallback.key);
+            if (anchoredGroups.contains(group)) {
+                continue;
+            }
+            anchoredGroups.insert(group);
+            m_plan.m_fallbackStations.insert(fallback.blockId, fallback.station);
+            if (fallback.attachedFile) {
+                m_plan.m_originFixedOwners.insert(fallback.blockId);
+            }
+        }
+    }
+};
+
+cwSurvexExporterCaveTask::AnchorPlan::AnchorPlan(const DriverTree& tree,
+                                                 const QHash<QUuid, QStringList>& externalFixedStations)
+{
+    Builder(*this, tree, externalFixedStations).build();
+}
+
+const cwSurvexExporterCaveTask::AnchorPlan::NodeFixes&
+cwSurvexExporterCaveTask::AnchorPlan::fixes(const QUuid& nodeId) const
+{
+    static const NodeFixes kNoFixes;
+    const auto it = m_fixes.constFind(nodeId);
+    return it == m_fixes.constEnd() ? kNoFixes : it.value();
+}
+
+QString cwSurvexExporterCaveTask::AnchorPlan::fallbackStation(const QUuid& blockId) const
+{
+    return m_fallbackStations.value(blockId);
+}
+
 cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
     cwCaveExporterTask(parent)
 {
@@ -235,7 +590,8 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
     // A single-cave export has no region and no siblings, so the cave stands
     // alone under its own sanitized name.
     const QList<cwCaveData> nodes = {cave};
-    const DriverTree tree(nodes, cwScopeLabels::forNode(cave), ExportOptions.excludedExternalOwners);
+    const DriverTree tree(nodes, cwScopeLabels::forNode(cave), ExportOptions.excludedExternalOwners,
+                          m_equates);
 
     if (!tree.emits(cave.id)) {
         // An excluded cave-level attachment is skipped, not failed: the
@@ -251,14 +607,15 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         return false;
     }
 
-    if (!writeNode(stream, nodes.first(), tree, globalCS)) {
+    const AnchorPlan plan(tree, ExportOptions.externalFixedStations);
+    if (!writeNode(stream, nodes.first(), tree, plan, globalCS)) {
         return false;
     }
 
     // Ties emit after the cave's block closes, fully qualified, as the region
     // driver does. A tie reaching outside this cave renders no operand there,
     // so writeEquateLine drops it.
-    writeEquates(stream, m_equates, tree);
+    writeEquates(stream, tree.equates(), tree);
     return true;
 }
 
@@ -270,18 +627,20 @@ void cwSurvexExporterCaveTask::setEquates(const QList<cwEquate>& equates)
 bool cwSurvexExporterCaveTask::writeNode(QTextStream& stream,
                                          const cwCaveData& node,
                                          const DriverTree& tree,
+                                         const AnchorPlan& plan,
                                          const QString& globalCS)
 {
     TotalProgress = 0;
     // Each top-level block starts with no input *cs in scope: the region
     // block above names only *cs out.
     const cwSurvexExporterUtils::CsScope csScope(sidecars());
-    return writeNodeBlock(stream, node, tree, globalCS, Inherited(), csScope);
+    return writeNodeBlock(stream, node, tree, plan, globalCS, Inherited(), csScope);
 }
 
 bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
                                               const cwCaveData& node,
                                               const DriverTree& tree,
+                                              const AnchorPlan& plan,
                                               const QString& globalCS,
                                               const Inherited& inherited,
                                               const cwSurvexExporterUtils::CsScope& enclosingScope)
@@ -311,15 +670,15 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
             cwSurvexExporterUtils::writeDeclinationReset(stream);
         }
         // The node's own fixes name the file's stations in this block's scope,
-        // except a station the file fixes itself, whose fix writeFixStations
-        // drops. A file that fixes nothing sits at the origin, like a native
-        // node with no fix.
+        // except a station the file fixes itself, whose fix validation drops.
+        // A file that fixes nothing sits at the origin unless a tie anchors
+        // it, like a native node with no fix.
         cwSurvexExporterUtils::CsScope includeScope(enclosingScope);
         cwSurvexExporterUtils::CsScope fixesScope(includeScope);
         QString fixesText;
         QTextStream fixesStream(&fixesText);
-        const WrittenFixes written =
-            writeFixStations(fixesStream, node, tree, globalCS, inherited.anchored, fixesScope);
+        const AnchorPlan::NodeFixes& written =
+            writeFixStations(fixesStream, node, plan, globalCS, fixesScope);
         fixesStream.flush();
         // A system the node's own fixes name would stay in force at the
         // *include and read the file's bare fixes in it. With no system
@@ -371,8 +730,8 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
     cwSurvexExporterUtils::CsScope fixesScope(csScope);
     QString fixesText;
     QTextStream fixesStream(&fixesText);
-    const WrittenFixes written =
-        writeFixStations(fixesStream, node, tree, globalCS, inherited.anchored, fixesScope);
+    const AnchorPlan::NodeFixes& written =
+        writeFixStations(fixesStream, node, plan, globalCS, fixesScope);
     fixesStream.flush();
     const bool fixesLeaveSystem = shielded && fixesScope.system() != csScope.system();
     if (fixesLeaveSystem) {
@@ -381,7 +740,6 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         stream << fixesText;
     }
     cwSurvexExporterUtils::CsScope& nodeScope = fixesLeaveSystem ? csScope : fixesScope;
-    here.anchored = written.anchored || inherited.anchored;
 
     // A node with a location of its own declares `*declination auto` for its
     // whole subtree and sets the grid convergence below it. A node without one
@@ -437,10 +795,7 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
                 cwSurvexExporterUtils::writeDeclinationReset(stream);
             }
             cwSurvexExporterUtils::CsScope includeScope(nodeScope);
-            const QString tripOriginStation =
-                here.anchored ? QString()
-                              : originStation(tripData.externalCenterline, tripData.externalStations,
-                                              ExportOptions.externalFixedStations.value(tripData.id));
+            const QString tripOriginStation = plan.fallbackStation(tripData.id);
             if (!tripOriginStation.isEmpty()) {
                 cwSurvexExporterUtils::writeFixStations(stream, {}, tripOriginStation, globalCS,
                                                         includeScope);
@@ -475,7 +830,7 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
     }
 
     for (const cwCaveData& child : node.nodes) {
-        if (!writeNodeBlock(stream, child, tree, globalCS, here, nodeScope)) {
+        if (!writeNodeBlock(stream, child, tree, plan, globalCS, here, nodeScope)) {
             return false;
         }
     }
@@ -557,145 +912,34 @@ void cwSurvexExporterCaveTask::writeEquateLine(QTextStream& stream, const QStrin
 }
 
 /**
- * Emit the *cs / *fix block for the node. Validates the snapshot's
- * fixStations against the station names the node's block knows: its native
- * chunk stations, each attached trip's harvested stations under the trip's
- * scope ("<tripLabel>.doghill.d1"), and its own attached file's harvested
- * stations ("doghill.d1"). Those are the names the node's solved network
- * carries, so the Fix Stations page and the driver agree on one spelling, and
- * the *fix written from this block resolves to the file's station inside its
- * *include. A fix on an attached Compass .mak's station is returned in
- * WrittenFixes::makFixes rather than written here. Rejected fixes, and fixes
- * on a station an attached file fixes itself, are dropped from the output
- * and their reasons appended to Errors. Falls back to
- * `*fix <firstStation> 0 0 0` when no valid fix exists and no enclosing block
- * is anchored, so each un-fixed top-level survey still resolves in cavern.
+ * Emit the *cs / *fix block for the node from \a plan. The plan validated the
+ * snapshot's fixStations before output started, against the station names the
+ * node's block knows: its native chunk stations, each attached trip's
+ * harvested stations under the trip's scope ("<tripLabel>.doghill.d1"), and
+ * its own attached file's harvested stations ("doghill.d1"). Those are the
+ * names the node's solved network carries, so the Fix Stations page and the
+ * driver agree on one spelling, and the *fix written from this block resolves
+ * to the file's station inside its *include. A fix on an attached Compass
+ * .mak's station is returned in NodeFixes::makFixes rather than written here.
+ * Rejected fixes, and fixes on a station an attached file fixes itself, are
+ * left out and their reasons appended to Errors. The node writes
+ * `*fix <firstStation> 0 0 0` only when the plan gives it the fallback: it
+ * keeps no valid fix, no enclosing block anchors it, and no validated fix,
+ * self-fixing file or earlier fallback reaches its station.
  * cwScopeStationListModel's node mode restates this name set on the live tree
  * for the station autocomplete; keep the two in step.
  */
-cwSurvexExporterCaveTask::WrittenFixes
+const cwSurvexExporterCaveTask::AnchorPlan::NodeFixes&
 cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &node,
-                                           const DriverTree& tree,
-                                           const QString& globalCS, bool anchoredAbove,
+                                           const AnchorPlan& plan,
+                                           const QString& globalCS,
                                            cwSurvexExporterUtils::CsScope& scope)
 {
-    QSet<QString> stationNamesLower;
-    QString firstValidStation;
-    const auto addChunkStations = [&](const cwTripData& trip, const QString& tripScope) {
-        for (const cwSurveyChunkData& chunk : trip.chunks) {
-            for (const cwStation& station : chunk.stations) {
-                if (station.isValid()) {
-                    stationNamesLower.insert(cwStation::canonicalKey(tripScope + station.name()));
-                    if (firstValidStation.isEmpty()) {
-                        firstValidStation = station.name();
-                    }
-                }
-            }
-        }
-    };
-    if (isSourceRoot(node)) {
-        // Every native trip of the subtree sits under its label in the root's
-        // block, so the root's fixes may name any of them.
-        for (const DriverTree::SourcedTrip& sourced : tree.sourcedNativeTrips(node.id)) {
-            addChunkStations(*sourced.trip,
-                             cwTrip::scopePrefix(*sourced.trip, tree.labels(), sourced.node->id));
-        }
-    } else {
-        for (const cwTripData& trip : node.trips) {
-            // Empty for a native trip in a native node.
-            const QString tripScope = trip.externalCenterline.isEmpty()
-                ? cwTrip::scopePrefix(trip, tree.labels(), node.id)
-                : QString();
-            addChunkStations(trip, tripScope);
-        }
-    }
-
-    // The stations the attached files fix themselves, under the same keys,
-    // each with the name of the file that fixes it.
-    QHash<QString, QString> fileFixedStations;
-    // The stations of attached Compass .mak files, under the same keys, each
-    // with its owner and the owner's scope: a fix on one is written inside
-    // the Survex the .mak is translated into, where its case is kept.
-    struct MakOwner {
-        QUuid ownerId;
-        QString scope;
-    };
-    QHash<QString, MakOwner> makStationOwners;
-    const auto addFileStations = [&](const QUuid& ownerId, const QString& scope,
-                                     const cwExternalCenterline& centerline,
-                                     const QStringList& stations) {
-        const QSet<QString> stationKeys = cwSurvexExporterUtils::scopedStationKeys(scope, stations);
-        stationNamesLower.unite(stationKeys);
-        if (cwCompassMakFile::isMakFile(centerline.entryFile())) {
-            for (const QString& key : stationKeys) {
-                makStationOwners.insert(key, {ownerId, scope});
-            }
-        }
-        const QString fileName = QFileInfo(centerline.entryFile()).fileName();
-        const QSet<QString> fixedKeys = cwSurvexExporterUtils::scopedStationKeys(
-            scope, ExportOptions.externalFixedStations.value(ownerId));
-        for (const QString& key : fixedKeys) {
-            fileFixedStations.insert(key, fileName);
-        }
-    };
-
-    for (const cwTripData& trip : node.trips) {
-        if (trip.externalCenterline.isEmpty()
-            || tree.excludedExternalOwners().contains(trip.id)) {
-            continue;
-        }
-        addFileStations(trip.id, cwTrip::scopePrefix(trip, tree.labels(), node.id),
-                        trip.externalCenterline, trip.externalStations);
-    }
-    addFileStations(node.id, QString(), node.externalCenterline, node.externalStations);
-
-    QStringList errors;
-    const QList<cwFixStation> validFixes = cwSurvexExporterUtils::validateFixStations(
-        node.fixStations, stationNamesLower, errors);
-    for (const QString& message : std::as_const(errors)) {
-        Errors.append(message);
-    }
-
-    // Cavern rejects a second fix on a station at different coordinates
-    // (error 46) and fails the whole run, so the file's own fix stays in
-    // force and the node's is dropped.
-    QList<cwFixStation> writtenFixes;
-    writtenFixes.reserve(validFixes.size());
-    for (const cwFixStation& fix : validFixes) {
-        const auto fixingFile =
-            fileFixedStations.constFind(cwStation::canonicalKey(fix.stationName().trimmed()));
-        if (fixingFile == fileFixedStations.constEnd()) {
-            writtenFixes.append(fix);
-        } else {
-            Errors.append(cwFixStationDiagnostics::fileFixCollisionMessage(
-                fixingFile.value(), fix.stationName().trimmed()));
-        }
-    }
-
-    QList<cwFixStation> directFixes;
-    QHash<QUuid, QList<cwFixStation>> makFixes;
-    for (const cwFixStation& fix : std::as_const(writtenFixes)) {
-        const QString name = fix.stationName().trimmed();
-        const auto makOwner = makStationOwners.constFind(cwStation::canonicalKey(name));
-        if (makOwner == makStationOwners.constEnd()) {
-            directFixes.append(fix);
-            continue;
-        }
-        cwFixStation inFileScope = fix;
-        inFileScope.setStationName(name.mid(makOwner->scope.size()));
-        makFixes[makOwner->ownerId].append(inFileScope);
-    }
-
-    // A sourced root has no native stations; the file's own first station
-    // stands in for them when the file fixes nothing.
-    const QString nativeOrFileStation = node.externalCenterline.isEmpty()
-        ? firstValidStation
-        : originStation(node.externalCenterline, node.externalStations,
-                        ExportOptions.externalFixedStations.value(node.id));
-    const QString fallbackStation =
-        anchoredAbove || !writtenFixes.isEmpty() ? QString() : nativeOrFileStation;
-    cwSurvexExporterUtils::writeFixStations(stream, directFixes, fallbackStation, globalCS, scope);
-    return { writtenFixes, !writtenFixes.isEmpty() || !fallbackStation.isEmpty(), makFixes };
+    const AnchorPlan::NodeFixes& fixes = plan.fixes(node.id);
+    Errors.append(fixes.errors);
+    cwSurvexExporterUtils::writeFixStations(stream, fixes.direct, plan.fallbackStation(node.id),
+                                            globalCS, scope);
+    return fixes;
 }
 
 bool cwSurvexExporterCaveTask::readsInheritedSystem(const QUuid& ownerId,

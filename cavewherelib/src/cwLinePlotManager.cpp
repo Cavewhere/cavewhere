@@ -134,8 +134,9 @@ bool isUnfixedAttachment(const QUuid& ownerId, const cwExternalCenterline& cente
 }
 
 //! Whether the driver keeps one of \a node's own fixes, by the rules of
-//! cwSurvexExporterCaveTask::writeFixStations: the fix validates against the
-//! stations the node's block knows, and names none an attached file fixes.
+//! cwSurvexExporterCaveTask::AnchorPlan's fix validation: the fix validates
+//! against the stations the node's block knows, and names none an attached
+//! file fixes.
 bool keepsAFix(const cwSurveyNode* node, const QSet<QString>& nativeKeys,
                const ExternalInputs& inputs)
 {
