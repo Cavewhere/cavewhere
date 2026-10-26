@@ -235,6 +235,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 
     SurveySignaler->addConnectionToTrips(SIGNAL(chunksInserted(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToTrips(SIGNAL(chunksRemoved(int,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToTrips(SIGNAL(chunksMoved(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToTrips(SIGNAL(nameChanged()), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToTripCalibrations(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
     // declinationChanged covers external inputs that don't dirty stored

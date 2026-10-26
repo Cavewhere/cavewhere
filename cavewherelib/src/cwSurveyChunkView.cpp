@@ -693,26 +693,6 @@ void cwSurveyChunkView::rightClickOnShot(int index) {
 /**
   \brief Splits the chunk into two pieces on a station
 
-  \param int - The station index where the station will be
-  split
-
-  This will emit a InsertNewChunk()
-  */
-void cwSurveyChunkView::splitOnStation(int index) {
-    qDebug() << "cwSurveyChunkView: split on station" << index;
-
-    //Make sure the index is good
-    if(index < 0 || index >= SurveyChunk->stationCount()) {
-        return; //Can't split on a bad index
-    }
-
-    cwSurveyChunk* newChunk = SurveyChunk->splitAtStation(index);
-    emit createdNewChunk(newChunk);
-}
-
-/**
-  \brief Splits the chunk into two pieces on a station
-
   \param int - The shot index where the chunk will be split
 */
 void cwSurveyChunkView::splitOnShot(int /*index*/) {

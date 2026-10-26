@@ -463,6 +463,8 @@ QtObject {
     readonly property int groupBoxHorizontalPadding: 11
     // Between a group box title and the content below it.
     readonly property int groupBoxTitleSpacing: 5
+    // The divider the survey table draws where "Split chunk here" would end a chunk.
+    readonly property int chunkSplitLineThickness: 3
     // A split view handle, and the wider strip that grabs it.
     readonly property int splitHandleThickness: 5
     readonly property int splitHandleGrabThickness: 11

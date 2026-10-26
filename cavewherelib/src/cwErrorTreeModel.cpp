@@ -45,13 +45,14 @@ struct KindMember {
 };
 
 //Every warning id that belongs to a kind; any other id is Kind::Other
-constexpr std::array<KindMember, 10> kKindMembers = {{
+constexpr std::array<KindMember, 11> kKindMembers = {{
     {cwErrorTypeId::SurveyCompassDisagreement, Kind::Disagreement},
     {cwErrorTypeId::SurveyClinoDisagreement, Kind::Disagreement},
     {cwErrorTypeId::SurveyMissingBackCompass, Kind::MissingBacksight},
     {cwErrorTypeId::SurveyMissingBackClino, Kind::MissingBacksight},
     {cwErrorTypeId::SurveyMissingCompass, Kind::MissingReading},
     {cwErrorTypeId::SurveyMissingClino, Kind::MissingReading},
+    {cwErrorTypeId::SurveyEmptyShot, Kind::MissingReading},
     {cwErrorTypeId::SurveyMissingLeft, Kind::MissingLrud},
     {cwErrorTypeId::SurveyMissingRight, Kind::MissingLrud},
     {cwErrorTypeId::SurveyMissingUp, Kind::MissingLrud},

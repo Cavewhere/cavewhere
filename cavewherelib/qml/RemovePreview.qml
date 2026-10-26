@@ -15,11 +15,17 @@ QQ.QtObject {
     property int shotIndex: -1
     property bool previewChunkRemoval: false
 
+    //A split draws a divider rather than striking rows out
+    property SurveyChunk splitChunk: null
+    property int splitShotIndex: -1
+
     function clear() {
         chunk = null
         stationIndex = -1
         shotIndex = -1
         previewChunkRemoval = false
+        splitChunk = null
+        splitShotIndex = -1
     }
 
     function previewChunk(previewChunk) {
@@ -61,5 +67,14 @@ QQ.QtObject {
         } else if(direction === SurveyChunk.Below) {
             stationIndex = previewShotIndex + 1
         }
+    }
+
+    function previewSplit(previewChunk, previewShotIndex) {
+        clear()
+        if(previewChunk === null) {
+            return
+        }
+        splitChunk = previewChunk
+        splitShotIndex = previewShotIndex
     }
 }

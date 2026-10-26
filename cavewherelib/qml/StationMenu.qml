@@ -206,10 +206,59 @@ QQ.Loader {
 
             QC.MenuSeparator { }
 
-            RemoveChunkMenuItem {
-                objectName: "stationMenuRemoveChunk"
-                chunk: dataValue.chunk
-                removePreview: stationMenuLoader.removePreview
+            QC.Menu {
+                objectName: "stationMenuChunkMenu"
+                title: "Chunk"
+                enabled: dataValue.chunk !== null
+
+                SplitChunkMenuItem {
+                    objectName: "stationMenuSplitChunk"
+                    model: stationMenuLoader.model
+                    cell: stationMenuLoader.model.cellIndex(listViewIndex, dataValue.cellRole)
+                    removePreview: stationMenuLoader.removePreview
+                }
+
+                QC.MenuSeparator { }
+
+                MergeChunkMenuItem {
+                    objectName: "stationMenuMergeChunkAbove"
+                    model: stationMenuLoader.model
+                    chunk: dataValue.chunk
+                    direction: SurveyChunk.Above
+                    removePreview: stationMenuLoader.removePreview
+                }
+
+                MergeChunkMenuItem {
+                    objectName: "stationMenuMergeChunkBelow"
+                    model: stationMenuLoader.model
+                    chunk: dataValue.chunk
+                    direction: SurveyChunk.Below
+                    removePreview: stationMenuLoader.removePreview
+                }
+
+                QC.MenuSeparator { }
+
+                MoveChunkMenuItem {
+                    objectName: "stationMenuMoveChunkUp"
+                    model: stationMenuLoader.model
+                    chunk: dataValue.chunk
+                    direction: SurveyChunk.Above
+                }
+
+                MoveChunkMenuItem {
+                    objectName: "stationMenuMoveChunkDown"
+                    model: stationMenuLoader.model
+                    chunk: dataValue.chunk
+                    direction: SurveyChunk.Below
+                }
+
+                QC.MenuSeparator { }
+
+                RemoveChunkMenuItem {
+                    objectName: "stationMenuRemoveChunk"
+                    chunk: dataValue.chunk
+                    removePreview: stationMenuLoader.removePreview
+                }
             }
         }
     }

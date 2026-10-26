@@ -13,10 +13,14 @@
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
 #include "cwScopeLabels.h"
+
+//Test includes
 #include "SurveyTreeTestHelper.h"
+#include "SurveyEditorTestHelper.h"
 
 //Qt inculdes
 #include "cwSignalSpy.h"
+#include <QSignalSpy>
 #include <QUndoStack>
 #include <QVector3D>
 
@@ -966,5 +970,51 @@ TEST_CASE("Derived trips read their stations by unit-set membership",
         const QMap<QString, QVector3D> stations = byName(dig->solvedStations());
         CHECK(stations.keys() == QStringList({QStringLiteral("d1")}));
         CHECK(stations.value(QStringLiteral("d1")) == QVector3D(19, 20, 21));
+    }
+}
+
+TEST_CASE("cwTrip::chunk returns nullptr for an index outside the chunk list", "[cwTrip]")
+{
+    cwTrip trip;
+    trip.addChunk(chunkWithNames({QStringLiteral("A1"), QStringLiteral("A2")}));
+    trip.addChunk(chunkWithNames({QStringLiteral("B1"), QStringLiteral("B2")}));
+    REQUIRE(trip.chunkCount() == 2);
+
+    CHECK(trip.chunk(0) == trip.chunks().at(0));
+    CHECK(trip.chunk(trip.chunkCount() - 1) == trip.chunks().last());
+    CHECK(trip.chunk(trip.chunkCount()) == nullptr);
+    CHECK(trip.chunk(-1) == nullptr);
+}
+
+TEST_CASE("cwTrip::removeChunks clamps an end past the last chunk to the last index", "[cwTrip]")
+{
+    cwTrip trip;
+    cwSurveyChunk* a = chunkWithNames({QStringLiteral("A1"), QStringLiteral("A2")});
+    trip.addChunk(a);
+    trip.addChunk(chunkWithNames({QStringLiteral("B1"), QStringLiteral("B2")}));
+    trip.addChunk(chunkWithNames({QStringLiteral("C1"), QStringLiteral("C2")}));
+    REQUIRE(trip.chunkCount() == 3);
+
+    QSignalSpy aboutToRemoveSpy(&trip, &cwTrip::chunksAboutToBeRemoved);
+    QSignalSpy removedSpy(&trip, &cwTrip::chunksRemoved);
+
+    SECTION("A range that starts inside the list removes through the last chunk") {
+        trip.removeChunks(1, 5);
+
+        CHECK(trip.chunks() == QList<cwSurveyChunk*>{a});
+        REQUIRE(aboutToRemoveSpy.count() == 1);
+        CHECK(aboutToRemoveSpy.at(0).at(0).toInt() == 1);
+        CHECK(aboutToRemoveSpy.at(0).at(1).toInt() == 2);
+        REQUIRE(removedSpy.count() == 1);
+        CHECK(removedSpy.at(0).at(0).toInt() == 1);
+        CHECK(removedSpy.at(0).at(1).toInt() == 2);
+    }
+
+    SECTION("A range that starts past the last chunk removes nothing") {
+        trip.removeChunks(3, 5);
+
+        CHECK(trip.chunkCount() == 3);
+        CHECK(aboutToRemoveSpy.count() == 0);
+        CHECK(removedSpy.count() == 0);
     }
 }

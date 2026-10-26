@@ -201,12 +201,36 @@ Hover a remove item and CaveWhere strikes a line through exactly the rows that
 would go. Read that preview; it beats reasoning about which shot pairs with
 which station.
 
-Both menus also offer **Remove Chunk**, which deletes the whole block. No dialog
-asks you to confirm, so the strike-through is the only warning you get.
+Both menus also hold a **Chunk** submenu for whole blocks. It groups **Split
+chunk here**, the 2 merge items, the 2 move items, and **Remove Chunk**, each
+described below.
+
+**Remove Chunk** deletes the whole block. No dialog asks you to confirm, so the
+strike-through is the only warning you get.
 
 A block can never shrink below 2 stations and the shot between them, so
 `canRemoveStation` refuses there and the remove items gray out. To clear the
 last of it, remove the chunk.
+
+**Split chunk here** cuts a block in two at a shot. On a station cell it cuts at
+the shot below that station. Everything from that shot down moves into a new
+block right under the old one, and CaveWhere repeats the shot's from-station at
+the top so the new block still ties in. The copy carries the name only: its
+LRUDs and splays stay with the original. A shot with no distance and no angles
+gets dropped instead of moved, and the new block starts at the station below it.
+Hover the item and a line marks where the cut would go. Like **Remove Chunk**,
+the split has no undo.
+
+**Merge with chunk above** and **Merge with chunk below** join a block to its
+neighbor in the same trip. They work only when the two blocks share a tie
+station: the upper block ends on the station the lower one starts on, so A3 and
+a3 match, A3 and A4 do not. The joined block keeps the upper copy of that
+station. Any LRUD it lacks comes from the lower copy, and the lower copy's
+splays get added to its own. Hover the item and CaveWhere strikes through the
+block that goes away. A merge has no undo either.
+
+**Move chunk up** and **Move chunk down** swap a block with its neighbor in the
+trip, and the cell you were on keeps the focus.
 
 ## Exclude a distance from the total
 
@@ -243,7 +267,10 @@ If the trip has no LRUDs at all, untick **LRUD** in the trip's Settings instead
 A shot with an **explicitly entered zero** distance and no compass or clino is
 special: an **LRUD-only** station, where you recorded passage dimensions without
 measuring a leg. Compass sometimes writes these. Leaving the distance **empty**
-means something else entirely, an unfinished shot, which CaveWhere marks fatal.
+means something else entirely, an unfinished shot. CaveWhere asks for the
+missing readings, or, when the whole shot sits empty in the middle of a block,
+suggests **Chunk** > **Split chunk here** (see
+[Fix Survey Errors](survey-errors.md#empty-shot-a1--a2-use-split-chunk-here-if-a2-starts-a-new-line)).
 
 ## Next steps
 

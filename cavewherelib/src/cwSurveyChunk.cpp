@@ -141,6 +141,8 @@ std::optional<cwSurveyChunk::DataRole> roleForWarningId(int id)
         return cwSurveyChunk::ShotClinoRole;
     case cwErrorTypeId::SurveyMissingBackClino:
         return cwSurveyChunk::ShotBackClinoRole;
+    case cwErrorTypeId::SurveyEmptyShot:
+        return cwSurveyChunk::ShotDistanceRole;
     default:
         return std::nullopt;
     }
@@ -162,6 +164,8 @@ QSet<int> idsClearedByEdit(cwSurveyChunk::DataRole role)
     case cwSurveyChunk::ShotClinoRole:
     case cwSurveyChunk::ShotBackClinoRole:
         return {toInt(missingReadingId(role)), toInt(cwErrorTypeId::SurveyClinoDisagreement)};
+    case cwSurveyChunk::ShotDistanceRole:
+        return {toInt(cwErrorTypeId::SurveyEmptyShot)};
     default:
         return {};
     }
@@ -424,55 +428,13 @@ void cwSurveyChunk::appendShot(cwStation fromStation, cwStation toStation, cwSho
 
     checkForStationError(stationIndex);
     checkForShotError(shotIndex);
-}
 
-/**
-  \brief Splits the current survey chunk at stationIndex
-
-  This will split the this chunk into two pieces, if it's valid to split there, ie
-  the station Index, is valid.
-
-  This will create a new chunk, that the caller is responsible for deleting
-  */
-cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
-    if(stationIndex < 1 || stationIndex >= d.stations.size()) { return nullptr; }
-
-    cwSurveyChunk* newChunk = new cwSurveyChunk(this);
-    newChunk->d.stations.append(cwStation()); //Add an empty station to the front
-
-    //Copy the points from one chunk to another
-    for(int i = stationIndex; i < d.stations.size(); i++) {
-
-        //Get the current stations and shots
-        cwStation station = d.stations[i];
-        cwShot currentShot = shot(i - 1);
-
-        newChunk->d.stations.append(station);
-        if(currentShot.isValid()) {
-            newChunk->d.shots.append(currentShot);
-        }
+    //The shot that was last now has a shot below it, so it can be an empty shot inside the chunk
+    const int previousShotIndex = shotIndex - 1;
+    if(previousShotIndex >= 0) {
+        checkForShotError(previousShotIndex);
     }
-
-    //Remove the stations and shots from the list
-    int shotIndex = stationIndex - 1;
-    emit aboutToRemove(stationIndex, stationIndex, shotIndex, shotIndex);
-
-    QList<cwStation>::iterator stationIter = d.stations.begin() + stationIndex;
-    QList<cwShot>::iterator shotIter = d.shots.begin() + shotIndex;
-    d.stations.erase(stationIter, d.stations.end());
-    d.shots.erase(shotIter, d.shots.end());
-
-    emit removed(stationIndex, stationIndex, shotIndex, shotIndex);
-
-    //Check for errors
-    updateErrors();
-
-    //Append a new last station
-    appendNewShot();
-
-    return newChunk;
 }
-
 
 /**
   Inserts a station a index stationIndex.
@@ -749,7 +711,8 @@ void cwSurveyChunk::setStation(cwStation station, int index){
         announceStationSplaysChanged(index);
     }
 
-    checkForStationError(index);
+    //A rename can move the neighboring shots in or out of the empty-shot case
+    checkForErrorOnDataChanged(StationNameRole, index);
 }
 
 /**
@@ -1257,34 +1220,17 @@ void cwSurveyChunk::checkForErrorOnDataChanged(cwSurveyChunk::DataRole role, int
     case StationDownRole:
         //No dependancy
         break;
-    case ShotDistanceRole:
-        checkForError(StationNameRole, index);
-        checkForError(StationNameRole, index + 1);
-        break;
     case ShotDistanceIncludedRole:
         //No dependancy
         break;
+    case ShotDistanceRole:
     case ShotCompassRole:
-        checkForError(ShotBackCompassRole, index);
-        checkForError(StationNameRole, index);
-        checkForError(StationNameRole, index + 1);
-        break;
     case ShotBackCompassRole:
-        checkForError(ShotCompassRole, index);
-        checkForError(StationNameRole, index);
-        checkForError(StationNameRole, index + 1);
-        break;
     case ShotClinoRole:
-        checkForError(ShotBackClinoRole, index);
-        checkForError(ShotCompassRole, index);
-        checkForError(ShotBackCompassRole, index);
-        checkForError(StationNameRole, index);
-        checkForError(StationNameRole, index + 1);
-        break;
     case ShotBackClinoRole:
-        checkForError(ShotClinoRole, index);
-        checkForError(ShotCompassRole, index);
-        checkForError(ShotBackCompassRole, index);
+        //Any reading can move the shot in or out of the empty-shot case,
+        //which changes what every reading cell reports
+        checkForShotReadingErrors(index);
         checkForError(StationNameRole, index);
         checkForError(StationNameRole, index + 1);
         break;
@@ -1434,8 +1380,13 @@ void cwSurveyChunk::checkForShotError(int index)
 {
     Q_ASSERT(index >= 0);
     Q_ASSERT(index < d.shots.size());
-    checkForError(ShotDistanceRole, index);
     checkForError(ShotDistanceIncludedRole, index);
+    checkForShotReadingErrors(index);
+}
+
+void cwSurveyChunk::checkForShotReadingErrors(int index)
+{
+    checkForError(ShotDistanceRole, index);
     checkForError(ShotCompassRole, index);
     checkForError(ShotBackCompassRole, index);
     checkForError(ShotClinoRole, index);
@@ -1731,6 +1682,19 @@ QList<cwError> cwSurveyChunk::checkDataError(DataRole role, int index) const
 {
     QList<cwError> errors;
 
+    if(isEmptyShotInsideChunk(index)) {
+        //The fix is a split, so the shot gets one warning in place of a missing error per reading
+        if(role == ShotDistanceRole) {
+            cwError error;
+            error.setType(cwError::Warning);
+            error.setMessage(QStringLiteral("Empty shot \"%1\" ➔ \"%2\". Use \"Split chunk here\" if \"%2\" starts a new line")
+                                 .arg(d.stations.at(index).name(), d.stations.at(index + 1).name()));
+            stampWarning(error, cwErrorTypeId::SurveyEmptyShot, d.shots.at(index).ignoredWarnings());
+            errors.append(error);
+        }
+        return errors;
+    }
+
     if(parentTrip() != nullptr) {
         if(!parentTrip()->calibrations()->hasFrontSights()) {
             //Front sights are disabled
@@ -2019,6 +1983,21 @@ bool cwSurveyChunk::allDirectionReadingsEmpty(const cwShot& shot)
 }
 
 /**
+ * True for a shot with no readings between two named stations that has a shot
+ * above and below it, which is where cwTrip::canSplitChunk allows a split.
+ */
+bool cwSurveyChunk::isEmptyShotInsideChunk(int index) const
+{
+    constexpr int kFirstInnerShot = 1;
+    const int lastShot = d.shots.size() - 1;
+    return index >= kFirstInnerShot
+           && index < lastShot
+           && isShotDataEmpty(index)
+           && !d.stations.at(index).name().isEmpty()
+           && !d.stations.at(index + 1).name().isEmpty();
+}
+
+/**
  * @brief cwSurveyChunk::isLrudOnlyShot
  * @param index
  * @return True if the shot is an explicit zero-length shot that carries no
@@ -2086,6 +2065,18 @@ void cwSurveyChunk::updateErrors()
     }
     for(int station : std::as_const(goneStations)) {
         removeSplayErrorsFrom(station, 0);
+    }
+
+    //The same goes for the cells of stations and shots the chunk no longer has
+    const QList<CellIndex> cells = CellErrorModels.keys();
+    for(const auto& cellIndex : cells) {
+        const auto role = static_cast<DataRole>(cellIndex.role());
+        const int count = isStationRole(role) ? d.stations.size() : d.shots.size();
+        if(cellIndex.index() >= count) {
+            cwErrorModel* cellModel = CellErrorModels.take(cellIndex);
+            cellModel->setParentModel(nullptr);
+            cellModel->deleteLater();
+        }
     }
 
     for(int i = 0; i < d.shots.size(); i++) {
@@ -2396,6 +2387,46 @@ cwErrorModel* cwSurveyChunk::errorsAt(int index, cwSurveyChunk::DataRole role) c
 cwErrorModel* cwSurveyChunk::splayErrorsAt(int index, int splayIndex, cwSurveyChunk::DataRole role) const
 {
     return SplayCellErrorModels.value(SplayCellIndex(index, splayIndex, role), nullptr);
+}
+
+void cwSurveyChunk::removeTail(int firstStationIndex)
+{
+    //Station 1 is the last that still leaves the chunk a shot
+    constexpr int kFirstRemovableStation = 2;
+    if(firstStationIndex < kFirstRemovableStation || firstStationIndex >= d.stations.size()) {
+        return;
+    }
+
+    const int lastStationIndex = d.stations.size() - 1;
+    const int firstShotIndex = firstStationIndex - 1;
+    const int lastShotIndex = d.shots.size() - 1;
+
+    emit aboutToRemove(firstStationIndex, lastStationIndex, firstShotIndex, lastShotIndex);
+
+    d.stations.remove(firstStationIndex, lastStationIndex - firstStationIndex + 1);
+    d.shots.remove(firstShotIndex, lastShotIndex - firstShotIndex + 1);
+
+    emit removed(firstStationIndex, lastStationIndex, firstShotIndex, lastShotIndex);
+
+    updateErrors();
+}
+
+void cwSurveyChunk::appendTail(const QList<cwStation>& stations, const QList<cwShot>& shots)
+{
+    if(d.stations.isEmpty() || stations.isEmpty() || stations.size() != shots.size()) {
+        return;
+    }
+
+    const int stationBegin = d.stations.size();
+    const int shotBegin = d.shots.size();
+    const int count = stations.size();
+
+    d.stations.append(stations);
+    d.shots.append(shots);
+
+    emit added(stationBegin, stationBegin + count - 1, shotBegin, shotBegin + count - 1);
+
+    updateErrors();
 }
 
 /**

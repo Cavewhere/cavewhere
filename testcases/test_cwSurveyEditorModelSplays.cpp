@@ -22,6 +22,7 @@
 
 //Test includes
 #include "SplayFixtureHelper.h"
+#include "SurveyEditorTestHelper.h"
 
 //Std includes
 #include <algorithm>
@@ -34,11 +35,9 @@ namespace {
  * A trip of one chunk with stations a1, a2, a3, where a2 carries the three
  * splays from the TopoDroid fixture.
  *
- * Row counts are read through checkRowCount, which also holds the model to what
- * it told the view: the rows announced through beginInsertRows and
- * beginRemoveRows have to add up to the rows the model really gained or lost.
- * Splay clusters make that easy to get wrong, and a view that's told the wrong
- * range shows stale rows rather than failing.
+ * Row counts are read through checkRowCount, which also holds the model to the
+ * rows it announced to the view (SurveyEditorRowTally). Splay clusters make
+ * that easy to get wrong.
  */
 struct SplayFixture {
     SplayFixture()
@@ -49,32 +48,12 @@ struct SplayFixture {
         chunk->setStationSplays(1, a4Splays());
         trip.addChunk(chunk);
         model.setTrip(&trip);
-
-        QObject::connect(&model, &QAbstractItemModel::rowsInserted, &model,
-                         [this](const QModelIndex&, int first, int last) {
-                             announcedRows += last - first + 1;
-                         });
-        QObject::connect(&model, &QAbstractItemModel::rowsRemoved, &model,
-                         [this](const QModelIndex&, int first, int last) {
-                             announcedRows -= last - first + 1;
-                         });
-
-        //A reset tells the view to throw every row away, so the tally restarts
-        QObject::connect(&model, &QAbstractItemModel::modelReset, &model, [this]() {
-            lastCheckedRowCount = model.rowCount();
-            announcedRows = 0;
-        });
-
-        lastCheckedRowCount = model.rowCount();
+        rowTally.restart();
     }
 
     void checkRowCount(int expected)
     {
-        CHECK(model.rowCount() == expected);
-        CHECK(lastCheckedRowCount + announcedRows == expected);
-
-        lastCheckedRowCount = model.rowCount();
-        announcedRows = 0;
+        rowTally.check(expected);
     }
 
     cwSurveyEditorRowIndex stationRow(int stationIndex) const
@@ -129,8 +108,7 @@ struct SplayFixture {
     cwSurveyChunk* chunk;
     cwSurveyEditorModel model;
     QSignalSpy changes {&model, &QAbstractItemModel::dataChanged};
-    int lastCheckedRowCount = 0;
-    int announcedRows = 0;
+    SurveyEditorRowTally rowTally {&model};
 };
 
 }

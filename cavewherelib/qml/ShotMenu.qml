@@ -105,8 +105,6 @@ QQ.Loader {
                 }
             }
 
-            // QC.MenuSeparator { }
-
             QC.Menu {
                 objectName: "shotMenuInsertMenu"
                 title: "Insert"
@@ -137,10 +135,59 @@ QQ.Loader {
 
             QC.MenuSeparator { }
 
-            RemoveChunkMenuItem {
-                objectName: "shotMenuRemoveChunk"
-                chunk: dataValue.chunk
-                removePreview: shotMenuLoader.removePreview
+            QC.Menu {
+                objectName: "shotMenuChunkMenu"
+                title: "Chunk"
+                enabled: dataValue.chunk !== null
+
+                SplitChunkMenuItem {
+                    objectName: "shotMenuSplitChunk"
+                    model: shotMenuLoader.model
+                    cell: shotMenuLoader.model.cellIndex(listViewIndex, dataValue.cellRole)
+                    removePreview: shotMenuLoader.removePreview
+                }
+
+                QC.MenuSeparator { }
+
+                MergeChunkMenuItem {
+                    objectName: "shotMenuMergeChunkAbove"
+                    model: shotMenuLoader.model
+                    chunk: dataValue.chunk
+                    direction: SurveyChunk.Above
+                    removePreview: shotMenuLoader.removePreview
+                }
+
+                MergeChunkMenuItem {
+                    objectName: "shotMenuMergeChunkBelow"
+                    model: shotMenuLoader.model
+                    chunk: dataValue.chunk
+                    direction: SurveyChunk.Below
+                    removePreview: shotMenuLoader.removePreview
+                }
+
+                QC.MenuSeparator { }
+
+                MoveChunkMenuItem {
+                    objectName: "shotMenuMoveChunkUp"
+                    model: shotMenuLoader.model
+                    chunk: dataValue.chunk
+                    direction: SurveyChunk.Above
+                }
+
+                MoveChunkMenuItem {
+                    objectName: "shotMenuMoveChunkDown"
+                    model: shotMenuLoader.model
+                    chunk: dataValue.chunk
+                    direction: SurveyChunk.Below
+                }
+
+                QC.MenuSeparator { }
+
+                RemoveChunkMenuItem {
+                    objectName: "shotMenuRemoveChunk"
+                    chunk: dataValue.chunk
+                    removePreview: shotMenuLoader.removePreview
+                }
             }
         }
     }

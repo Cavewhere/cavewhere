@@ -110,7 +110,6 @@ private slots:
     void rightClickOnStation(int index);
     void rightClickOnShot(int index);
 
-    void splitOnStation(int index);
     void splitOnShot(int index);
 
     void updateErrors(const QObject* parent, int index, int role);

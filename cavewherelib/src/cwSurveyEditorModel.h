@@ -129,6 +129,16 @@ public:
     Q_INVOKABLE void removeShotAt(const cwSurveyEditorCellIndex& cell, cwSurveyChunk::Direction direction);
     Q_INVOKABLE void insertStationAt(const cwSurveyEditorCellIndex& cell, cwSurveyChunk::Direction direction);
     Q_INVOKABLE void insertShotAt(const cwSurveyEditorCellIndex& cell, cwSurveyChunk::Direction direction);
+    Q_INVOKABLE bool canSplitChunkAt(const cwSurveyEditorCellIndex& cell) const;
+    Q_INVOKABLE void splitChunkAt(const cwSurveyEditorCellIndex& cell);
+    Q_INVOKABLE bool canMergeWithAbove(cwSurveyChunk* chunk) const;
+    Q_INVOKABLE bool canMergeWithBelow(cwSurveyChunk* chunk) const;
+    Q_INVOKABLE void mergeWithAbove(cwSurveyChunk* chunk);
+    Q_INVOKABLE void mergeWithBelow(cwSurveyChunk* chunk);
+    Q_INVOKABLE bool canMoveChunkUp(cwSurveyChunk* chunk) const;
+    Q_INVOKABLE bool canMoveChunkDown(cwSurveyChunk* chunk) const;
+    Q_INVOKABLE void moveChunkUp(cwSurveyChunk* chunk);
+    Q_INVOKABLE void moveChunkDown(cwSurveyChunk* chunk);
 
 
     QHash<int, QByteArray> roleNames() const;
@@ -216,11 +226,23 @@ private:
 
     //For bookkeeping on row removal
     RemoveToken m_removeToken;
+    bool m_moveRowsStarted = false;
 
     enum TrimType {
         FullTrim,
         PreserveLastEmptyOne
     };
+
+    struct SplitPoint {
+        cwSurveyChunk* chunk = nullptr;
+        int shotIndex = -1;
+    };
+
+    SplitPoint splitPointAt(const cwSurveyEditorCellIndex& cell) const;
+    cwSurveyChunk* neighborChunk(cwSurveyChunk* chunk, int step) const;
+    void moveChunkBy(cwSurveyChunk* chunk, int step);
+    bool canMergePair(cwSurveyChunk* upper, cwSurveyChunk* lower) const;
+    void mergePair(cwSurveyChunk* upper, cwSurveyChunk* lower);
 
     bool setSplayDataAt(const cwSurveyEditorCellIndex& cell,
                         cwSurveyChunk::DataRole readingRole,
@@ -262,6 +284,7 @@ private:
     void invalidateStationFixed();
     void syncFocusedCellSignals();
     static bool isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex);
+    static int lastStationAfterTrim(cwSurveyChunk* chunk);
     static void trim(cwSurveyChunk* chunk, TrimType trimType);
     static void trim(cwSurveyChunk* chunk);
     cwSurveyEditorCellIndex nextCellIndex(const cwSurveyEditorCellIndex& currentCell,

@@ -273,6 +273,13 @@ public:
     void addChunk(cwSurveyChunk* chunk);
     Q_INVOKABLE void addNewChunk();
     Q_INVOKABLE void removeChunk(cwSurveyChunk* chunk);
+    bool canSplitChunk(cwSurveyChunk* chunk, int shotIndex) const;
+    cwSurveyChunk* splitChunk(cwSurveyChunk* chunk, int shotIndex);
+    bool canMergeChunks(int upperIndex) const;
+    static bool isTie(const QString& upperLastName, const QString& lowerFirstName);
+    void mergeChunks(int upperIndex);
+    bool canMoveChunk(int from, int to) const;
+    void moveChunk(int from, int to);
 
     int chunkCount() const;
     Q_INVOKABLE cwSurveyChunk* chunk(int i) const;
@@ -410,6 +417,8 @@ signals:
     void chunksInserted(int begin, int end);
     void chunksAboutToBeRemoved(int begin, int end);
     void chunksRemoved(int begin, int end);
+    void chunksAboutToBeMoved(int from, int to);
+    void chunksMoved(int from, int to);
     // void teamChanged();
     // void calibrationChanged();
     // void notesChanged();

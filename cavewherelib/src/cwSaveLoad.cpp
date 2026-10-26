@@ -5207,6 +5207,7 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
     // connect(trip, &cwTrip::numberOfChunksChanged, this, saveTrip);
     connect(trip, &cwTrip::chunksAboutToBeRemoved, this, saveTrip);
     connect(trip, &cwTrip::chunksRemoved, this, saveTrip);
+    connect(trip, &cwTrip::chunksMoved, this, saveTrip);
 
     // Newly inserted chunks → connect them and save
     connect(trip, &cwTrip::chunksInserted, this,

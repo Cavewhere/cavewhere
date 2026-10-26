@@ -584,11 +584,10 @@ void cwTrip::addShotToLastChunk(const cwStation &fromStation, const cwStation &t
   \brief Remove the chunks
   */
 void cwTrip::removeChunks(int begin, int end) {
-    if(end < begin) { return; }
-
-    //Clamp the end and the beginning
+    //The range is inclusive, so clamp to the first and last index
     begin = qMax(0, begin);
-    end = qMin(end, chunkCount());
+    end = qMin(end, chunkCount() - 1);
+    if(end < begin) { return; }
 
     emit chunksAboutToBeRemoved(begin, end);
 
@@ -660,6 +659,162 @@ void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
      }
  }
 
+bool cwTrip::canSplitChunk(cwSurveyChunk* chunk, int shotIndex) const
+{
+    if(chunk == nullptr || !Chunks.contains(chunk)) {
+        return false;
+    }
+
+    if(shotIndex < 1 || shotIndex >= chunk->shotCount()) {
+        return false;
+    }
+
+    //An empty shot is dropped, so the lower half needs a shot after it
+    if(chunk->isShotDataEmpty(shotIndex)) {
+        return shotIndex <= chunk->shotCount() - 2;
+    }
+    return true;
+}
+
+/**
+  Splits \a chunk at \a shotIndex and inserts the lower half right after it.
+
+  The upper half keeps the chunk's id and stations 0..shotIndex. A shot with
+  readings starts the new chunk under a name-only copy of its from-station; an
+  empty shot is dropped. Returns the new chunk, or nullptr when canSplitChunk()
+  refuses.
+  */
+cwSurveyChunk* cwTrip::splitChunk(cwSurveyChunk* chunk, int shotIndex)
+{
+    if(!canSplitChunk(chunk, shotIndex)) {
+        return nullptr;
+    }
+
+    const QList<cwStation> stations = chunk->stations();
+    const QList<cwShot> shots = chunk->shots();
+
+    cwSurveyChunkData data;
+    data.id = QUuid::createUuid();
+    if(chunk->isShotDataEmpty(shotIndex)) {
+        data.stations = stations.mid(shotIndex + 1);
+        data.shots = shots.mid(shotIndex + 1);
+    } else {
+        data.stations.append(cwStation(stations.at(shotIndex).name()));
+        data.stations.append(stations.mid(shotIndex + 1));
+        data.shots = shots.mid(shotIndex);
+    }
+
+    auto newChunk = new cwSurveyChunk();
+    newChunk->setData(data);
+
+    //The lower half lands in the trip before the upper one lets go of it, so
+    //listeners always see every shot somewhere
+    insertChunk(Chunks.indexOf(chunk) + 1, newChunk);
+    chunk->removeTail(shotIndex + 1);
+
+    return newChunk;
+}
+
+/**
+  True when chunk \a upperIndex and the one below it share a tie station: the
+  upper chunk's last station and the lower chunk's first station, per isTie().
+  */
+bool cwTrip::canMergeChunks(int upperIndex) const
+{
+    if(upperIndex < 0 || upperIndex >= Chunks.size() - 1) {
+        return false;
+    }
+
+    const cwSurveyChunk* upper = Chunks.at(upperIndex);
+    const cwSurveyChunk* lower = Chunks.at(upperIndex + 1);
+    if(upper->stationCount() == 0 || lower->stationCount() == 0) {
+        return false;
+    }
+
+    return isTie(upper->station(upper->stationCount() - 1).name(), lower->station(0).name());
+}
+
+/**
+  True when both names are non-empty and match in any case
+  */
+bool cwTrip::isTie(const QString& upperLastName, const QString& lowerFirstName)
+{
+    return !upperLastName.isEmpty()
+           && !lowerFirstName.isEmpty()
+           && upperLastName.compare(lowerFirstName, Qt::CaseInsensitive) == 0;
+}
+
+/**
+  Joins chunk \a upperIndex + 1 onto chunk \a upperIndex and removes it.
+
+  The upper chunk keeps its id and its copy of the tie station. Each LRUD the
+  upper copy lacks comes from the lower copy, and the lower copy's splays
+  follow the upper copy's. Does nothing when canMergeChunks() refuses.
+  */
+void cwTrip::mergeChunks(int upperIndex)
+{
+    if(!canMergeChunks(upperIndex)) {
+        return;
+    }
+
+    cwSurveyChunk* upper = Chunks.at(upperIndex);
+    const cwSurveyChunk* lower = Chunks.at(upperIndex + 1);
+
+    const int tieIndex = upper->stationCount() - 1;
+    cwStation tie = upper->station(tieIndex);
+    const cwStation lowerTie = lower->station(0);
+
+    using Reading = cwDistanceReading (cwStation::*)() const;
+    using SetReading = void (cwStation::*)(const cwDistanceReading&);
+    bool tieChanged = false;
+    const auto fillEmpty = [&](Reading reading, SetReading setReading) {
+        if((tie.*reading)().state() == cwDistanceReading::State::Empty
+                && (lowerTie.*reading)().state() != cwDistanceReading::State::Empty) {
+            (tie.*setReading)((lowerTie.*reading)());
+            tieChanged = true;
+        }
+    };
+    fillEmpty(&cwStation::left, &cwStation::setLeft);
+    fillEmpty(&cwStation::right, &cwStation::setRight);
+    fillEmpty(&cwStation::up, &cwStation::setUp);
+    fillEmpty(&cwStation::down, &cwStation::setDown);
+
+    if(lowerTie.splayCount() > 0) {
+        tie.setSplays(tie.splays() + lowerTie.splays());
+        tieChanged = true;
+    }
+
+    if(tieChanged) {
+        upper->setStation(tie, tieIndex);
+    }
+
+    //The tail lands in the upper chunk before the lower one goes, so listeners
+    //always see every shot somewhere
+    upper->appendTail(lower->stations().mid(1), lower->shots());
+    removeChunks(upperIndex + 1, upperIndex + 1);
+}
+
+bool cwTrip::canMoveChunk(int from, int to) const
+{
+    const auto inRange = [this](int i) { return i >= 0 && i < Chunks.size(); };
+    return from != to && inRange(from) && inRange(to);
+}
+
+/**
+ * Moves the chunk at \a from so it sits at \a to afterward, the way QList::move
+ * does. The chunk itself is unchanged
+ */
+void cwTrip::moveChunk(int from, int to)
+{
+    if(!canMoveChunk(from, to)) {
+        return;
+    }
+
+    emit chunksAboutToBeMoved(from, to);
+    Chunks.move(from, to);
+    emit chunksMoved(from, to);
+}
+
 /**
   \brief Set chunks for the group
 
@@ -686,10 +841,10 @@ void cwTrip::setChucks(QList<cwSurveyChunk*> chunks) {
   If i is out of bounds, this returns a null chunk
   */
 cwSurveyChunk* cwTrip::chunk(int i) const {
-    if(i < 0 || i > chunkCount()) {
+    if(i < 0 || i >= chunkCount()) {
         return nullptr;
     }
-    return Chunks[i];
+    return Chunks.at(i);
 }
 
 /**

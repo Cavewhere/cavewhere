@@ -53,6 +53,7 @@ enum class cwErrorTypeId : int {
     AttachedFileDefaultDatum = 16,  //!< an attached Compass .mak that names a UTM zone but no datum, read in North American 1927
     AttachedFileFixWithoutCS = 17,  //!< an attachment with fixes that name no coordinate system and no system chosen for them, placed with its first such fix at the project origin
     AttachedFileReadWarnings = 18,  //!< advisories the scan of an attached file raised: a missing *include, a case-fallback match, an encoding fallback, a value it could not parse
+    SurveyEmptyShot = 19,           //!< on the distance cell of an empty shot inside a chunk
 };
 
 /**

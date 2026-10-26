@@ -811,6 +811,10 @@ void cwSketchManager::connectLinePlotTripSignals(cwTrip* trip, TripPipeline& pip
             rebuildChunkSignals(trip);
             requestLinePlotRerun(trip);
         }));
+    pipeline.tripConnections.append(
+        connect(trip, &cwTrip::chunksMoved, this, [this, trip]() {
+            requestLinePlotRerun(trip);
+        }));
     if (auto* calib = trip->calibrations()) {
         pipeline.tripConnections.append(
             connect(calib, &cwTripCalibration::calibrationsChanged,

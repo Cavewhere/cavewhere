@@ -20,6 +20,7 @@
 
 //Test includes
 #include "SignalSpyChecker.h"
+#include "EmptyShotChunkHelper.h"
 
 //Std includes
 #include <algorithm>
@@ -308,4 +309,78 @@ TEST_CASE("Turning the LRUD column off silences only missing LRUDs", "[cwSurveyC
     const cwError ignoredLeft = fixture.warningWithId(1, cwSurveyChunk::StationLeftRole, cwErrorTypeId::SurveyMissingLeft);
     CHECK(ignoredLeft.errorTypeId() == toInt(cwErrorTypeId::SurveyMissingLeft));
     CHECK(ignoredLeft.suppressed());
+}
+
+TEST_CASE("The empty-shot warning is ignorable", "[cwSurveyChunk][ignoredWarnings]")
+{
+    auto fixture = EmptyShotChunk::Fixture::issue721();
+    cwSurveyChunk* chunk = fixture.chunk;
+    const int id = EmptyShotChunk::emptyShotId();
+    REQUIRE(chunk->warningCountForTypeId(id) == 1);
+    CHECK(chunk->ignorableWarningCount() == 1);
+
+    CHECK(chunk->ignoreWarnings({id}) == 1);
+    CHECK(chunk->shot(1).isWarningIgnored(cwErrorTypeId::SurveyEmptyShot));
+    CHECK(chunk->warningCountForTypeId(id) == 0);
+    CHECK(chunk->errorModel()->ignoredWarningCount() == 1);
+
+    const cwErrorModel* distance = chunk->errorsAt(1, cwSurveyChunk::ShotDistanceRole);
+    REQUIRE(distance != nullptr);
+    REQUIRE(distance->errors()->size() == 1);
+    CHECK(distance->errors()->first().suppressed());
+
+    CHECK(chunk->clearIgnoredWarnings({id}) == 1);
+    CHECK_FALSE(chunk->shot(1).isWarningIgnored(cwErrorTypeId::SurveyEmptyShot));
+    CHECK(chunk->warningCountForTypeId(id) == 1);
+}
+
+TEST_CASE("Typing a distance clears the ignored empty-shot warning", "[cwSurveyChunk][ignoredWarnings]")
+{
+    auto fixture = EmptyShotChunk::Fixture::issue721();
+    cwSurveyChunk* chunk = fixture.chunk;
+    const int id = EmptyShotChunk::emptyShotId();
+
+    chunk->setWarningIgnored(1, cwSurveyChunk::ShotDistanceRole, id, true);
+    CHECK(chunk->shot(1).isWarningIgnored(cwErrorTypeId::SurveyEmptyShot));
+
+    SECTION("Committing the same empty text keeps it ignored") {
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 1, QString());
+
+        CHECK(chunk->shot(1).isWarningIgnored(cwErrorTypeId::SurveyEmptyShot));
+        const cwErrorModel* distance = chunk->errorsAt(1, cwSurveyChunk::ShotDistanceRole);
+        REQUIRE(distance != nullptr);
+        REQUIRE(distance->errors()->size() == 1);
+        CHECK(distance->errors()->first().errorTypeId() == id);
+        CHECK(distance->errors()->first().suppressed());
+    }
+
+    SECTION("Typing then clearing a distance shows it again") {
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 1, QStringLiteral("5"));
+        CHECK_FALSE(chunk->shot(1).isWarningIgnored(cwErrorTypeId::SurveyEmptyShot));
+
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 1, QString());
+        CHECK(chunk->warningCountForTypeId(id) == 1);
+        const cwErrorModel* distance = chunk->errorsAt(1, cwSurveyChunk::ShotDistanceRole);
+        REQUIRE(distance != nullptr);
+        REQUIRE(distance->errors()->size() == 1);
+        CHECK_FALSE(distance->errors()->first().suppressed());
+    }
+}
+
+TEST_CASE("Splitting at the empty shot leaves neither chunk with the warning", "[cwSurveyChunk][ignoredWarnings]")
+{
+    auto fixture = EmptyShotChunk::Fixture::issue721();
+    const int id = EmptyShotChunk::emptyShotId();
+    REQUIRE(fixture.trip->warningCountForTypeId(id) == 1);
+    REQUIRE(fixture.trip->canSplitChunk(fixture.chunk, 1));
+
+    cwSurveyChunk* lower = fixture.trip->splitChunk(fixture.chunk, 1);
+    REQUIRE(lower != nullptr);
+    REQUIRE(fixture.trip->chunkCount() == 2);
+
+    CHECK(fixture.chunk->warningCountForTypeId(id) == 0);
+    CHECK(lower->warningCountForTypeId(id) == 0);
+    CHECK(fixture.trip->warningCountForTypeId(id) == 0);
+    CHECK(fixture.trip->errorModel()->fatalCount() == 0);
+    CHECK(fixture.trip->errorModel()->warningCount() == 0);
 }
