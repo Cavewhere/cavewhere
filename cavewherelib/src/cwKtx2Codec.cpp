@@ -27,6 +27,7 @@
 #include <cstring>
 #include <memory>
 #include <optional>
+#include <span>
 
 // basisu's UASTC block kernel, as libktx 4.x (verified on 4.4.2) bundles and
 // exports it. libktx installs only ktx.h, so these mirror
@@ -303,35 +304,59 @@ namespace {
         }
     }
 
+    //! A run of at most kBlocksPerChunk of a level's blocks, [first, last)
+    struct UastcChunk
+    {
+        const UastcLevel* level = nullptr;
+        int first = 0;
+        int last = 0;
+    };
+
     /**
      * Encodes every level on the task pool in runs of kBlocksPerChunk blocks.
-     * Runs on the encode lane, a thread outside the pool, so it is the only
-     * thread that waits on the chunks.
+     * Runs on the encode lane, a thread outside the pool, and encodes in waves:
+     * one cwConcurrent::map over a pool width of chunks, waiting on each wave's
+     * future before queuing the next. Each wave's engine joins the back of the
+     * pool queue, so a job queued during an encode waits about one chunk, the
+     * encode holds at most one queue entry, and the lane runs no items itself.
      */
     void encodeLevelsOnPool(const QVector<UastcLevel>& levels, int quality)
     {
         ensureBasisuEncoderInitialized();
 
-        QThreadPool* pool = cwTask::threadPool();
-        QSemaphore chunksFinished;
-        int chunkCount = 0;
+        qsizetype chunkCount = 0;
+        for(const UastcLevel& level : levels) {
+            chunkCount += (level.blockCount + kBlocksPerChunk - 1) / kBlocksPerChunk;
+        }
 
+        QList<UastcChunk> chunks;
+        chunks.reserve(chunkCount);
         for(const UastcLevel& level : levels) {
             for(int first = 0; first < level.blockCount; first += kBlocksPerChunk) {
-                const int last = std::min(first + kBlocksPerChunk, level.blockCount);
-                if(pool != nullptr) {
-                    cwConcurrent::run([level, first, last, quality, &chunksFinished]() {
-                        encodeBlockRun(level, first, last, quality);
-                        chunksFinished.release();
-                    });
-                    chunkCount++;
-                } else {
-                    encodeBlockRun(level, first, last, quality);
-                }
+                chunks.append({&level, first, std::min(first + kBlocksPerChunk, level.blockCount)});
             }
         }
 
-        chunksFinished.acquire(chunkCount);
+        const auto encodeChunk = [quality](const UastcChunk& chunk) {
+            encodeBlockRun(*chunk.level, chunk.first, chunk.last, quality);
+        };
+
+        QThreadPool* pool = cwTask::threadPool();
+        if(pool) {
+            const std::span<const UastcChunk> allChunks(chunks.constData(), chunks.size());
+            qsizetype next = 0;
+            while(next < chunks.size()) {
+                const qsizetype width = std::max(kSmallestThreadCount, pool->maxThreadCount());
+                const std::span<const UastcChunk> wave = allChunks.subspan(next, std::min(width, chunks.size() - next));
+                QFuture<void> waveFinished = cwConcurrent::map(wave, encodeChunk);
+                waveFinished.waitForFinished();
+                next += wave.size();
+            }
+        } else {
+            for(const UastcChunk& chunk : std::as_const(chunks)) {
+                encodeChunk(chunk);
+            }
+        }
     }
 
     /**

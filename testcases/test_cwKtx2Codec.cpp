@@ -660,6 +660,42 @@ TEST_CASE("A worker waiting on the encode lane frees its pool slot", "[Ktx2][Enc
 }
 
 namespace {
+    //! A narrow pool keeps the encode long next to one chunk on any machine
+    constexpr int kQueueProbeThreads = 2;
+    //! 2048 x 2048 makes a 12-level chain of 1371 chunks: 1024 + 256 + 64 + 16 + 4 + 1 + six one-chunk tails
+    constexpr int kQueueProbeSize = 2048;
+    //! Well above one chunk (about 6 ms) and well below the whole encode on kQueueProbeThreads threads
+    constexpr int kChunkWaitBudgetMs = 500;
+}
+
+TEST_CASE("A pool item queued during an encode starts within one chunk", "[Ktx2][EncodeLane]") {
+    const QImage image = gradientImage(kQueueProbeSize, kQueueProbeSize);
+    cwThreadCountRestorer threadCount(kQueueProbeThreads);
+
+    const EncodeFuture encode = cwConcurrent::run([image]() {
+        return cw::ktx2::encodeRgba(image);
+    });
+
+    //The lane runs only the chunk loop, so a busy lane and a busy pool mean the chunks are queuing
+    REQUIRE(spinUntil([]() {
+        return cw::ktx2::encodeLane()->activeThreadCount() >= kSingleThread
+               && cwTask::threadPool()->activeThreadCount() >= kQueueProbeThreads;
+    }, kLaneOccupiedTimeoutMs));
+
+    //The probe settles behind the first wave; once it has run, the encode is in steady state
+    const QFuture<int> probe = cwConcurrent::run([]() { return 1; });
+    REQUIRE(spinUntil([&probe]() { return probe.isFinished(); }, kEncodeTimeoutMs));
+
+    const QFuture<int> trivial = cwConcurrent::run([]() { return 1; });
+
+    CHECK(spinUntil([&trivial]() { return trivial.isFinished(); }, kChunkWaitBudgetMs));
+    CHECK_FALSE(encode.isFinished());
+
+    REQUIRE(encodeFinished(encode, kEncodeTimeoutMs));
+    CHECK_FALSE(encode.result().hasError());
+}
+
+namespace {
     //! The RGBA8 bytes of every mip level of an encodeRgba result
     QList<QByteArray> decodedLevels(const QByteArray& ktx2Bytes)
     {
