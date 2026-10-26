@@ -45,6 +45,7 @@
 #include <QVector3D>
 
 // Std
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -160,8 +161,8 @@ TEST_CASE("cancelAttach before the scan lands leaves the target untouched",
     REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
     CHECK(future.isCanceled());
 
-    settleEventLoop(kNothingHappensSettleMs);
-    CHECK_FALSE(managerOf(fixture.get())->isOwnerBusy(ownerId));
+    REQUIRE(waitUntil([&] { return !managerOf(fixture.get())->isOwnerBusy(ownerId); }));
+    REQUIRE(waitForQueuedEvents());
     CHECK(target->childNodeCount() == childCountBefore);
     CHECK(fixture->project->cavingRegion()->externalSources()->count() == 0);
     CHECK(fixture->settings()->breadcrumbPath(ownerId).isEmpty());
@@ -303,7 +304,11 @@ TEST_CASE("deleting a source root forgets its own remembered source",
     auto future = managerOf(fixture.get())->deleteSourceRoot(cave);
     REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
     CHECK_FALSE(future.result().hasError());
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] {
+        return std::none_of(ownerIds.cbegin(), ownerIds.cend(), [&](const QUuid& ownerId) {
+            return fixture->settings()->hasBreadcrumb(ownerId);
+        });
+    }));
 
     for (const QUuid& ownerId : ownerIds) {
         INFO("owner: " << ownerId.toString().toStdString());
@@ -331,7 +336,6 @@ TEST_CASE("closing the project keeps a source root's remembered source",
     //Project close and load-replacing-the-region both run this. The closed
     //project still owns its source, so the breadcrumb must survive.
     fixture->project->cavingRegion()->clearCaves();
-    QCoreApplication::processEvents();
 
     CHECK(fixture->settings()->hasBreadcrumb(caveId));
     CHECK(fixture->settings()->breadcrumbPath(caveId) == storedPath);
@@ -534,12 +538,7 @@ TEST_CASE("source reload stays offered after the project is saved and reopened",
     const QString savedPath = fixture->project->filename();
     fixture.reset();
 
-    auto freshRoot = std::make_unique<cwRootData>();
-    freshRoot->project()->loadFile(savedPath);
-    freshRoot->project()->waitLoadToFinish();
-    freshRoot->linePlotManager()->waitToFinish();
-    freshRoot->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    auto freshRoot = openInFreshRootData(savedPath);
 
     cwSurveyNode* reopened = nullptr;
     for (cwSurveyNode* candidate : freshRoot->region()->rootNode()->allNodes()) {

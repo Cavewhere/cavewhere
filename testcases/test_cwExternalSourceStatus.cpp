@@ -149,13 +149,7 @@ TEST_CASE("the sweep at project open reports a source edited while the project w
     writeSource(sourcePath, kTwoShots,
                 QDateTime::currentDateTimeUtc().addSecs(kEditIsNewerSeconds));
 
-    auto freshRoot = std::make_unique<cwRootData>();
-    freshRoot->project()->loadFile(projectPath);
-    freshRoot->project()->waitLoadToFinish();
-    freshRoot->linePlotManager()->waitToFinish();
-    freshRoot->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    waitForSourceSweep(freshRoot->externalCenterlineManager());
+    auto freshRoot = openInFreshRootData(projectPath);
 
     auto* statuses = freshRoot->externalCenterlineManager()->sourceStatusModel();
     REQUIRE(statuses->rowCount() == 1);
@@ -566,7 +560,8 @@ TEST_CASE("a burst of sweep triggers in one event-loop turn runs one sweep pass"
     emit qGuiApp->focusWindowChanged(&window);
 
     drainPipelines(fixture.get());
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitUntil([&] { return swept.count() >= 1; }));
+    REQUIRE(waitForQueuedEvents());
     drainPipelines(fixture.get());
 
     INFO("sweep passes: " << swept.count());

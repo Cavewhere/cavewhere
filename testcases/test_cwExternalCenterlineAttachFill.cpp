@@ -365,7 +365,7 @@ TEST_CASE("Closing the project mid-fill ends the attach and leaves nothing behin
         CHECK((future.isCanceled() || future.result().hasError()));
 
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        settleEventLoop(kNothingHappensSettleMs);
+        REQUIRE(waitForQueuedEvents());
         CHECK(parent->childNodeCount() == 0);
         CHECK(rootPointer.isNull());
         CHECK(tryWait(kFillWaitMs, [&fixture]() {
@@ -389,7 +389,7 @@ TEST_CASE("Closing the project mid-fill ends the attach and leaves nothing behin
         CHECK(tryWait(kFillWaitMs, [&future]() { return future.isFinished(); }));
 
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        settleEventLoop(kNothingHappensSettleMs);
+        REQUIRE(waitForQueuedEvents());
         CHECK(rootPointer.isNull());
     }
 }
@@ -452,9 +452,10 @@ void watchSaveCoverage(QList<SaveCoverage>* coverage, cwProject* project, QObjec
 
 void saveAndSettle(SavedProjectFixture* fixture)
 {
+    QSignalSpy saved(fixture->project, &cwProject::fileSaved);
     REQUIRE(fixture->project->save());
     fixture->project->waitSaveToFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&saved] { return saved.count() >= 1; }));
 }
 
 } // namespace

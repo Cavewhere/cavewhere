@@ -178,7 +178,7 @@ std::unique_ptr<ContainmentFixture> makeFixture(const char* includeTarget,
     REQUIRE_FALSE(fixture->projectRootDir.isEmpty());
 
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
     return fixture;
 }
 

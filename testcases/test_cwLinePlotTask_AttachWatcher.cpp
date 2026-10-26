@@ -313,7 +313,7 @@ std::unique_ptr<RememberedSourceFixture> makeRememberedSourceFixture()
     // Drain the queued fileSaved delivery so modified() is settled false
     // before tests take a baseline (same idiom as the attach tests).
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
     return fixture;
 }
 
@@ -342,7 +342,7 @@ TEST_CASE("Editing a remembered source file changes nothing observable",
     manager.waitToFinish();
     fixture->project->waitSaveToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
     REQUIRE_FALSE(fixture->project->modified());
 
     const QString tripPrefix = tripScopeLabel(fixture->trip);
@@ -371,10 +371,10 @@ TEST_CASE("Editing a remembered source file changes nothing observable",
 
     overwriteFile(fixture->sourcePath, simpleSvxWithExtraShot());
 
-    // Nothing is expected to happen, so the test has to wait out the
-    // window in which it would have: long enough for a watcher event to
-    // have been delivered and any queued reconcile or solve to have run.
-    settleEventLoop(kNothingHappensSettleMs);
+    // The source sits outside the watch set, so the edit has no event to
+    // wait on. The fence drains any queued reconcile or solve before the
+    // save and solve waits below.
+    REQUIRE(waitForQueuedEvents());
     fixture->project->waitSaveToFinish();
     manager.waitToFinish();
 

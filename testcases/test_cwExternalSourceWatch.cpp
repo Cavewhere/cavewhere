@@ -228,7 +228,7 @@ TEST_CASE("re-stamping a breadcrumb moves the watch onto the file it now names",
     // The file the attachment no longer comes from says nothing anymore,
     // while the one it does is heard.
     writeSource(watched.sourcePath, kTwoShots, laterThanNow());
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitForQueuedEvents());
     CHECK(statusModelOf(fixture)->statusFor(watched.ownerId) == Status::UpToDate);
 
     writeSource(replacementPath, kTwoShots, laterThanNow());

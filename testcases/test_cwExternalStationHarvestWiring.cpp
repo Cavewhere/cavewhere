@@ -87,7 +87,7 @@ std::unique_ptr<ProjectFixture> makeProjectFixture(const QByteArray& entryConten
     overwriteFile(fixture->entryPath, entryContents);
 
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
     return fixture;
 }
 

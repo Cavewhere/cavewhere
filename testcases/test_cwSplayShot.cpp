@@ -586,13 +586,13 @@ TEST_CASE("Editing splays makes the project dirty", "[SplayShot]") {
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
     root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !project->modified(); }));
 
     REQUIRE_FALSE(project->modified());
 
     chunk->setStationSplayData(cwSurveyChunk::ShotDistanceRole, 0, 1, QStringLiteral("6.10"));
     project->waitSaveToFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return project->modified(); }));
 
     CHECK(project->modified());
 }

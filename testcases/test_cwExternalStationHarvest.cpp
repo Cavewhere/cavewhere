@@ -313,9 +313,9 @@ TEST_CASE("A harvest canceled while it waits on the cavern mutex runs no cavern"
             [&canceled]() { return canceled.load(); });
     });
 
-    // Time for the worker to queue on the mutex; a cancel that lands
-    // before it does takes the same path.
-    settleEventLoop(kNothingHappensSettleMs);
+    // The cancel lands either before or after the worker queues on the
+    // mutex; both take the same path.
+    REQUIRE(waitForQueuedEvents());
     canceled = true;
     holder.release();
     worker.join();

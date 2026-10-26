@@ -110,7 +110,7 @@ std::unique_ptr<ProjectFixture> makeBundledProject(const QString& fileBase)
     // Drain the queued fileSaved delivery so modified() has settled
     // before a test takes a baseline.
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
 
     return fixture;
 }
@@ -287,7 +287,7 @@ TEST_CASE("an external centerline attached to a bundled .cw survives save and re
     REQUIRE(fixture->project->save());
     fixture->project->waitSaveToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
 
     // Saving a bundle re-zips the extraction tree. The copied
     // centerline has to be inside the archive, not left behind in the
@@ -358,7 +358,7 @@ TEST_CASE("an external centerline attached before the first save survives Save A
     REQUIRE(fixture->project->saveAs(bundlePath));
     fixture->project->waitSaveToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->isTemporaryProject(); }));
 
     // Both layers agree the bundle is a durable home now (issue #597).
     CHECK(fixture->saveLoad()->hasDurableHome());
@@ -386,7 +386,7 @@ TEST_CASE("an external centerline attached before the first save survives Save A
         QDir(fixture->tempDir.path()).filePath(QStringLiteral("saved-from-temp.cwproj"))));
     fixture->project->waitSaveToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
 
     // .cwproj is a directory format: the descriptor lands inside the new
     // project dir rather than at the path handed to saveAs, so reopen by
@@ -423,7 +423,7 @@ TEST_CASE("a multi-file attachment closure survives Save As from an unsaved proj
         QDir(fixture->tempDir.path()).filePath(QStringLiteral("closure-from-temp.cw"))));
     fixture->project->waitSaveToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
 
     // Check the closure in the REOPENED archive, not fixture->attachmentDir():
     // saveBundledArchive zips the working tree that attach already populated

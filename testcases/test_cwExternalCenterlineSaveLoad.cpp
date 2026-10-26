@@ -109,7 +109,8 @@ TEST_CASE("harvested station names never trigger a save",
 
     fixture->project->waitSaveToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitForQueuedEvents());
+    fixture->project->waitSaveToFinish();
 
     CHECK_FALSE(fixture->project->modified());
     CHECK(QFileInfo(tripFile).lastModified() == mtimeBefore);
@@ -119,7 +120,7 @@ TEST_CASE("harvested station names never trigger a save",
     fixture->trip->setDate(QDateTime(QDate(kControlYear, kControlMonth, kControlDay), QTime()));
     fixture->project->waitSaveToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return QFileInfo(tripFile).lastModified() != mtimeBefore; }));
 
     CHECK(QFileInfo(tripFile).lastModified() != mtimeBefore);
 }
@@ -160,7 +161,7 @@ TEST_CASE("within-cave and cross-cave equates round-trip through the region list
     REQUIRE(fixture->project->save());
     fixture->project->waitSaveToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
 
     const QString projectPath = fixture->project->filename();
 
@@ -214,7 +215,7 @@ TEST_CASE("Loading a project does not re-save the project file",
     REQUIRE(fixture->project->save());
     fixture->project->waitSaveToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
 
     const QString projectFile = fixture->project->filename();
     REQUIRE(QFileInfo::exists(projectFile));
@@ -230,7 +231,8 @@ TEST_CASE("Loading a project does not re-save the project file",
     loaderRoot->project()->waitLoadToFinish();
     loaderRoot->project()->waitSaveToFinish();
     loaderRoot->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitForQueuedEvents());
+    loaderRoot->project()->waitSaveToFinish();
 
     // The loaded equates must still be intact...
     auto loadedRegion = loaderRoot->project()->cavingRegion();

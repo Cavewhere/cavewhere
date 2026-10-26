@@ -87,7 +87,6 @@ void drainSave(ModifiedFixture& fixture)
 {
     fixture.project->waitSaveToFinish();
     fixture.rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
 }
 
 // One cave, one trip, one attachment declared — the model half of every
@@ -139,6 +138,7 @@ std::unique_ptr<ModifiedFixture> makeFixture(cwLinePlotManager& manager,
                       .arg(extension));
     REQUIRE(fixture->project->saveAs(projectPath));
     drainSave(*fixture);
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
 
     seedEntryFile(*fixture);
 
@@ -151,7 +151,7 @@ std::unique_ptr<ModifiedFixture> makeFixture(cwLinePlotManager& manager,
     // after a save that follows the first scan, not after saveAs alone.
     fixture->project->save();
     drainSave(*fixture);
-    REQUIRE_FALSE(fixture->project->modified());
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
 
     return fixture;
 }
@@ -212,10 +212,11 @@ TEST_CASE("Editing the source outside the project leaves the project unmodified"
 
     overwriteFile(sourcePath, kEditedEntry);
 
-    // The edit produces no signal to wait on, so wait out the window in
-    // which one would have arrived. The edited entry adds a station, so
-    // the harvest count is what a wrongly-processed edit would move.
-    settleEventLoop(kNothingHappensSettleMs);
+    // The source sits outside the watch set, so the edit has no event to
+    // wait on; the fence drains whatever main-thread work it did queue. The
+    // edited entry adds a station, so the harvest count is what a
+    // wrongly-processed edit would move.
+    REQUIRE(waitForQueuedEvents());
 
     CHECK_FALSE(fixture->project->modified());
     CHECK(fixture->trip->externalStations().size() == kOriginalStationCount);
@@ -254,7 +255,6 @@ TEST_CASE("Discarding changes does not re-dirty the project through the watcher"
 
     fixture->project->discardChanges();
     fixture->project->waitForDiscardToFinish();
-    QCoreApplication::processEvents();
 
     // The reset puts the original entry back and the harvest drops the leg
     // again — which is the manager telling us it processed the watcher event
@@ -310,7 +310,7 @@ TEST_CASE("A Replace leaves nothing behind to save once it has been saved",
 
     fixture->project->save();
     drainSave(*fixture);
-    REQUIRE_FALSE(fixture->project->modified());
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
 
     // Long enough for the copy's watcher event to have been delivered and
     // handled, so a surviving echo has had its chance to land.
@@ -404,7 +404,7 @@ TEST_CASE("The first save of a temporary project does not re-dirty it through th
     const QString entryBeforeMove = fixture.entryPath;
     REQUIRE(fixture.project->saveAs(destination));
     drainSave(fixture);
-    REQUIRE_FALSE(QFile::exists(entryBeforeMove));
+    REQUIRE(waitUntil([&] { return !QFile::exists(entryBeforeMove); }));
 
     // The move re-arms the watch set on the new location, which is the one
     // deterministic marker that the whole post-move recompute has run — the

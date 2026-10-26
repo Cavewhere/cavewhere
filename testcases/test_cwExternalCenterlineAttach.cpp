@@ -463,11 +463,11 @@ TEST_CASE("cancelling the attach before the scan lands leaves everything untouch
 
     // The scan worker finishes regardless; its continuation must see
     // the cancel and drop the result without mutating anything. Wait
-    // for the worker pool to drain first so the settle loop provably
+    // for the worker pool to drain first so the fence provably
     // delivers the discarded continuation (otherwise a slow-CI cold
     // pool start would make the assertions pass vacuously).
     REQUIRE(QThreadPool::globalInstance()->waitForDone(kAttachWaitMs));
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitForQueuedEvents());
 
     CHECK(future.isCanceled());
     CHECK(fixture->trip->externalCenterline().isEmpty());
@@ -907,7 +907,8 @@ TEST_CASE("cancelAttach cancels an in-flight attach before the scan lands",
     REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
     CHECK(future.isCanceled());
 
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitUntil([&] { return attachSpy.count() >= 1; }));
+    REQUIRE(waitForQueuedEvents());
     REQUIRE(attachSpy.count() == 1);
     const auto report = attachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
     CHECK(report.canceled());
@@ -953,7 +954,8 @@ TEST_CASE("cancelAttach after the scan lands is a structural no-op",
     CHECK_FALSE(future.isCanceled());
     REQUIRE_FALSE(future.result().hasError());
 
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitUntil([&] { return attachSpy.count() >= 1; }));
+    REQUIRE(waitForQueuedEvents());
     REQUIRE(attachSpy.count() == 1);
     const auto report = attachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
     CHECK(report.success());
@@ -987,7 +989,8 @@ TEST_CASE("cancelAttach is a no-op for idle owners and non-attach operations",
     CHECK_FALSE(detachFuture.isCanceled());
     REQUIRE_FALSE(detachFuture.result().hasError());
 
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitUntil([&] { return detachSpy.count() >= 1; }));
+    REQUIRE(waitForQueuedEvents());
     CHECK(attachSpy.count() == 1); // only the successful attach reported
     REQUIRE(detachSpy.count() == 1);
     const auto detachReport =
@@ -1007,7 +1010,8 @@ TEST_CASE("attachment dirs derive from the save/load pipeline at load time",
     const QString projectPath = fixture->project->filename();
     const QUuid ownerId = fixture->trip->id();
     fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    fixture->project->waitSaveToFinish();
+    REQUIRE(waitForQueuedEvents());
 
     // A fresh session opening the project: no attach ran here, so the
     // dir map, rows, and watch set can only come from the load-time
@@ -1032,7 +1036,6 @@ TEST_CASE("attachment dirs derive from the save/load pipeline at load time",
 
     freshRoot->linePlotManager()->waitToFinish();
     freshRoot->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
 }
 
 // ---------------------------------------------------------------------
@@ -1682,13 +1685,7 @@ TEST_CASE("Save As keeps the attachment's remembered source and fingerprint",
 
     // Re-opening what Save As wrote has to land on the same key too.
     const QString savedPath = fixture->project->filename();
-    auto freshRoot = std::make_unique<cwRootData>();
-    freshRoot->project()->loadFile(savedPath);
-    freshRoot->project()->waitLoadToFinish();
-    freshRoot->linePlotManager()->waitToFinish();
-    freshRoot->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    waitForSourceSweep(freshRoot->externalCenterlineManager());
+    auto freshRoot = openInFreshRootData(savedPath);
 
     REQUIRE(freshRoot->region()->caveCount() == 1);
     cwTrip* reopenedTrip = freshRoot->region()->cave(0)->trip(0);
@@ -1712,7 +1709,6 @@ TEST_CASE("deleting a trip forgets its remembered source",
 
     //The verb the trip's delete UI calls (CavePage's RemoveAskBox).
     fixture->cave->removeTrip(0);
-    QCoreApplication::processEvents();
 
     CHECK(fixture->settings()->breadcrumbPath(ownerId).isEmpty());
     CHECK(fixture->settings()->fingerprint(ownerId).isEmpty());
@@ -1733,7 +1729,6 @@ TEST_CASE("deleting a cave forgets every remembered source it held",
 
     //The verb the cave's delete UI calls (DataMainPage).
     fixture->rootData->region()->removeCave(0);
-    QCoreApplication::processEvents();
 
     CHECK(fixture->settings()->breadcrumbPath(ownerId).isEmpty());
     CHECK(fixture->settings()->fingerprint(ownerId).isEmpty());
@@ -1756,7 +1751,6 @@ TEST_CASE("closing the project keeps every remembered source",
     //The closed project still owns its sources, so they must survive - keyed on
     //a destructor or on removeCaves(range), the clear would take them.
     fixture->rootData->region()->clearCaves();
-    QCoreApplication::processEvents();
 
     CHECK(fixture->settings()->breadcrumbPath(ownerId) == source);
     CHECK(fixture->settings()->fingerprint(ownerId) == storedFingerprint);
@@ -1779,7 +1773,6 @@ TEST_CASE("deleting a never-attached trip touches nothing",
     cwSignalSpy breadcrumbSpy(fixture->settings(),
                               &cwExternalSourceSettings::breadcrumbsChanged);
     fixture->cave->removeTrip(1);
-    QCoreApplication::processEvents();
 
     CHECK(breadcrumbSpy.count() == 0);
     CHECK(fixture->settings()->breadcrumbPath(attachedId) == source);
@@ -1800,7 +1793,6 @@ TEST_CASE("moving a trip to another cave keeps its remembered source",
                                       QStringLiteral("SecondCave"));
     //The attachment travels with the trip, so the move must stay silent.
     secondCave->insertTrip(0, fixture->trip);
-    QCoreApplication::processEvents();
 
     CHECK(secondCave->indexOf(fixture->trip) == 0);
     CHECK(fixture->settings()->breadcrumbPath(ownerId) == source);
@@ -1840,12 +1832,7 @@ TEST_CASE("trip reload stays offered after the project is saved and reopened",
     const QString savedPath = fixture->project->filename();
     fixture.reset();
 
-    auto freshRoot = std::make_unique<cwRootData>();
-    freshRoot->project()->loadFile(savedPath);
-    freshRoot->project()->waitLoadToFinish();
-    freshRoot->linePlotManager()->waitToFinish();
-    freshRoot->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    auto freshRoot = openInFreshRootData(savedPath);
 
     REQUIRE(freshRoot->region()->caveCount() == 1);
     REQUIRE(freshRoot->region()->cave(0)->tripCount() == 1);
