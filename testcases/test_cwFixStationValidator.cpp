@@ -23,6 +23,7 @@
 #include "cwGeoReference.h"
 #include "cwSurveyNetwork.h"
 #include "ExternalCenterlineTestHelpers.h"
+#include "TestHelper.h"
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -1005,9 +1006,10 @@ TEST_CASE("a fix in a cave with no survey data is flagged until the network name
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
 
+    // The queued pass that wires the new cave also judges the fix.
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("a1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
-    REQUIRE(cave->errorModel()->warningCount() == 1);
+    REQUIRE(waitUntil([cave] { return cave->errorModel()->warningCount() == 1; }));
     CHECK(warningText(cave).contains(
         QStringLiteral("Fix station \"a1\" names a survey station that doesn't exist in this "
                        "cave")));
@@ -1666,10 +1668,12 @@ constexpr double kOutlierNorthing = 5194000.0;
 constexpr double kOutlierElevation = 2708.0;
 
 //! A detached cave whose one fix (B) has a transposed leading digit, so it
-//! raises a domain warning wherever it joins.
+//! raises a domain warning wherever it joins. A trip names B, so the domain
+//! warning is the only one.
 cwCave* makeDomainBadCave()
 {
     auto* cave = new cwCave();
+    SurveyTreeTestHelper::addTripWithStations(cave, {QStringLiteral("B")});
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"),
                 kDomainBadEasting, kDomainNorthing, kDomainElevation));
@@ -1684,6 +1688,7 @@ cwCave* addOutlierCave(cwCavingRegion& region, const QString& name)
     cwCave* cave = region.cave(region.caveCount() - 1);
     REQUIRE(cave != nullptr);
     cave->setName(name);
+    SurveyTreeTestHelper::addTripWithStations(cave, {QStringLiteral("Bad")});
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), kOutlierEasting, kOutlierNorthing, kOutlierElevation));
     return cave;

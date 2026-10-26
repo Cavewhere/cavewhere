@@ -98,6 +98,7 @@ Data model: `cwCavingRegion` → `cwSurveyNode` tree (`cwCave` is a thin node su
 
 #### C++ testing
 - Tests must be safe to run as **multiple concurrent processes** (nightly CI runs several in parallel). Never use hardcoded temp paths — include `QCoreApplication::applicationPid()` in the name or use `QTemporaryFile`/`QTemporaryDir`.
+- **Wait on a condition, never pump.** When a test needs a queued pass or a worker result to land, name the state it produces and wait for that: `REQUIRE(waitUntil([&] { return <state>; }))` from `testcases/TestHelper.h`, or `QSignalSpy::wait()`. A bare `QCoreApplication::processEvents()` asserts timing (one turn happened to be enough) where the test means to assert behavior; it is the C++ form of a fixed `wait()`.
 
 #### QML testing
 - Prefer `tryVerify()`/`tryCompare()` over fixed `wait()`. `QQ.Transition` with `QQ.ScriptAction` fires next frame, so `tryVerify` the side-effect rather than assuming the state change is enough.
