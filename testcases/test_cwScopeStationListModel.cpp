@@ -245,6 +245,10 @@ TEST_CASE("matchingStations filters in-scope names by typed prefix", "[Model][Sc
     // No match yields an empty list (drives the out-of-scope advisory).
     CHECK(model.matchingStations(QStringLiteral("z")).isEmpty());
 
+    // A trip matches from the start of the tail only; matching any dotted
+    // part belongs to node scope.
+    CHECK(model.matchingStations(QStringLiteral("b1")).isEmpty());
+
     // The dotted tail travels whole in the handle — a station is named by its
     // scope plus that tail, never by a flattened qualified string.
     CHECK(handles(model).last()
@@ -561,6 +565,53 @@ TEST_CASE("Node scope lists trips in node order, then the node's own attachment"
           == QStringList({ QStringLiteral("b1"), QStringLiteral("b2"),
                            QStringLiteral("trip2.e2"), QStringLiteral("trip2.e10"),
                            QStringLiteral("hillside.h1") }));
+}
+
+TEST_CASE("Node scope matches a typed name at the start of any dotted part",
+          "[Model][ScopeStations]")
+{
+    // The trip label appears nowhere in the UI, so a person types the name the
+    // file gives the station and still finds the scoped name a fix takes.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    addHarvestedTrip(cave, QStringLiteral("trip1"),
+                     { QStringLiteral("entrance"), QStringLiteral("sump") });
+
+    cwScopeStationListModel model;
+    model.setNode(cave);
+    REQUIRE(roleValues(model, cwScopeStationListModel::StationNameRole)
+            == QStringList({ QStringLiteral("trip1.entrance"), QStringLiteral("trip1.sump") }));
+
+    CHECK(model.matchingStations(QStringLiteral("ent"))
+          == QStringList({ QStringLiteral("trip1.entrance") }));
+    CHECK(model.matchingStations(QStringLiteral("SU"))
+          == QStringList({ QStringLiteral("trip1.sump") }));
+    // A part matches from its start only.
+    CHECK(model.matchingStations(QStringLiteral("rance")).isEmpty());
+}
+
+TEST_CASE("Node scope lists whole-name matches before part matches",
+          "[Model][ScopeStations]")
+{
+    // Rows run trips first, then the node's own attachment; a name that
+    // matches from its start still leads the list.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    addHarvestedTrip(cave, QStringLiteral("trip1"), { QStringLiteral("entrance") });
+    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("/nonexistent/hillside.svx")));
+    cave->setExternalStations({ QStringLiteral("entry") });
+
+    cwScopeStationListModel model;
+    model.setNode(cave);
+    REQUIRE(roleValues(model, cwScopeStationListModel::StationNameRole)
+            == QStringList({ QStringLiteral("trip1.entrance"), QStringLiteral("entry") }));
+
+    CHECK(model.matchingStations(QStringLiteral("ent"))
+          == QStringList({ QStringLiteral("entry"), QStringLiteral("trip1.entrance") }));
 }
 
 TEST_CASE("Node scope leaves out a station the attached file fixes itself",

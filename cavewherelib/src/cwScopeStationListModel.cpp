@@ -168,11 +168,17 @@ QStringList cwScopeStationListModel::matchingStations(const QString& prefix) con
 {
     const QString key = cwStation::canonicalKey(prefix);
     QStringList matches;
+    QStringList partMatches;
+    const bool matchParts = m_node != nullptr && !key.isEmpty();
+    const QString partKey = matchParts ? QLatin1Char('.') + key : QString();
     for (const Row& row : m_rows) {
         if (row.key.startsWith(key)) {
             matches.append(row.name);
+        } else if (matchParts && row.key.contains(partKey)) {
+            partMatches.append(row.name);
         }
     }
+    matches.append(partMatches);
     return matches;
 }
 

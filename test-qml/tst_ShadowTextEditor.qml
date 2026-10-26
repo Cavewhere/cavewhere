@@ -59,7 +59,7 @@ QQ.Item {
 
         //The station editor carries this; the plain one has no such property.
         function isStationEditor() {
-            return overlayId.shadowEditor.currentEditor.stationField !== undefined
+            return overlayId.shadowEditor.currentEditor.stationScope !== undefined
         }
 
         function test_fieldWithoutEditorComponentGetsThePlainEditor() {

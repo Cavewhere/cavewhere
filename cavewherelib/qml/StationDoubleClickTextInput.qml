@@ -20,12 +20,9 @@ DoubleClickTextInput {
     //So we don't add new station when we click on the station
     acceptMousePress: true
 
-    //The scope the editor autocompletes against. Read off the field by
-    //StationNameEditor, so every station field shares one editor component.
-    readonly property alias scopeModel: scopeStationModel
-
     //Station entry gets the autocompleting editor
     editorComponent: EditorComponents.stationName
+    stationScope: scopeStationModel
 
     ScopeStationListModel {
         id: scopeStationModel

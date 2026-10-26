@@ -526,6 +526,12 @@ StandardPage {
 
     QQ.Component.onCompleted: fixStationPage.readColumnWidths()
 
+    // The station names every station cell autocompletes from, one for the
+    // page, pointed at the edited row's node.
+    ScopeStationListModel {
+        id: stationScopeId
+    }
+
     // currentFixRow mirrors the view, so a link naming the row the page last
     // showed still counts as a change once the view has moved on.
     QQ.Connections {
@@ -596,6 +602,17 @@ StandardPage {
         color: field.error ? Theme.errorText
                            : field.readOnly ? Theme.textSubtle : Theme.text
         validator: field.coordinate ? coordinateValidatorId : null
+        editorComponent: field.role === FixStationModel.StationNameRole ? EditorComponents.stationName : null
+        stationScope: field.role === FixStationModel.StationNameRole ? stationScopeId : null
+
+        // A fix's name is relative to the node holding it, which on a page
+        // listing a subtree differs from row to row. Synchronous, so the rows
+        // are in before the editor opens.
+        onStartedEditting: {
+            if (field.stationScope !== null) {
+                field.stationScope.node = fixStationPage.nodeOfFixRow(field.rowIndex)
+            }
+        }
 
         onFinishedEditting: (newText) => {
             if (field.coordinate) {

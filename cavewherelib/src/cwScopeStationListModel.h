@@ -94,8 +94,10 @@ public:
     Q_INVOKABLE bool containsStation(const QString& displayName) const;
 
     //In-scope display names whose start matches prefix (case-insensitive),
-    //in row order, for the note-entry autocomplete dropdown + inline ghost.
-    //An empty prefix returns every in-scope name.
+    //in row order, for the autocomplete dropdown + inline ghost. Node mode
+    //also matches the start of any dotted part ("ent" finds "trip1.entrance"),
+    //listed after the whole-name matches. An empty prefix returns every
+    //in-scope name.
     Q_INVOKABLE QStringList matchingStations(const QString& prefix) const;
 
 signals:

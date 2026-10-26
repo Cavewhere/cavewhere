@@ -31,6 +31,8 @@ QQ.Item {
     //The editor this field opens. Null gets the plain shadow editor; a field
     //with more to offer while editing names its own (see StationNameEditor).
     property QQ.Component editorComponent
+    //The scope the station editor autocompletes against.
+    property ScopeStationListModel stationScope: null
     property bool readOnly: false
     property bool autoResize: false
     property alias wrapMode: textAreaId.wrapMode

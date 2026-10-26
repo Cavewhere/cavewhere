@@ -11,7 +11,7 @@ import cavewherelib
 
 /**
   Station-name autocomplete for the shared shadow editor: a dropdown of
-  in-scope stations driven by a trip-scoped cwScopeStationListModel. Inert
+  in-scope stations driven by a trip- or node-scoped cwScopeStationListModel. Inert
   unless both textInput and scopeModel are set, so every non-station field
   using the shadow editor is unaffected.
 
@@ -32,6 +32,7 @@ QQ.Item {
     property ScopeStationListModel scopeModel
 
     readonly property Trip trip: scopeModel !== null ? scopeModel.trip : null
+    readonly property SurveyNode node: scopeModel !== null ? scopeModel.node : null
     readonly property bool active: textInput !== null && scopeModel !== null && textInput.visible
     readonly property string currentText: textInput !== null ? textInput.text : ""
 
@@ -58,6 +59,19 @@ QQ.Item {
                                        && !scopeModel.containsStation(typedText)
 
     readonly property bool dropdownVisible: active && (matches.length > 0 || outOfScope)
+
+    // The out-of-scope line, naming the scope the typed name is missing from.
+    // Node scope offers no tie-in: moving a fix to another cave is a separate tool.
+    readonly property string advisoryText: {
+        if (node !== null) {
+            return qsTr("“%1” isn't a station in %2").arg(typedText).arg(node.name)
+        } else if (trip !== null && trip.parentCave !== null) {
+            return qsTr("“%1” isn't in this trip — tie into %2?")
+                .arg(typedText).arg(trip.parentCave.name)
+        } else {
+            return qsTr("“%1” isn't in this trip").arg(typedText)
+        }
+    }
 
     signal pickCommitted()
 
@@ -232,10 +246,7 @@ QQ.Item {
                 id: advisoryLabel
                 width: dropdownColumn.width
                 visible: completer.outOfScope
-                text: completer.trip !== null && completer.trip.parentCave !== null
-                      ? qsTr("“%1” isn't in this trip — tie into %2?")
-                        .arg(completer.typedText).arg(completer.trip.parentCave.name)
-                      : qsTr("“%1” isn't in this trip").arg(completer.typedText)
+                text: completer.advisoryText
                 color: Theme.textSecondary
                 font.pixelSize: Theme.fontSizeSmall
                 wrapMode: QC.Label.WordWrap
