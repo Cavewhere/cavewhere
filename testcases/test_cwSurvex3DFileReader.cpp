@@ -834,3 +834,237 @@ TEST_CASE("cwSurvex3DFileReader reads the loop closure error of each loop leg", 
     CHECK(parsed.legErrors.value(key("a2", "a3")).e == error.e);
     CHECK(parsed.legErrors.value(key("a1", "a3")).e == error.e);
 }
+
+namespace {
+    /// Writes each file into a temporary directory, runs cavern on the first
+    /// one, and reads the .3d it writes.
+    cwSurvex3DFileReader::NetworkAndLookup solveSurvexFiles(
+        const QList<QPair<QString, QByteArray>>& files)
+    {
+        QTemporaryDir dir;
+        REQUIRE(dir.isValid());
+        for (const auto& file : files) {
+            QFile out(dir.filePath(file.first));
+            REQUIRE(out.open(QIODevice::WriteOnly));
+            out.write(file.second);
+        }
+
+        const QString svxPath = dir.filePath(files.constFirst().first);
+        const auto cavernResult = cwCavernRunner::run(
+            svxPath, dir.filePath(QFileInfo(svxPath).completeBaseName() + QStringLiteral(".3d")));
+        REQUIRE_FALSE(cavernResult.hasError());
+
+        cwSurvex3DFileReader reader;
+        return reader.readNetworkAndLookup(cavernResult.value().output3dPath);
+    }
+
+    /// The station's neighbors, sorted and comma-joined, so a failure prints them.
+    std::string neighborsOf(const cwSurveyNetwork& network, const char* station)
+    {
+        QStringList neighbors = network.neighbors(QString::fromLatin1(station));
+        neighbors.sort();
+        return neighbors.join(QStringLiteral(", ")).toStdString();
+    }
+
+    /// Every edge whose two ends sit under different top-level surveys,
+    /// sorted and joined, so a failure prints them.
+    std::string crossSurveyEdges(const cwSurveyNetwork& network)
+    {
+        QStringList edges;
+        const QStringList stations = network.stations();
+        for (const QString& station : stations) {
+            const QStringList neighbors = network.neighbors(station);
+            for (const QString& neighbor : neighbors) {
+                if (station < neighbor
+                    && cwCavernNaming::scopeHeadOf(station) != cwCavernNaming::scopeHeadOf(neighbor)) {
+                    edges.append(station + QStringLiteral(" - ") + neighbor);
+                }
+            }
+        }
+        edges.sort();
+        return edges.join(QStringLiteral("; ")).toStdString();
+    }
+
+    QString describe(const cwSurveyNetwork& network)
+    {
+        QStringList stations = network.stations();
+        stations.sort();
+        QStringList lines;
+        for (const QString& station : std::as_const(stations)) {
+            QStringList neighbors = network.neighbors(station);
+            neighbors.sort();
+            lines.append(station + QStringLiteral(" -> ") + neighbors.join(QStringLiteral(", ")));
+        }
+        return lines.join(QLatin1Char('\n'));
+    }
+
+    // Two caves shaped like a CaveWhere driver: each cave wraps its trip in an
+    // anonymous *begin, and a region equate ties alpha.a2 to beta.b1.
+    constexpr const char* kEquatedCaves =
+        "*begin alpha\n"
+        "*fix a1 0 0 0\n"
+        "*begin\n"
+        "*data normal from to tape compass clino\n"
+        "a1 a2 10 0 0\n"
+        "*end\n"
+        "*end alpha\n"
+        "*begin beta\n"
+        "*begin\n"
+        "*data normal from to tape compass clino\n"
+        "b1 b2 10 0 0\n"
+        "*end\n"
+        "*end beta\n"
+        "*equate alpha.a2 beta.b1\n";
+}
+
+TEST_CASE("cwSurvex3DFileReader names each leg end under the leg's own survey across a region equate",
+          "[cwSurvex3DFileReader]") {
+    const auto parsed = solveSurvexFiles({{QStringLiteral("equated.svx"), kEquatedCaves}});
+    INFO("network:\n" << describe(parsed.network).toStdString());
+
+    CHECK(neighborsOf(parsed.network, "alpha.a1") == "alpha.a2");
+    CHECK(neighborsOf(parsed.network, "alpha.a2") == "alpha.a1");
+    CHECK(neighborsOf(parsed.network, "beta.b1") == "beta.b2");
+    CHECK(neighborsOf(parsed.network, "beta.b2") == "beta.b1");
+    CHECK(crossSurveyEdges(parsed.network) == "");
+}
+
+TEST_CASE("cwSurvex3DFileReader keeps each survey's names on legs whose stations coincide",
+          "[cwSurvex3DFileReader]") {
+    // No equate: beta's fix just happens to land on alpha.a2.
+    const auto parsed = solveSurvexFiles({{QStringLiteral("coincide.svx"),
+                                           "*begin alpha\n"
+                                           "*fix a1 0 0 0\n"
+                                           "*data normal from to tape compass clino\n"
+                                           "a1 a2 10 0 0\n"
+                                           "*end alpha\n"
+                                           "*begin beta\n"
+                                           "*fix b1 0 10 0\n"
+                                           "*data normal from to tape compass clino\n"
+                                           "b1 b2 10 0 0\n"
+                                           "*end beta\n"}});
+    INFO("network:\n" << describe(parsed.network).toStdString());
+
+    CHECK(neighborsOf(parsed.network, "alpha.a2") == "alpha.a1");
+    CHECK(neighborsOf(parsed.network, "beta.b1") == "beta.b2");
+    CHECK(crossSurveyEdges(parsed.network) == "");
+}
+
+TEST_CASE("cwSurvex3DFileReader keys leg errors and splays at an equated station by their own survey",
+          "[cwSurvex3DFileReader]") {
+    // A misclosed triangle in each cave, both through the equated point, with
+    // a splay to the anonymous wall station off it from each cave.
+    const auto parsed = solveSurvexFiles({{QStringLiteral("loops.svx"),
+                                           "*begin alpha\n"
+                                           "*fix a1 0 0 0\n"
+                                           "*data normal from to tape compass clino\n"
+                                           "a1 a2 10 0 0\n"
+                                           "a2 a3 10 90 0\n"
+                                           "a3 a1 15 225 0\n"
+                                           "*flags splay\n"
+                                           "a2 .. 2 270 0\n"
+                                           "*end alpha\n"
+                                           "*begin beta\n"
+                                           "*data normal from to tape compass clino\n"
+                                           "b1 b2 10 0 0\n"
+                                           "b2 b3 10 270 0\n"
+                                           "b3 b1 15 135 0\n"
+                                           "*flags splay\n"
+                                           "b1 .. 3 90 0\n"
+                                           "*end beta\n"
+                                           "*equate alpha.a2 beta.b1\n"}});
+
+    QStringList errorKeys;
+    QStringList crossSurveyErrorKeys;
+    for (auto it = parsed.legErrors.constBegin(); it != parsed.legErrors.constEnd(); ++it) {
+        const QString errorKey = it.key().first + QStringLiteral(" - ") + it.key().second;
+        errorKeys.append(errorKey);
+        if (cwCavernNaming::scopeHeadOf(it.key().first) != cwCavernNaming::scopeHeadOf(it.key().second)) {
+            crossSurveyErrorKeys.append(errorKey);
+        }
+    }
+    errorKeys.sort();
+    crossSurveyErrorKeys.sort();
+    INFO("leg error keys: " << errorKeys.join(QStringLiteral(", ")).toStdString());
+
+    const auto key = [](const char* from, const char* to) {
+        return cwSurvex3DFileReader::legKey(QString::fromLatin1(from), QString::fromLatin1(to));
+    };
+    CHECK(parsed.legErrors.contains(key("alpha.a1", "alpha.a2")));
+    CHECK(parsed.legErrors.contains(key("alpha.a2", "alpha.a3")));
+    CHECK(parsed.legErrors.contains(key("alpha.a3", "alpha.a1")));
+    CHECK(parsed.legErrors.contains(key("beta.b1", "beta.b2")));
+    CHECK(parsed.legErrors.contains(key("beta.b2", "beta.b3")));
+    CHECK(parsed.legErrors.contains(key("beta.b3", "beta.b1")));
+
+    CHECK(crossSurveyErrorKeys.join(QStringLiteral("; ")).toStdString() == "");
+
+    QStringList splayAnchors;
+    for (auto it = parsed.splayTips.constBegin(); it != parsed.splayTips.constEnd(); ++it) {
+        splayAnchors.append(it.key() + QStringLiteral(" x") + QString::number(it.value().size()));
+    }
+    splayAnchors.sort();
+    INFO("splay anchors: " << splayAnchors.join(QStringLiteral(", ")).toStdString());
+    CHECK(parsed.splayTips.value(QStringLiteral("alpha.a2")).size() == 1);
+    CHECK(parsed.splayTips.value(QStringLiteral("beta.b1")).size() == 1);
+}
+
+TEST_CASE("cwSurvex3DFileReader names a parent survey's leg into a child station by the parent's station",
+          "[cwSurvex3DFileReader]") {
+    // Cavern labels the leg "leaf.a2 m1" written in mid with leaf's prefix,
+    // and m1 shares its point with other.c1 through the equate. The leg ends
+    // at mid's own m1, and other's leg keeps c1.
+    const auto parsed = solveSurvexFiles({{QStringLiteral("nested.svx"),
+                                           "*begin top\n"
+                                           "*begin mid\n"
+                                           "*fix leaf.a1 0 0 0\n"
+                                           "*begin leaf\n"
+                                           "*data normal from to tape compass clino\n"
+                                           "a1 a2 10 0 0\n"
+                                           "*end leaf\n"
+                                           "*begin other\n"
+                                           "*data normal from to tape compass clino\n"
+                                           "c1 c2 10 270 0\n"
+                                           "*end other\n"
+                                           "*data normal from to tape compass clino\n"
+                                           "leaf.a2 m1 5 270 0\n"
+                                           "*equate m1 other.c1\n"
+                                           "*end mid\n"
+                                           "*end top\n"}});
+    INFO("network:\n" << describe(parsed.network).toStdString());
+
+    CHECK(neighborsOf(parsed.network, "top.mid.m1") == "top.mid.leaf.a2");
+    CHECK(neighborsOf(parsed.network, "top.mid.other.c1") == "top.mid.other.c2");
+}
+
+TEST_CASE("cwSurvex3DFileReader names each leg end under its own survey with a non-dot separator",
+          "[cwSurvex3DFileReader][Walls]") {
+    // A Walls include makes cavern join labels with ':', on the NODE labels and
+    // the LINE survey prefixes alike. Both caves sit one level down, so each
+    // leg's survey prefix ("site:alpha", "site:beta") carries the separator.
+    const auto parsed = solveSurvexFiles(
+        {{QStringLiteral("separator.svx"),
+          "*include walls_leg.srv\n"
+          "*begin site\n"
+          "*begin alpha\n"
+          "*fix a1 0 0 0\n"
+          "*data normal from to tape compass clino\n"
+          "a1 a2 10 0 0\n"
+          "*end alpha\n"
+          "*begin beta\n"
+          "*data normal from to tape compass clino\n"
+          "b1 b2 10 0 0\n"
+          "*end beta\n"
+          "*equate alpha.a2 beta.b1\n"
+          "*end site\n"},
+         {QStringLiteral("walls_leg.srv"),
+          "#UNITS D=Meters A=Degrees V=Degrees\n"
+          "#Fix WA 100 100 0\n"
+          "WA\tWB\t10.0\t0\t0\n"}});
+    INFO("network:\n" << describe(parsed.network).toStdString());
+
+    CHECK(neighborsOf(parsed.network, "site.alpha.a1") == "site.alpha.a2");
+    CHECK(neighborsOf(parsed.network, "site.alpha.a2") == "site.alpha.a1");
+    CHECK(neighborsOf(parsed.network, "site.beta.b1") == "site.beta.b2");
+    CHECK(neighborsOf(parsed.network, "site.beta.b2") == "site.beta.b1");
+}

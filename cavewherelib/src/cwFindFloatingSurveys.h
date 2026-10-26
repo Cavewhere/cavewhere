@@ -99,8 +99,8 @@ public:
     //! set the exact answer rather than an approximation of it. Reading the
     //! solved graph instead would be wrong in the commonest case there is: an
     //! attachment fixed at its own origin lands on top of a cave auto-fixed at
-    //! the origin, and .3d legs name their endpoints only by coordinate, so the
-    //! two surveys fuse into one component that looks perfectly connected.
+    //! the origin, and the solved positions alone make the two surveys look
+    //! like one component.
     //!
     //! \a regionNetwork supplies what the declared ties cannot: which stations
     //! each scope actually solved, and so which attachments cavern dropped

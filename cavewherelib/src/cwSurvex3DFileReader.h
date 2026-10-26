@@ -63,7 +63,8 @@ public:
     // Parses a .3d file once, returning the survey network (station names,
     // shot connectivity, positions), a standalone position lookup, and the
     // splay tips. Two-pass using img_rewind(): pass 1 indexes LABEL items,
-    // pass 2 resolves LINE endpoints by coordinate match.
+    // pass 2 resolves LINE endpoints by coordinate, naming each end under the
+    // leg's own survey.
     NetworkAndLookup readNetworkAndLookup(const QString& threeDFilePath);
 };
 

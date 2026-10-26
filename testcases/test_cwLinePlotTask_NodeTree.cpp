@@ -22,6 +22,7 @@
 #include "cwErrorModel.h"
 #include "cwExternalCenterline.h"
 #include "cwFixStation.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
 #include "cwLength.h"
@@ -29,9 +30,11 @@
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
 #include "cwRootData.h"
+#include "cwScopeLabels.h"
 #include "cwStationHandle.h"
 #include "cwSurveyChunk.h"
 #include "cwSurveyNetwork.h"
+#include "cwSurvexExporterCaveTask.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 
@@ -48,6 +51,7 @@
 #include <QFile>
 #include <QSet>
 #include <QTemporaryDir>
+#include <QTextStream>
 
 namespace {
 
@@ -65,8 +69,7 @@ const QString kFrameCS = QStringLiteral(
     "+proj=tmerc +lat_0=37.1832 +lon_0=-84.0947 +k=1 +x_0=0 +y_0=0 "
     "+datum=WGS84 +units=m +no_defs +type=crs");
 // The Folder and Fisher Ridge are fixed away from the origin survex_simple.svx
-// fixes itself at: the .3d names a leg's endpoints by coordinate, so two surveys
-// sharing a point would trade legs in the solved network.
+// fixes itself at, so each survey's stations sit at their own positions.
 constexpr double kFolderNorthing = -1000.0;
 constexpr double kFisherRidgeEasting = 1000.0;
 constexpr double kPositionMarginMeters = 0.001;
@@ -613,4 +616,106 @@ TEST_CASE("The depth-2 fixture's unconnected surveys warn on their trips",
     }
 
     rootData->project()->waitSaveToFinish();
+}
+
+TEST_CASE("A cave's solved network holds only its own stations when a region equate ties it to another cave",
+          "[LinePlotManager][NodeTree][FixStation]")
+{
+    // An equate puts two caves' stations on one coordinate, and each leg keeps
+    // its own cave's names. The Fix Stations page measures a fix against the
+    // cave's scoped network, and the export against the cave's own stations:
+    // both agree on which names the cave holds.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    region.geoReference()->restore(cwGeoReference::Frozen, kFrameCS, {}, QString());
+    cwCave* alpha = addEmptyCave(region, QStringLiteral("Alpha"));
+    alpha->fixStations()->appendFixStation(fixAt(QStringLiteral("a1"), 0.0, 0.0));
+    cwTrip* alphaTrip = addNativeTripWithShot(alpha, QStringLiteral("Alpha trip"),
+                                              QStringLiteral("a1"), QStringLiteral("a2"));
+    cwCave* beta = addEmptyCave(region, QStringLiteral("Beta"));
+    // Beta's own fix agrees with the equate (b1 sits on a2, one shot north of
+    // a1), so the export's fallback fix stays out of the picture.
+    beta->fixStations()->appendFixStation(fixAt(QStringLiteral("b1"), 0.0, kShotLength));
+    cwTrip* betaTrip = addNativeTripWithShot(beta, QStringLiteral("Beta trip"),
+                                             QStringLiteral("b1"), QStringLiteral("b2"));
+    for (cwTrip* trip : {alphaTrip, betaTrip}) {
+        trip->calibrations()->setAutoDeclination(false);
+    }
+    region.equates()->appendEquate(cwEquate({nativeHandle(alpha, QStringLiteral("a2")),
+                                             nativeHandle(beta, QStringLiteral("b1"))}));
+
+    cwLinePlotManager manager;
+    solveRegion(manager, region, {});
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // The equate puts a2 and b1 on one point, but each leg keeps the names of
+    // the cave that shot it: no edge joins the two caves.
+    const cwSurveyNetwork regionNetwork = manager.regionNetwork();
+    INFO("region network stations: " << regionNetwork.stations().join(QStringLiteral(", ")).toStdString());
+    const auto regionNeighbors = [&regionNetwork](const QString& station) {
+        QStringList neighbors = regionNetwork.neighbors(station);
+        neighbors.sort();
+        return neighbors.join(QStringLiteral(", ")).toStdString();
+    };
+    CHECK(regionNeighbors(QStringLiteral("alpha.a1")) == "alpha.a2");
+    CHECK(regionNeighbors(QStringLiteral("alpha.a2")) == "alpha.a1");
+    CHECK(regionNeighbors(QStringLiteral("beta.b1")) == "beta.b2");
+    CHECK(regionNeighbors(QStringLiteral("beta.b2")) == "beta.b1");
+
+    const QHash<cwCave*, QSet<QString>> ownStations = {
+        {alpha, {QStringLiteral("a1"), QStringLiteral("a2")}},
+        {beta, {QStringLiteral("b1"), QStringLiteral("b2")}},
+    };
+    const QHash<cwCave*, QStringList> otherCaveStations = {
+        {alpha, {QStringLiteral("beta.b1"), QStringLiteral("beta.b2")}},
+        {beta, {QStringLiteral("alpha.a1"), QStringLiteral("alpha.a2")}},
+    };
+
+    for (auto it = ownStations.constBegin(); it != ownStations.constEnd(); ++it) {
+        cwCave* cave = it.key();
+        INFO("cave: " << cave->name().toStdString());
+        const cwSurveyNetwork network = cave->scopedNetwork();
+        REQUIRE_FALSE(network.isEmpty());
+
+        QStringList foreignStations;
+        for (const QString& station : network.stations()) {
+            if (!it.value().contains(station)) {
+                foreignStations.append(station);
+            }
+        }
+        INFO("scoped network stations: " << network.stations().join(QStringLiteral(", ")).toStdString());
+        CHECK(foreignStations.isEmpty());
+
+        // The other cave's names, and any foreign name the network holds, are
+        // ones the export rejects for this cave, so the Fix Stations page has
+        // to reject them too.
+        QStringList rejectedStations = otherCaveStations.value(cave);
+        for (const QString& foreign : std::as_const(foreignStations)) {
+            if (!rejectedStations.contains(foreign)) {
+                rejectedStations.append(foreign);
+            }
+        }
+        for (const QString& foreign : std::as_const(rejectedStations)) {
+            INFO("foreign station: " << foreign.toStdString());
+
+            cwCaveData caveData = cave->data();
+            caveData.fixStations = {fixAt(foreign, 0.0, 0.0)};
+            const cwCavingRegionData regionData = region.data();
+            const cwSurvexExporterCaveTask::DriverTree tree(regionData.caves,
+                                                            cwScopeLabels(regionData));
+            cwSurvexExporterCaveTask task;
+            QString driver;
+            QTextStream stream(&driver);
+            task.writeNode(stream, caveData, tree);
+            CHECK(task.errors().contains(
+                QStringLiteral("Fix references unknown station: \"%1\"").arg(foreign)));
+
+            CHECK(cwFixStationDiagnostics::classifyStationReference(
+                      foreign, network, cwFixStationDiagnostics::SurveyData::Stations)
+                  == cwFixStationDiagnostics::StationReference::Unknown);
+        }
+    }
 }

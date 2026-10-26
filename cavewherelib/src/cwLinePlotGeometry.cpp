@@ -619,10 +619,10 @@ private:
                 }
 
                 // Two-endpoint membership: a shared station's leg draws in
-                // every unit that holds both of its ends. The .3d names a
-                // leg's ends by coordinate, so an equated station ("bravo.A5"
-                // tied to "alpha.A5") reaches the network under whichever
-                // label came first; matching by position holds both.
+                // every unit that holds both of its ends. An equated station
+                // ("bravo.A5" tied to "alpha.A5") reaches the network under a
+                // different name in each survey's legs; matching by position
+                // holds both.
                 QSet<QString> memberPositions;
                 QStringList sortedMembers;
                 for (const QString& member : std::as_const(members)) {

@@ -53,6 +53,52 @@ QVector3D toVector3D(const img_point& p) {
     return QVector3D(p.x, p.y, p.z);
 }
 
+QString normalizedLabel(const char* label, QChar separator)
+{
+    QString name = QString::fromUtf8(label);
+    if (separator != QLatin1Char('.')) {
+        name.replace(separator, QLatin1Char('.'));
+    }
+    return name;
+}
+
+// Picks which of the labels at one coordinate names a leg's end. An equate or
+// a coincidence puts several stations at one point; the leg belongs to the
+// survey cavern labels it with, which is the parent survey of one of its ends.
+// The station whose own survey shares the longest leading run with that label
+// wins, then the one whose survey sits closest to it, then the first label.
+QString legEndName(const QStringList& candidates, const QStringList& legSurvey)
+{
+    if (candidates.size() == 1) {
+        return candidates.first();
+    }
+
+    QString best = candidates.first();
+    qsizetype bestShared = 0;
+    qsizetype bestExtra = 0;
+    for (const QString& candidate : candidates) {
+        QStringList survey = candidate.split(QLatin1Char('.'));
+        survey.removeLast();
+
+        qsizetype shared = 0;
+        const qsizetype limit = qMin(survey.size(), legSurvey.size());
+        while (shared < limit
+               && survey.at(shared).compare(legSurvey.at(shared), Qt::CaseInsensitive) == 0) {
+            ++shared;
+        }
+        const qsizetype extra = survey.size() - shared;
+
+        const bool longerMatch = shared > bestShared;
+        const bool closerMatch = shared > 0 && shared == bestShared && extra < bestExtra;
+        if (longerMatch || closerMatch) {
+            best = candidate;
+            bestShared = shared;
+            bestExtra = extra;
+        }
+    }
+    return best;
+}
+
 } // namespace
 
 QPair<QString, QString> cwSurvex3DFileReader::legKey(const QString& from, const QString& to)
@@ -93,10 +139,10 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
     // the level that would break it.
     const QChar separator = QLatin1Char(pimg->separator);
 
-    // Pass 1: collect station labels (name + position). Build a coord -> name
+    // Pass 1: collect station labels (name + position). Build a coord -> names
     // index so pass 2 can resolve LINE endpoints. Skip anonymous stations —
     // they're never referenced as shot endpoints.
-    QHash<CoordKey, QString> coordToName;
+    QHash<CoordKey, QStringList> coordToNames;
 
     img_point pt;
     int code;
@@ -110,10 +156,7 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
             if (pimg->flags & img_SFLAG_ANON) {
                 continue;
             }
-            QString name = QString::fromUtf8(pimg->label);
-            if (separator != QLatin1Char('.')) {
-                name.replace(separator, QLatin1Char('.'));
-            }
+            const QString name = normalizedLabel(pimg->label, separator);
             const QVector3D position = toVector3D(pt);
             out.lookup.setPosition(name, position);
             out.network.setPosition(name, position);
@@ -121,22 +164,18 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
                 out.fixedStations.append(cwStation::canonicalKey(name));
             }
 
-            // First label wins at a given coordinate; later duplicates/aliases
-            // are ignored for endpoint resolution but still get their own
-            // position + network entry.
-            const CoordKey key = toKey(pt);
-            if (!coordToName.contains(key)) {
-                coordToName.insert(key, name);
-            }
+            // Equated or coincident stations share a coordinate; pass 2 picks
+            // among them by the leg's survey.
+            coordToNames[toKey(pt)].append(name);
         }
     }
 
     // Pass 2: walk MOVE/LINE sequence, resolving shot endpoints by coordinate.
-    // img_LINE's pimg->label is the survey-name prefix for the leg, not a
+    // img_LINE's pimg->label is the full survey prefix of the leg, not a
     // station name, so we look up both endpoints in the coord index built
-    // above. Splay legs (img_FLAG_SPLAY) have an anonymous end that pass 1
-    // skipped, so only their anchor station resolves; the other end is the
-    // splay tip.
+    // above and name each end under that survey. Splay legs (img_FLAG_SPLAY)
+    // have an anonymous end that pass 1 skipped, so only their anchor station
+    // resolves; the other end is the splay tip.
     if (!img_rewind(pimg)) {
         qWarning() << "cwSurvex3DFileReader: img_rewind failed for" << threeDFilePath;
         img_close(pimg);
@@ -172,20 +211,31 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
             }
         } else if (code == img_LINE) {
             if (hasPrev) {
-                const auto fromIt = coordToName.constFind(toKey(prev));
-                const auto toIt   = coordToName.constFind(toKey(pt));
-                const bool fromIsNamed = fromIt != coordToName.constEnd();
-                const bool toIsNamed = toIt != coordToName.constEnd();
+                const auto fromIt = coordToNames.constFind(toKey(prev));
+                const auto toIt   = coordToNames.constFind(toKey(pt));
+                const bool fromIsNamed = fromIt != coordToNames.constEnd();
+                const bool toIsNamed = toIt != coordToNames.constEnd();
+
+                QStringList legSurvey;
+                const auto endName = [&](const QStringList& candidates) {
+                    if (candidates.size() > 1 && legSurvey.isEmpty()) {
+                        legSurvey = normalizedLabel(pimg->label, separator)
+                                        .split(QLatin1Char('.'), Qt::SkipEmptyParts);
+                    }
+                    return legEndName(candidates, legSurvey);
+                };
 
                 if (fromIsNamed && toIsNamed) {
                     // Both ends are real stations, so this is a leg of the
                     // network even when it carries *flags splay.
-                    out.network.addShot(*fromIt, *toIt);
-                    legsSinceMove.append(legKey(*fromIt, *toIt));
+                    const QString fromName = endName(*fromIt);
+                    const QString toName = endName(*toIt);
+                    out.network.addShot(fromName, toName);
+                    legsSinceMove.append(legKey(fromName, toName));
                 } else if ((pimg->flags & img_FLAG_SPLAY) && (fromIsNamed || toIsNamed)) {
                     // Exactly one end named: that end is the station the splay
                     // hangs off, and the anonymous end is where it lands.
-                    const QString& anchor = fromIsNamed ? *fromIt : *toIt;
+                    const QString anchor = endName(fromIsNamed ? *fromIt : *toIt);
                     const img_point& tip = fromIsNamed ? pt : prev;
                     out.splayTips[cwStation::canonicalKey(anchor)].append(toVector3D(tip));
                 }
