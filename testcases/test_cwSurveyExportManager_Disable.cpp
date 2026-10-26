@@ -17,6 +17,7 @@
 #include "cwSurveyChunk.h"
 #include "cwSurveyExportManager.h"
 #include "cwTrip.h"
+#include "TestHelper.h"
 #include "cwSignalSpy.h"
 
 // Qt includes
@@ -186,11 +187,12 @@ TEST_CASE("Attaching a trip added after region setup is still tracked",
     cwTrip* lateTrip = new cwTrip();
     lateTrip->setName(QStringLiteral("Late"));
     cave->addTrip(lateTrip);
-    QCoreApplication::processEvents();
-    REQUIRE(manager.canExport() == true);
 
     lateTrip->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));
-    CHECK(manager.canExport() == false);
+    REQUIRE(waitUntil([&manager]() { return !manager.canExport(); }));
+
+    lateTrip->setExternalCenterline(cwExternalCenterline());
+    CHECK(manager.canExport() == true);
 }
 
 TEST_CASE("Attaching a cave added after region setup is still tracked",
@@ -206,11 +208,12 @@ TEST_CASE("Attaching a cave added after region setup is still tracked",
     REQUIRE(manager.canExport() == true);
 
     cwCave* lateCave = addCaveWithOneShot(region, QStringLiteral("LateCave"));
-    QCoreApplication::processEvents();
-    REQUIRE(manager.canExport() == true);
 
     lateCave->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));
-    CHECK(manager.canExport() == false);
+    REQUIRE(waitUntil([&manager]() { return !manager.canExport(); }));
+
+    lateCave->setExternalCenterline(cwExternalCenterline());
+    CHECK(manager.canExport() == true);
 }
 
 TEST_CASE("Attaching a trip in a depth-2 node added after region setup is still tracked",
@@ -232,9 +235,10 @@ TEST_CASE("Attaching a trip in a depth-2 node added after region setup is still 
     cwTrip* lateTrip = new cwTrip();
     lateTrip->setName(QStringLiteral("Late"));
     section->addTrip(lateTrip);
-    QCoreApplication::processEvents();
-    REQUIRE(manager.canExport() == true);
 
     lateTrip->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));
-    CHECK(manager.canExport() == false);
+    REQUIRE(waitUntil([&manager]() { return !manager.canExport(); }));
+
+    lateTrip->setExternalCenterline(cwExternalCenterline());
+    CHECK(manager.canExport() == true);
 }

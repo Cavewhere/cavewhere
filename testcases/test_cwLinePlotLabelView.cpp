@@ -865,7 +865,7 @@ TEST_CASE("A native edit made while a solve's labels drain solves once more insi
     }));
     ticker.stop();
     drainPipelines(fixture->project.get());
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitForQueuedEvents());
 
     REQUIRE_FALSE(fixture->linePlot()->hasSolveError());
     INFO("labeled groups when the edit landed: " << labeledAtEdit << " of " << kBatchedBlocks + 1

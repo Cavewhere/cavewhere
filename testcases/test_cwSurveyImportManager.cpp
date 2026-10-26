@@ -192,9 +192,6 @@ TEST_CASE("importSurvexToTrip flattens chunks across multiple top-level blocks",
     rig.manager->importSurvexToTrip(QUrl::fromLocalFile(path), &trip);
     REQUIRE(chunksInsertedSpy.wait(10000));
 
-    // Both blocks contribute chunks. Drain remaining queued events
-    // just in case the second insertion is still pending.
-    QCoreApplication::processEvents();
-
-    CHECK(trip.chunkCount() >= 2);
+    // Both blocks contribute chunks; the second insertion may still be pending.
+    REQUIRE(waitUntil([&trip]() { return trip.chunkCount() >= 2; }));
 }

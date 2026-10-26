@@ -132,6 +132,8 @@ TEST_CASE("Restart during an in-flight scan converges to the newest attachment d
     // Let the queued start fire so the worker is actually running, then
     // supersede it. The worker abandons its remaining owners as soon as it
     // sees the cancel; whatever it had built by then must stay invisible.
+    // One bare turn: no observable state reports the worker started, and a
+    // condition wait would let the scan finish before it is superseded.
     QCoreApplication::processEvents();
 
     QHash<QUuid, QString> dirsB;

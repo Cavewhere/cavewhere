@@ -52,6 +52,7 @@
 // Test helpers
 #include "BoulderFixtureHelper.h"
 #include "LoadProjectHelper.h"
+#include "TestHelper.h"
 
 // Qt
 #include <QCoreApplication>
@@ -1581,8 +1582,10 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         // warning follows on the re-solve.
         attached->setName(QStringLiteral("Renamed"));
         REQUIRE(scopedD1() != originalD1);
-        QCoreApplication::processEvents();
-        CHECK(host->attachedFixes()->attachedFixes().first().station == scopedD1());
+        REQUIRE(waitUntil([&]() {
+            return host->attachedFixes()->attachedFixes().first().station == scopedD1();
+        }));
+        CHECK_FALSE(manager.externalCenterlineManager()->isScanning());
         manager.waitToFinish();
         const QStringList renamedWarnings = attachedFixWarnings(host);
         REQUIRE(renamedWarnings.size() == 1);

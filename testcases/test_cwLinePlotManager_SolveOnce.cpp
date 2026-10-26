@@ -138,7 +138,9 @@ void settle(cwRootData* root)
         if (!idle()) {
             return false;
         }
-        settleEventLoop(kNothingHappensSettleMs);
+        if (!waitForQueuedEvents()) {
+            return false;
+        }
         return idle();
     }));
 }
@@ -413,7 +415,7 @@ TEST_CASE("A native edit made while the scan is pending joins the solve after it
         manager.waitToFinish();
         return manager.updateState() == cwUpdatable::State::Clean;
     }));
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitForQueuedEvents());
 
     INFO(log.describe().toStdString());
     CHECK(manager.updateState() == cwUpdatable::State::Clean);
@@ -447,7 +449,7 @@ TEST_CASE("Dropping the region while its scan is pending leaves the line plot Cl
     CHECK(tryWait(kSettleWaitMs, [&manager]() {
         return manager.updateState() == cwUpdatable::State::Clean;
     }));
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitForQueuedEvents());
     INFO(log.describe().toStdString());
     CHECK(manager.updateState() == cwUpdatable::State::Clean);
     CHECK(manager.driverSource().isEmpty());
@@ -483,7 +485,7 @@ TEST_CASE("Emptying the region while its scan is pending starts no solve after i
         return !manager.externalCenterlineManager()->isScanning()
                && manager.updateState() == cwUpdatable::State::Clean;
     }));
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitForQueuedEvents());
 
     INFO(log.describe().toStdString());
     CHECK(manager.updateState() == cwUpdatable::State::Clean);
@@ -521,8 +523,8 @@ TEST_CASE("A restart while a harvest waits on the cavern mutex applies one harve
         attachSourceThroughManager(fixture.get(), fixture->project->cavingRegion()->rootNode(), entry);
     const bool scanStarted = tryWait(kSettleWaitMs, [external]() { return external->isScanning(); });
 
-    // Time for the first scan's harvest to queue on the mutex.
-    settleEventLoop(kNothingHappensSettleMs);
+    // The scan is running; run the continuations queued behind it.
+    REQUIRE(waitForQueuedEvents());
     external->rescanAttachments();
     holder.release();
     settle(fixture->rootData.get());
@@ -579,7 +581,7 @@ TEST_CASE("Save As of an unsaved project with an attached source runs no harvest
     // A later restart (the data-root rename, a save job's path) starts
     // another scan. It finishes only if it skips cavern, since the mutex is
     // still held.
-    settleEventLoop(kNothingHappensSettleMs);
+    REQUIRE(waitForQueuedEvents());
     const bool quietWhileHeld = tryWait(kCachedScanWaitMs, [external]() {
         return !external->isScanning();
     });
