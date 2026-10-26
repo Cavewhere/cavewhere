@@ -262,7 +262,7 @@ TEST_CASE("A node warning on a fix opens the fix's row, wherever the row moves",
     // A transposed leading digit puts this fix outside UTM 13N's valid domain.
     cave->fixStations()->appendFixStation(utm13NFix(QStringLiteral("BAD"), 1478000.0));
     // The validator picks up the new cave on its queued pass.
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return cave->errorModel()->warningCount() == 1; }));
 
     cwNodeWarningModel model;
     model.setNode(cave);

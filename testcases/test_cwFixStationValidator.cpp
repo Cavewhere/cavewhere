@@ -100,7 +100,10 @@ void appendGoodFixes(cwCave* cave)
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("A4"), QStringLiteral("EPSG:32612"), 500100.0, 4193950.0, 2708.0));
     // The frame the classification reads settles on the next event-loop turn.
-    QCoreApplication::processEvents();
+    REQUIRE(cave->parentRegion() != nullptr);
+    REQUIRE(waitUntil([&] {
+        return cave->parentRegion()->geoReference()->state() == cwGeoReference::Anchored;
+    }));
 }
 
 } // namespace
@@ -306,7 +309,7 @@ TEST_CASE("currentClassification flags a typo'd fix across caves with provenance
     const QUuid badId = badFix.id();
     caveB->fixStations()->appendFixStation(badFix);
 
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Anchored; }));
     const auto result = region.fixStationValidator()->currentClassification();
 
     REQUIRE(result.outliers.size() == 1);
@@ -351,7 +354,7 @@ TEST_CASE("currentClassification reprojects a fix entered in a different CS",
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("W1"), QStringLiteral("EPSG:4326"), -111.0, 37.871, 2700.0));
 
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Anchored; }));
     const auto result = region.fixStationValidator()->currentClassification();
 
     CHECK(result.outliers.isEmpty());
@@ -387,7 +390,7 @@ TEST_CASE("currentClassification drops fixes with no usable CS of their own",
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("NOT_A_CS"), 9000000.0, 9000000.0, 0.0));
 
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Anchored; }));
     const auto result = region.fixStationValidator()->currentClassification();
 
     CHECK(result.outliers.isEmpty());
@@ -434,7 +437,7 @@ TEST_CASE("currentClassification drops a fix that has a CS but no coordinate yet
     REQUIRE_FALSE(blank.inputCS().isEmpty());
     REQUIRE(cwCoordinateTransform::isValidCS(blank.inputCS()));
 
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Anchored; }));
     const auto result = region.fixStationValidator()->currentClassification();
 
     CHECK(result.outliers.isEmpty());
@@ -594,7 +597,7 @@ TEST_CASE("revalidate clears the warning when its cave leaves the region",
     // clear its warning while the cave is still alive (it outlives removal via the
     // undo command's deleteLater), without disturbing the surviving cave.
     region.removeCave(1);
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return doomedCave->errorModel()->warningCount() == 0; }));
 
     CHECK(doomedCave->errorModel()->warningCount() == 0);
     CHECK(keepCave->errorModel()->warningCount() == 0);
@@ -622,7 +625,7 @@ TEST_CASE("revalidate raises no warning across caves entered in different CSs",
     // Raw WGS84 degrees sit ~4000 km from the UTM eastings/northings above.
     wgsCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("W1"), QStringLiteral("EPSG:4326"), -111.0, 37.871, 2700.0));
-    QCoreApplication::processEvents();
+    REQUIRE(waitForQueuedEvents());
 
     CHECK(utmCave->errorModel()->warningCount() == 0);
     CHECK(wgsCave->errorModel()->warningCount() == 0);
@@ -750,7 +753,7 @@ TEST_CASE("revalidate flags a fix outside its CS's valid domain",
     SurveyTreeTestHelper::surveyStations(badCave, {QStringLiteral("B")});
     badCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return badCave->errorModel()->warningCount() == 1; }));
 
     REQUIRE(badCave->errorModel()->warningCount() == 1);
     // These messages are assembled by choosing between two whole sentences, so
@@ -777,7 +780,8 @@ TEST_CASE("revalidate flags a lone domain-bad fix on a project with no frame",
     SurveyTreeTestHelper::surveyStations(cave, {QStringLiteral("B")});
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return cave->errorModel()->warningCount() == 1; }));
+    REQUIRE(waitForQueuedEvents());
     REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
 
     REQUIRE(cave->errorModel()->warningCount() == 1);
@@ -790,7 +794,7 @@ TEST_CASE("revalidate flags a lone domain-bad fix on a project with no frame",
     // Correcting it anchors the frame and clears the warning.
     cave->fixStations()->setData(cave->fixStations()->index(0), 478000.0,
                                  cwFixStationModel::EastingRole);
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Anchored; }));
     CHECK(region.geoReference()->state() == cwGeoReference::Anchored);
     CHECK(cave->errorModel()->warningCount() == 0);
     CHECK(region.fixStationValidator()->warningMessage().isEmpty());
@@ -826,7 +830,7 @@ TEST_CASE("revalidate flags a distant in-domain cave",
     SurveyTreeTestHelper::surveyStations(caveC, {QStringLiteral("C")});
     caveC->fixStations()->appendFixStation(
         makeFix(QStringLiteral("C"), QStringLiteral("EPSG:32613"), 478000.0, 5430000.0, 1655.0));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return caveC->errorModel()->warningCount() == 1; }));
 
     REQUIRE(caveC->errorModel()->warningCount() == 1);
     // One outlier, so the singular verb. The distance is computed, so the
@@ -864,7 +868,7 @@ TEST_CASE("revalidate attributes a whole bad cave to Part A, not Part B",
         makeFix(QStringLiteral("B1"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
     badCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B2"), QStringLiteral("EPSG:32613"), 1478100.0, 4430100.0, 1656.0));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return badCave->errorModel()->warningCount() == 1; }));
 
     // Part A flags the bad cave; the good cave is clean. Two offenders in one
     // cave, so the plural wording — one sentence naming both, not one each.
@@ -906,7 +910,7 @@ TEST_CASE("revalidate flags a two-cave project whose second fix is a continent a
     SurveyTreeTestHelper::surveyStations(strayCave, {QStringLiteral("b2")});
     strayCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("b2"), QStringLiteral("EPSG:4326"), -98.370455, 41.936678, 0.0));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return strayCave->errorModel()->warningCount() == 1; }));
 
     REQUIRE(bcCave->errorModel()->warningCount() == 0);
     REQUIRE(strayCave->errorModel()->warningCount() == 1);
@@ -945,7 +949,7 @@ TEST_CASE("revalidate does not flag two legitimately distant caves",
         makeFix(QStringLiteral("E1"), QStringLiteral("EPSG:32613"), 700000.0, 4430000.0, 1655.0));
     eastCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("E2"), QStringLiteral("EPSG:32613"), 700100.0, 4430100.0, 1656.0));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Anchored; }));
 
     CHECK(westCave->errorModel()->warningCount() == 0);
     CHECK(eastCave->errorModel()->warningCount() == 0);
@@ -1225,7 +1229,7 @@ TEST_CASE("a fix on a station an attached file fixes itself is flagged",
 
     // As the attach scan's harvest reports the file's own *fix.
     cave->setFileFixedStations({{cave->id(), {QStringLiteral("doghill.d1")}}});
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return cave->errorModel()->warningCount() == 1; }));
 
     const QString collision = QStringLiteral(
         "survex_blocks.svx already fixes doghill.d1; remove that fix from the file or fix "
@@ -1238,7 +1242,7 @@ TEST_CASE("a fix on a station an attached file fixes itself is flagged",
 
     // A file that stops fixing the station frees it for the node's fix.
     cave->setFileFixedStations({});
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return cave->errorModel()->warningCount() == 0; }));
     CHECK(cave->errorModel()->warningCount() == 0);
 }
 
@@ -1483,7 +1487,7 @@ struct DomainBadSubNode {
         SurveyTreeTestHelper::addTripWithStations(upperLevel, {QStringLiteral("B")});
         upperLevel->fixStations()->appendFixStation(
             makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
-        QCoreApplication::processEvents();
+        REQUIRE(waitUntil([&] { return upperLevel->errorModel()->errors()->warningMessages().size() == 1; }));
         REQUIRE(upperLevel->errorModel()->errors()->warningMessages().size() == 1);
     }
 };
@@ -1534,7 +1538,7 @@ TEST_CASE("the project-wide fix-station warnings name the node each one sits on"
 
     SECTION("a node leaving the region takes its warning with it") {
         project.cave->removeNode(project.cave->indexOfNode(project.upperLevel));
-        QCoreApplication::processEvents();
+        REQUIRE(waitUntil([&] { return validator->fixStationWarningMessages().isEmpty(); }));
         CHECK(validator->fixStationWarningMessages().isEmpty());
     }
 }
@@ -1549,7 +1553,9 @@ TEST_CASE("the project-wide fix-station warnings list nodes in tree order",
     SurveyTreeTestHelper::addTripWithStations(otherCave, {QStringLiteral("B")});
     otherCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] {
+        return project.region.fixStationValidator()->fixStationWarningMessages().size() == 2;
+    }));
 
     //Pre-order, not name order: Deep Hole's section comes before the cave added
     //after it.
@@ -1580,7 +1586,12 @@ TEST_CASE("the Fix Stations page's add path leaves the region root without fixes
     CHECK(cave->fixStations()->count() == 1);
     CHECK(region.rootNode()->fixStations()->count() == 0);
 
-    QCoreApplication::processEvents();
+    //The blank row addFixAt makes raises no warning, so give the cave a
+    //domain-bad fix; the loop below then has a message to check.
+    SurveyTreeTestHelper::addTripWithStations(cave, {QStringLiteral("B")});
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+    REQUIRE(waitUntil([&] { return !region.fixStationValidator()->fixStationWarningMessages().isEmpty(); }));
     for (const QString& message : region.fixStationValidator()->fixStationWarningMessages()) {
         CHECK(message.startsWith(QStringLiteral("Aardvark Pit: ")));
     }
@@ -1610,7 +1621,7 @@ TEST_CASE("a node's fix-station warnings cover the node and its descendants",
     SECTION("a sibling branch keeps its own warning to itself") {
         sibling->fixStations()->appendFixStation(
             makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
-        QCoreApplication::processEvents();
+        REQUIRE(waitUntil([&] { return validator->fixStationWarningMessagesUnder(sibling).size() == 1; }));
 
         const QStringList underSibling = validator->fixStationWarningMessagesUnder(sibling);
         REQUIRE(underSibling.size() == 1);
@@ -1640,7 +1651,7 @@ TEST_CASE("a node's fix-station warnings cover the node and its descendants",
 
     SECTION("moving the sub-node carries its warning to the new ancestor") {
         REQUIRE(sibling->moveHere(project.upperLevel));
-        QCoreApplication::processEvents();
+        REQUIRE(waitUntil([&] { return validator->fixStationWarningMessagesUnder(sibling).size() == 1; }));
 
         CHECK(validator->fixStationWarningMessagesUnder(project.cave).isEmpty());
         const QStringList underSibling = validator->fixStationWarningMessagesUnder(sibling);
@@ -1704,7 +1715,9 @@ qint64 measureRemovalStall(int nodes)
         for (int i = 0; i < nodes; ++i) {
             region.addCave(makeDomainBadCave());
         }
-        QCoreApplication::processEvents();
+        REQUIRE(waitUntil([&] {
+            return region.fixStationValidator()->fixStationWarningMessages().size() == nodes;
+        }));
         REQUIRE(region.fixStationValidator()->fixStationWarningMessages().size() == nodes);
 
         const qint64 stall = longestMainThreadStall([&region]() {
@@ -1713,7 +1726,7 @@ qint64 measureRemovalStall(int nodes)
             }
         });
         shortest = std::min(shortest, stall);
-        QCoreApplication::processEvents();
+        REQUIRE(waitUntil([&] { return region.fixStationValidator()->fixStationWarningMessages().isEmpty(); }));
         REQUIRE(region.fixStationValidator()->fixStationWarningMessages().isEmpty());
     }
     return shortest;
@@ -1732,10 +1745,10 @@ TEST_CASE("nodes joining in one turn revalidate once",
     for (int i = 0; i < kBudgetNodeCount; ++i) {
         region.addCave(makeDomainBadCave());
     }
-    QCoreApplication::processEvents();
-
+    REQUIRE(waitUntil([&] { return validator->fixStationWarningMessages().size() == kBudgetNodeCount; }));
     CHECK(changed.count() == 1);
-    CHECK(validator->fixStationWarningMessages().size() == kBudgetNodeCount);
+    REQUIRE(waitForQueuedEvents());
+    CHECK(changed.count() == 1);
 }
 
 TEST_CASE("nodes leaving in one turn revalidate once",
@@ -1747,17 +1760,17 @@ TEST_CASE("nodes leaving in one turn revalidate once",
     for (int i = 0; i < kBudgetNodeCount; ++i) {
         region.addCave(makeDomainBadCave());
     }
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return validator->fixStationWarningMessages().size() == kBudgetNodeCount; }));
     REQUIRE(validator->fixStationWarningMessages().size() == kBudgetNodeCount);
 
     QSignalSpy changed(validator, &cwFixStationValidator::fixStationWarningsChanged);
     while (region.caveCount() > 0) {
         region.removeCave(region.caveCount() - 1);
     }
-    QCoreApplication::processEvents();
-
+    REQUIRE(waitUntil([&] { return validator->fixStationWarningMessages().isEmpty(); }));
     CHECK(changed.count() == 1);
-    CHECK(validator->fixStationWarningMessages().isEmpty());
+    REQUIRE(waitForQueuedEvents());
+    CHECK(changed.count() == 1);
 }
 
 TEST_CASE("deleting the first outlier's cave leaves no dangling summary",
@@ -1771,11 +1784,10 @@ TEST_CASE("deleting the first outlier's cave leaves no dangling summary",
 
     QPointer<cwCave> firstOutlier = addOutlierCave(region, QStringLiteral("First Sink"));
     QPointer<cwCave> nextOutlier = addOutlierCave(region, QStringLiteral("Next Sink"));
-    QCoreApplication::processEvents();
 
     cwFixStationValidator* validator = region.fixStationValidator();
     REQUIRE(validator != nullptr);
-    REQUIRE(validator->firstOutlierCave() == firstOutlier.data());
+    REQUIRE(waitUntil([&] { return validator->firstOutlierCave() == firstOutlier.data(); }));
 
     // Destroy the cave before the queued pass can run: removal with no undo
     // stack deletes it on the next deferred-delete sweep.
@@ -1784,8 +1796,7 @@ TEST_CASE("deleting the first outlier's cave leaves no dangling summary",
     REQUIRE(firstOutlier.isNull());
 
     CHECK(validator->firstOutlierCave() == nullptr);
-    QCoreApplication::processEvents();
-    CHECK(validator->firstOutlierCave() == nextOutlier.data());
+    REQUIRE(waitUntil([&] { return validator->firstOutlierCave() == nextOutlier.data(); }));
 
     // With no outlier left, the summary stays empty through the pass.
     region.removeCave(region.indexOf(nextOutlier.data()));
@@ -1793,9 +1804,9 @@ TEST_CASE("deleting the first outlier's cave leaves no dangling summary",
     REQUIRE(nextOutlier.isNull());
 
     CHECK(validator->firstOutlierCave() == nullptr);
-    QCoreApplication::processEvents();
+    CHECK(validator->outlierCount() == 1);
+    REQUIRE(waitUntil([&] { return validator->outlierCount() == 0; }));
     CHECK(validator->firstOutlierCave() == nullptr);
-    CHECK(validator->outlierCount() == 0);
 }
 
 TEST_CASE("removing nodes in one turn stalls in time linear in the nodes",
