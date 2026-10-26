@@ -150,7 +150,7 @@ MainWindowTest {
         category: "FixStationPage"
     }
 
-    CWTestCase {
+    ExternalCenterlineTestCase {
         name: "FixStationPage"
         when: windowShown
 
@@ -1516,10 +1516,10 @@ MainWindowTest {
             RootData.region.unitSystem = previousUnits
         }
 
-        function test_stationWarningIconHiddenWithoutSurvey() {
-            // Without a computed survey network there's nothing to validate the
-            // station reference against, so the icon stays hidden — and its
-            // objectName confirms the shared InlineWarning wiring is intact.
+        // #727: a named fix on a cave with nothing to solve is flagged as an
+        // unknown station right away, and the flag clears once a trip surveys
+        // that station and the solve lands.
+        function test_stationWarningShowsForUnknownStationOnBareCave() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
@@ -1533,14 +1533,21 @@ MainWindowTest {
                 warning = findChild(fixPage, "stationWarning.0")
                 return warning !== null
             }, 5000, "row 0 station warning indicator should be reachable")
-            verify(!warning.visible, "no survey network → no station-reference warning")
+            tryVerify(() => warning.visible, 5000,
+                      "a named fix on a bare cave shows the station-reference warning")
+            verify(warning.message.indexOf("No survey station named \"A1\"") >= 0,
+                   "the warning names the unknown station, got: " + warning.message)
+
+            addTripNamingStations(cave, ["A1", "A2"])
+            tryVerify(() => !warning.visible, 5000,
+                      "surveying A1 clears the unknown-station warning")
         }
 
         function test_stationWarningShownForEmptyName() {
             // A blank row names no survey station — survex drops such a fix — so
-            // it is flagged inline the moment it appears, even before a network
-            // exists (the empty check runs before the "nothing to check" defer).
+            // it is flagged inline the moment it appears.
             const cave = gotoFixStations()
+            addTripNamingStations(cave, ["A1", "A2"])
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
 
@@ -1556,14 +1563,14 @@ MainWindowTest {
                 warning = findChild(fixPage, "stationWarning.0")
                 return warning !== null
             }, 5000, "row 0 station warning indicator should be reachable")
-            verify(warning.visible, "empty station name → station-reference warning shows")
+            tryVerify(() => warning.visible, 5000,
+                      "empty station name → station-reference warning shows")
 
-            // Typing any name clears it: with no network there is nothing to
-            // match against, so a *named* fix defers rather than cry wolf. The
-            // flag is specific to the name being missing altogether.
+            // Typing a name clears it: A1 is a surveyed station, so the name
+            // resolves. The flag is specific to the name being missing.
             model.setData(model.index(0), "A1", FixStationModel.StationNameRole)
             tryVerify(() => !warning.visible, 5000,
-                      "a named fix with no network defers and clears the warning")
+                      "naming a surveyed station clears the warning")
         }
 
 
