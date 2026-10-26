@@ -1,156 +1,176 @@
-# Region load stall — incremental, observer-suppressed `setData` (issue: big-cave load freeze)
+# F7 (#542) — Native project open: the region `setData` frame
 
-## Context
+Rewritten 2026-10-24. The 2025 version of this plan diagnosed the same shape against code
+that has since been replaced by the survey-tree work (W1 to W5) and MP.11 (MT.1 to MT.6):
+`cwCave::setData`/`insertedCaves`/`setAutomaticUpdate` are gone, keyword registration is bulk,
+labels are computed on the solve worker, and tree-wide consumers run once per turn. What
+remains is one synchronous frame, and the owner's profiles now say what is in it.
 
-Loading a large project (e.g. Fisher Ridge) freezes the window with no feedback. The file
-**parse is already off-thread** (`cwRegionLoadTask` / the bundle loader, run through
-`cwConcurrent::run`). The stall is entirely in the GUI-thread continuation that turns the
-parsed POD tree into the live `QObject` model:
+Numbers come from the owner's Instruments profiles of native `.cwproj` opens (`loadHang1`,
+`loadHang2`, `loadHang3`, 2026-10-24, Debug). The projects are private: counts and stack
+shapes only. The git status walk that dominated two of the three profiles is a separate
+problem with its own plan, plans/GIT_STATUS_LOAD_PLAN.md.
 
-```
-cwProject.cpp:877   Region->setData(result.cavingRegion())   // one synchronous call, no event-loop turn
-```
+## 0. What the profiles show
 
-`cwCavingRegionData` is a plain POD tree (caves → trips → chunks → stations/shots).
-`cwCavingRegion::setData` (cwCavingRegion.cpp:262) inflates it into `cwCave`/`cwTrip`/
-`cwSurveyChunk` `QObject`s and wires every observer **in one stack frame**, so Qt never
-repaints or advances a progress bar.
+The parse runs on a worker. The load continuation (cwSaveLoad.cpp:1665, `continueLoad`)
+then calls `cavingRegion()->setData(loadData.region)` at cwSaveLoad.cpp:1720 in one stack
+frame. `cwCavingRegion::setData` (cwCavingRegion.cpp:446) runs `setLoading(true)`, sets
+equates and sources, `clearCaves`, builds a `cwCave` per cave data through the recursive
+`cwSurveyNode::setData` (cwSurveyNode.cpp:1626) and `cwTrip::setData` (cwTrip.cpp:966), then
+`addCaves` → `m_root->addNodes` (one range insert, :401), restores the geo reference and
+`setLoading(false)`. These are QML-exposed models, so construction stays on the GUI thread.
 
-These model objects are `QAbstractListModel`s exposed to QML, so they have **GUI-thread
-affinity** — materialization cannot simply move to a worker.
+loadHang1, 579 ms inside `setData`:
 
-### Three stacked synchronous cost centers in that frame
+| Share | Where | What |
+|---|---|---|
+| 340 ms | `cwSurveyChunk::setData` → `updateErrors` → `checkForShotError` → `checkForError` | per-shot validation during construction |
+| 158 ms of those | `cwErrorModel::cwErrorModel` | 143 ms is the two string-based `QObject::connect` calls in the constructor (cwErrorModel.cpp:20 to 21); one model per cell that has an error, created at cwSurveyChunk.cpp:1251 |
+| 116 ms of those | `checkDataError` | the validation itself |
+| 100 ms | `cwTrip::addChunk` → `setParentTrip` → `updateCompassClinoErrors` → `checkForError` | the same shots validated a second time when the chunk is parented |
+| 67 ms | `addCaves` → `addNodes` → `insertedNodes` | 53 ms is `cwLinePlotLabelView::nodesInserted` (cwLinePlotLabelView.cpp:114) → `labels(trip)` → `cwTrip::solvedStations` → `uniqueStations` (cwTrip.cpp:1001), where `QMap::operator[]` default-constructs a `cwStation` and each one draws a `QUuid` from `getentropy` (47 ms), before any solve has run |
+| 26 ms | `cwTrip::cwTrip` | constructor |
 
-1. **QObject materialization** — `cwCavingRegion::setData` → `cwCave::setData`
-   (cwCave.cpp:463) → `cwTrip::setData` (cwTrip.cpp:407) → `cwSurveyChunk::setData`
-   (cwSurveyChunk.cpp:661). One QObject per node + station/shot lists. O(total nodes), GUI
-   thread. Caves are built **before** insertion into the region, so per-chunk
-   `chunksInserted` signals during this phase reach no heavy consumer yet.
+loadHang2, 409 ms inside `setData`, 266 ms of it in `clearCaves` tearing down the previous
+region: `cwLinePlotLabelView::nodesRemoved` → `removeTrip` → `cwKeywordItemRegistry::drop` →
+`cwKeywordItemModel::remove` (cwKeywordItemModel.cpp:276), one `beginRemoveRows` per trip
+cascading through `cwKeywordFilterModel::eraseRow`, `cwUniqueValueFilterModel::releaseRow`,
+`cwKeywordFilterPipelineModel`, and `cwKeywordVisibility` → `cwLabel3dView::updateGroup`.
+This is the single-row keyword removal MP.11 left as measure-first; it is now measured at
+162 ms for one teardown. A further 97 ms is `cwLinePlotManager::handleSubtreeChanged` →
+`markNeedsUpdate` during the clear.
 
-2. **The `insertedCaves` storm** — `cwCavingRegion.cpp:347`, fires once as a batch when
-   `addCaves` commits. Connected subsystems each do O(N·trips·notes·scraps) work
-   back-to-back, synchronously:
-   - `cwRegionTreeModel::insertedCaves` (cwRegionTreeModel.cpp:66) — recurses
-     caves→trips→notes→scraps doing per-node `beginInsertRows` + `addCaveConnections`
-     (4+ connects/node).
-   - `cwSurveyChunkSignaler` — walks caves→trips→chunks connecting per-chunk signals.
-   - `cwLinePlotLabelView::addCaves` — a `cwLabel3dGroup` per cave, traversing trips/scraps.
-   - `cwKeywordItemModel` / `cwKeywordFilterPipelineModel` — per-item connects (the filter
-     already debounces via `mUpdatePossibleKeysTimer`; the item model does not).
+Not in these profiles: the solve input snapshot (`cwLinePlotTask::buildInput(Region.data(),
+...)`, cwLinePlotManager.cpp ~730) runs on the GUI thread when the first solve starts, which
+is a later event-loop turn. It must stay on the GUI thread for consistency; GS.1's signpost
+around the solve kick will say what it costs on a large native project.
 
-3. **`runSurvex` → `buildInput` deep-copy** — `insertedCaves` triggers
-   `cwLinePlotManager::runSurvex` (cwLinePlotManager.cpp:235), which calls
-   `buildInput(Region)` → `region->data()` → `cwData::toDataList` (cwLinePlotManager.cpp:267):
-   a **full deep-copy of the entire region back into POD on the GUI thread**, before the
-   async survex task is even queued. The data we just inflated is immediately deep-copied
-   again, synchronously.
+### Stale from the 2025 plan, for the record
 
-The line-plot/network **computation** itself is already async (`m_restarter` +
-`cwConcurrent::run`) and already reports progress through `cwFutureManagerToken`. The frozen
-window is purely items 1–3.
+- Anchors cwProject.cpp:877, cwCavingRegion.cpp:262/347, cwCave.cpp:463, cwTrip.cpp:407,
+  cwSurveyChunk.cpp:661, cwLinePlotManager.cpp:235/267: all moved; see above.
+- `cwLinePlotManager::setAutomaticUpdate` (the proposed suppression hook) no longer exists.
+  The solve is marked dirty with `markNeedsUpdate` and run by `cwUpdateCoordinator`.
+- The "insertedCaves storm" (cost 2) is collapsed: `addNodes` is a range insert, MT.3 made
+  tree-wide consumers run once per turn, MT.4 made keyword registration bulk, MT.5 moved
+  label lists to the solve worker. The profile confirms post-insert consumers at 67 ms.
+- Checkpoint 0's "temporary QElapsedTimer behind a flag" is replaced by GS.1's MarkScope
+  signposts, which stay in.
 
-## Goal
+## 1. Decisions (2026-10-24)
 
-Turn the load from a single multi-second GUI-thread block into a responsive, progress-
-reporting operation: the window stays live, and a named `cwFutureManagerToken` job advances
-while caves stream in. Two independent levers, applied together:
+1. **Cut before interleave.** F7.1 to F7.4 remove work the profile shows as waste. Only
+   after they land and the owner re-profiles does F7.5 (batched install) get a go or a close.
+2. **Materialization stays on the GUI thread.** Models have GUI-thread affinity; building the
+   tree detached and installing it per event-loop turn (F7.5) reuses the shape MT.2 built in
+   `cwSourceSubtreeFill`, never `moveToThread`.
+3. **Validation runs once per chunk per load.** A chunk built by `setData` and then parented
+   validates its shots once, after parenting, and the resulting error state equals what an
+   interactive edit of the same data produces.
+4. **Error models connect with function pointers.** `cwErrorModel` loses its `SIGNAL`/`SLOT`
+   string connects (the CLAUDE.md rule); no change to when cell models are created.
+5. **The label view defers inserted nodes to the solve.** `nodesInserted` on an unsolved
+   trip computes nothing; the solve's label publish (MT.5) installs the labels. A node
+   inserted after a solve, with stations already solved, still gets its labels on insert.
+6. **Keyword items are removed in bulk**, mirroring MT.4's bulk add: `cwKeywordItemModel`
+   gains a range removal that the registry's `drop` of many items and the label view's
+   `nodesRemoved` use, and the filter pipeline resets instead of replaying per row when a
+   removal exceeds a small fraction of the rows.
+7. **Tests pin growth, not milliseconds.** 1x and 4x synthetic regions (built in code with
+   the fixture helpers in testcases/ExternalCenterlineTestHelpers.h), `longestMainThreadStall`
+   around `setData` on an otherwise idle region, and `QSignalSpy` counts on `rowsRemoved`,
+   `rowsInserted`, and `errorsChanged`. No private data.
 
-- **Option 1 — collapse the per-item observer work** (kills costs 2 and 3, the pure waste).
-- **Option 2 — yield to the event loop across frames** (makes the remaining unavoidable
-  construction, cost 1, responsive with a moving bar).
+## 2. Items (one workflow, sequential, one commit each)
 
-## Checkpoint 0 — Profile first (no behavior change)
+Pipeline shape as in plans/SOURCE_BREADCRUMB_LOCAL_STORE_PLAN.md. GS.1 (signposts) lands
+first, in the GS pipeline, so each of these can be re-measured in Instruments.
 
-Before changing anything, get real numbers so we know whether Option 1 alone suffices.
+### F7.1 — `cwErrorModel` connects with function pointers
 
-- Wrap the three phases in `cwCavingRegion::setData` / the `cwProject` continuation with
-  `QElapsedTimer` (temporary `qDebug`, behind a local flag — removed before merge), measuring:
-  (a) QObject construction, (b) the `insertedCaves` storm, (c) `buildInput` deep-copy.
-- Run against a Fisher-Ridge-sized dataset (or the largest available test `.cw`).
-- Record the split in the issue. This decides whether Checkpoint 2 (Option 2) is needed or
-  whether Checkpoint 1 already makes the load acceptable.
+cwErrorModel.cpp:20 to 21 and :64 to 65 / :76 to 77 (`setParentModel`) move to
+`connect(obj, &Class::signal, this, &Class::slot)`. `checkForCountChanged` takes the
+`QVector<int>` roles argument as today. No behavior change.
 
-## Checkpoint 1 — Suppress + batch the observers during bulk load (Option 1)
+Tests: existing `[cwErrorModel]`, `[cwSurveyChunk]`, `[cwTrip]` suites. Gate on them.
 
-Introduce a **bulk-load scope** so a whole-region `setData` does the observer work once
-instead of per-row. Smallest blast radius; attacks costs 2 and 3, which are wasted work.
+### F7.2 — A chunk validates once per load
 
-1. **Suppress redundant line-plot recompute.** During `cwCavingRegion::setData`, set
-   `linePlotManager->setAutomaticUpdate(false)` (property already exists,
-   cwLinePlotManager.h:39 / runSurvex early-returns when false at cwLinePlotManager.cpp:236),
-   then re-enable and trigger **one** `runSurvex` at the end. Eliminates the repeated
-   `buildInput` deep-copies (cost 3). The region doesn't own the line-plot manager, so expose
-   the bulk-load boundary as signals (`bulkLoadAboutToStart()` / `bulkLoadFinished()`) or a
-   scope guard that `cwRootData` wires the manager to — keep the region unaware of its
-   observers (preserves the subsystem boundary).
+`cwSurveyChunk::setData` (the `updateErrors` call) and `setParentTrip`
+(`updateCompassClinoErrors`) validate the same shots back to back. Validation moves to one
+pass after the chunk is parented: `setData` records that errors are stale and
+`setParentTrip` (or the first consumer of `errorModel()` if the chunk stays unparented)
+runs the full `updateErrors`. The compass/clino pass that depends on the trip's calibration
+remains part of that single pass.
 
-2. **Collapse the model signal storm into a reset.** Have `cwRegionTreeModel` (and the
-   keyword item model) treat a bulk insert as `beginResetModel`/`endResetModel` rather than
-   recursive per-row `beginInsertRows`. `cwRegionTreeModel` already resets in `setRegion`
-   (cwRegionTreeModel.cpp:342–356), so the reset path exists — drive it from the bulk-load
-   boundary instead of emitting `insertedCaves` per batch. Verify Qt views (tree, keyword
-   filter) repaint correctly after a reset.
+Failing tests: for a trip loaded through `cwTrip::setData` with a chunk containing a missing
+clino, a back-compass mismatch, and an empty station, the set of cell error models and their
+fatal/warning counts equals a trip built interactively with the same shots. `QSignalSpy` on
+the chunk's `errorsChanged` during `setData` + parenting counts one emission per cell.
 
-3. **Single network/keyword pass at the end.** Ensure `cwSurveyChunkSignaler` and the keyword
-   models connect once after the bulk insert, not per node mid-load.
+Gate: `cavewhere-test "[cwSurveyChunk],[cwTrip],[cwErrorModel],[SaveLoad]"`.
 
-**Verification:** load a large dataset; confirm one `runSurvex`/`buildInput` instead of N;
-confirm tree + keyword views still populate; existing C++/QML tests green (region tree model,
-line plot, keyword filter suites).
+### F7.3 — `uniqueStations` and the label view's insert path stop constructing stations
 
-## Checkpoint 2 — Incremental materialization across frames (Option 2)
+`cwTrip::uniqueStations` (cwTrip.cpp:1001) inserts with `lookup.insert(name, station)` into a
+`QHash` with `reserve`, so no `cwStation` is default-constructed and no `QUuid` is drawn per
+lookup. `cwLinePlotLabelView::nodesInserted` (cwLinePlotLabelView.cpp:114) adds the nodes'
+groups and connections but computes labels only for trips that already have solved stations
+(decision 5); unsolved trips get their labels from the next solve publish.
 
-If Checkpoint 0 shows construction (cost 1) still blocks too long, spread it across frames so
-the event loop breathes and the progress bar moves.
+Failing tests: `longestMainThreadStall` around `addNodes` of a 4x region on a line plot label
+view with no solve run is at most about 4x the 1x cost and under one tick at 1x; after a
+solve, the label count equals today's. A node added after a solve, whose trips carry solved
+stations, has labels immediately after insert.
 
-- Drive `cwCavingRegion::setData` as a **main-thread batch loop**: materialize K caves per
-  cycle, then yield via `QTimer(0)` / `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`
-  (a small state machine), or a main-thread `QPromise` whose progress is reported per batch.
-  Note: a `QPromise` reports progress but does **not** preempt — the batch loop is what makes
-  the work yield; pick whichever reads cleanest.
-- Register the load as a `cwFutureManagerToken` job ("Loading caves N/M") so it appears in the
-  same progress UI the survex/network steps already use.
-- Must compose with Checkpoint 1: keep the observer suppression active for the whole
-  streamed load and fire the single reset + one `runSurvex` only when the last batch lands —
-  otherwise each batch re-triggers the storm.
-- Decide the load's intermediate-state contract: the window is interactive mid-load, so either
-  the region is hidden behind a "loading" state until complete, or partial population is
-  explicitly allowed. Resolve before implementing.
+Gate: `cavewhere-test "[cwLinePlotLabelView],[cwTrip],[cwLinePlotManager]"`.
 
-**Verification:** large-dataset load keeps the window responsive (can move/resize, bar
-advances); load completes with identical final model state; cancel mid-load (token cancel)
-leaves a clean, empty/consistent region — mirror the Compass-import cancel guarantee.
+### F7.4 — Keyword items and label groups are removed in bulk on region teardown
 
-## Options considered and rejected
+`cwKeywordItemModel::removeItems(const QList<cwKeywordItem*>&)` does one `beginRemoveRows`
+per contiguous run (or a reset when the removal covers more than a small fraction of rows,
+the same threshold MT.4 uses for the add side). `cwKeywordItemRegistry::drop` gains a batch
+form, and `cwLinePlotLabelView::nodesRemoved` (cwLinePlotLabelView.cpp:129) collects every
+trip under the removed subtree before one drop. `cwCavingRegion::clearCaves` keeps its shape;
+the consumers do the batching. `cwLinePlotManager::handleSubtreeChanged` during a clear
+while `isLoading()` marks the solve dirty once (it already coalesces per turn after MT.3;
+verify and pin).
 
-- **Build the QObject tree off-thread, `moveToThread` to GUI.** Fragile with QML affinity,
-  bindings, undo stack, and `QAbstractItemModel` internals. Not worth the risk.
-- **Lazy materialization** (inflate a cave's trips/chunks only when a view demands them).
-  Biggest payoff for huge caves but a model-layer redesign — a separate, larger effort.
+Failing tests: `QSignalSpy` on `cwKeywordItemModel::rowsRemoved` and `modelReset` during
+`clearCaves` of a 4x region counts at most a constant number of emissions, independent of
+trip count; the keyword filter pipeline shows zero rows afterward; `longestMainThreadStall`
+around `clearCaves` grows at most about 4x from 1x to 4x.
 
-## Risks / notes
+Gate: `cavewhere-test "[cwKeywordItemModel],[cwKeywordItemRegistry],[cwLinePlotLabelView],[cwCavingRegion],[SaveLoad]"`.
 
-- Model affinity: materialization stays on the GUI thread throughout — do not move model
-  objects between threads.
-- Keep `cwCavingRegion` unaware of its observers; drive suppression through signals/scope
-  guards wired in `cwRootData`, not direct manager calls from the region.
-- Reset vs. incremental insert: a model reset invalidates persistent indexes/selection —
-  confirm no view relies on surviving selection across a load (load replaces the region, so
-  this should be safe).
-- The same `setData` path is used by both project load (`cwProject.cpp:877`,
-  `cwSaveLoad.cpp:1402/4716`) and could be reused by import — scope the bulk-load behavior so
-  both benefit, but verify import flows (which add to an existing region) still behave.
+### F7.5 — Gated: install the loaded tree one parent per event-loop turn
 
-## Key file references
+Only if, after F7.1 to F7.4, the owner's re-profile of the largest native project shows
+`setData` above the budget in Release. Reuses `cwSourceSubtreeFill`'s shape (MT.2): build the
+caves detached, install them under a `cwFutureManagerToken` row one parent per turn. The
+open questions are load semantics, to settle with the owner before implementing: `loaded`,
+the undo-stack clear, save enabling, and every test that waits on load must mean "after the
+last batch", and QML pages bound to the region see a partial tree during install.
+
+## 3. Order and bookkeeping
+
+GS.1 first (other plan). Then F7.1, F7.2, F7.3, F7.4 as one pipeline. Owner re-profiles the
+same three projects with the Points of Interest track; the before numbers are §0 above. F7.5
+gets a decision from that profile. Issue #542 closes with the after numbers once the open is
+within budget, or F7.5 is scheduled.
+
+## 4. Key file references
 
 | Path | Role |
-|------|------|
-| `cavewherelib/src/cwCavingRegion.cpp:262` | `setData` — top of the materialization |
-| `cavewherelib/src/cwCavingRegion.cpp:347` | `insertedCaves` emit — the observer storm trigger |
-| `cavewherelib/src/cwCave.cpp:463` / `cwTrip.cpp:407` / `cwSurveyChunk.cpp:661` | nested `setData` |
-| `cavewherelib/src/cwLinePlotManager.cpp:235,267` | `runSurvex` + `buildInput` deep-copy |
-| `cavewherelib/src/cwLinePlotManager.h:39` | `automaticUpdate` property (suppression hook) |
-| `cavewherelib/src/cwRegionTreeModel.cpp:66,342` | `insertedCaves` recursion + existing reset path |
-| `cavewherelib/src/cwSurveyChunkSignaler.cpp` | per-chunk connection walk |
-| `cavewherelib/src/cwKeywordItemModel.cpp` / `cwKeywordFilterPipelineModel.cpp` | keyword model per-item connects |
-| `cavewherelib/src/cwProject.cpp:877` | load continuation calling `setData` on the GUI thread |
+|---|---|
+| cavewherelib/src/cwSaveLoad.cpp:1665, :1720 | load continuation and the `setData` call |
+| cavewherelib/src/cwCavingRegion.cpp:446, :401 | `setData`, `addCaves` → `addNodes` |
+| cavewherelib/src/cwSurveyNode.cpp:1626 | recursive node `setData` |
+| cavewherelib/src/cwTrip.cpp:966, :1001 | trip `setData`, `uniqueStations` |
+| cavewherelib/src/cwSurveyChunk.cpp:1251, 1376 | cell error model creation in `checkForError` |
+| cavewherelib/src/cwErrorModel.cpp:20, :64 | string-based connects |
+| cavewherelib/src/cwLinePlotLabelView.cpp:114, :129, :225 | `nodesInserted`, `nodesRemoved`, `removeTrip` |
+| cavewherelib/src/cwKeywordItemModel.cpp:132, :276 | `removeItem`, `remove` (single row) |
+| cavewherelib/src/cwLinePlotManager.cpp ~730 | `buildInput` snapshot on the GUI thread |
+| testcases/ExternalCenterlineTestHelpers.h:851 | `longestMainThreadStall` |
