@@ -94,10 +94,12 @@ MainWindowTest {
                        "removing a lead should lower the count")
         }
 
-        function setupCaveWithTrips() {
+        // Give each test its own cave name: a second page registered under the
+        // same name in one run crashes cwPage teardown at exit.
+        function setupCaveWithTrips(caveName = "TestCave") {
             RootData.region.addCave()
             let cave = RootData.region.cave(0)
-            cave.name = "TestCave"
+            cave.name = caveName
 
             cave.addTrip()
             cave.trip(0).name = "C-Trip"
@@ -108,7 +110,7 @@ MainWindowTest {
             cave.addTrip()
             cave.trip(2).name = "B-Trip"
 
-            gotoCavePage("TestCave")
+            gotoCavePage(caveName)
             waitForRendering(rootId)
 
             return cave
@@ -170,6 +172,42 @@ MainWindowTest {
                    "C-Trip should still exist but remaining trips are: [" + remainingNames + "]")
             verify(remainingNames.indexOf("B-Trip") !== -1,
                    "B-Trip should still exist but remaining trips are: [" + remainingNames + "]")
+        }
+
+        function showTripRemoveAskBox(cavePage) {
+            let removeAskBox = findChild(cavePage, "removeChallange")
+            verify(removeAskBox !== null, "the cave page should declare a remove ask box")
+
+            removeAskBox.indexToRemove = 0
+            removeAskBox.removeName = "C-Trip"
+            removeAskBox.show()
+            tryVerify(() => removeAskBox.visible, 5000, "show() should open the remove ask box")
+            return removeAskBox
+        }
+
+        // Issue #720: Escape dismisses the ask box and removes nothing.
+        function test_escapeClosesRemoveAskBox() {
+            let cave = setupCaveWithTrips("EscapeCave")
+            let cavePage = RootData.pageView.currentPageItem
+            let removeAskBox = showTripRemoveAskBox(cavePage)
+
+            keyClick(Qt.Key_Escape)
+            tryVerify(() => !removeAskBox.visible, 5000, "Escape should close the remove ask box")
+            compare(cave.rowCount(), 3, "closing the box with Escape should keep every trip")
+        }
+
+        // Issue #720: a press outside the ask box closes it and removes nothing.
+        function test_pressOutsideClosesRemoveAskBox() {
+            let cave = setupCaveWithTrips("OutsidePressCave")
+            let cavePage = RootData.pageView.currentPageItem
+            let removeAskBox = showTripRemoveAskBox(cavePage)
+
+            // show() leaves the box at the page's top-left; the trip table is
+            // only as tall as its rows, so the bottom-right corner is empty page.
+            const outsideInset = 10
+            mouseClick(cavePage, cavePage.width - outsideInset, cavePage.height - outsideInset)
+            tryVerify(() => !removeAskBox.visible, 5000, "a press outside should close the remove ask box")
+            compare(cave.rowCount(), 3, "closing the box with an outside press should keep every trip")
         }
     }
 }

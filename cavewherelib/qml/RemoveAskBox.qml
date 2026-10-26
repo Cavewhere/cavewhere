@@ -9,57 +9,37 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-ShadowRectangle {
+QC.Popup {
     id: removeChallenge
     objectName: "removeChallange"
 
-    property string removeName;
+    property string removeName
     property int indexToRemove
 
+    padding: Theme.popupPadding
+    // The style's insets leave room for StylePopupPanel's shadow margin;
+    // ShadowRectangle draws its own shadow and fills the popup.
+    leftInset: 0
+    topInset: 0
+    rightInset: 0
+    bottomInset: 0
+    modal: false
+    dim: false
+    focus: true
+    closePolicy: QC.Popup.CloseOnEscape | QC.Popup.CloseOnPressOutside
+
+    signal remove()
+
     function show() {
-        state = "visible"
+        open()
     }
 
-    visible: false
-    z: 1
-
-//    x: 20
-//    y: 5
-
-    width: askRow.width + 6
-    height: askRow.height + 6
-
-    signal remove();
-
-    color: Theme.errorBackground
-
-    QQ.MouseArea {
-        parent: RootPopupItem
-        anchors.fill: parent
-
-        visible: removeChallenge.visible
-        z:1000
-
-        onPressed: (mouse) => {
-            var mappedPoint = mapToItem(removeChallenge, mouse.x, mouse.y)
-
-            if(!(mappedPoint.x >= 0 &&
-                    mappedPoint.y >= 0 &&
-                    mappedPoint.x < removeChallenge.width &&
-                    mappedPoint.y < removeChallenge.height))
-            {
-                removeChallenge.state = ""
-            }
-
-            mouse.accepted = false
-        }
+    background: ShadowRectangle {
+        color: Theme.errorBackground
     }
 
-    QQ.Row {
-        id: askRow
-        x: 3
-        y: 3
-        spacing: 3
+    contentItem: QQ.Row {
+        spacing: Theme.popupPadding
 
         QC.Label {
             anchors.verticalCenter: parent.verticalCenter
@@ -71,45 +51,23 @@ ShadowRectangle {
             objectName: "removeButton"
             text: "Remove"
             onClicked: {
-                removeChallenge.remove();
-                removeChallenge.state = ""
+                removeChallenge.remove()
+                removeChallenge.close()
             }
         }
 
         QC.Button {
             objectName: "cancelButton"
             text: "Cancel"
-            onClicked: {
-                removeChallenge.state = ""
-            }
+            onClicked: removeChallenge.close()
         }
     }
 
-
-
-    states: [
-        QQ.State {
-            name: "visible"
-            QQ.PropertyChanges {
-                removeChallenge {
-                    visible: true
-                }
-            }
+    enter: QQ.Transition {
+        QQ.NumberAnimation {
+            property: "opacity"
+            from: 0.0
+            to: 1.0
         }
-    ]
-
-    transitions: [
-         QQ.Transition {
-            from: ""
-            to: "visible"
-
-                QQ.PropertyAnimation {
-                    target: removeChallenge
-                    property: "opacity"
-                    from: 0.0
-                    to: 1.0
-                }
-
-        }
-    ]
+    }
 }

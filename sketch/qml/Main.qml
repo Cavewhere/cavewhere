@@ -132,7 +132,6 @@ Window {
 
     Component.onCompleted: {
         GlobalShadowTextInput.parent = overlay;
-        RootPopupItem.parent = overlay
 
         pageView.unknownPageComponent = unknownPageComponent
         let welcomePage = RootData.pageSelectionModel.registerPage(null, "Welcome", welcomePageComponent);

@@ -344,7 +344,6 @@ set(qml_singletons
     "qml/GlobalShadowTextInput.qml"
     "qml/NoteToolMode.qml"
     "qml/ProjectUnits.qml"
-    "qml/RootPopupItem.qml"
 	"qml/Theme.qml"
     "qml/SelectableValueGroup.qml"
     "qml/ViewTools.qml"

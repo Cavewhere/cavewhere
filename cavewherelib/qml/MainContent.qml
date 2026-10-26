@@ -286,7 +286,6 @@ QQ.Item {
 
     QQ.Component.onCompleted: {
         GlobalShadowTextInput.parent = overlay;
-        RootPopupItem.parent = overlay
 
         pageView.unknownPageComponent = unknownPageComponent
         let viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
