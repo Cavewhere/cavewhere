@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 //Our includes
 #include "cwSurveyNetwork.h"
@@ -7,6 +8,7 @@
 //Qt include
 #include <QStringList>
 #include <QSet>
+#include <QVector3D>
 
 
 TEST_CASE("Build a survey network", "[SurveyNetwork]") {
@@ -152,4 +154,59 @@ TEST_CASE("cwSurveyNetwork::hasStation matches trimmed and case-insensitively",
     for (const QString& name : network.stations()) {
         CHECK(network.hasStation(name));
     }
+}
+
+TEST_CASE("cwSurveyNetwork::addNeighbor creates only the near station",
+          "[cwSurveyNetwork]") {
+    cwSurveyNetwork network;
+    network.addNeighbor(QStringLiteral("A1"), QStringLiteral("X"));
+
+    CHECK(network.hasStation(QStringLiteral("a1")));
+    CHECK_FALSE(network.hasStation(QStringLiteral("x")));
+    CHECK(network.neighbors(QStringLiteral("a1")) == QStringList{QStringLiteral("x")});
+    CHECK(network.neighbors(QStringLiteral("x")).isEmpty());
+    CHECK(network.stationCount() == 1);
+
+    SECTION("A repeated neighbor is recorded once") {
+        network.addNeighbor(QStringLiteral("a1"), QStringLiteral("x"));
+        CHECK(network.neighbors(QStringLiteral("a1")) == QStringList{QStringLiteral("x")});
+        CHECK(network.stationCount() == 1);
+    }
+
+    SECTION("An empty name on either side records nothing") {
+        network.addNeighbor(QString(), QStringLiteral("y"));
+        network.addNeighbor(QStringLiteral("a2"), QString());
+        CHECK(network.stationCount() == 1);
+        CHECK_FALSE(network.hasStation(QStringLiteral("a2")));
+        CHECK_FALSE(network.hasStation(QStringLiteral("y")));
+        CHECK(network.neighbors(QStringLiteral("a1")) == QStringList{QStringLiteral("x")});
+    }
+}
+
+TEST_CASE("A scoped network holds only its own stations, keeping a shot that leaves the scope as an edge",
+          "[cwSurveyNetwork]") {
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("alpha.a1"), QStringLiteral("alpha.a2"));
+    network.addShot(QStringLiteral("alpha.a2"), QStringLiteral("beta.b2"));
+    network.addShot(QStringLiteral("beta.b1"), QStringLiteral("beta.b2"));
+    const QVector3D a2Position(1.0f, 2.0f, 3.0f);
+    network.setPosition(QStringLiteral("alpha.a2"), a2Position);
+    network.setPosition(QStringLiteral("beta.b2"), QVector3D(4.0f, 5.0f, 6.0f));
+
+    const QString prefix = GENERATE(QStringLiteral("alpha."), QStringLiteral("Alpha."));
+    INFO("prefix " << prefix.toStdString());
+    const cwSurveyNetwork scoped = network.scoped(prefix);
+
+    QStringList stations = scoped.stations();
+    stations.sort();
+    INFO("stations " << stations.join(QStringLiteral(", ")).toStdString());
+    CHECK(stations == QStringList{QStringLiteral("a1"), QStringLiteral("a2")});
+    CHECK(scoped.stationCount() == 2);
+    CHECK_FALSE(scoped.hasStation(QStringLiteral("beta.b2")));
+
+    const QStringList a2Neighbors = scoped.neighbors(QStringLiteral("a2"));
+    CHECK(a2Neighbors.contains(QStringLiteral("a1")));
+    CHECK(a2Neighbors.contains(QStringLiteral("beta.b2")));
+    CHECK(scoped.neighbors(QStringLiteral("beta.b2")).isEmpty());
+    CHECK(scoped.position(QStringLiteral("a2")) == a2Position);
 }

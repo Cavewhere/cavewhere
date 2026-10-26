@@ -715,9 +715,11 @@ cwSurveyNetwork cwCavingRegion::memberNetwork(const cwSurveyNode* node) const
             const QString local = memberLocalKey(station, cavernPath);
             const QStringList neighbors = rootNetwork.neighbors(station);
             for (const QString& neighbor : neighbors) {
-                network.addShot(local, members.contains(neighbor)
-                                           ? memberLocalKey(neighbor, cavernPath)
-                                           : neighbor);
+                if (members.contains(neighbor)) {
+                    network.addShot(local, memberLocalKey(neighbor, cavernPath));
+                } else {
+                    network.addNeighbor(local, neighbor);
+                }
             }
             if (rootNetwork.hasPosition(station)) {
                 network.setPosition(local, rootNetwork.position(station));

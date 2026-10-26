@@ -68,7 +68,8 @@ QString memberLocalKey(const QString& key, const QString& nodeCavernPath)
 }
 
 //! \a node's network built from the public pieces: the source root's view kept
-//! to node->sourceMembers(), member names local to the node.
+//! to node->sourceMembers(), member names local to the node. A shot to a
+//! non-member stays on the member's neighbor list without a station entry.
 cwSurveyNetwork referenceNetwork(const cwSurveyNode* node)
 {
     const cwSurveyNode::SourceMembers members = node->sourceMembers();
@@ -81,8 +82,11 @@ cwSurveyNetwork referenceNetwork(const cwSurveyNode* node)
         }
         const QString local = memberLocalKey(station, cavernPath);
         for (const QString& neighbor : rootNetwork.neighbors(station)) {
-            network.addShot(local, members.contains(neighbor) ? memberLocalKey(neighbor, cavernPath)
-                                                              : neighbor);
+            if (members.contains(neighbor)) {
+                network.addShot(local, memberLocalKey(neighbor, cavernPath));
+            } else {
+                network.addNeighbor(local, neighbor);
+            }
         }
         if (rootNetwork.hasPosition(station)) {
             network.setPosition(local, rootNetwork.position(station));
@@ -273,6 +277,78 @@ TEST_CASE("A derived node's member views keep exactly its members' stations",
         }
         CHECK(host->scopedNetwork().hasStation(prefix + QStringLiteral("d1")));
     }
+}
+
+TEST_CASE("A derived node's member view keeps a shot to a non-member as an edge, not a station",
+          "[cwCavingRegion][MemberViews]")
+{
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString entry = writeSurvexTree(sourceDir.path(), kNativeTreeFiles, kShotsPerFile,
+                                          kBinaryTreeChildren);
+    auto fixture = makeProject(QStringLiteral("member-views-foreign-edge"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        fixture.get(), fixture->project->cavingRegion()->rootNode(), entry);
+    drainPipelines(fixture.get());
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+    cwCavingRegion* region = fixture->project->cavingRegion();
+
+    // A derived node with a member station in the root's view, and a station
+    // of the same root outside its members.
+    const QStringList rootStations = root->scopedNetwork().stations();
+    const cwSurveyNode* node = nullptr;
+    QString memberRootKey;
+    QString siblingRootKey;
+    for (const cwSurveyNode* candidate : derivedNodes(root)) {
+        const cwSurveyNode::SourceMembers members = candidate->sourceMembers();
+        const auto member = std::find_if(rootStations.cbegin(), rootStations.cend(),
+                                         [&members](const QString& station) { return members.contains(station); });
+        const auto sibling = std::find_if(rootStations.cbegin(), rootStations.cend(),
+                                          [&members](const QString& station) { return !members.contains(station); });
+        if (member != rootStations.cend() && sibling != rootStations.cend()) {
+            node = candidate;
+            memberRootKey = *member;
+            siblingRootKey = *sibling;
+            break;
+        }
+    }
+    REQUIRE(node != nullptr);
+
+    const QString rootPrefix = cwStation::canonicalKey(root->scopePrefix());
+    REQUIRE_FALSE(rootPrefix.isEmpty());
+    const QString memberRegionKey = rootPrefix + memberRootKey;
+    const QString siblingRegionKey = rootPrefix + siblingRootKey;
+    REQUIRE(region->network().hasStation(memberRegionKey));
+    REQUIRE(region->network().hasStation(siblingRegionKey));
+
+    // An invented cave outside the root, and a sibling of the same root.
+    const QString foreign = QStringLiteral("beta.b2");
+    cwSurveyNetwork network = region->network();
+    network.addShot(memberRegionKey, foreign);
+    network.addShot(memberRegionKey, siblingRegionKey);
+    region->setNetwork(network);
+
+    const cwSurveyNode::SourceMembers members = node->sourceMembers();
+    const QString cavernPath = cwStation::canonicalKey(node->cavernPath());
+    const QString local = memberLocalKey(memberRootKey, cavernPath);
+    INFO("node " << node->name().toStdString() << ", member " << local.toStdString()
+                 << ", sibling " << siblingRootKey.toStdString());
+
+    const cwSurveyNetwork view = node->scopedNetwork();
+    CHECK_FALSE(view.hasStation(foreign));
+    CHECK_FALSE(view.hasStation(siblingRootKey));
+    const QStringList memberNeighbors = view.neighbors(local);
+    CHECK(memberNeighbors.contains(foreign));
+    CHECK(memberNeighbors.contains(siblingRootKey));
+    for (const QString& station : view.stations()) {
+        INFO("station " << station.toStdString());
+        CHECK((members.contains(station) || members.contains(cavernPath + station)));
+    }
+
+    const cwSurveyNetwork rootAfter = root->scopedNetwork();
+    CHECK_FALSE(rootAfter.hasStation(foreign));
+    CHECK(rootAfter.neighbors(memberRootKey).contains(foreign));
+    CHECK(rootAfter.hasStation(siblingRootKey));
 }
 
 TEST_CASE("A member-view fan-out grows with the stations, not with nodes times stations",

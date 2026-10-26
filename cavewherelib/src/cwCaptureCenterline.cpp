@@ -87,7 +87,11 @@ QList<cwSurveyNetwork> cwCaptureCenterline::caveNetworks(const cwCavingRegion* r
                 continue;
             }
             for(const QString& neighbor : scoped.neighbors(station)) {
-                network.addShot(station, neighbor);
+                if(scoped.hasStation(neighbor)) {
+                    network.addShot(station, neighbor);
+                } else {
+                    network.addNeighbor(station, neighbor);
+                }
             }
             if(stationLookup.hasPosition(station)) {
                 network.setPosition(station, stationLookup.position(station));

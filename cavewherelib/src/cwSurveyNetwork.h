@@ -26,6 +26,11 @@ public:
     void clear();
     void addShot(const QString& from, const QString& to);
 
+    //! Records \a neighbor on \a station's neighbor list, creating an entry
+    //! for \a station only: \a neighbor stays an edge, not a station. Names are
+    //! canonicalized like addShot(); an empty name records nothing.
+    void addNeighbor(const QString& station, const QString& neighbor);
+
     QStringList neighbors(const QString& stationName) const;
     QStringList stations() const;
     int stationCount() const;
@@ -43,9 +48,10 @@ public:
     bool hasPosition(const QString& stationName) const;
 
     //! The stations whose names start with \a prefix (case-insensitively),
-    //! named by the rest of the name, with their shots and positions. A
-    //! neighbor outside the prefix keeps its full name, so a tie leaving the
-    //! scope still resolves. An empty prefix answers this network.
+    //! named by the rest of the name, with their shots and positions. A shot
+    //! that leaves the scope stays on the in-scope station's neighbor list
+    //! under the neighbor's full name; that neighbor is no station of the
+    //! view. An empty prefix answers this network.
     cwSurveyNetwork scoped(const QString& prefix) const;
 
     static QStringList changedStations(const cwSurveyNetwork& n1,

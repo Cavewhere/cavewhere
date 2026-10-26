@@ -31,6 +31,20 @@ void cwSurveyNetwork::addShot(const QString& fromStation, const QString& toStati
     }
 }
 
+void cwSurveyNetwork::addNeighbor(const QString& station, const QString& neighbor) {
+    const QString stationKey = cwStation::canonicalKey(station);
+    const QString neighborKey = cwStation::canonicalKey(neighbor);
+
+    if (stationKey.isEmpty() || neighborKey.isEmpty()) {
+        return;
+    }
+
+    StationData& stationData = stationDataMap[stationKey];
+    if (!stationData.neighborList.contains(neighborKey)) {
+        stationData.neighborList.append(neighborKey);
+    }
+}
+
 QStringList cwSurveyNetwork::neighbors(const QString& stationName) const {
     const QString key = cwStation::canonicalKey(stationName);
     auto dataIterator = stationDataMap.constFind(key);
@@ -83,9 +97,6 @@ cwSurveyNetwork cwSurveyNetwork::scoped(const QString& prefix) const
     }
 
     const QString key = cwStation::canonicalKey(prefix);
-    const auto local = [&key](const QString& station) {
-        return station.startsWith(key) ? station.sliced(key.size()) : station;
-    };
 
     cwSurveyNetwork network;
     for (auto it = stationDataMap.constBegin(); it != stationDataMap.constEnd(); ++it) {
@@ -97,7 +108,11 @@ cwSurveyNetwork cwSurveyNetwork::scoped(const QString& prefix) const
             continue;
         }
         for (const QString& neighbor : it.value().neighborList) {
-            network.addShot(station, local(neighbor));
+            if (neighbor.startsWith(key)) {
+                network.addShot(station, neighbor.sliced(key.size()));
+            } else {
+                network.addNeighbor(station, neighbor);
+            }
         }
         if (it.value().positionIsSet) {
             network.setPosition(station, it.value().stationPosition);

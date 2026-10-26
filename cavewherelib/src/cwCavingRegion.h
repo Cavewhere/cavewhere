@@ -262,8 +262,9 @@ public:
     //! invalidateMemberViews() runs.
     cwStationPositionLookup memberPositions(const cwSurveyNode* node) const;
 
-    //! The source root's scopedNetwork() kept to the same members. A neighbor
-    //! outside them keeps its name in the root's view.
+    //! The source root's scopedNetwork() kept to the same members. A shot to
+    //! a station outside them stays on the member's neighbor list under the
+    //! root view's name; that station is no station of this view.
     cwSurveyNetwork memberNetwork(const cwSurveyNode* node) const;
 
     //! The member sets moved without a solve (a harvest named a derived
