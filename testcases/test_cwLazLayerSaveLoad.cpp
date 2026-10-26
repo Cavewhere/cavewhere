@@ -29,6 +29,25 @@
 #include <google/protobuf/util/json_util.h>
 
 #include "LazFixtureHelper.h"
+#include "TestHelper.h"
+
+namespace {
+
+// Arms the fileSaved spy before saveAs so it records the queued completeSave.
+// A project that was already clean reads modified() == false before the save lands.
+bool saveAsAndWaitSaved(cwRootData* root, const QString& path)
+{
+    auto* project = root->project();
+    QSignalSpy savedSpy(project, &cwProject::fileSaved);
+    if (!project->saveAs(path)) {
+        return false;
+    }
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    return waitUntil([&] { return savedSpy.count() >= 1; });
+}
+
+} // namespace
 
 TEST_CASE("cwLazLayer save/load round-trip preserves layer files",
           "[cwLazLayer][cwSaveLoad]") {
@@ -180,7 +199,7 @@ TEST_CASE("cwLazLayer save/load: disabled state survives reopen",
     root2->project()->loadFile(actualPath);
     root2->project()->waitLoadToFinish();
     // Apply queued state after rescan.
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return root2->project()->cavingRegion()->lazLayers()->count() == 2; }));
 
     auto* reloadedRegion = root2->project()->cavingRegion();
     REQUIRE(reloadedRegion->lazLayers()->count() == 2);
@@ -291,7 +310,7 @@ TEST_CASE("cwLazLayer save/load: user-removed layer does not silently disable it
     auto root2 = std::make_unique<cwRootData>();
     root2->project()->loadFile(actualPath);
     root2->project()->waitLoadToFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return root2->project()->cavingRegion()->lazLayers()->count() == 1; }));
 
     auto* reloadedRegion = root2->project()->cavingRegion();
     REQUIRE(reloadedRegion->lazLayers()->count() == 1);
@@ -327,7 +346,7 @@ TEST_CASE("cwLazLayer save/load: all-enabled round-trip leaves all enabled",
     auto root2 = std::make_unique<cwRootData>();
     root2->project()->loadFile(actualPath);
     root2->project()->waitLoadToFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return root2->project()->cavingRegion()->lazLayers()->count() == 2; }));
 
     auto* reloadedRegion = root2->project()->cavingRegion();
     REQUIRE(reloadedRegion->lazLayers()->count() == 2);
@@ -362,7 +381,7 @@ TEST_CASE("cwLazLayer save/load: all-defaults project round-trips with every lay
     auto root2 = std::make_unique<cwRootData>();
     root2->project()->loadFile(actualPath);
     root2->project()->waitLoadToFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return root2->project()->cavingRegion()->lazLayers()->count() == 1; }));
 
     auto* reloadedRegion = root2->project()->cavingRegion();
     REQUIRE(reloadedRegion->lazLayers()->count() == 1);
@@ -494,7 +513,7 @@ TEST_CASE("cwLazLayer .cwlaz: pre-placed sibling sets UUID + enabled on rescan",
     auto root2 = std::make_unique<cwRootData>();
     root2->project()->loadFile(savedPath);
     root2->project()->waitLoadToFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return root2->project()->cavingRegion()->lazLayers()->count() == 1; }));
 
     auto* layers = root2->project()->cavingRegion()->lazLayers();
     REQUIRE(layers->count() == 1);
@@ -618,9 +637,9 @@ TEST_CASE("cwLazLayer .cwlaz: orphaned sibling without matching .laz is left unt
     auto root2 = std::make_unique<cwRootData>();
     root2->project()->loadFile(savedPath);
     root2->project()->waitLoadToFinish();
+    REQUIRE(waitForQueuedEvents());
     root2->project()->waitSaveToFinish();
     root2->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
 
     REQUIRE(root2->project()->cavingRegion()->lazLayers()->count() == 0);
     REQUIRE(QFile::exists(cwlazInProject));
@@ -658,7 +677,7 @@ TEST_CASE("cwLazLayer .cwlaz: UUID survives close/reopen",
     auto root2 = std::make_unique<cwRootData>();
     root2->project()->loadFile(savedPath);
     root2->project()->waitLoadToFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return root2->project()->cavingRegion()->lazLayers()->count() == 2; }));
 
     auto* reloaded = root2->project()->cavingRegion()->lazLayers();
     REQUIRE(reloaded->count() == 2);
@@ -709,7 +728,7 @@ TEST_CASE("cwLazLayer .cwlaz: malformed sibling skips layer + reports to errorMo
     auto root2 = std::make_unique<cwRootData>();
     root2->project()->loadFile(savedPath);
     root2->project()->waitLoadToFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return root2->project()->errorModel()->count() >= 1; }));
 
     REQUIRE(root2->project()->cavingRegion()->lazLayers()->count() == 0);
     REQUIRE(root2->project()->errorModel()->count() >= 1);
@@ -738,10 +757,7 @@ TEST_CASE("cwLazLayer .cwlaz: external .laz delete dirties the project",
     const QString projectPath = QDir(tempDir.path())
                                     .filePath(QStringLiteral("laz-extdel-%1.cwproj")
                                                   .arg(QCoreApplication::applicationPid()));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-    root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(saveAsAndWaitSaved(root.get(), projectPath));
 
     // After a clean save, the project is at HEAD and not modified.
     REQUIRE_FALSE(project->modified());
@@ -783,10 +799,7 @@ TEST_CASE("cwLazLayer .cwlaz: discardChanges re-surfaces .laz with original UUID
     const QString projectPath = QDir(tempDir.path())
                                     .filePath(QStringLiteral("laz-disc-%1.cwproj")
                                                   .arg(QCoreApplication::applicationPid()));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-    root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(saveAsAndWaitSaved(root.get(), projectPath));
     REQUIRE_FALSE(project->modified());
 
     // Snapshot the layer's UUID so we can verify identity survives the
@@ -825,8 +838,7 @@ TEST_CASE("cwLazLayer .cwlaz: discardChanges re-surfaces .laz with original UUID
     QSignalSpy discardSpy(project, &cwProject::discardCompleted);
     project->discardChanges();
     project->waitForDiscardToFinish();
-    QCoreApplication::processEvents();
-    REQUIRE(discardSpy.count() >= 1);
+    REQUIRE(waitUntil([&] { return discardSpy.count() >= 1; }));
 
     // The queued rescan fires on the next event loop tick after
     // discardCompleted. Pump events until the layer reappears or the
@@ -881,10 +893,7 @@ TEST_CASE("cwLazLayer .cwlaz: discarding an uncommitted layer leaves the project
     const QString projectPath = QDir(tempDir.path())
                                     .filePath(QStringLiteral("laz-discadd-%1.cwproj")
                                                   .arg(QCoreApplication::applicationPid()));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-    root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(saveAsAndWaitSaved(root.get(), projectPath));
     REQUIRE_FALSE(project->modified());
 
     addLazAndWait(root.get(), {externalLaz});
@@ -905,8 +914,7 @@ TEST_CASE("cwLazLayer .cwlaz: discarding an uncommitted layer leaves the project
     QSignalSpy discardSpy(project, &cwProject::discardCompleted);
     project->discardChanges();
     project->waitForDiscardToFinish();
-    QCoreApplication::processEvents();
-    REQUIRE(discardSpy.count() >= 1);
+    REQUIRE(waitUntil([&] { return discardSpy.count() >= 1; }));
 
     // cleanUntracked removed the .laz; the queued rescan notices on the next
     // event loop tick and drops the row. Bounding by wall-clock surfaces
@@ -953,10 +961,7 @@ TEST_CASE("cwLazLayer .cwlaz: a failed discard rescans layers and leaves the pro
     const QString projectPath = QDir(tempDir.path())
                                     .filePath(QStringLiteral("laz-discfail-%1.cwproj")
                                                   .arg(QCoreApplication::applicationPid()));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-    root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(saveAsAndWaitSaved(root.get(), projectPath));
     REQUIRE_FALSE(project->modified());
 
     auto* lazLayers = project->cavingRegion()->lazLayers();
@@ -990,7 +995,7 @@ TEST_CASE("cwLazLayer .cwlaz: a failed discard rescans layers and leaves the pro
     QSignalSpy failedSpy(project->saveLoad(), &cwSaveLoad::discardFailed);
     project->discardChanges();
     project->waitForDiscardToFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return failedSpy.count() >= 1; }));
     REQUIRE(failedSpy.count() == 1);
     CHECK(completedSpy.count() == 0);
 
@@ -1061,10 +1066,7 @@ TEST_CASE("cwLazLayer .cwlaz: a reconcile that drops the .laz drops the row and 
     const QString projectPath = QDir(tempDir.path())
                                     .filePath(QStringLiteral("laz-restore-%1.cwproj")
                                                   .arg(QCoreApplication::applicationPid()));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-    root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(saveAsAndWaitSaved(root.get(), projectPath));
 
     auto* repo = project->repository();
     REQUIRE(repo != nullptr);
@@ -1097,9 +1099,9 @@ TEST_CASE("cwLazLayer .cwlaz: a reconcile that drops the .laz drops the row and 
     QSignalSpy mutationSpy(project, &cwProject::localMutationOccurred);
 
     REQUIRE(project->restoreToCommit(beforeLayerOid.value()));
+    REQUIRE(waitUntil([&] { return lazLayers->count() == 0; }));
     project->waitSaveToFinish();
     root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
 
     REQUIRE_FALSE(QFile::exists(lazInProject));
     CHECK(lazLayers->count() == 0);
@@ -1147,10 +1149,7 @@ LazProjectFixture makeRenameFixture(QTemporaryDir& tempDir,
                          .filePath(QStringLiteral("laz-rename-%1-%2.cwproj")
                                        .arg(tag)
                                        .arg(QCoreApplication::applicationPid()));
-    REQUIRE(project->saveAs(fx.projectPath));
-    project->waitSaveToFinish();
-    fx.root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(saveAsAndWaitSaved(fx.root.get(), fx.projectPath));
     fx.savedPath = project->filename();
     REQUIRE_FALSE(project->modified());
     return fx;
@@ -1236,10 +1235,10 @@ TEST_CASE("cwLazLayer rename: round-trip preserves UUID and enabled state",
 
     project->waitSaveToFinish();
     fx.root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
 
     const QString newLaz = gisDir.absoluteFilePath(newBasename + QStringLiteral(".laz"));
     const QString newCwlaz = gisDir.absoluteFilePath(newBasename + QStringLiteral(".cwlaz"));
+    REQUIRE(waitUntil([&] { return QFile::exists(newLaz) && QFile::exists(newCwlaz); }));
     REQUIRE(QFile::exists(newLaz));
     REQUIRE(QFile::exists(newCwlaz));
     REQUIRE_FALSE(QFile::exists(oldLaz));
@@ -1265,13 +1264,15 @@ TEST_CASE("cwLazLayer rename: reopen project picks up new basename + original UU
     REQUIRE(lazLayers->rename(0, QStringLiteral("reopened")));
     project->waitSaveToFinish();
     fx.root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    const QString reopenedLaz = gisLayersDirForProject(fx.savedPath)
+                                    .absoluteFilePath(QStringLiteral("reopened.laz"));
+    REQUIRE(waitUntil([&] { return QFile::exists(reopenedLaz); }));
 
     // Reopen.
     auto root2 = std::make_unique<cwRootData>();
     root2->project()->loadFile(fx.savedPath);
     root2->project()->waitLoadToFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return root2->project()->cavingRegion()->lazLayers()->count() == 1; }));
 
     auto* layers2 = root2->project()->cavingRegion()->lazLayers();
     REQUIRE(layers2->count() == 1);
@@ -1299,10 +1300,7 @@ TEST_CASE("cwLazLayer rename: collides with another loaded layer",
     const QString projectPath = QDir(tempDir.path())
                                     .filePath(QStringLiteral("laz-collide-%1.cwproj")
                                                   .arg(QCoreApplication::applicationPid()));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-    root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(saveAsAndWaitSaved(root.get(), projectPath));
 
     auto* lazLayers = project->cavingRegion()->lazLayers();
     REQUIRE(lazLayers->count() == 2);
@@ -1402,7 +1400,7 @@ TEST_CASE("cwLazLayer rename: sequential renames coalesce per artifact",
 
     project->waitSaveToFinish();
     fx.root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return QFile::exists(finalLaz) && QFile::exists(finalCwlaz); }));
 
     // Final disk state: only the final basename exists; the intermediate
     // basename never landed.
@@ -1438,11 +1436,11 @@ TEST_CASE("cwLazLayer rename: enqueues exactly two Move jobs with distinct tags"
     REQUIRE(lazLayers->rename(0, QStringLiteral("guarded")));
     project->waitSaveToFinish();
     fx.root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
 
     const QDir gisDir = gisLayersDirForProject(fx.savedPath);
     const QString newLaz = gisDir.absoluteFilePath(QStringLiteral("guarded.laz"));
     const QString newCwlaz = gisDir.absoluteFilePath(QStringLiteral("guarded.cwlaz"));
+    REQUIRE(waitUntil([&] { return QFile::exists(newLaz) && QFile::exists(newCwlaz); }));
 
     // Both artifacts must arrive at the new basename intact. The
     // corruption this guards against is: if both Move jobs were enqueued
@@ -1489,9 +1487,9 @@ TEST_CASE("cwLazLayer rename: phantom-rename guard — no rename, no on-disk chu
     auto root2 = std::make_unique<cwRootData>();
     root2->project()->loadFile(fx.savedPath);
     root2->project()->waitLoadToFinish();
+    REQUIRE(waitUntil([&] { return root2->project()->cavingRegion()->lazLayers()->count() == 1; }));
     root2->project()->waitSaveToFinish();
     root2->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
 
     const QList<DirSnapshot> after = snapshotDir(gisDir);
     INFO("before:" << before.size() << " after:" << after.size());
@@ -1534,10 +1532,7 @@ TEST_CASE("cwLazLayer retarget: Save As keeps layer objects and their point data
                                                       .arg(baseName)
                                                       .arg(QCoreApplication::applicationPid()));
         INFO("saveAs " << projectPath.toStdString());
-        REQUIRE(project->saveAs(projectPath));
-        project->waitSaveToFinish();
-        root->futureManagerModel()->waitForFinished();
-        QCoreApplication::processEvents();
+        REQUIRE(saveAsAndWaitSaved(root.get(), projectPath));
 
         REQUIRE(removeSpy.count() == 0);
         REQUIRE(mutationSpy.count() == 0);
@@ -1569,7 +1564,10 @@ TEST_CASE("cwLazLayer retarget: Save As keeps layer objects and their point data
     layer0->setEnabled(false);
     project->waitSaveToFinish();
     root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] {
+        const auto persisted = cwSaveLoad::loadLazLayer(cwlaz0);
+        return !persisted.hasError() && !persisted.value().enabled;
+    }));
     const auto reread = cwSaveLoad::loadLazLayer(cwlaz0);
     REQUIRE_FALSE(reread.hasError());
     REQUIRE_FALSE(reread.value().enabled);
@@ -1595,10 +1593,7 @@ TEST_CASE("cwLazLayer retarget: file missing at the new root drops only that row
     const QString projectPath = QDir(tempDir.path())
                                     .filePath(QStringLiteral("laz-part-%1.cwproj")
                                                   .arg(QCoreApplication::applicationPid()));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-    root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(saveAsAndWaitSaved(root.get(), projectPath));
     REQUIRE_FALSE(project->modified());
 
     QPointer<cwLazLayer> layerA = lazLayers->layerAt(0);
@@ -1618,8 +1613,7 @@ TEST_CASE("cwLazLayer retarget: file missing at the new root drops only that row
     QSignalSpy removeSpy(lazLayers, &QAbstractItemModel::rowsAboutToBeRemoved);
     lazLayers->retargetGisLayersDir(partialDir);
 
-    // The reconciling rescan is queued; pump it through.
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return lazLayers->count() == 1; }));
 
     // Layer A survives with its object identity and a retargeted path;
     // layer B's file never arrived, so its row goes — and that genuine
