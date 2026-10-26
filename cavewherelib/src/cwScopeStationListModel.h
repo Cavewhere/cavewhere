@@ -24,6 +24,7 @@
 #include "cwStationHandle.h"
 
 class cwTrip;
+class cwSurveyNode;
 
 /**
  * Read-only list model exposing a trip's stations by their scope-relative
@@ -46,6 +47,17 @@ class cwTrip;
  * diff). Rows come out in the natural order knownStations() sorts them in
  * (trailing station numbers ascend numerically, so "a2" precedes "a10") so
  * consumers stay deterministic.
+ *
+ * Set node instead (setting one scope clears the other) and the model lists
+ * the names a fix on that node takes, the set
+ * cwSurvexExporterCaveTask::writeFixStations accepts: each trip's
+ * knownStations() under its scopePrefix() ("trip1.entrance"), in node order,
+ * then the node's own attachment's stations unscoped, deduplicated by
+ * canonical key. A source root lists every native trip of its subtree under
+ * the label its block gives it. Stations an attached file fixes itself
+ * (cwSurveyNode::fileFixedStations()) are left out. A row from the node's own
+ * attachment has an invalid handle and no position. Node mode coalesces its
+ * many pulses into one queued rebuild per event-loop turn.
  */
 class CAVEWHERE_LIB_EXPORT cwScopeStationListModel : public QAbstractListModel
 {
@@ -53,10 +65,11 @@ class CAVEWHERE_LIB_EXPORT cwScopeStationListModel : public QAbstractListModel
     QML_NAMED_ELEMENT(ScopeStationListModel)
 
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
+    Q_PROPERTY(cwSurveyNode* node READ node WRITE setNode NOTIFY nodeChanged)
 
 public:
     enum Roles {
-        StationNameRole = Qt::UserRole + 1, //scope-relative name, the handle's tail
+        StationNameRole = Qt::UserRole + 1, //trip mode: the handle's tail; node mode: the node-relative name
         StationHandleRole,                  //cwStationHandle, the station's identity
         PositionRole                        //solved QVector3D, undefined when unplaced
     };
@@ -71,6 +84,9 @@ public:
     cwTrip* trip() const { return m_trip; }
     void setTrip(cwTrip* trip);
 
+    cwSurveyNode* node() const { return m_node; }
+    void setNode(cwSurveyNode* node);
+
     //Non-blocking membership check: is displayName one of the in-scope
     //station names? Case-insensitive, canonicalized like the rows.
     //Drives the note-entry advisory ("a2 isn't in this trip") without
@@ -84,16 +100,31 @@ public:
 
 signals:
     void tripChanged();
+    void nodeChanged();
+
+private slots:
+    void scheduleRebuild();
+    void rebuildPendingRows();
+    void nodeDestroyed();
 
 private:
     struct Row {
+        QString name;
+        QString key;
         cwStationHandle handle;
         std::optional<QVector3D> position;
     };
 
     void rebuildRows();
+    void appendNodeRows();
+    void clearTrip();
+    void clearNode();
 
     QPointer<cwTrip> m_trip;
+    QPointer<cwSurveyNode> m_node;
+    QList<QMetaObject::Connection> m_nodeConnections;
+    QList<QMetaObject::Connection> m_nodeTripConnections;
+    bool m_rebuildPending = false;
     QList<Row> m_rows;
 };
 

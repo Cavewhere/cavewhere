@@ -570,6 +570,8 @@ void cwSurvexExporterCaveTask::writeEquateLine(QTextStream& stream, const QStrin
  * and their reasons appended to Errors. Falls back to
  * `*fix <firstStation> 0 0 0` when no valid fix exists and no enclosing block
  * is anchored, so each un-fixed top-level survey still resolves in cavern.
+ * cwScopeStationListModel's node mode restates this name set on the live tree
+ * for the station autocomplete; keep the two in step.
  */
 cwSurvexExporterCaveTask::WrittenFixes
 cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &node,

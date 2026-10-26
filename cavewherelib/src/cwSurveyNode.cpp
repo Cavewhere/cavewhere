@@ -300,6 +300,15 @@ void cwSurveyNode::setSourcePath(const QString& sourcePath)
     emit sourceChanged();
 }
 
+void cwSurveyNode::setExternalStations(const QStringList& stations)
+{
+    if (m_externalStations == stations) {
+        return;
+    }
+    m_externalStations = stations;
+    emit externalStationsChanged();
+}
+
 bool cwSurveyNode::canHoldFixes() const
 {
     return !isRoot() && (!isSourced() || isSourceRoot());

@@ -2,10 +2,14 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
+#include <QCoreApplication>
 #include <QPointer>
 #include <QSignalSpy>
 #include <QUndoStack>
 #include <QVector3D>
+
+//Std includes
+#include <utility>
 
 //Our includes
 #include "cwScopeStationListModel.h"
@@ -13,6 +17,7 @@
 #include "cwCavingRegion.h"
 #include "cwProject.h"
 #include "cwExternalCenterline.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwTrip.h"
 #include "cwStation.h"
 #include "cwShot.h"
@@ -78,6 +83,28 @@ cwTrip* addPrefixedTrip(cwCave* cave, const QStringList& prefixedNames)
     }
     SurveyTreeTestHelper::setScopedPositions(cave, lookup);
     return trip;
+}
+
+//A trip attached to a Survex file whose scan harvested \a harvest. The file
+//never exists; the harvest stands in for the scan.
+cwTrip* addHarvestedTrip(cwCave* cave, const QString& name, const QStringList& harvest)
+{
+    cwTrip* trip = new cwTrip();
+    trip->setName(name);
+    cave->addTrip(trip);
+    trip->setExternalCenterline(cwExternalCenterline(
+        QStringLiteral("/nonexistent/") + name + QStringLiteral(".svx")));
+    trip->setExternalStations(harvest);
+    return trip;
+}
+
+QStringList numberedStations(const QString& prefix, int count)
+{
+    QStringList names;
+    for (int i = 1; i <= count; ++i) {
+        names.append(prefix + QString::number(i));
+    }
+    return names;
 }
 
 }
@@ -414,4 +441,316 @@ TEST_CASE("A cave pulses solvedStationsChanged only on the trips it lists",
 
     advanceSolve(QStringLiteral("A.s3"));
     CHECK(pulseSpy.count() == 1);
+}
+
+TEST_CASE("Node scope lists a native trip's stations under its scopePrefix",
+          "[Model][ScopeStations]")
+{
+    // A flat native trip has no scope of its own, so its stations are the bare
+    // names a fix on the cave takes, and they are listed before any solve.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = SurveyTreeTestHelper::addTrip(cave, QStringLiteral("Trip 1"), QStringLiteral("a"));
+    REQUIRE(trip->scopePrefix().isEmpty());
+
+    cwScopeStationListModel model;
+    model.setNode(cave);
+
+    REQUIRE(roleValues(model, cwScopeStationListModel::StationNameRole)
+            == QStringList({ QStringLiteral("a1"), QStringLiteral("a2") }));
+    CHECK(handles(model)
+          == QList<cwStationHandle>({
+                 cwStationHandle(cwStationHandle::NativeCave, cave->id(), QStringLiteral("a1")),
+                 cwStationHandle(cwStationHandle::NativeCave, cave->id(), QStringLiteral("a2"))
+             }));
+
+    // Once solved, every listed name is one the station diagnostic accepts.
+    // The cave-prefixed spelling is not.
+    SurveyTreeTestHelper::surveyStations(cave, { QStringLiteral("a1"), QStringLiteral("a2") });
+    const cwSurveyNetwork network = cave->scopedNetwork();
+    REQUIRE_FALSE(network.isEmpty());
+    for (const QString& name : roleValues(model, cwScopeStationListModel::StationNameRole)) {
+        INFO(name.toStdString());
+        CHECK(cwFixStationDiagnostics::classifyStationReference(
+                  name, network, cwFixStationDiagnostics::SurveyData::Stations)
+              == cwFixStationDiagnostics::StationReference::Ok);
+    }
+    CHECK(cwFixStationDiagnostics::classifyStationReference(
+              cave->scopePrefix() + QStringLiteral("a1"), network,
+              cwFixStationDiagnostics::SurveyData::Stations)
+          == cwFixStationDiagnostics::StationReference::Unknown);
+}
+
+TEST_CASE("Node scope lists an attached trip's harvest under the trip's label",
+          "[Model][ScopeStations]")
+{
+    // The name a fix takes for a station of a trip's attached file is the
+    // trip's label plus the file's name, and the harvest gives it before any
+    // solve.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = addHarvestedTrip(cave, QStringLiteral("trip1"), { QStringLiteral("entrance") });
+    REQUIRE(trip->scopePrefix() == QStringLiteral("trip1."));
+
+    cwScopeStationListModel model;
+    model.setNode(cave);
+
+    REQUIRE(roleValues(model, cwScopeStationListModel::StationNameRole)
+            == QStringList({ QStringLiteral("trip1.entrance") }));
+    CHECK(handles(model)
+          == QList<cwStationHandle>({
+                 cwStationHandle(cwStationHandle::Trip, trip->id(), QStringLiteral("entrance"))
+             }));
+    CHECK_FALSE(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole).isValid());
+
+    CHECK(model.containsStation(QStringLiteral("TRIP1.Entrance")));
+    CHECK_FALSE(model.containsStation(QStringLiteral("entrance")));
+    CHECK(model.matchingStations(QStringLiteral("trip1.e"))
+          == QStringList({ QStringLiteral("trip1.entrance") }));
+}
+
+TEST_CASE("Node scope lists the node's own attachment unscoped",
+          "[Model][ScopeStations]")
+{
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("/nonexistent/hillside.svx")));
+    cave->setExternalStations({ QStringLiteral("hillside.h1") });
+
+    cwScopeStationListModel model;
+    model.setNode(cave);
+
+    REQUIRE(roleValues(model, cwScopeStationListModel::StationNameRole)
+            == QStringList({ QStringLiteral("hillside.h1") }));
+    // No single trip owns a station of the node's own file.
+    CHECK_FALSE(handles(model).first().isValid());
+    CHECK_FALSE(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole).isValid());
+
+    // A rescan of the node's own file reaches the rows once the event loop turns.
+    cave->setExternalStations({ QStringLiteral("hillside.h1"), QStringLiteral("hillside.h2") });
+    QCoreApplication::processEvents();
+
+    CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
+          == QStringList({ QStringLiteral("hillside.h1"), QStringLiteral("hillside.h2") }));
+}
+
+TEST_CASE("Node scope lists trips in node order, then the node's own attachment",
+          "[Model][ScopeStations]")
+{
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("/nonexistent/hillside.svx")));
+    cave->setExternalStations({ QStringLiteral("hillside.h1") });
+    SurveyTreeTestHelper::addTrip(cave, QStringLiteral("Trip 1"), QStringLiteral("b"));
+    addHarvestedTrip(cave, QStringLiteral("trip2"), { QStringLiteral("e2"), QStringLiteral("e10") });
+    // The same station named twice is one row.
+    SurveyTreeTestHelper::addTrip(cave, QStringLiteral("Trip 3"), QStringLiteral("B"));
+
+    cwScopeStationListModel model;
+    model.setNode(cave);
+
+    CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
+          == QStringList({ QStringLiteral("b1"), QStringLiteral("b2"),
+                           QStringLiteral("trip2.e2"), QStringLiteral("trip2.e10"),
+                           QStringLiteral("hillside.h1") }));
+}
+
+TEST_CASE("Node scope leaves out a station the attached file fixes itself",
+          "[Model][ScopeStations]")
+{
+    // The exporter drops a node fix on a station its file already fixes, so
+    // listing it would offer a name that cannot take a fix.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = addHarvestedTrip(cave, QStringLiteral("trip1"),
+                                   { QStringLiteral("entrance"), QStringLiteral("sink") });
+    cave->setFileFixedStations({ { trip->id(), { QStringLiteral("entrance") } } });
+
+    cwScopeStationListModel model;
+    model.setNode(cave);
+
+    REQUIRE(roleValues(model, cwScopeStationListModel::StationNameRole)
+            == QStringList({ QStringLiteral("trip1.sink") }));
+
+    // A rescan that finds the file fixing the other station too drops it.
+    cave->setFileFixedStations({ { trip->id(), { QStringLiteral("entrance"), QStringLiteral("sink") } } });
+    QCoreApplication::processEvents();
+
+    CHECK(model.rowCount() == 0);
+}
+
+TEST_CASE("Node scope coalesces a burst of pulses into one reset",
+          "[Model][ScopeStations]")
+{
+    // Two harvests and a solve land in one turn; the model rebuilds once,
+    // after the event loop turns.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* first = addHarvestedTrip(cave, QStringLiteral("trip1"), { QStringLiteral("e1") });
+    cwTrip* second = addHarvestedTrip(cave, QStringLiteral("trip2"), {});
+
+    cwScopeStationListModel model;
+    model.setNode(cave);
+    REQUIRE(roleValues(model, cwScopeStationListModel::StationNameRole)
+            == QStringList({ QStringLiteral("trip1.e1") }));
+
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+
+    first->setExternalStations({ QStringLiteral("e1"), QStringLiteral("e2") });
+    second->setExternalStations({ QStringLiteral("f1") });
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("trip1.e1"), QVector3D(1, 2, 3));
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
+
+    CHECK(resetSpy.count() == 0);
+
+    QCoreApplication::processEvents();
+
+    CHECK(resetSpy.count() == 1);
+    CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
+          == QStringList({ QStringLiteral("trip1.e1"), QStringLiteral("trip1.e2"),
+                           QStringLiteral("trip2.f1") }));
+    CHECK(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole).value<QVector3D>()
+          == QVector3D(1, 2, 3));
+}
+
+TEST_CASE("Node scope costs one reset per burst at four times the size",
+          "[Model][ScopeStations]")
+{
+    // Every trip pulses on a solve and on a harvest. A 4x larger node must
+    // still cost one reset per burst, never one per trip.
+    constexpr int kStationsPerTrip = 5;
+    constexpr int kSmallTripCount = 4;
+    constexpr int kSizeFactor = 4;
+
+    const auto resetsPerBurst = [](int tripCount) {
+        cwCavingRegion region;
+        cwCave* cave = new cwCave();
+        cave->setName(QStringLiteral("Cave"));
+        region.addCave(cave);
+        QList<cwTrip*> trips;
+        for (int i = 1; i <= tripCount; ++i) {
+            trips.append(addHarvestedTrip(cave, QStringLiteral("t") + QString::number(i),
+                                         numberedStations(QStringLiteral("s"), kStationsPerTrip)));
+        }
+
+        cwScopeStationListModel model;
+        model.setNode(cave);
+        CHECK(model.rowCount() == tripCount * kStationsPerTrip);
+
+        QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+
+        cwStationPositionLookup lookup;
+        lookup.setPosition(QStringLiteral("t1.s1"), QVector3D(1, 1, 1));
+        SurveyTreeTestHelper::setScopedPositions(cave, lookup);
+        QCoreApplication::processEvents();
+        const int solveResets = resetSpy.count();
+
+        for (cwTrip* trip : std::as_const(trips)) {
+            trip->setExternalStations(numberedStations(QStringLiteral("s"), kStationsPerTrip + 1));
+        }
+        QCoreApplication::processEvents();
+        const int harvestResets = resetSpy.count() - solveResets;
+
+        CHECK(model.rowCount() == tripCount * (kStationsPerTrip + 1));
+        return std::make_pair(solveResets, harvestResets);
+    };
+
+    const auto small = resetsPerBurst(kSmallTripCount);
+    const auto large = resetsPerBurst(kSmallTripCount * kSizeFactor);
+
+    CHECK(small.first == 1);
+    CHECK(small.second == 1);
+    CHECK(large.first == 1);
+    CHECK(large.second == 1);
+}
+
+TEST_CASE("Setting one scope clears the other", "[Model][ScopeStations]")
+{
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = SurveyTreeTestHelper::addTrip(cave, QStringLiteral("Trip 1"), QStringLiteral("a"));
+
+    cwScopeStationListModel model;
+    model.setTrip(trip);
+    QSignalSpy tripSpy(&model, &cwScopeStationListModel::tripChanged);
+    QSignalSpy nodeSpy(&model, &cwScopeStationListModel::nodeChanged);
+
+    model.setNode(cave);
+    CHECK(model.node() == cave);
+    CHECK(model.trip() == nullptr);
+    CHECK(tripSpy.count() == 1);
+    CHECK(nodeSpy.count() == 1);
+
+    model.setTrip(trip);
+    CHECK(model.trip() == trip);
+    CHECK(model.node() == nullptr);
+    CHECK(tripSpy.count() == 2);
+    CHECK(nodeSpy.count() == 2);
+}
+
+TEST_CASE("Node scope announces a destroyed node", "[Model][ScopeStations]")
+{
+    auto* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    SurveyTreeTestHelper::addTrip(cave, QStringLiteral("Trip 1"), QStringLiteral("a"));
+
+    cwScopeStationListModel model;
+    model.setNode(cave);
+    REQUIRE(model.rowCount() == 2);
+    QSignalSpy nodeSpy(&model, &cwScopeStationListModel::nodeChanged);
+
+    delete cave;
+    CHECK(model.node() == nullptr);
+    CHECK(nodeSpy.count() == 1);
+
+    QCoreApplication::processEvents();
+    CHECK(model.rowCount() == 0);
+}
+
+TEST_CASE("Node scope on a source root lists native trips across its subtree",
+          "[Model][ScopeStations]")
+{
+    // A source root's fixes reach every native trip below it, each under the
+    // label the root's block gives it, as writeFixStations accepts them.
+    cwCavingRegion region;
+    cwCave* root = new cwCave();
+    root->setName(QStringLiteral("Root"));
+    region.addCave(root);
+    root->setSourceId(QUuid::createUuid());
+    root->setSourcePath(QString());
+    REQUIRE(root->isSourceRoot());
+
+    cwCave* side = new cwCave();
+    side->setName(QStringLiteral("Side"));
+    root->addNode(side);
+    cwTrip* trip = SurveyTreeTestHelper::addTrip(side, QStringLiteral("Lower"), QStringLiteral("a"));
+    const QString prefix = trip->scopePrefix();
+    REQUIRE_FALSE(prefix.isEmpty());
+
+    cwScopeStationListModel model;
+    model.setNode(root);
+
+    CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
+          == QStringList({ prefix + QStringLiteral("a1"), prefix + QStringLiteral("a2") }));
+
+    // A native trip added further down reaches the rows once the event loop turns.
+    cwTrip* another = SurveyTreeTestHelper::addTrip(side, QStringLiteral("Upper"), QStringLiteral("c"));
+    QCoreApplication::processEvents();
+
+    CHECK(model.containsStation(another->scopePrefix() + QStringLiteral("c1")));
 }

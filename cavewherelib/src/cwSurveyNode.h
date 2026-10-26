@@ -166,7 +166,7 @@ public:
     //! state: rebuilt by every external-centerline scan, never persisted, and
     //! never a save trigger.
     QStringList externalStations() const { return m_externalStations; }
-    void setExternalStations(const QStringList& stations) { m_externalStations = stations; }
+    void setExternalStations(const QStringList& stations);
 
     //! The naming level cavern builds for this derived node, from its source's
     //! units.json: the lower-cased .dat stem of a Compass file, the block name
@@ -515,6 +515,9 @@ signals:
     //! those pulses; the asymmetry is honest, because positions do move for
     //! every trip at once and a harvest does not.
     void tripExternalStationsChanged();
+
+    //! externalStations(), this node's own harvest, changed.
+    void externalStationsChanged();
 
     //! attachedFixes()' rows or the stations behind fileFixedStations() changed.
     void attachedFixesChanged();
