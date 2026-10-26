@@ -382,7 +382,9 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(changesCovering(dataChanged, alphaIndex) <= kMaxChangesPerRowPerTurn);
 
         dataChanged.clear();
-        QCoreApplication::processEvents();
+        REQUIRE(waitForChange(dataChanged, crawlIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole));
+        REQUIRE(waitForChange(dataChanged, upperIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole));
+        REQUIRE(waitForChange(dataChanged, alphaIndex, cwSurveyTreeModel::Trips, cwSurveyTreeModel::TripCountRole));
         CHECK(changesCovering(dataChanged, crawlIndex) <= kMaxChangesPerRowPerTurn);
         CHECK(changesCovering(dataChanged, upperIndex) <= kMaxChangesPerRowPerTurn);
         CHECK(changesCovering(dataChanged, alphaIndex) <= kMaxChangesPerRowPerTurn);

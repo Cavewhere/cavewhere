@@ -21,9 +21,9 @@
 
 //Test includes
 #include "SplayFixtureHelper.h"
+#include "TestHelper.h"
 
 //Qt includes
-#include <QCoreApplication>
 #include <QSignalSpy>
 
 namespace {
@@ -46,13 +46,6 @@ cwSurveyChunk* addLrudOnlyWarningChunk(cwTrip* trip, const QString& prefix)
                              QStringLiteral("0")));
     trip->addChunk(chunk);
     return chunk;
-}
-
-//! Lets the trip's queued recompute of hasLrudData/hasSplayData run
-void runQueuedCalls()
-{
-    QCoreApplication::sendPostedEvents();
-    QCoreApplication::processEvents();
 }
 
 }
@@ -130,7 +123,7 @@ TEST_CASE("hasLrudData and hasSplayData follow the trip's data", "[cwTrip][ignor
 {
     cwTrip trip;
     cwSurveyChunk* chunk = addLrudOnlyWarningChunk(&trip, QStringLiteral("A"));
-    runQueuedCalls();
+    REQUIRE(waitForQueuedEvents());
 
     QSignalSpy lrudSpy(&trip, &cwTrip::hasLrudDataChanged);
     QSignalSpy splaySpy(&trip, &cwTrip::hasSplayDataChanged);
@@ -140,12 +133,12 @@ TEST_CASE("hasLrudData and hasSplayData follow the trip's data", "[cwTrip][ignor
 
     SECTION("LRUD text") {
         chunk->setData(cwSurveyChunk::StationLeftRole, 0, QStringLiteral("1.5"));
-        runQueuedCalls();
+        REQUIRE(waitUntil([&] { return trip.hasLrudData(); }));
         CHECK(trip.hasLrudData());
         CHECK(lrudSpy.size() == 1);
 
         chunk->setData(cwSurveyChunk::StationLeftRole, 0, QString());
-        runQueuedCalls();
+        REQUIRE(waitUntil([&] { return !trip.hasLrudData(); }));
         CHECK_FALSE(trip.hasLrudData());
         CHECK(lrudSpy.size() == 2);
     }
@@ -153,8 +146,10 @@ TEST_CASE("hasLrudData and hasSplayData follow the trip's data", "[cwTrip][ignor
     SECTION("Two LRUDs typed in one turn emit once") {
         chunk->setData(cwSurveyChunk::StationLeftRole, 0, QStringLiteral("1.5"));
         chunk->setData(cwSurveyChunk::StationRightRole, 1, QStringLiteral("2.5"));
-        runQueuedCalls();
+        REQUIRE(waitUntil([&] { return trip.hasLrudData(); }));
         CHECK(trip.hasLrudData());
+        CHECK(lrudSpy.size() == 1);
+        REQUIRE(waitForQueuedEvents());
         CHECK(lrudSpy.size() == 1);
     }
 
@@ -162,12 +157,12 @@ TEST_CASE("hasLrudData and hasSplayData follow the trip's data", "[cwTrip][ignor
         chunk->appendStationSplay(1, makeSplay(QStringLiteral("5.88"),
                                                QStringLiteral("124.1"),
                                                QStringLiteral("4.6")));
-        runQueuedCalls();
+        REQUIRE(waitUntil([&] { return trip.hasSplayData(); }));
         CHECK(trip.hasSplayData());
         CHECK(splaySpy.size() == 1);
 
         chunk->clearStationSplays(1);
-        runQueuedCalls();
+        REQUIRE(waitUntil([&] { return !trip.hasSplayData(); }));
         CHECK_FALSE(trip.hasSplayData());
         CHECK(splaySpy.size() == 2);
     }

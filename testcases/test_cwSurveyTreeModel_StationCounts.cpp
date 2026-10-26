@@ -18,6 +18,7 @@
 #include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
 #include "SurveyTreeTestHelper.h"
+#include "TestHelper.h"
 
 // Qt
 #include <QCoreApplication>
@@ -242,6 +243,8 @@ TEST_CASE("An attach announces each ancestor row at most twice per event-loop tu
     cwSurveyNode* root = nullptr;
     int maxFolderChanges = 0;
     int maxRootChanges = 0;
+    //One event-loop turn is the unit of measurement: a per-turn maximum is lost
+    //by any wait that spans several turns.
     const auto stepOneTurn = [&]() {
         dataChanged.clear();
         QCoreApplication::processEvents();
@@ -260,10 +263,8 @@ TEST_CASE("An attach announces each ancestor row at most twice per event-loop tu
                 && !root->scopedPositions().positions().isEmpty())) {
         stepOneTurn();
     }
-    QDeadlineTimer settle(kNothingHappensSettleMs);
-    while (!settle.hasExpired()) {
-        stepOneTurn();
-    }
+    REQUIRE(waitForQueuedEvents());
+    stepOneTurn();
 
     REQUIRE(future.isFinished());
     REQUIRE_FALSE(future.result().hasError());
