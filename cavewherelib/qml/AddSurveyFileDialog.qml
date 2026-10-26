@@ -104,12 +104,14 @@ QQ.Item {
         objectName: "attachDialog"
 
         // The two choice group boxes sit side by side when the window
-        // has room and stack when it doesn't.
+        // has room and stack when it is compact; the Attach box stands
+        // alone when Import does not apply.
         readonly property QQ.Item overlayItem: QC.Overlay.overlay
         readonly property bool compact: overlayItem !== null
                                         && overlayItem.width < Theme.breakpointPanelCollapse
         readonly property int wideWidth: 640
         readonly property int compactWidth: 400
+        readonly property bool offersImport: pickerId.importSupported
 
         anchors.centerIn: QC.Overlay.overlay
         modal: true
@@ -128,7 +130,6 @@ QQ.Item {
             ExternalCenterlineFilePicker {
                 id: pickerId
                 Layout.fillWidth: true
-                promptText: qsTr("Pick the entry file:")
                 fileDialogTitle: dialogId.title
                 locked: root.busy
                 operationError: sessionId.errorMessage
@@ -136,18 +137,24 @@ QQ.Item {
             }
 
             QC.Label {
+                objectName: "choicesHeading"
                 Layout.topMargin: Theme.sectionSpacing
+                visible: pickerId.valid && dialogId.offersImport
                 text: qsTr("How should CaveWhere use this file?")
                 font.bold: true
             }
 
             GridLayout {
                 Layout.fillWidth: true
-                columns: dialogId.compact ? 1 : 2
+                // The heading carries the section gap; alone, the grid does.
+                Layout.topMargin: dialogId.offersImport ? 0 : Theme.sectionSpacing
+                visible: pickerId.valid
+                columns: !dialogId.compact && dialogId.offersImport ? 2 : 1
                 columnSpacing: Theme.flowSpacing
                 rowSpacing: Theme.flowSpacing
 
                 QC.GroupBox {
+                    objectName: "attachChoiceBox"
                     Layout.fillWidth: true
                     // Equalize heights only side by side; stacked boxes
                     // keep their natural height.
@@ -185,6 +192,7 @@ QQ.Item {
 
                             QC.Label {
                                 objectName: "recommendedLabel"
+                                visible: dialogId.offersImport
                                 text: qsTr("Recommended")
                                 font.bold: true
                                 color: Theme.accent
@@ -206,10 +214,12 @@ QQ.Item {
                 }
 
                 QC.GroupBox {
+                    objectName: "importChoiceBox"
                     Layout.fillWidth: true
                     Layout.fillHeight: !dialogId.compact
                     Layout.preferredWidth: 1
                     Layout.alignment: Qt.AlignTop
+                    visible: dialogId.offersImport
 
                     contentItem: ColumnLayout {
                         spacing: Theme.tightSpacing
@@ -221,15 +231,6 @@ QQ.Item {
                             text: qsTr("Copies the data into CaveWhere. You edit "
                                      + "it here; the original file is never read "
                                      + "again.")
-                        }
-
-                        QC.Label {
-                            objectName: "importFormatNote"
-                            Layout.fillWidth: true
-                            visible: pickerId.valid && !pickerId.importSupported
-                            wrapMode: QC.Label.WordWrap
-                            color: Theme.textSubtle
-                            text: qsTr("Import supports Survex files only.")
                         }
 
                         QQ.Item { Layout.fillHeight: true }

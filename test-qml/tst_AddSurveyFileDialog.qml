@@ -61,6 +61,73 @@ MainWindowTest {
             return pathField
         }
 
+        // Points the picker at a fixture and waits for the scan behind
+        // Attach to land.
+        function pickFixture(pathField, fixture) {
+            pathField.text = TestHelper.testcasesDatasetPath(
+                "external-centerlines/" + fixture)
+            const attachButton = findChild(attachDialogId, "attachButton")
+            tryVerify(() => attachButton.enabled, 10000, "preview scan lands")
+        }
+
+        function cancelDialog(pathField) {
+            mouseClick(findChild(attachDialogId, "cancelButton"))
+            tryVerify(() => !pathField.visible, 5000, "Cancel closes the dialog")
+        }
+
+        // At open the dialog is the picker row and the formats hint: no
+        // prompt line, and no choices before a scan lands.
+        function test_opensOnThePickerAlone() {
+            const pathField = openWithTrip("add-open-picker")
+
+            verify(pathField.visible, "the path field shows")
+            verify(findChild(attachDialogId, "supportedFormatsLabel").visible,
+                   "the formats hint shows")
+            const choices = choiceItems(attachDialogId)
+            verify(choices.heading !== null, "choicesHeading must exist")
+            verify(choices.attachBox !== null, "attachChoiceBox must exist")
+            verify(choices.importBox !== null, "importChoiceBox must exist")
+            verify(!choices.heading.visible, "no choice heading before a scan")
+            verify(!choices.attachBox.visible, "no Attach box before a scan")
+            verify(!choices.importBox.visible, "no Import box before a scan")
+            verify(!containsText(findChild(attachDialogId, "attachDialog").contentItem,
+                                 "Pick the entry file:"),
+                   "the dialog carries no prompt line")
+
+            cancelDialog(pathField)
+        }
+
+        function test_survexScanOffersAttachAndImport() {
+            const pathField = openWithTrip("add-survex-choices")
+
+            pickFixture(pathField, "survex_simple.svx")
+            const choices = choiceItems(attachDialogId)
+            verify(choices.heading.visible, "the choice heading shows")
+            verify(choices.attachBox.visible, "the Attach box shows")
+            verify(choices.importBox.visible, "the Import box shows")
+            tryVerify(() => findChild(attachDialogId, "importButton").enabled, 5000,
+                      "Import enables on a Survex scan")
+
+            cancelDialog(pathField)
+        }
+
+        function test_clearingThePathHidesTheChoices() {
+            const pathField = openWithTrip("add-clear-path")
+
+            pickFixture(pathField, "survex_simple.svx")
+            const choices = choiceItems(attachDialogId)
+            verify(choices.attachBox.visible, "the Attach box shows after the scan")
+
+            pathField.text = ""
+            tryVerify(() => !choices.heading.visible && !choices.attachBox.visible
+                            && !choices.importBox.visible, 5000,
+                      "an empty field hides the choices")
+            verify(findChild(attachDialogId, "supportedFormatsLabel").visible,
+                   "the formats hint shows again")
+
+            cancelDialog(pathField)
+        }
+
         function test_attachFailureShowsInlineErrorAndStaysOpen() {
             const pathField = openWithTrip("attach-dialog-fail")
             const source = TestHelper.testcasesDatasetPath(
@@ -223,23 +290,22 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
         }
 
-        function test_compassFileDisablesImportOnly() {
+        // Import is Survex-only, so a Compass file offers Attach alone,
+        // with no heading or "Recommended" over a single choice.
+        function test_compassFileOffersAttachAlone() {
             const pathField = openWithTrip("import-dialog-compass")
-            pathField.text = TestHelper.testcasesDatasetPath(
-                "external-centerlines/compass_simple.dat")
+            pickFixture(pathField, "compass_simple.dat")
 
-            const attachButton = findChild(attachDialogId, "attachButton")
-            tryVerify(() => attachButton.enabled, 10000,
-                      "Compass scans are attachable")
+            const choices = choiceItems(attachDialogId)
+            verify(choices.attachBox.visible, "the Attach box shows")
+            verify(!choices.importBox.visible, "no Import box for a Compass file")
+            verify(!choices.heading.visible, "no choice heading over one choice")
+            verify(!findChild(attachDialogId, "recommendedLabel").visible,
+                   "no \"Recommended\" over one choice")
+            compare(findChild(attachDialogId, "importFormatNote"), null,
+                    "no note explaining a missing Import")
 
-            const importButton = findChild(attachDialogId, "importButton")
-            verify(!importButton.enabled, "Import is Survex-only")
-            const formatNote = findChild(attachDialogId, "importFormatNote")
-            verify(formatNote.visible, "the disabled Import explains itself")
-
-            const cancelButton = findChild(attachDialogId, "cancelButton")
-            mouseClick(cancelButton)
-            tryVerify(() => !pathField.visible, 5000, "Cancel closes the dialog")
+            cancelDialog(pathField)
         }
 
         function test_cancelDuringScanLeavesTripNative() {

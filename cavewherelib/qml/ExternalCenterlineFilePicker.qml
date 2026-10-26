@@ -22,7 +22,6 @@ import cavewherelib
 ColumnLayout {
     id: root
 
-    property string promptText: ""
     property string fileDialogTitle: ""
     property bool locked: false
     property string operationError: ""
@@ -68,11 +67,6 @@ ColumnLayout {
     ExternalCenterlineScanPreview {
         id: previewId
         sourcePath: pathFieldId.text
-    }
-
-    QC.Label {
-        visible: root.promptText.length > 0
-        text: root.promptText
     }
 
     RowLayout {

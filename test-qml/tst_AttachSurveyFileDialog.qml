@@ -103,6 +103,105 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
         }
 
+        // At open the dialog is the picker row and the formats hint: no
+        // prompt line, and no choices before a scan lands.
+        function test_opensOnThePickerAlone() {
+            saveProjectAs("attach-open-picker")
+            const dataPage = gotoDataMainPage()
+            const dialog = openDialog(dataPage)
+
+            verify(findChild(dialog, "sourcePathField").visible, "the path field shows")
+            verify(findChild(dialog, "supportedFormatsLabel").visible, "the formats hint shows")
+            const choices = choiceItems(dialog)
+            verify(choices.heading !== null, "choicesHeading must exist")
+            verify(choices.attachBox !== null, "attachChoiceBox must exist")
+            verify(choices.importBox !== null, "importChoiceBox must exist")
+            verify(!choices.heading.visible, "no choice heading before a scan")
+            verify(!choices.attachBox.visible, "no Attach box before a scan")
+            verify(!choices.importBox.visible, "no Import box before a scan")
+            verify(!containsText(findChild(dialog, "attachDialog").contentItem,
+                                 "Pick the entry file:"),
+                   "the dialog carries no prompt line")
+
+            cancelDialog(dialog)
+        }
+
+        function test_survexScanOffersAttachAndImport() {
+            saveProjectAs("attach-survex-choices")
+            const dataPage = gotoDataMainPage()
+            const dialog = openDialog(dataPage)
+
+            pickFixture(dialog, "survex_simple.svx")
+            const choices = choiceItems(dialog)
+            verify(choices.heading.visible, "the choice heading shows")
+            verify(choices.attachBox.visible, "the Attach box shows")
+            verify(choices.importBox.visible, "the Import box shows")
+            tryVerify(() => findChild(dialog, "importButton").enabled, 5000,
+                      "Import enables on a Survex scan")
+
+            cancelDialog(dialog)
+        }
+
+        // Import is Survex-only, so a Compass master offers Attach alone,
+        // with no heading or "Recommended" over a single choice.
+        function test_compassScanOffersAttachAlone() {
+            saveProjectAs("attach-compass-choices")
+            const dataPage = gotoDataMainPage()
+            const dialog = openDialog(dataPage)
+
+            const attachButton = pickFixture(dialog, "compass_project/PROJECT.MAK")
+            const choices = choiceItems(dialog)
+            verify(choices.attachBox.visible, "the Attach box shows")
+            verify(attachButton.enabled, "Attach is enabled")
+            verify(!choices.importBox.visible, "no Import box for a Compass file")
+            verify(!choices.heading.visible, "no choice heading over one choice")
+            verify(!findChild(dialog, "recommendedLabel").visible,
+                   "no \"Recommended\" over one choice")
+            compare(findChild(dialog, "importFormatNote"), null,
+                    "no note explaining a missing Import")
+
+            cancelDialog(dialog)
+        }
+
+        // A cave does not take caves, so Import has no place to go there.
+        function test_caveTargetOffersAttachAlone() {
+            saveProjectAs("attach-cave-target")
+            const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, "Target Cave")
+            const dataPage = gotoDataMainPage()
+            dataPage.attachSurveyFile(cave)
+            const dialog = openedDialog(dataPage)
+            compare(dialog.target, cave)
+
+            pickFixture(dialog, "survex_simple.svx")
+            const choices = choiceItems(dialog)
+            verify(choices.attachBox.visible, "the Attach box shows")
+            verify(!choices.importBox.visible, "no Import box under a cave")
+            verify(!choices.heading.visible, "no choice heading over one choice")
+            compare(findChild(dialog, "importPlacementNote"), null,
+                    "no note explaining a missing Import")
+
+            cancelDialog(dialog)
+        }
+
+        function test_clearingThePathHidesTheChoices() {
+            saveProjectAs("attach-clear-path")
+            const dataPage = gotoDataMainPage()
+            const dialog = openDialog(dataPage)
+
+            pickFixture(dialog, "survex_simple.svx")
+            const choices = choiceItems(dialog)
+            verify(choices.attachBox.visible, "the Attach box shows after the scan")
+
+            findChild(dialog, "sourcePathField").text = ""
+            tryVerify(() => !choices.heading.visible && !choices.attachBox.visible
+                            && !choices.importBox.visible, 5000,
+                      "an empty field hides the choices")
+            verify(findChild(dialog, "supportedFormatsLabel").visible,
+                   "the formats hint shows again")
+
+            cancelDialog(dialog)
+        }
+
         function test_menuItemPresent() {
             saveProjectAs("attach-menu")
             const dataPage = gotoDataMainPage()

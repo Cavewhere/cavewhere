@@ -182,4 +182,29 @@ CWTestCase {
         menuArea.menu.dismiss()
         tryVerify(() => !menuArea.menu.opened, 5000, "the menu closes")
     }
+
+    // The survey-file dialogs' choice heading and group boxes.
+    function choiceItems(dialog) {
+        return {
+            heading: findChild(dialog, "choicesHeading"),
+            attachBox: findChild(dialog, "attachChoiceBox"),
+            importBox: findChild(dialog, "importChoiceBox"),
+        }
+    }
+
+    // True when \a item or any visual descendant shows \a text. findChild
+    // matches objectName only, so a line with no objectName needs a walk.
+    // Start from a Dialog's contentItem: a Popup's items sit outside the
+    // children of the Item that declares it.
+    function containsText(item, text) {
+        if (item.text === text) {
+            return true
+        }
+        for (let i = 0; i < item.children.length; ++i) {
+            if (containsText(item.children[i], text)) {
+                return true
+            }
+        }
+        return false
+    }
 }
