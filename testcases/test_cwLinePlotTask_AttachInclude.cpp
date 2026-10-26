@@ -634,6 +634,48 @@ TEST_CASE("Cave-attached centerline skips trip loop and resolves under <caveLabe
     }
 }
 
+TEST_CASE("Cave-attached Compass file solves with X-flagged shots that carry LRUDs",
+          "[Attach][Cave][Compass]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString fixtureName = QStringLiteral("compass_excluded_lrud.dat");
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("compass-x-lrud")),
+                                             fixturePath(fixtureName));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Excluded"));
+    cave->setExternalCenterline(cwExternalCenterline(fixtureName));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{cave->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    const QStringList kept = {QStringLiteral("k1"),
+                              QStringLiteral("k2"),
+                              QStringLiteral("k3")};
+    for (const QString& key : kept) {
+        INFO("kept key: " << key.toStdString());
+        CHECK(lookup.hasPosition(key));
+    }
+
+    // K2->XS1 and XS1->XS2 are flagged #|X# and carry LRUDs, so XS1 and XS2
+    // exist only through excluded shots.
+    const QStringList excluded = {QStringLiteral("xs1"),
+                                  QStringLiteral("xs2")};
+    for (const QString& key : excluded) {
+        INFO("excluded key: " << key.toStdString());
+        CHECK_FALSE(lookup.hasPosition(key));
+    }
+
+    CHECK(lookup.positions().size() == kept.size());
+}
+
 TEST_CASE("Mixed cave: native trip and attached trip both resolve",
           "[Attach][Mixed]")
 {
