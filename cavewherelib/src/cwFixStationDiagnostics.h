@@ -19,6 +19,7 @@
 
 class cwFixStation;
 class cwSurveyNetwork;
+class cwSurveyNode;
 
 /**
  * The rules for judging a single fix station, shared by everything that reports
@@ -54,18 +55,33 @@ CAVEWHERE_LIB_EXPORT cwCoordinateTransform::DomainCheck domainCheck(const cwFixS
 //! for callers with no cell to tint.
 CAVEWHERE_LIB_EXPORT bool isDomainValid(const cwFixStation& fix);
 
+//! What a solve of a node has to work with, which decides how a fix is judged
+//! while the node's network is still empty.
+enum class SurveyData {
+    Stations, //!< a trip names a station, so a solve is coming
+    FromFile, //!< no trip names a station, but a file places the node's stations
+    Nothing   //!< no trip names a station and no file places any: the node never gets a solve
+};
+
+//! What \a node's solve has to work with. The walk stops at the first named
+//! station, so a node with survey data reads only up to its first one.
+CAVEWHERE_LIB_EXPORT SurveyData classifySurveyData(const cwSurveyNode& node);
+
 //! How a fix's station name measures up against a cave's survey network.
-//! A named fix defers to Ok while the network is empty (nothing to check
-//! against yet); an empty name is always flagged, since survex drops such a fix
-//! whether or not the survey has been solved.
+//! While the network is empty, a named fix defers to Ok until a solve fills it,
+//! and is Unknown when \a surveyData says the node has Nothing to solve; an
+//! empty name is always flagged, since survex drops such a fix whether or not
+//! the survey has been solved.
 enum class StationReference {
-    Ok,      //!< names an existing station (or nothing to check against)
+    Ok,      //!< names an existing station (or a solve is still to come)
     Empty,   //!< no name — an incomplete fix that survex silently drops
     Unknown  //!< a non-empty name that no survey station matches
 };
 
-CAVEWHERE_LIB_EXPORT StationReference classifyStationReference(const QString& stationName,
-                                                              const cwSurveyNetwork& network);
+CAVEWHERE_LIB_EXPORT StationReference classifyStationReference(
+    const QString& stationName,
+    const cwSurveyNetwork& network,
+    SurveyData surveyData);
 
 //! Why the export drops a fix whose station name is fine on its own.
 enum class StationConflict {

@@ -32,6 +32,15 @@ StandardPage {
         return "Node=" + cave.name;
     }
 
+    // Opens the page's Attach survey file dialog with \a node as the place
+    // the file's subtree goes.
+    function attachSurveyFile(node: SurveyNode) {
+        attachDialogLoaderId.active = true;
+        const dialog = attachDialogLoaderId.item as AttachSurveyFileDialog;
+        dialog.target = node;
+        dialog.open();
+    }
+
     function registerGeospatialPage() {
         if (PageView.page === null) return
         if (PageView.page.childPage("Geospatial Layers") !== null) return
@@ -513,6 +522,8 @@ StandardPage {
 
         Layout.fillWidth: true
         Layout.fillHeight: true
+
+        onAttachSurveyFileRequested: (node) => pageId.attachSurveyFile(node)
     }
 
     // Sits outside both layouts and positions itself, so one hint serves
@@ -539,7 +550,22 @@ StandardPage {
 
         //A new folder stays on this page with its name ready to type.
         onAdded: (object) => caveTreeId.revealAdded(object)
-        onAttachSurveyFileRequested: (node) => caveTreeId.attachSurveyFile(node)
+        onAttachSurveyFileRequested: (node) => pageId.attachSurveyFile(node)
+    }
+
+    // Built on the first Attach survey file…: the dialog carries a file
+    // dialog and a scan preview that most visits to a page never open.
+    QQ.Loader {
+        id: attachDialogLoaderId
+
+        active: false
+
+        sourceComponent: QQ.Component {
+            AttachSurveyFileDialog {
+                onAttached: (sourceRoot) => caveTreeId.revealAttached(sourceRoot)
+                onImported: (cave) => caveTreeId.openObject(cave)
+            }
+        }
     }
 
     QQ.Component {

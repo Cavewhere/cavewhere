@@ -17,6 +17,7 @@
 #include "cwFixStation.h"
 #include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
+#include "cwFixStationTreeModel.h"
 #include "cwFixStationValidator.h"
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
@@ -69,6 +70,21 @@ QString warningText(cwCave* cave)
 {
     return cave->errorModel()->toStringList().join(QChar(' '));
 }
+
+// A bare shot raises data warnings of its own, so trip-backed tests look for
+// the fix's warning by its type.
+bool hasReferenceWarning(cwSurveyNode* node)
+{
+    const QList<cwError> errors = node->errorModel()->errors()->toList();
+    return std::any_of(errors.cbegin(), errors.cend(), [](const cwError& error) {
+        return error.errorTypeId() == static_cast<int>(cwErrorTypeId::FixStationReference);
+    });
+}
+
+// The stations appendGoodFixes() fixes, and those plus the outlier tests' typo.
+const QStringList kGoodStations = {QStringLiteral("A1"), QStringLiteral("A2"),
+                                   QStringLiteral("A3"), QStringLiteral("A4")};
+const QStringList kGoodAndBadStations = kGoodStations + QStringList{QStringLiteral("Bad")};
 
 // Append four good fixes close together in EPSG:32612. The first anchors the
 // project's frame, so all four sit within a few hundred meters of its origin.
@@ -443,6 +459,7 @@ TEST_CASE("revalidate attributes an outlier warning to its cave",
     region.addCave();
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
+    SurveyTreeTestHelper::surveyStations(cave, kGoodAndBadStations);
     appendGoodFixes(cave);
 
     // No outlier yet — all four fixes are clean.
@@ -465,6 +482,7 @@ TEST_CASE("revalidate clears the warning when the outlier is corrected",
     region.addCave();
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
+    SurveyTreeTestHelper::surveyStations(cave, kGoodAndBadStations);
     appendGoodFixes(cave);
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
@@ -487,6 +505,7 @@ TEST_CASE("revalidate updates an existing warning in place without re-adding",
     region.addCave();
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
+    SurveyTreeTestHelper::surveyStations(cave, kGoodAndBadStations);
     appendGoodFixes(cave);
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
@@ -515,6 +534,7 @@ TEST_CASE("revalidate preserves a suppressed outlier warning across edits",
     region.addCave();
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
+    SurveyTreeTestHelper::surveyStations(cave, kGoodAndBadStations);
     appendGoodFixes(cave);
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
@@ -557,11 +577,13 @@ TEST_CASE("revalidate clears the warning when its cave leaves the region",
     region.addCave();
     auto* keepCave = region.cave(0);
     REQUIRE(keepCave != nullptr);
+    SurveyTreeTestHelper::surveyStations(keepCave, kGoodStations);
     appendGoodFixes(keepCave);
 
     region.addCave();
     auto* doomedCave = region.cave(1);
     REQUIRE(doomedCave != nullptr);
+    SurveyTreeTestHelper::surveyStations(doomedCave, kGoodAndBadStations);
     appendGoodFixes(doomedCave);
     doomedCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
@@ -589,11 +611,13 @@ TEST_CASE("revalidate raises no warning across caves entered in different CSs",
     region.addCave();
     auto* utmCave = region.cave(0);
     REQUIRE(utmCave != nullptr);
+    SurveyTreeTestHelper::surveyStations(utmCave, kGoodStations);
     appendGoodFixes(utmCave);
 
     region.addCave();
     auto* wgsCave = region.cave(1);
     REQUIRE(wgsCave != nullptr);
+    SurveyTreeTestHelper::surveyStations(wgsCave, {QStringLiteral("W1")});
     // Raw WGS84 degrees sit ~4000 km from the UTM eastings/northings above.
     wgsCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("W1"), QStringLiteral("EPSG:4326"), -111.0, 37.871, 2700.0));
@@ -634,6 +658,7 @@ TEST_CASE("revalidate summarizes outliers for the render-view overlay",
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
     cave->setName(QStringLiteral("Deep Hole"));
+    SurveyTreeTestHelper::surveyStations(cave, kGoodAndBadStations);
     appendGoodFixes(cave);
 
     auto* validator = region.fixStationValidator();
@@ -684,6 +709,7 @@ TEST_CASE("revalidate refreshes the summary when the offending cave is renamed",
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
     cave->setName(QStringLiteral("Deep Hole"));
+    SurveyTreeTestHelper::surveyStations(cave, kGoodAndBadStations);
     appendGoodFixes(cave);
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("EPSG:32612"), 500150.0, 5194000.0, 2708.0));
@@ -713,12 +739,14 @@ TEST_CASE("revalidate flags a fix outside its CS's valid domain",
     region.addCave();
     auto* goodCave = region.cave(0);
     REQUIRE(goodCave != nullptr);
+    SurveyTreeTestHelper::surveyStations(goodCave, {QStringLiteral("G")});
     goodCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("G"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
 
     region.addCave();
     auto* badCave = region.cave(1);
     REQUIRE(badCave != nullptr);
+    SurveyTreeTestHelper::surveyStations(badCave, {QStringLiteral("B")});
     badCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
     QCoreApplication::processEvents();
@@ -745,6 +773,7 @@ TEST_CASE("revalidate flags a lone domain-bad fix on a project with no frame",
     region.addCave();
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
+    SurveyTreeTestHelper::surveyStations(cave, {QStringLiteral("B")});
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
     QCoreApplication::processEvents();
@@ -779,18 +808,21 @@ TEST_CASE("revalidate flags a distant in-domain cave",
     region.addCave();
     auto* caveA = region.cave(0);
     REQUIRE(caveA != nullptr);
+    SurveyTreeTestHelper::surveyStations(caveA, {QStringLiteral("A")});
     caveA->fixStations()->appendFixStation(
         makeFix(QStringLiteral("A"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
 
     region.addCave();
     auto* caveB = region.cave(1);
     REQUIRE(caveB != nullptr);
+    SurveyTreeTestHelper::surveyStations(caveB, {QStringLiteral("B")});
     caveB->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 478100.0, 4430100.0, 1656.0));
 
     region.addCave();
     auto* caveC = region.cave(2);
     REQUIRE(caveC != nullptr);
+    SurveyTreeTestHelper::surveyStations(caveC, {QStringLiteral("C")});
     caveC->fixStations()->appendFixStation(
         makeFix(QStringLiteral("C"), QStringLiteral("EPSG:32613"), 478000.0, 5430000.0, 1655.0));
     QCoreApplication::processEvents();
@@ -817,6 +849,7 @@ TEST_CASE("revalidate attributes a whole bad cave to Part A, not Part B",
     region.addCave();
     auto* goodCave = region.cave(0);
     REQUIRE(goodCave != nullptr);
+    SurveyTreeTestHelper::surveyStations(goodCave, {QStringLiteral("G1"), QStringLiteral("G2")});
     goodCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("G1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
     goodCave->fixStations()->appendFixStation(
@@ -825,6 +858,7 @@ TEST_CASE("revalidate attributes a whole bad cave to Part A, not Part B",
     region.addCave();
     auto* badCave = region.cave(1);
     REQUIRE(badCave != nullptr);
+    SurveyTreeTestHelper::surveyStations(badCave, {QStringLiteral("B1"), QStringLiteral("B2")});
     badCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B1"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
     badCave->fixStations()->appendFixStation(
@@ -860,6 +894,7 @@ TEST_CASE("revalidate flags a two-cave project whose second fix is a continent a
     auto* bcCave = region.cave(0);
     REQUIRE(bcCave != nullptr);
     bcCave->setName(QStringLiteral("Cave 1"));
+    SurveyTreeTestHelper::surveyStations(bcCave, {QStringLiteral("a1")});
     bcCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("a1"), QStringLiteral("EPSG:4326"), -121.83058365, 51.11408015, 2198.03));
 
@@ -867,6 +902,7 @@ TEST_CASE("revalidate flags a two-cave project whose second fix is a continent a
     auto* strayCave = region.cave(1);
     REQUIRE(strayCave != nullptr);
     strayCave->setName(QStringLiteral("Cave 2"));
+    SurveyTreeTestHelper::surveyStations(strayCave, {QStringLiteral("b2")});
     strayCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("b2"), QStringLiteral("EPSG:4326"), -98.370455, 41.936678, 0.0));
     QCoreApplication::processEvents();
@@ -894,6 +930,7 @@ TEST_CASE("revalidate does not flag two legitimately distant caves",
     region.addCave();
     auto* westCave = region.cave(0);
     REQUIRE(westCave != nullptr);
+    SurveyTreeTestHelper::surveyStations(westCave, {QStringLiteral("W1"), QStringLiteral("W2")});
     westCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("W1"), QStringLiteral("EPSG:32613"), 400000.0, 4430000.0, 1655.0));
     westCave->fixStations()->appendFixStation(
@@ -902,6 +939,7 @@ TEST_CASE("revalidate does not flag two legitimately distant caves",
     region.addCave();
     auto* eastCave = region.cave(1);
     REQUIRE(eastCave != nullptr);
+    SurveyTreeTestHelper::surveyStations(eastCave, {QStringLiteral("E1"), QStringLiteral("E2")});
     eastCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("E1"), QStringLiteral("EPSG:32613"), 700000.0, 4430000.0, 1655.0));
     eastCave->fixStations()->appendFixStation(
@@ -956,6 +994,51 @@ TEST_CASE("revalidate flags a fix whose station name is not in the survey",
     CHECK(cave->errorModel()->warningCount() == 0);
 }
 
+TEST_CASE("a fix in a cave with no survey data is flagged until the network names it",
+          "[cwFixStationValidator][reference]")
+{
+    // Issue #727: a cave with no named station in any trip has nothing to
+    // solve, so its network stays empty and the fix names a station that
+    // doesn't exist.
+    cwCavingRegion region;
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("a1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+    CHECK(warningText(cave).contains(
+        QStringLiteral("Fix station \"a1\" names a survey station that doesn't exist in this "
+                       "cave")));
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("a1"), QStringLiteral("a2"));
+    SurveyTreeTestHelper::setScopedNetwork(cave, network);
+    CHECK(cave->errorModel()->warningCount() == 0);
+}
+
+TEST_CASE("a fix in a cave whose trips name stations defers until the first solve",
+          "[cwFixStationValidator][reference]")
+{
+    // The network is left empty, as before the first solve. The trip promises
+    // one, so no named fix is judged yet, whether or not the trip holds it.
+    cwCavingRegion region;
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+
+    SurveyTreeTestHelper::addTripWithStations(cave, {QStringLiteral("a1"), QStringLiteral("a2")});
+    REQUIRE(cave->scopedNetwork().isEmpty());
+
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("zzz"), QStringLiteral("EPSG:32613"), 478010.0, 4430010.0, 1655.0));
+    CHECK_FALSE(hasReferenceWarning(cave));
+    CHECK_FALSE(warningText(cave).contains(QStringLiteral("Fix station")));
+}
+
 TEST_CASE("several broken fixes in one cave collapse into one plural sentence per kind",
           "[cwFixStationValidator][reference]")
 {
@@ -984,7 +1067,7 @@ TEST_CASE("several broken fixes in one cave collapse into one plural sentence pe
     CHECK(message.contains(QStringLiteral("2 fix stations have no station name")));
 }
 
-TEST_CASE("revalidate defers a named fix with no network but flags a blank fix",
+TEST_CASE("revalidate flags a blank fix",
           "[cwFixStationValidator][reference]")
 {
     cwCavingRegion region;
@@ -992,16 +1075,15 @@ TEST_CASE("revalidate defers a named fix with no network but flags a blank fix",
     auto* cave = region.cave(0);
     REQUIRE(cave != nullptr);
 
-    // A named fix but no survey network yet — nothing to check against.
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    SurveyTreeTestHelper::setScopedNetwork(cave, network);
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
     CHECK(cave->errorModel()->warningCount() == 0);
 
     // A blank scaffold row names no station; survex drops such a fix, so it is
     // flagged at the cave level.
-    cwSurveyNetwork network;
-    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    SurveyTreeTestHelper::setScopedNetwork(cave, network);
     cave->fixStations()->addFixStation();
     REQUIRE(cave->errorModel()->warningCount() == 1);
     CHECK(warningText(cave)
@@ -1391,10 +1473,12 @@ struct DomainBadSubNode {
     {
         cave = region.addNode(nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Deep Hole"));
         REQUIRE(cave != nullptr);
+        SurveyTreeTestHelper::addTripWithStations(cave, {QStringLiteral("G")});
         cave->fixStations()->appendFixStation(
             makeFix(QStringLiteral("G"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
         upperLevel = region.addNode(cave, cwSurveyNode::Kind::Folder, QStringLiteral("Upper Level"));
         REQUIRE(upperLevel != nullptr);
+        SurveyTreeTestHelper::addTripWithStations(upperLevel, {QStringLiteral("B")});
         upperLevel->fixStations()->appendFixStation(
             makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
         QCoreApplication::processEvents();
@@ -1460,6 +1544,7 @@ TEST_CASE("the project-wide fix-station warnings list nodes in tree order",
     cwSurveyNode* otherCave =
         project.region.addNode(nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Aardvark Pit"));
     REQUIRE(otherCave != nullptr);
+    SurveyTreeTestHelper::addTripWithStations(otherCave, {QStringLiteral("B")});
     otherCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
     QCoreApplication::processEvents();
@@ -1472,17 +1557,31 @@ TEST_CASE("the project-wide fix-station warnings list nodes in tree order",
     CHECK(messages.at(1).startsWith(QStringLiteral("Aardvark Pit: ")));
 }
 
-TEST_CASE("a fix on the region root raises no project-wide warning",
+TEST_CASE("the Fix Stations page's add path leaves the region root without fixes",
           "[cwFixStationValidator]")
 {
-    //Pins today's reach, which is narrower than the Fix Stations page's: the
-    //validator walks rootNode()->allNodes(), which leaves the root out, so a
-    //fix the page lets a user add on the root is never judged.
+    //The validator walks rootNode()->allNodes(), which leaves the root out, so
+    //the page's Add refuses the root rather than create a fix nothing judges.
     cwCavingRegion region;
-    region.rootNode()->fixStations()->appendFixStation(
-        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+    cwSurveyNode* cave =
+        region.addNode(nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Aardvark Pit"));
+    REQUIRE(cave != nullptr);
+    cwFixStationTreeModel model;
+    model.setRootNode(region.rootNode());
+    REQUIRE(model.rowCount() == 1);
 
-    CHECK(region.fixStationValidator()->fixStationWarningMessages().isEmpty());
+    CHECK(model.addFixAt(QModelIndex()) == -1);
+    CHECK(model.addFixAt(model.index(0, 0)) == -1);
+    CHECK(region.rootNode()->fixStations()->count() == 0);
+
+    CHECK(model.addFixAt(model.nodeRowIndex(cave)) >= 0);
+    CHECK(cave->fixStations()->count() == 1);
+    CHECK(region.rootNode()->fixStations()->count() == 0);
+
+    QCoreApplication::processEvents();
+    for (const QString& message : region.fixStationValidator()->fixStationWarningMessages()) {
+        CHECK(message.startsWith(QStringLiteral("Aardvark Pit: ")));
+    }
 }
 
 TEST_CASE("a node's fix-station warnings cover the node and its descendants",
@@ -1494,6 +1593,7 @@ TEST_CASE("a node's fix-station warnings cover the node and its descendants",
     cwSurveyNode* sibling =
         project.region.addNode(nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Aardvark Pit"));
     REQUIRE(sibling != nullptr);
+    SurveyTreeTestHelper::addTripWithStations(sibling, {QStringLiteral("B")});
 
     const QStringList underCave = validator->fixStationWarningMessagesUnder(project.cave);
     REQUIRE(underCave.size() == 1);

@@ -206,8 +206,12 @@ QString cwFixStationDiagnosticsModel::stationErrorMessage(int row) const
 {
     const QList<cwFixStation>& fixes = m_fixStations->fixStations();
     const cwFixStation& fix = fixes.at(row);
-    switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(),
-                                                             m_node->scopedNetwork())) {
+    const cwSurveyNetwork network = m_node->scopedNetwork();
+    const auto surveyData = network.isEmpty()
+        ? cwFixStationDiagnostics::classifySurveyData(*m_node)
+        : cwFixStationDiagnostics::SurveyData::Stations;
+    switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network,
+                                                             surveyData)) {
     case StationReference::Ok:
         return stationConflictMessage(fixes, row);
     case StationReference::Empty:

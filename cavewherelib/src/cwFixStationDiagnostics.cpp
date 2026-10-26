@@ -11,7 +11,10 @@
 #include "cwFixStation.h"
 #include "cwGeoPoint.h"
 #include "cwStation.h"
+#include "cwSurveyChunk.h"
 #include "cwSurveyNetwork.h"
+#include "cwSurveyNode.h"
+#include "cwTrip.h"
 
 namespace cwFixStationDiagnostics {
 
@@ -43,7 +46,8 @@ bool isDomainValid(const cwFixStation& fix)
 }
 
 StationReference classifyStationReference(const QString& stationName,
-                                         const cwSurveyNetwork& network)
+                                         const cwSurveyNetwork& network,
+                                         SurveyData surveyData)
 {
     // Trim before matching, exactly as the survex export does
     // (cwSurvexExporterUtils::validateFixStations) — otherwise a stray trailing
@@ -52,16 +56,63 @@ StationReference classifyStationReference(const QString& stationName,
     if (trimmedName.isEmpty()) {
         return StationReference::Empty;
     }
-    // Nothing to check against — a cave whose survey network hasn't been
-    // computed yet would flag every named fix, so defer instead.
+    // An empty network is a solve still to come, unless the node has nothing
+    // to solve: then it stays empty, and no station can match.
     if (network.isEmpty()) {
-        return StationReference::Ok;
+        return surveyData == SurveyData::Nothing
+            ? StationReference::Unknown
+            : StationReference::Ok;
     }
     // CaveWhere station names are case-insensitive (Compass isn't — see
     // CLAUDE.md); hasStation matches that way in one hash probe.
     return network.hasStation(trimmedName)
         ? StationReference::Ok
         : StationReference::Unknown;
+}
+
+namespace {
+
+bool hasNamedStation(const cwTrip& trip)
+{
+    for (const cwSurveyChunk* chunk : trip.chunks()) {
+        for (const cwStation& station : chunk->stations()) {
+            if (!station.name().trimmed().isEmpty()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+//! Walks \a node's trips, then its children, and stops at the first named
+//! station. \a placedByFile collects whether anything on the way is backed by
+//! a file, which only matters when no station turns up.
+bool walkForStations(const cwSurveyNode& node, bool& placedByFile)
+{
+    for (const cwTrip* trip : node.trips()) {
+        if (hasNamedStation(*trip)) {
+            return true;
+        }
+        placedByFile = placedByFile || trip->externallyBacked();
+    }
+    for (const cwSurveyNode* child : node.childNodes()) {
+        placedByFile = placedByFile || child->isSourced() || child->externallyBacked();
+        if (walkForStations(*child, placedByFile)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+SurveyData classifySurveyData(const cwSurveyNode& node)
+{
+    bool placedByFile = node.sourceRoot() != nullptr || node.externallyBacked();
+    if (walkForStations(node, placedByFile)) {
+        return SurveyData::Stations;
+    }
+    return placedByFile ? SurveyData::FromFile : SurveyData::Nothing;
 }
 
 StationConflict classifyStationConflict(const QList<cwFixStation>& fixes, qsizetype row,

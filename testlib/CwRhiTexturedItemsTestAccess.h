@@ -109,16 +109,32 @@ struct CwRhiTexturedItemsTestAccess {
         return items.m_streamer.hasWork();
     }
 
-    // Raw GPU-resource identities, so a lifetime test can watch the streamed
-    // texture swap and tell whether the SRB was rebuilt to match it.
-    static const void* texturePointer(const cwRhiTexturedItems& items, uint32_t id) {
+    // The item's live GPU resources, so a lifetime test can watch the streamed
+    // texture swap and check what the SRB binds afterward.
+    static const QRhiTexture* texturePointer(const cwRhiTexturedItems& items, uint32_t id) {
         auto* found = items.m_items.value(id, nullptr);
         return found ? found->texture : nullptr;
     }
 
-    static const void* srbPointer(const cwRhiTexturedItems& items, uint32_t id) {
+    static const QRhiShaderResourceBindings* srbPointer(const cwRhiTexturedItems& items, uint32_t id) {
         auto* found = items.m_items.value(id, nullptr);
         return found ? found->srb : nullptr;
+    }
+
+    // The sampled-texture binding the item's material declares, bound to the
+    // item's current texture: the entry its SRB holds when it draws live memory.
+    static QRhiShaderResourceBinding currentTextureBinding(cwRhiTexturedItems& items,
+                                                           uint32_t id,
+                                                           QRhi* rhi) {
+        auto* found = items.m_items.value(id, nullptr);
+        if (!found) {
+            return QRhiShaderResourceBinding();
+        }
+        return QRhiShaderResourceBinding::sampledTexture(
+            found->material.textureBinding,
+            cwRhiTexturedItems::toRhiStages(found->material.textureStages),
+            found->texture,
+            items.sharedSampler(rhi));
     }
 };
 

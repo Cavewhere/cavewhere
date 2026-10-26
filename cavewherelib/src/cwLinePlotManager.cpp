@@ -727,15 +727,16 @@ void cwLinePlotManager::startSolveAfterScan()
             emit updateStateChanged();
         }
 
+        cwProfilePhase solvePhase(lcProfileLoad(), QStringLiteral("project"), QStringLiteral("solveKick"));
+
         const auto externalInputs = m_externalCenterlineManager->solveInputs();
         publishAttachedFixWarnings(externalInputs);
-        cwProfilePhase solvePhase(lcProfileLoad(), QStringLiteral("project"), QStringLiteral("solveKick"));
         auto input = cwLinePlotTask::buildInput(Region.data(), externalInputs);
         m_memberViewsMovedSinceSnapshot = false;
         cwTaskContextScope traceScope(QStringLiteral("lineplot"));
         auto worker = cwLinePlotTask::run(std::move(input));
-        solvePhase.finish();
         m_solveWorker = worker;
+        solvePhase.finish();
 
         // The restarter tracks the drain, not the worker, so the job lasts
         // until the labels are installed. A restart cancels the drain, and the

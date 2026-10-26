@@ -17,6 +17,7 @@
 #include "cwFixStationModel.h"
 #include "cwNodeWarningModel.h"
 #include "cwTrip.h"
+#include "SurveyTreeTestHelper.h"
 #include "TestHelper.h"
 
 //Catch includes
@@ -147,6 +148,7 @@ TEST_CASE("A node warning lists the node's warnings and where each is fixed",
 
     SECTION("an attached file's bare fix opens the Fix Stations page on that fix's row")
     {
+        SurveyTreeTestHelper::surveyStations(cave, {QStringLiteral("G"), QStringLiteral("H")});
         cave->fixStations()->appendFixStation(utm13NFix(QStringLiteral("G"), 478000.0));
         cave->setAttachedFixes(
             {cwAttachedFix{QStringLiteral("a.p1"), QStringLiteral("1 2 3"),
@@ -177,6 +179,7 @@ TEST_CASE("A node warning lists the node's warnings and where each is fixed",
 
     SECTION("an attached file with no fixed station opens the Fix Stations page with no row")
     {
+        SurveyTreeTestHelper::surveyStations(cave, {QStringLiteral("G"), QStringLiteral("H")});
         cave->fixStations()->appendFixStation(utm13NFix(QStringLiteral("G"), 478000.0));
         errors->setTypedWarning(cwErrorTypeId::AttachedFileUnfixed,
                                 QStringLiteral("a.svx has no fixed station, so it sits at the "
@@ -252,6 +255,8 @@ TEST_CASE("A node warning on a fix opens the fix's row, wherever the row moves",
     cwCavingRegion region;
     region.addCave();
     cwCave* cave = region.cave(0);
+    SurveyTreeTestHelper::surveyStations(
+        cave, {QStringLiteral("G"), QStringLiteral("H"), QStringLiteral("BAD")});
     cave->fixStations()->appendFixStation(utm13NFix(QStringLiteral("G"), 478000.0));
     cave->fixStations()->appendFixStation(utm13NFix(QStringLiteral("H"), 478010.0));
     // A transposed leading digit puts this fix outside UTM 13N's valid domain.

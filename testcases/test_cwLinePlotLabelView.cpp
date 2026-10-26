@@ -20,13 +20,13 @@
 #include "cwFutureManagerModel.h"
 #include "cwRootData.h"
 #include "cwUpdatable.h"
+#include "cwCamera.h"
+#include "cwScene.h"
+#include "cwRenderTextBillboards.h"
 
 //Test helpers
 #include "ExternalCenterlineTestHelpers.h"
 #include "TestHelper.h"
-#include "cwCamera.h"
-#include "cwScene.h"
-#include "cwRenderTextBillboards.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -39,13 +39,12 @@
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QVector3D>
-#include <algorithm>
-#include <functional>
 #include <QMatrix4x4>
 #include <QQuickItem>
 #include <QQuickWindow>
-#include <QStringList>
 #include <QTextLayout>
+#include <algorithm>
+#include <functional>
 #include <memory>
 
 namespace {

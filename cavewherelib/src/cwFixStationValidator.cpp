@@ -428,7 +428,8 @@ void cwFixStationValidator::revalidateNodes()
     // the owning node, plus fixes with no name at all (both are anchors survex
     // silently drops). Independent of the project frame and the distance/domain
     // math, so it runs even before the project is georeferenced. A node whose
-    // network hasn't been computed yet is skipped for its *named* fixes.
+    // network hasn't been computed yet is skipped for its *named* fixes, unless
+    // it has nothing to solve and so never gets one.
     const QHash<cwSurveyNode*, NodeWarning> referenceWarningsByNode = referenceWarnings();
 
     // Reconcile every warning kind against every node that has or had one, so a
@@ -491,6 +492,9 @@ QHash<cwSurveyNode*, cwFixStationValidator::NodeWarning> cwFixStationValidator::
             continue;
         }
         const cwSurveyNetwork network = node->scopedNetwork();
+        const auto surveyData = network.isEmpty()
+            ? cwFixStationDiagnostics::classifySurveyData(*node)
+            : cwFixStationDiagnostics::SurveyData::Stations;
         const QHash<QString, QString> fileFixedStations = node->fileFixedStations();
         const QList<cwFixStation>& fixes = node->fixStations()->fixStations();
         QStringList unknownNames;
@@ -506,7 +510,8 @@ QHash<cwSurveyNode*, cwFixStationValidator::NodeWarning> cwFixStationValidator::
                     firstBrokenFix = fix.id();
                 }
             };
-            switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network)) {
+            switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network,
+                                                                      surveyData)) {
             case cwFixStationDiagnostics::StationReference::Unknown:
                 markBroken();
                 unknownNames.append(QStringLiteral("\"%1\"").arg(station));

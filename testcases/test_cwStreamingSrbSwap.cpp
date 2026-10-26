@@ -25,6 +25,7 @@
 #include <rhi/qrhi_platform.h>
 
 //Std includes
+#include <algorithm>
 #include <array>
 #include <memory>
 
@@ -144,6 +145,14 @@ namespace {
         renderData.viewMatrix = view;
         renderData.viewProjectionMatrix = projection * view;
         return renderData;
+    }
+
+    QList<QRhiShaderResourceBinding> bindingsOf(const QRhiShaderResourceBindings* srb)
+    {
+        if (srb) {
+            return QList<QRhiShaderResourceBinding>(srb->cbeginBindings(), srb->cendBindings());
+        }
+        return {};
     }
 
 } // namespace
@@ -310,24 +319,26 @@ TEST_CASE("A streamed texture swap rebuilds the shader resource bindings when th
     // renderLiveFrame runs them in. Whichever frame the finer chain lands in is
     // the frame that swaps `texture` with a null pipeline record — and then draws.
     int frames = 0;
-    const void* bindingsBeforeTheSwap = nullptr;
-    const void* bindingsAfterTheSwap = nullptr;
+    QList<QRhiShaderResourceBinding> bindingsBeforeTheSwap;
+    QList<QRhiShaderResourceBinding> bindingsAfterTheSwap;
+    const QRhiShaderResourceBindings* srbAfterTheSwap = nullptr;
     timer.restart();
     while (CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, itemId) != kFinestLevel
            && timer.elapsed() < kWaitTimeoutMs) {
-        const void* textureBefore = CwRhiTexturedItemsTestAccess::texturePointer(*backend, itemId);
-        const void* bindingsBefore = CwRhiTexturedItemsTestAccess::srbPointer(*backend, itemId);
+        const QRhiTexture* textureBefore = CwRhiTexturedItemsTestAccess::texturePointer(*backend, itemId);
+        const QList<QRhiShaderResourceBinding> bindingsBefore =
+            bindingsOf(CwRhiTexturedItemsTestAccess::srbPointer(*backend, itemId));
 
         renderFrame(live, scratch.renderPassDescriptor.get());
         frames++;
 
-        const void* textureAfter = CwRhiTexturedItemsTestAccess::texturePointer(*backend, itemId);
+        const QRhiTexture* textureAfter = CwRhiTexturedItemsTestAccess::texturePointer(*backend, itemId);
         if (textureAfter != textureBefore) {
+            srbAfterTheSwap = CwRhiTexturedItemsTestAccess::srbPointer(*backend, itemId);
             bindingsBeforeTheSwap = bindingsBefore;
-            bindingsAfterTheSwap = CwRhiTexturedItemsTestAccess::srbPointer(*backend, itemId);
+            bindingsAfterTheSwap = bindingsOf(srbAfterTheSwap);
             qInfo() << "frame" << frames << "swapped the texture" << textureBefore << "->"
-                    << textureAfter << "with bindings" << bindingsBefore << "->"
-                    << bindingsAfterTheSwap;
+                    << textureAfter;
         }
 
         QThread::msleep(kFramePauseMs);
@@ -337,8 +348,13 @@ TEST_CASE("A streamed texture swap rebuilds the shader resource bindings when th
 
     // The invariant: the frame that deleted the old texture also replaced the
     // bindings that held it, so nothing downstream draws from freed memory.
-    CHECK(bindingsAfterTheSwap != nullptr);
+    CHECK(srbAfterTheSwap != nullptr);
     CHECK(bindingsAfterTheSwap != bindingsBeforeTheSwap);
+
+    const QRhiShaderResourceBinding liveTextureBinding =
+        CwRhiTexturedItemsTestAccess::currentTextureBinding(*backend, itemId, rhi.get());
+    CHECK(std::find(bindingsAfterTheSwap.cbegin(), bindingsAfterTheSwap.cend(), liveTextureBinding)
+          != bindingsAfterTheSwap.cend());
 
     // The bindings the swap left behind are the ones the item keeps drawing
     // with, and more frames — still without an updateResources — keep using

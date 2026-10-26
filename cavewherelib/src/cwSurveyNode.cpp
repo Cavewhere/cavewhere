@@ -300,6 +300,11 @@ void cwSurveyNode::setSourcePath(const QString& sourcePath)
     emit sourceChanged();
 }
 
+bool cwSurveyNode::canHoldFixes() const
+{
+    return !isRoot() && (!isSourced() || isSourceRoot());
+}
+
 void cwSurveyNode::setExternalCenterline(const cwExternalCenterline& value)
 {
     if (m_externalCenterline == value) {

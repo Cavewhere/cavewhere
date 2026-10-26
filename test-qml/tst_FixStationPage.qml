@@ -150,7 +150,7 @@ MainWindowTest {
         category: "FixStationPage"
     }
 
-    CWTestCase {
+    ExternalCenterlineTestCase {
         name: "FixStationPage"
         when: windowShown
 
@@ -1516,10 +1516,10 @@ MainWindowTest {
             RootData.region.unitSystem = previousUnits
         }
 
-        function test_stationWarningIconHiddenWithoutSurvey() {
-            // Without a computed survey network there's nothing to validate the
-            // station reference against, so the icon stays hidden — and its
-            // objectName confirms the shared InlineWarning wiring is intact.
+        // #727: a named fix on a cave with nothing to solve is flagged as an
+        // unknown station right away, and the flag clears once a trip surveys
+        // that station and the solve lands.
+        function test_stationWarningShowsForUnknownStationOnBareCave() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
@@ -1533,14 +1533,21 @@ MainWindowTest {
                 warning = findChild(fixPage, "stationWarning.0")
                 return warning !== null
             }, 5000, "row 0 station warning indicator should be reachable")
-            verify(!warning.visible, "no survey network → no station-reference warning")
+            tryVerify(() => warning.visible, 5000,
+                      "a named fix on a bare cave shows the station-reference warning")
+            verify(warning.message.indexOf("No survey station named \"A1\"") >= 0,
+                   "the warning names the unknown station, got: " + warning.message)
+
+            addTripNamingStations(cave, ["A1", "A2"])
+            tryVerify(() => !warning.visible, 5000,
+                      "surveying A1 clears the unknown-station warning")
         }
 
         function test_stationWarningShownForEmptyName() {
             // A blank row names no survey station — survex drops such a fix — so
-            // it is flagged inline the moment it appears, even before a network
-            // exists (the empty check runs before the "nothing to check" defer).
+            // it is flagged inline the moment it appears.
             const cave = gotoFixStations()
+            addTripNamingStations(cave, ["A1", "A2"])
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
 
@@ -1556,14 +1563,14 @@ MainWindowTest {
                 warning = findChild(fixPage, "stationWarning.0")
                 return warning !== null
             }, 5000, "row 0 station warning indicator should be reachable")
-            verify(warning.visible, "empty station name → station-reference warning shows")
+            tryVerify(() => warning.visible, 5000,
+                      "empty station name → station-reference warning shows")
 
-            // Typing any name clears it: with no network there is nothing to
-            // match against, so a *named* fix defers rather than cry wolf. The
-            // flag is specific to the name being missing altogether.
+            // Typing a name clears it: A1 is a surveyed station, so the name
+            // resolves. The flag is specific to the name being missing.
             model.setData(model.index(0), "A1", FixStationModel.StationNameRole)
             tryVerify(() => !warning.visible, 5000,
-                      "a named fix with no network defers and clears the warning")
+                      "naming a surveyed station clears the warning")
         }
 
 
@@ -2068,7 +2075,7 @@ MainWindowTest {
 
     // The tree's rows on the project's page, checked against the model as the
     // tree opens, closes and changes shape.
-    TestCase {
+    ExternalCenterlineTestCase {
         name: "FixStationPageTreeRows"
         when: windowShown
 
@@ -2103,6 +2110,10 @@ MainWindowTest {
             const a = RootData.region.addNode(null, SurveyNodeKind.Cave, "A")
             const sub = RootData.region.addNode(a, SurveyNodeKind.Folder, "Sub")
             const b = RootData.region.addNode(null, SurveyNodeKind.Cave, "B")
+            // A fix on a node with nothing to solve is an unknown station (#727).
+            addTripNamingStations(a, ["dup", "x"])
+            addTripNamingStations(sub, ["s0", "s1"])
+            addTripNamingStations(b, ["b0", "b1", "b2", "b3"])
             compare(a.fixStations.addFixStation("dup"), 0)
             compare(a.fixStations.addFixStation("x"), 1)
             compare(a.fixStations.addFixStation("dup2"), 2)
@@ -2300,27 +2311,198 @@ MainWindowTest {
             verify(shownRow(view, "fixRow.b0") === null, "B stays closed")
         }
 
-        // Add Fix clears the filter, so the new row it adds is on screen.
+        // Add Fix clears the filter, so the new row it adds is on screen. The
+        // picked s1 row names Sub, so the fix lands there.
         function test_addFixClearsTheFilter() {
-            makeCaves()
+            const caves = makeCaves()
             const view = openProjectFixStations(initialRowCount)
             const field = filterField()
             typeInto(field, "s1")
             tryCompare(view, "rows", 4, 5000, "the filter keeps s1 and its node rows")
 
-            const addButton = findChild(findChild(RootData.pageView.currentPageItem, "addFixBar"),
-                                        "addButton")
+            // Page rows: A's dup, x, dup are 0..2, Sub's s0, s1 are 3, 4.
+            const s1PageRow = 4
+            const page = RootData.pageView.currentPageItem
+            page.currentFixRow = s1PageRow
+            tryCompare(view, "currentIndex", s1PageRow, 5000, "s1 is the current row")
+
+            const addButton = findChild(findChild(page, "addFixBar"), "addButton")
             verify(addButton !== null, "the page has an Add Fix button")
+            tryVerify(() => addButton.enabled, 5000, "Add is enabled on a row whose node holds fixes")
             mouseClick(addButton)
             tryCompare(field, "text", "", 5000, "adding a fix clears the filter")
+            tryCompare(caves.sub.fixStations, "count", 3, 5000, "the fix lands on s1's node")
+            compare(page.cave.fixStations.count, 0, "and none on the project")
             verifyRowsMatchModel(view, initialRowCount + 1, "every row plus the new one")
+        }
 
-            // New Project keeps the root node's own fixes, so the next test
-            // would open on this one.
-            const root = RootData.pageView.currentPageItem.cave
-            while (root.fixStations.count > 0) {
-                root.fixStations.removeAt(0)
+        //! Clicks node row \a nodeName's background with \a button, right of
+        //! its name and chips and inside the view.
+        function clickNodeRow(view, nodeName, button) {
+            const row = shownRow(view, "nodeRow." + nodeName)
+            verify(row !== null, "node row " + nodeName + " is shown")
+            const at = row.mapFromItem(view, view.width * 3 / 4, 0)
+            mouseClick(row, at.x, row.height / 2, button)
+            return row
+        }
+
+        //! The live station cell of page row \a fixRow, else null.
+        function shownStationCell(view, fixRow) {
+            for (const item of shownItems(view)) {
+                const cell = item === null ? null : findChild(item, "stationCell." + fixRow)
+                if (cell !== null) {
+                    return cell
+                }
             }
+            return null
+        }
+
+        //! Right-clicks node row \a nodeName and returns its menu once open.
+        function openNodeRowMenu(view, nodeName) {
+            const row = shownRow(view, "nodeRow." + nodeName)
+            verify(row !== null, "node row " + nodeName + " is shown")
+            const rowMenu = findChild(row, "nodeRowMenu." + nodeName)
+            verify(rowMenu !== null, "node row " + nodeName + " has a right-click menu")
+            clickNodeRow(view, nodeName, Qt.RightButton)
+            tryVerify(() => rowMenu.menu !== null && rowMenu.menu.opened, 5000,
+                      "a right-click opens node row " + nodeName + "'s menu")
+            return rowMenu.menu
+        }
+
+        //! \a menu's "Add fix station" item, else null.
+        function addFixMenuItemOf(menu) {
+            for (let i = 0; i < menu.count; ++i) {
+                if (menu.itemAt(i).objectName === "addFixMenuItem") {
+                    return menu.itemAt(i)
+                }
+            }
+            return null
+        }
+
+        // The project's own node holds no fixes, so its page's empty state
+        // says to pick a node, and Add waits for one.
+        function test_theProjectPagesEmptyStateSaysToSelectANode() {
+            openProjectFixStations(1)
+            const page = RootData.pageView.currentPageItem
+            const help = findChild(page, "noFixStationsHelpBox")
+            verify(help !== null, "the page has an empty-state box")
+            tryVerify(() => help.visible, 5000, "the box shows with no fixes")
+            verify(String(help.text).indexOf("Select a cave, folder, or section") >= 0,
+                   "the box says to select a node, got: " + help.text)
+            const addButton = findChild(findChild(page, "addFixBar"), "addButton")
+            tryVerify(() => !addButton.enabled, 5000, "Add is disabled on the project's page")
+        }
+
+        // On the project's page, Add waits for a picked row; a cave row makes
+        // it add to that cave, opening the cave to show the new fix.
+        function test_addOnTheProjectPageTargetsThePickedNodeRow() {
+            const caves = makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const page = RootData.pageView.currentPageItem
+            const addBar = findChild(page, "addFixBar")
+            const addButton = findChild(addBar, "addButton")
+            verify(addButton !== null, "the page has an Add Fix button")
+
+            tryVerify(() => !addButton.enabled, 5000, "Add is disabled with no row picked")
+            verify(String(addBar.addToolTip).startsWith("Select"),
+                   "the tooltip says to select a node, got: " + addBar.addToolTip)
+            mouseMove(addButton, addButton.width / 2, addButton.height / 2)
+            let tip = null
+            tryVerify(() => {
+                tip = findChild(addBar, "addToolTip")
+                return tip !== null && tip.visible
+            }, 5000, "hovering the disabled Add shows its tooltip")
+            compare(tip.text, addBar.addToolTip)
+            rootId.leaveToolTip(this, tip)
+
+            mouseClick(shownChevron(view, "A"))
+            tryCompare(view, "rows", initialRowCount - 6, 5000, "closing A hides its rows")
+
+            clickNodeRow(view, "A", Qt.LeftButton)
+            tryVerify(() => view.currentNode === caves.a, 5000, "a click on A's row picks it")
+            compare(page.currentFixRow, -1, "a node row picks no fix")
+            compare(view.currentIndex, -1)
+            tryVerify(() => addButton.enabled, 5000, "Add is enabled on a cave row")
+            compare(addBar.addToolTip, "Add a fix station to A")
+
+            mouseClick(addButton)
+            tryCompare(caves.a.fixStations, "count", 4, 5000, "the new fix lands on A")
+            compare(page.cave.fixStations.count, 0, "and none on the project")
+            // A's own fixes come first, so the new one is page row 3.
+            const newPageRow = 3
+            tryVerify(() => shownRow(view, "nodeRow.A")?.expanded === true, 5000,
+                      "A opens to show the new fix")
+            tryVerify(() => shownStationCell(view, newPageRow) !== null, 5000,
+                      "the new fix's row is shown")
+            compare(view.currentNode, caves.a, "A stays the picked row")
+        }
+
+        // A picked node row is no fix: currentFixRow reads -1 on it, and a
+        // link to a fix picks the fix again.
+        function test_aPickedNodeRowReadsAsNoFix() {
+            const caves = makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const page = RootData.pageView.currentPageItem
+            // Page row 1 is A's x, page row 5 is B's b0.
+            page.currentFixRow = 1
+            tryCompare(view, "currentIndex", 1, 5000, "the link picks x")
+
+            clickNodeRow(view, "B", Qt.LeftButton)
+            tryVerify(() => view.currentNode === caves.b, 5000, "a click on B's row picks it")
+            tryCompare(page, "currentFixRow", -1, 5000, "B's row picks no fix")
+            compare(view.currentIndex, -1)
+
+            page.currentFixRow = 5
+            tryCompare(view, "currentIndex", 5, 5000, "a link picks b0")
+            tryVerify(() => view.currentNode === null, 5000, "and the node row lets go")
+        }
+
+        // A node row's menu adds a fix to that node; on the project's row the
+        // item is disabled.
+        function test_aNodeRowsMenuAddsAFixToThatNode() {
+            const caves = makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const page = RootData.pageView.currentPageItem
+
+            const menu = openNodeRowMenu(view, "Sub")
+            const item = addFixMenuItemOf(menu)
+            verify(item !== null, "Sub's menu offers to add a fix station")
+            compare(item.text, "Add fix station")
+            verify(item.enabled, "Sub can hold a fix")
+            mouseClick(item)
+            tryCompare(caves.sub.fixStations, "count", 3, 5000, "the fix lands on Sub")
+            tryVerify(() => !menu.visible, 5000, "choosing the item closes the menu")
+            compare(page.cave.fixStations.count, 0, "and none on the project")
+
+            const rootMenu = openNodeRowMenu(view, "")
+            const rootItem = addFixMenuItemOf(rootMenu)
+            verify(rootItem !== null, "the project's row offers the item too")
+            verify(!rootItem.enabled, "the project's row holds no fixes")
+            rootMenu.close()
+            tryVerify(() => !rootMenu.visible)
+        }
+
+        // A fix row's menu offers to add a fix to the node that owns the row.
+        function test_aFixRowsMenuAddsAFixToItsNode() {
+            const caves = makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const page = RootData.pageView.currentPageItem
+            const row = shownRow(view, "fixRow.s1")
+            verify(row !== null, "s1's row is shown")
+            const rowMenu = findChild(row, "fixRowMenu." + row.fixRow)
+            verify(rowMenu !== null, "s1's row has a right-click menu")
+            const cell = shownStationCell(view, row.fixRow)
+            verify(cell !== null, "s1's row has a station cell")
+
+            mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+            tryVerify(() => rowMenu.menu !== null && rowMenu.menu.opened, 5000,
+                      "a right-click opens s1's menu")
+            const menu = rowMenu.menu
+            compare(menu.count, 2, "the menu holds Remove and Add")
+            compare(menu.itemAt(1).text, "Add fix station to Sub")
+            mouseClick(menu.itemAt(1))
+            tryCompare(caves.sub.fixStations, "count", 3, 5000, "the fix lands on Sub")
+            compare(page.cave.fixStations.count, 0, "and none on the project")
         }
 
         // A link to a fix the filter hides clears the filter and shows the fix.
@@ -3890,9 +4072,10 @@ MainWindowTest {
 
         //! Right-clicks \a stationCell and checks that its row's menu, which
         //! nothing builds before, opens offering to remove \a stationName and
-        //! hands that row to the remove question. Opens it a second time and
-        //! checks that it opens where the first click opened it.
-        function verifyRightClickMenu(stationCell, rowMenu, stationName) {
+        //! to add a fix to \a nodeName, and hands that row to the remove
+        //! question. Opens it a second time and checks that it opens where the
+        //! first click opened it.
+        function verifyRightClickMenu(stationCell, rowMenu, stationName, nodeName) {
             compare(rowMenu.menu, null, "the row builds no menu before a right-click")
             waitForRendering(rootId)
             const clickX = stationCell.width / 2
@@ -3904,8 +4087,9 @@ MainWindowTest {
             const menuAt = menu.parent.mapToItem(stationCell, menu.x, menu.y)
             fuzzyCompare(menuAt.x, clickX, 1, "the menu opens at the pointer")
             fuzzyCompare(menuAt.y, clickY, 1)
-            compare(menu.count, 1, "the menu holds one item")
+            compare(menu.count, 2, "the menu holds Remove and Add")
             compare(menu.itemAt(0).text, "Remove " + stationName)
+            compare(menu.itemAt(1).text, "Add fix station to " + nodeName)
             const firstX = menu.x
             const firstY = menu.y
 
@@ -3933,7 +4117,7 @@ MainWindowTest {
             makePopupFixture("fix-station-popups-menu")
             const fixRow = liveChild("fixRow.own0").fixRow
             verifyRightClickMenu(waitForChild("stationCell." + fixRow),
-                                 liveChild("fixRowMenu." + fixRow), "own0")
+                                 liveChild("fixRowMenu." + fixRow), "own0", popupCaveName)
 
             const wideWidth = rootId.width
             try {
@@ -3942,7 +4126,7 @@ MainWindowTest {
                           "the narrow layout shows the rows")
                 const narrowRow = liveChild("fixRow.own0")
                 verifyRightClickMenu(waitForChild("stationCell." + narrowRow.fixRow),
-                                     liveChild("fixRowMenu." + narrowRow.fixRow), "own0")
+                                     liveChild("fixRowMenu." + narrowRow.fixRow), "own0", popupCaveName)
             } finally {
                 rootId.width = wideWidth
             }

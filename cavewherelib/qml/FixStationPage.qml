@@ -112,11 +112,42 @@ StandardPage {
 
     PageView.defaultSelectionProperties: ({ "currentFixRow": -1 })
 
-    function addFix() {
-        if (fixStationPage.fixStationsModel) {
-            fixStationPage.clearFilter()
-            fixStationPage.fixStationsModel.addFixStation()
+    // The node Add Fix puts a new fix on: the current row's node, else the
+    // page's own node.
+    readonly property SurveyNode addTarget: {
+        // The model answers through an invokable, so these name what it reads.
+        void treeViewId.currentNode
+        void fixStationPage.currentFixRow
+        void treeModelId.fixRowCount
+        return treeModelId.addTargetAt(fixStationPage.currentRowIndex())
+    }
+    readonly property bool canAddFix: fixStationPage.addTarget?.canHoldFixes ?? false
+
+    // The tree model's index of the current row: the picked node row, else
+    // the picked fix row, invalid for neither.
+    function currentRowIndex(): var {
+        return treeViewId.currentNode !== null
+                ? treeModelId.nodeRowIndex(treeViewId.currentNode)
+                : treeModelId.indexOfFixRow(fixStationPage.currentFixRow)
+    }
+
+    // Adds a fix to the node of \a index, a row of the tree model, and opens
+    // the nodes above the new row to show it.
+    function addFix(index: var): void {
+        fixStationPage.clearFilter()
+        const fixRow = treeModelId.addFixAt(index)
+        if (fixRow < 0) {
+            return
         }
+        const openIds = new Set()
+        for (let node = fixStationPage.nodeOfFixRow(fixRow); node !== null; node = node.parentNode) {
+            openIds.add(String(node.id))
+        }
+        const collapsed = fixStationPage.collapsedNodeIds.filter(id => !openIds.has(id))
+        if (collapsed.length !== fixStationPage.collapsedNodeIds.length) {
+            fixStationPage.collapsedNodeIds = collapsed
+        }
+        Qt.callLater(fixStationPage.revealFixRow, fixRow)
     }
 
     // Chooses the system attachmentOwners[ownerIndex]'s file's fixes with no
@@ -137,6 +168,11 @@ StandardPage {
     function nodeOfFixRow(fixRow: int): SurveyNode {
         const index = treeModelId.indexOfFixRow(fixRow)
         return index.valid ? treeModelId.data(index, FixStationTreeModel.NodeObjectRole) : null
+    }
+
+    // \a node's name, "Project" for the region's root, which has none.
+    function displayNameOf(node: SurveyNode): string {
+        return node !== null && node.name !== "" ? node.name : "Project"
     }
 
     // Page row \a fixRow's row in its node's fix station table, which is the
@@ -214,9 +250,21 @@ StandardPage {
             fixStationPage.closeCSPicker()
         }
         fixStationPage.closeOwnerPicker()
+        treeViewId.currentNode = null
         treeViewId.currentIndex = row
         if (fixStationPage.PageView.page !== null) {
             fixStationPage.PageView.page.selectionProperties = { "currentFixRow": row }
+        }
+    }
+
+    // A picked node row is no fix: currentFixRow reads -1 while it is current.
+    function pickNodeRow(node: SurveyNode): void {
+        fixStationPage.closeCSPicker()
+        fixStationPage.closeOwnerPicker()
+        treeViewId.currentNode = node
+        treeViewId.currentIndex = -1
+        if (fixStationPage.PageView.page !== null) {
+            fixStationPage.PageView.page.selectionProperties = { "currentFixRow": -1 }
         }
     }
 
@@ -457,6 +505,7 @@ StandardPage {
         if (fixStationPage.currentFixRow < 0) {
             return
         }
+        treeViewId.currentNode = null
         // The rows may not be laid out yet when the page opens on a link.
         Qt.callLater(() => fixStationPage.revealFixRow(treeViewId.currentIndex))
     }
@@ -496,8 +545,13 @@ StandardPage {
 
     // A reused row delegate misses the page-row and diagnostics updates sent
     // while its row was moving, so they are sent again once the rows settle.
+    // Opening or closing a node moves the rows below it the same way, though
+    // only inside the view: a diagnostics update landing before the next
+    // layout reaches the delegate still sitting on the row's new position.
     QQ.Connections {
         target: treeViewId
+        function onExpanded() { fixStationPage.rowsShifted = true }
+        function onCollapsed() { fixStationPage.rowsShifted = true }
         function onLayoutChanged() {
             if (fixStationPage.rowsShifted) {
                 fixStationPage.rowsShifted = false
@@ -875,6 +929,12 @@ StandardPage {
         required property double elevation
         required property string coordinateText
         required property string stationError
+        required property SurveyNode node
+        required property bool canHoldFixes
+
+        //! The fix-row menu's item that adds a fix beside this one.
+        readonly property string addFixText: qsTr("Add fix station to %1").arg(
+                                                 fixStationPage.displayNameOf(fixRowItem.node))
 
         //! The row's numbers in the project's units, in the axis order its
         //! system reads them in.
@@ -895,6 +955,49 @@ StandardPage {
             isSelected: treeViewId.currentIndex === fixRowItem.fixRow
             rowIndex: fixRowItem.fixRow
             anchors.fill: parent
+        }
+    }
+
+    // A node row's right-click / long-press menu. Built on first use, so a
+    // pooled row carries no menu until one is asked for.
+    component NodeRowMenu : QQ.Item {
+        id: nodeRowMenu
+
+        property bool canHoldFixes: false
+        //! Built by the first right-click or long-press; null until then.
+        readonly property QC.Menu menu: nodeMenuLoader.item as QC.Menu
+
+        signal addFixRequested()
+
+        function showMenu(x: real, y: real): void {
+            nodeMenuLoader.active = true
+            nodeRowMenu.menu.popup(nodeRowMenu, x, y)
+        }
+
+        QQ.TapHandler {
+            acceptedButtons: Qt.RightButton
+            acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
+            onTapped: (eventPoint) => nodeRowMenu.showMenu(eventPoint.position.x, eventPoint.position.y)
+        }
+
+        QQ.TapHandler {
+            acceptedDevices: QQ.PointerDevice.TouchScreen
+            onLongPressed: nodeRowMenu.showMenu(point.position.x, point.position.y)
+        }
+
+        QQ.Loader {
+            id: nodeMenuLoader
+            active: false
+
+            sourceComponent: QC.Menu {
+                QC.MenuItem {
+                    objectName: "addFixMenuItem"
+                    text: qsTr("Add fix station")
+                    enabled: nodeRowMenu.canHoldFixes
+
+                    onTriggered: nodeRowMenu.addFixRequested()
+                }
+            }
         }
     }
 
@@ -1169,7 +1272,11 @@ StandardPage {
         id: addFixBar
         objectName: "addFixBar"
         addButtonText: "Add Fix"
-        onAdd: fixStationPage.addFix()
+        addEnabled: fixStationPage.canAddFix
+        addToolTip: fixStationPage.canAddFix
+                    ? qsTr("Add a fix station to %1").arg(fixStationPage.displayNameOf(fixStationPage.addTarget))
+                    : qsTr("Select a cave, folder, or section to add a fix station to")
+        onAdd: fixStationPage.addFix(fixStationPage.currentRowIndex())
     }
 
     ColumnLayout {
@@ -1258,6 +1365,8 @@ StandardPage {
 
             //! The page row of the picked fix, -1 for none.
             property int currentIndex: -1
+            //! The node of the picked node row, null for none.
+            property SurveyNode currentNode: null
             //! How many fix rows the tree holds, every node's included.
             readonly property int count: treeModelId.fixRowCount
 
@@ -1298,7 +1407,9 @@ StandardPage {
     HelpBox {
         objectName: "noFixStationsHelpBox"
         anchors.centerIn: parent
-        text: "No fix stations yet. Click <b>Add Fix</b> to anchor a station to absolute coordinates."
+        text: fixStationPage.cave?.canHoldFixes ?? false
+              ? "No fix stations yet. Click <b>Add Fix</b> to anchor a station to absolute coordinates."
+              : "No fix stations yet. Select a cave, folder, or section, then click <b>Add Fix</b> to anchor a station to absolute coordinates."
         visible: fixStationPage.cave !== null && treeModelId.fixRowCount === 0
     }
 
@@ -1392,10 +1503,10 @@ StandardPage {
             required property string inheritedFixCoordinateSystem
             required property SurveyNode inheritedFromNode
             required property list<Trip> bareFixOwnerTrips
+            required property bool canHoldFixes
 
             readonly property bool isPageNode: nodeRowId.node === fixStationPage.cave
-            // The region's root node has no name of its own.
-            readonly property string displayName: nodeRowId.nodeName !== "" ? nodeRowId.nodeName : "Project"
+            readonly property string displayName: fixStationPage.displayNameOf(nodeRowId.node)
             readonly property bool showsInheritedSystem: !nodeRowId.isAttachmentOwner
                                                          && nodeRowId.inheritedFromNode !== null
                                                          && nodeRowId.inheritedFixCoordinateSystem !== ""
@@ -1416,9 +1527,23 @@ StandardPage {
                 }
             }
 
+            // Under the row's controls, so the name link, chevron and owner
+            // controls keep their own clicks.
             QQ.Rectangle {
                 anchors.fill: parent
-                color: Theme.surfaceMuted
+                color: treeViewId.currentNode === nodeRowId.node ? Theme.highlight : Theme.surfaceMuted
+
+                QQ.TapHandler {
+                    onTapped: fixStationPage.pickNodeRow(nodeRowId.node)
+                }
+            }
+
+            NodeRowMenu {
+                objectName: "nodeRowMenu." + nodeRowId.nodeName
+                anchors.fill: parent
+                canHoldFixes: nodeRowId.canHoldFixes
+
+                onAddFixRequested: fixStationPage.addFix(treeModelId.nodeRowIndex(nodeRowId.node))
             }
 
             ColumnLayout {
@@ -1657,6 +1782,10 @@ StandardPage {
                 removeChallenge: removeChallengeId
                 row: wideEditableId.fixRow
                 name: wideEditableId.stationName
+                addFixText: wideEditableId.addFixText
+                addFixEnabled: wideEditableId.canHoldFixes
+
+                onAddFixRequested: fixStationPage.addFix(treeModelId.indexOfFixRow(wideEditableId.fixRow))
             }
 
             QQ.MouseArea {
@@ -1899,6 +2028,10 @@ StandardPage {
                 removeChallenge: removeChallengeId
                 row: narrowEditableId.fixRow
                 name: narrowEditableId.stationName
+                addFixText: narrowEditableId.addFixText
+                addFixEnabled: narrowEditableId.canHoldFixes
+
+                onAddFixRequested: fixStationPage.addFix(treeModelId.indexOfFixRow(narrowEditableId.fixRow))
             }
 
             QQ.MouseArea {

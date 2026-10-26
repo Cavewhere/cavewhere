@@ -8,8 +8,12 @@ QQ.Item {
     property RemoveAskBox removeChallenge
     required property int row
     required property string name
+    property string addFixText: ""
+    property bool addFixEnabled: true
     //! Built by the first right-click or long-press; null until then.
     readonly property QC.Menu menu: menuLoader.item as QC.Menu
+
+    signal addFixRequested()
 
     function showMenu(x, y) {
         clickPos = Qt.point(x, y)
@@ -49,6 +53,14 @@ QQ.Item {
                     root.removeChallenge.removeName = root.name
                     root.removeChallenge.show()
                 }
+            }
+
+            QC.MenuItem {
+                objectName: "addFixMenuItem"
+                text: root.addFixText
+                enabled: root.addFixEnabled
+
+                onTriggered: root.addFixRequested()
             }
         }
     }

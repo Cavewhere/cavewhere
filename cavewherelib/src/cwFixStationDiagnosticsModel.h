@@ -93,9 +93,9 @@ public:
         //! Read-only: a message when this fix's station reference is broken,
         //! empty otherwise. Two ways it breaks, both of which survex silently
         //! drops: the name matches no station in the owning cave's network, or
-        //! there is no name at all. A cave whose network hasn't been computed yet
-        //! never flags a *named* fix (nothing to check against); an empty name is
-        //! flagged regardless. A sound name is still flagged when the export
+        //! there is no name at all. While the cave's network is empty, a *named*
+        //! fix is flagged when the node has nothing to solve and otherwise waits
+        //! for the first solve; an empty name is flagged regardless. A sound name is still flagged when the export
         //! drops the fix for its station: an attached file fixes the station
         //! itself, or an earlier row already fixes it.
         StationErrorRole,

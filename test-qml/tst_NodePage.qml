@@ -569,9 +569,11 @@ MainWindowTest {
             tryCompare(link, "text", "1", 5000, "a removed section fix leaves the count")
         }
 
-        // Gives \a node one fix named B whose easting has a transposed leading
-        // digit: 1478000 in UTM 13N, outside the zone's valid range.
+        // Gives \a node a shot from A to B and one fix on B whose easting has a
+        // transposed leading digit: 1478000 in UTM 13N, outside the zone's
+        // valid range.
         function addDomainBadFix(node) {
+            addTripNamingStations(node, ["A", "B"])
             node.fixStations.addFixStation()
             const idx = node.fixStations.index(node.fixStations.count - 1)
             node.fixStations.setData(idx, "B", FixStationModel.StationNameRole)

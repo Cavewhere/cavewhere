@@ -19,9 +19,11 @@
 
 // Qt
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QStringList>
 #include <QTemporaryDir>
+#include <QTextStream>
 
 // Std
 #include <atomic>
@@ -322,4 +324,36 @@ TEST_CASE("A harvest canceled while it waits on the cavern mutex runs no cavern"
     INFO(result->errorMessage().toStdString());
     CHECK(result->errorCode() == static_cast<int>(LinePlotErrorCode::Cancelled));
     CHECK(result->value().names.isEmpty());
+}
+
+TEST_CASE("Harvest survives cavern giving up inside the passage model", "[ExternalStationHarvest]")
+{
+    // Fifty cross-sections at stations the centerline never names. Cavern
+    // reports each one while freeing the passage model, and the fiftieth
+    // report is "Too many errors", which unwinds the run mid-free. Before
+    // the netskel fix, the library's cleanup then walked the half-freed list
+    // (issue #728), so a second run in the same process is the regression check.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("ghost_xsects.svx"));
+    {
+        QFile file(path);
+        REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Text));
+        QTextStream out(&file);
+        out << "*data normal from to tape compass clino\n"
+            << "a b 10 0 0\n"
+            << "*data passage station left right up down\n";
+        constexpr int kGhostCrossSections = 50;
+        for (int i = 1; i <= kGhostCrossSections; ++i) {
+            out << "ghost" << i << " 1 1 1 1\n";
+        }
+    }
+
+    const auto first = cwExternalStationHarvest::harvest(path);
+    const auto second = cwExternalStationHarvest::harvest(path);
+
+    CHECK(first.hasError());
+    CHECK(first.errorMessage().contains(QStringLiteral("Too many errors")));
+    CHECK(second.hasError());
+    CHECK(second.errorMessage().toStdString() == first.errorMessage().toStdString());
 }

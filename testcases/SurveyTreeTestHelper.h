@@ -18,7 +18,10 @@
 #include "cwFutureManagerModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
+#include "cwShot.h"
+#include "cwStation.h"
 #include "cwSurveyChunk.h"
+#include "cwSurveyNetwork.h"
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
 
@@ -192,6 +195,37 @@ inline void setScopedNetwork(cwSurveyNode* node, const cwSurveyNetwork& network)
         }
     }
     region->setNetwork(merged);
+}
+
+//! Installs a network on \a node that names \a stations, so fixes on them
+//! pass the reference check and a test can isolate the other fix checks.
+inline void surveyStations(cwSurveyNode* node, const QStringList& stations)
+{
+    const QString hub = QStringLiteral("hub");
+    cwSurveyNetwork network;
+    for (const QString& station : stations) {
+        network.addShot(hub, station);
+    }
+    setScopedNetwork(node, network);
+}
+
+//! Adds a trip to \a node whose one chunk chains through \a stations, as a
+//! survey looks before its first solve.
+inline cwTrip* addTripWithStations(cwSurveyNode* node, const QStringList& stations)
+{
+    auto* trip = new cwTrip();
+    node->addTrip(trip);
+    auto* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+    cwStation from;
+    from.setName(QStringLiteral("hub"));
+    for (const QString& name : stations) {
+        cwStation to;
+        to.setName(name);
+        chunk->appendShot(from, to, cwShot());
+        from = to;
+    }
+    return trip;
 }
 
 //! The dataChanged emissions in \a spy whose rows cover \a rowIndex.

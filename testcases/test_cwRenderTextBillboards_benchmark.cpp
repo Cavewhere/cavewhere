@@ -85,7 +85,7 @@ QBox3D stationBounds(const cwCavingRegion* region)
 {
     QBox3D bounds;
     for (const cwCave* cave : region->caves()) {
-        const auto positions = region->memberPositions(cave).positions();
+        const auto positions = cave->scopedPositions().positions();
         for (auto it = positions.cbegin(); it != positions.cend(); ++it) {
             bounds.unite(it.value());
         }
