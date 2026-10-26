@@ -90,6 +90,27 @@ CWTestCase {
                         "external-centerlines/compass_project/PROJECT.MAK"))
     }
 
+    // Adds a trip to `node` whose one chunk surveys `names` in order, so
+    // fixes on those names point at known stations. A fix on a node with
+    // nothing to solve is flagged as an unknown station (#727).
+    function addTripNamingStations(node, names) {
+        node.addTrip()
+        const trip = node.trip(node.tripCount - 1)
+        trip.addNewChunk()
+        const chunk = trip.chunk(0)
+        for (let i = 0; i + 1 < names.length; ++i) {
+            if (i > 0) {
+                chunk.appendNewShot()
+            }
+            chunk.setData(SurveyChunk.StationNameRole, i, names[i])
+            chunk.setData(SurveyChunk.StationNameRole, i + 1, names[i + 1])
+            chunk.setData(SurveyChunk.ShotDistanceRole, i, "10")
+            chunk.setData(SurveyChunk.ShotCompassRole, i, "0")
+            chunk.setData(SurveyChunk.ShotClinoRole, i, "0")
+        }
+        return trip
+    }
+
     function childNamed(node, name) {
         for (let i = 0; i < node.childNodeCount; i++) {
             if (node.childNode(i).name === name) {

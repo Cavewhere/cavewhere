@@ -69,6 +69,7 @@ MainWindowTest {
             RootData.region.addCave()
             cave = RootData.region.cave(0)
             cave.name = "OutlierCave"
+            addTripNamingStations(cave, ["g1", "g2", "g3", "g4", "anchor", "BAD", "A<b>B"])
             gotoCavePage()
         }
 
