@@ -254,13 +254,6 @@ cwCave* setUpMainWithNativeFix(SavedProjectFixture* fixture, bool autoDeclinatio
     return main;
 }
 
-void drainRoot(cwRootData* rootData)
-{
-    rootData->linePlotManager()->waitToFinish();
-    rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-}
-
 //! Saves \a fixture's project as \a fileName in \a destinationDir, closes it,
 //! and loads the saved file into a fresh cwRootData.
 std::unique_ptr<cwRootData> saveAndReopen(std::unique_ptr<SavedProjectFixture>& fixture,
@@ -277,7 +270,7 @@ std::unique_ptr<cwRootData> saveAndReopen(std::unique_ptr<SavedProjectFixture>& 
     auto freshRoot = std::make_unique<cwRootData>();
     freshRoot->project()->loadFile(savedPath);
     freshRoot->project()->waitLoadToFinish();
-    drainRoot(freshRoot.get());
+    waitForQuietPipelines(freshRoot.get());
     return freshRoot;
 }
 
@@ -921,7 +914,7 @@ TEST_CASE("A frame a bare file fix's system gave the project survives save and r
     CHECK(tryWait(kAttachWaitMs, [reopened]() {
         return subtreeListsAttachedFix(reopened, kFixedStation);
     }));
-    drainRoot(freshRoot.get());
+    waitForQuietPipelines(freshRoot.get());
 
     const cwGeoReference* reopenedGeoReference = freshRoot->region()->geoReference();
     CHECK(reopenedGeoReference->localCoordinateSystem() == savedFrame);
@@ -1226,7 +1219,7 @@ TEST_CASE("A project on the local grid is stored and reloaded on the local grid"
         return lookup.hasPosition(kOriginFixStation)
                && std::abs(lookup.position(kOriginFixStation).x()) <= kShapeMarginMeters;
     }));
-    drainRoot(freshRoot.get());
+    waitForQuietPipelines(freshRoot.get());
     INFO("driver after reload:\n"
          << freshRoot->linePlotManager()->driverSource().toStdString());
     CHECK_FALSE(freshRoot->linePlotManager()->hasSolveError());

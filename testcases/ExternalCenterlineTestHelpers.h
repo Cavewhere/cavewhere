@@ -45,6 +45,7 @@
 
 // Test helpers
 #include "LoadProjectHelper.h"
+#include "TestHelper.h"
 
 // AsyncFuture
 #include <asyncfuture.h>
@@ -108,6 +109,10 @@ inline constexpr int kInnerPollEventsMs = 10;
 // continuation to have run. Shared so tuning it for a slow CI box is one
 // edit rather than one per suite.
 inline constexpr int kNothingHappensSettleMs = 500;
+
+// Plenty of headroom for the scan worker + save-job queue under
+// valgrind / busy CI; the actual attach finishes in milliseconds.
+inline constexpr int kAttachWaitMs = 10000;
 
 // Spins the event loop for `ms` wall-clock milliseconds, giving a
 // (wrongly) queued continuation every chance to run before the test
@@ -416,16 +421,11 @@ inline std::unique_ptr<SavedProjectFixture> makeSavedProject(
         QDir(fixture->tempDir.path()).filePath(projectFileBase + extension);
     REQUIRE(fixture->project->saveAs(projectPath));
     fixture->project->waitSaveToFinish();
-    // Drain the queued fileSaved delivery so modified() is settled false
-    // before tests take a baseline (same idiom as test_cwLazLayerSaveLoad).
-    fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    // fileSaved arrives queued, so wait for modified() to settle false before
+    // tests take a baseline.
+    REQUIRE(tryWait(kAttachWaitMs, [&fixture]() { return !fixture->project->modified(); }));
     return fixture;
 }
-
-// Plenty of headroom for the scan worker + save-job queue under
-// valgrind / busy CI; the actual attach finishes in milliseconds.
-inline constexpr int kAttachWaitMs = 10000;
 
 inline cwExternalCenterlineManager* managerOf(SavedProjectFixture* fixture)
 {
@@ -439,17 +439,38 @@ inline void waitForSourceSweep(const cwExternalCenterlineManager* manager)
     REQUIRE(tryWait(kAttachWaitMs, [manager]() { return !manager->isSweepingSources(); }));
 }
 
+// True once nothing is scanning, sweeping, solving, or listed in the task
+// model: the quiet point where every queued recompute has landed.
+inline bool pipelinesQuiet(const cwRootData* rootData)
+{
+    const cwExternalCenterlineManager* manager = rootData->externalCenterlineManager();
+    return !manager->isScanning()
+           && !manager->isSweepingSources()
+           && rootData->linePlotManager()->updateState() != cwUpdatable::State::Working
+           && rootData->futureManagerModel()->rowCount() == 0;
+}
+
+// Waits for the scan-then-solve pipeline and the source sweep behind it to go
+// quiet, so the maps, rows, and watch sets reflect every queued recompute.
+// The fence runs the continuations a finished operation left queued (an
+// owner token's release, a report emission); the second wait covers work
+// one of them requested.
+inline void waitForQuietPipelines(cwRootData* rootData)
+{
+    rootData->linePlotManager()->waitToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(tryWait(kAttachWaitMs, [rootData]() { return pipelinesQuiet(rootData); }));
+    REQUIRE(waitForQueuedEvents());
+    REQUIRE(tryWait(kAttachWaitMs, [rootData]() { return pipelinesQuiet(rootData); }));
+}
+
 // Drains the scan-then-solve pipeline, the source sweep behind it, and the
-// save queue so the maps, rows, and watch sets reflect every queued
-// recompute. The save wait runs again after the sweep because the sweep's
+// save queue. The save wait runs again after the sweep because the sweep's
 // stat refreshes reach the save queue when it installs.
 inline void drainPipelines(SavedProjectFixture* fixture)
 {
     fixture->project->waitSaveToFinish();
-    fixture->rootData->linePlotManager()->waitToFinish();
-    fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    waitForSourceSweep(managerOf(fixture));
+    waitForQuietPipelines(fixture->rootData.get());
     fixture->project->waitSaveToFinish();
 }
 
@@ -507,10 +528,7 @@ inline std::unique_ptr<cwRootData> openInFreshRootData(const QString& projectPat
     auto rootData = std::make_unique<cwRootData>();
     rootData->project()->loadFile(projectPath);
     rootData->project()->waitLoadToFinish();
-    rootData->linePlotManager()->waitToFinish();
-    rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    waitForSourceSweep(rootData->externalCenterlineManager());
+    waitForQuietPipelines(rootData.get());
     rootData->project()->waitSaveToFinish();
     return rootData;
 }
