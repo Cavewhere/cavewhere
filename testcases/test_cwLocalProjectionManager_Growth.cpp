@@ -14,6 +14,7 @@
 #include "cwExternalCenterline.h"
 #include "cwGeoReference.h"
 #include "ExternalCenterlineTestHelpers.h"
+#include "TestHelper.h"
 
 // Qt
 #include <QCoreApplication>
@@ -43,7 +44,7 @@ QList<cwCave*> addAttachedCaves(cwCavingRegion* region, int count)
         cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("attached.svx")));
         caves.append(cave);
     }
-    QCoreApplication::processEvents();
+    REQUIRE(waitForQueuedEvents());
     return caves;
 }
 

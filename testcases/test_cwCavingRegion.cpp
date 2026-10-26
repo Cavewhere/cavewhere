@@ -12,6 +12,7 @@
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "cwSignalSpy.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -71,8 +72,7 @@ TEST_CASE("A cave the region no longer lists stops following its coordinate syst
     anchor->setName(QStringLiteral("Anchor"));
     region.addCave(anchor);
     anchor->fixStations()->appendFixStation(anchorFix);
-    QCoreApplication::processEvents();
-    REQUIRE(region.geoReference()->hasCoordinateSystem());
+    REQUIRE(waitUntil([&] { return region.geoReference()->hasCoordinateSystem(); }));
 
     cwFixStation fix = anchorFix;
     fix.setEasting(600000.0);

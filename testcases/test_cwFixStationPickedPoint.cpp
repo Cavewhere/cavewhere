@@ -22,6 +22,7 @@
 
 #include "GeoreferenceFixtureHelper.h"
 #include "LazFixtureHelper.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -105,7 +106,7 @@ void addTile(cwCavingRegion* region, const QTemporaryDir& tempDir, const QString
     REQUIRE(QDir().mkpath(gisLayers.path()));
 
     region->lazLayers()->setGisLayersDir(gisLayers);
-    QCoreApplication::processEvents(QEventLoop::AllEvents);
+    REQUIRE(waitForQueuedEvents());
 
     REQUIRE_FALSE(writeMinimalLaz(gisLayers.filePath(QStringLiteral("tile.laz"))).isEmpty());
 

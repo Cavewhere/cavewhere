@@ -18,6 +18,7 @@
 #include "cwGeoReference.h"
 #include "cwSurveyNetwork.h"
 #include "SurveyTreeTestHelper.h"
+#include "TestHelper.h"
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -339,7 +340,7 @@ TEST_CASE("the inline row flag and the cave warning reach the same verdict",
     cwCave* goodCave = addCaveWithFix(makeFix(QStringLiteral("EPSG:32613"), kGoodEasting));
     cwCave* badOwnCS = addCaveWithFix(makeFix(QStringLiteral("EPSG:32613"), kBadEasting));
     cwCave* noCS = addCaveWithFix(makeFix(QString(), kBadEasting));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return domainWarned(badOwnCS) && rowFlagged(badOwnCS); }));
 
     CHECK(domainWarned(badOwnCS));
     CHECK(rowFlagged(badOwnCS));
