@@ -160,8 +160,8 @@ nothing to work with.
 
 A shot in the middle of a block has a name at each end but no distance and no
 angles. That usually means the book starts a new line at *A2*, and the empty row
-stood in for the break. Right-click the shot and pick **Split chunk here** (see
-[Insert and remove rows](enter-survey-data.md#insert-and-remove-rows)):
+stood in for the break. Right-click the shot and pick **Chunk** > **Split
+chunk here** (see [Insert and remove rows](enter-survey-data.md#insert-and-remove-rows)):
 CaveWhere drops the empty shot and starts a new block at *A2*. If the shot is
 real, type its readings and the usual missing-reading errors take over.
 

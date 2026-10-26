@@ -129,6 +129,15 @@ QQ.QtObject {
         return loader.item
     }
 
+    // Opens a submenu of `menu`, which fires the submenu's aboutToShow
+    function openSubMenu(testCase, menu, objectName) {
+        const subMenu = testCase.findChild(menu, objectName)
+        testCase.verify(subMenu !== null, "the menu should offer " + objectName)
+        subMenu.open()
+        testCase.tryVerify(() => subMenu.opened, 5000, objectName + " should be open")
+        return subMenu
+    }
+
     function closeMenu(testCase, menu) {
         menu.close()
         testCase.tryVerify(() => !menu.visible, 5000, "the menu should close")

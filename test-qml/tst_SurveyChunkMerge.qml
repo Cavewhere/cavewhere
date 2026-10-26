@@ -143,14 +143,15 @@ MainWindowTest {
             verify(below.enabled, "the tie matches before the rename")
             surveyTableId.closeMenu(this, menu)
 
-            // The menu's loader stays built, so reopening it must ask again
+            // The menu's loader stays built, so reopening the Chunk submenu must ask again
             const lowerTieRow = stationRow(context, context.lower, 0)
             verify(model.setDataAt(model.cellIndex(lowerTieRow, SurveyEditorCellIndex.StationNameCell), "B2"))
             tryVerify(() => context.lower.data(SurveyChunk.StationNameRole, 0) === "B2",
                       5000, "the lower chunk should start at B2")
 
             menu = surveyTableId.openMenu(this, context, row, SurveyEditorCellIndex.ShotDistanceCell, "shotMenuLoader")
-            below = surveyTableId.menuItem(this, menu, "shotMenuMergeChunkBelow", "Merge with chunk below")
+            const chunkMenu = surveyTableId.openSubMenu(this, menu, "shotMenuChunkMenu")
+            below = surveyTableId.menuItem(this, chunkMenu, "shotMenuMergeChunkBelow", "Merge with chunk below")
             verify(!below.enabled, "A2 and B2 are different names")
             surveyTableId.closeMenu(this, menu)
 

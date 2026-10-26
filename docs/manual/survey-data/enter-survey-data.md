@@ -201,8 +201,12 @@ Hover a remove item and CaveWhere strikes a line through exactly the rows that
 would go. Read that preview; it beats reasoning about which shot pairs with
 which station.
 
-Both menus also offer **Remove Chunk**, which deletes the whole block. No dialog
-asks you to confirm, so the strike-through is the only warning you get.
+Both menus also hold a **Chunk** submenu for whole blocks. It groups **Split
+chunk here**, the 2 merge items, the 2 move items, and **Remove Chunk**, each
+described below.
+
+**Remove Chunk** deletes the whole block. No dialog asks you to confirm, so the
+strike-through is the only warning you get.
 
 A block can never shrink below 2 stations and the shot between them, so
 `canRemoveStation` refuses there and the remove items gray out. To clear the
@@ -265,7 +269,7 @@ special: an **LRUD-only** station, where you recorded passage dimensions without
 measuring a leg. Compass sometimes writes these. Leaving the distance **empty**
 means something else entirely, an unfinished shot. CaveWhere asks for the
 missing readings, or, when the whole shot sits empty in the middle of a block,
-suggests **Split chunk here** (see
+suggests **Chunk** > **Split chunk here** (see
 [Fix Survey Errors](survey-errors.md#empty-shot-a1--a2-use-split-chunk-here-if-a2-starts-a-new-line)).
 
 ## Next steps
