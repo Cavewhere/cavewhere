@@ -505,10 +505,10 @@ void cwTrip::setChucks(QList<cwSurveyChunk*> chunks) {
   If i is out of bounds, this returns a null chunk
   */
 cwSurveyChunk* cwTrip::chunk(int i) const {
-    if(i < 0 || i > chunkCount()) {
+    if(i < 0 || i >= chunkCount()) {
         return nullptr;
     }
-    return Chunks[i];
+    return Chunks.at(i);
 }
 
 /**

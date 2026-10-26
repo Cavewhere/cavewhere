@@ -6,6 +6,10 @@
 #include "cwCave.h"
 #include "cwKeywordModel.h"
 #include "cwKeyword.h"
+#include "cwSurveyChunk.h"
+
+//Test includes
+#include "SurveyEditorTestHelper.h"
 
 //Qt inculdes
 #include "cwSignalSpy.h"
@@ -60,3 +64,16 @@ TEST_CASE("cwTrip::linePlotKeywordModel carries Type=Line Plot and extends the t
     }
 }
 
+
+TEST_CASE("cwTrip::chunk returns nullptr for an index outside the chunk list", "[cwTrip]")
+{
+    cwTrip trip;
+    trip.addChunk(chunkWithNames({QStringLiteral("A1"), QStringLiteral("A2")}));
+    trip.addChunk(chunkWithNames({QStringLiteral("B1"), QStringLiteral("B2")}));
+    REQUIRE(trip.chunkCount() == 2);
+
+    CHECK(trip.chunk(0) == trip.chunks().at(0));
+    CHECK(trip.chunk(trip.chunkCount() - 1) == trip.chunks().last());
+    CHECK(trip.chunk(trip.chunkCount()) == nullptr);
+    CHECK(trip.chunk(-1) == nullptr);
+}
