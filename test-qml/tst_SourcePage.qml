@@ -258,6 +258,9 @@ MainWindowTest {
             // Save a project so it appears in the recent list.
             const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
             const projectPath = tmpPath + "/source-ask-save.cwproj"
+            // A .cwproj save commits, and the commit needs an account.
+            RootData.account.name = "Recent Test"
+            RootData.account.email = "recent.test@example.com"
             verify(RootData.project.saveAs(projectPath))
             TestHelper.waitForProjectSaveToFinish(RootData.project)
 
