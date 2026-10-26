@@ -7,6 +7,10 @@ import QmlTestRecorder
 MainWindowTest {
     id: rootId
 
+    SurveyTableTestHelper {
+        id: surveyTableId
+        mainWindow: rootId.mainWindow
+    }
 
     TestCase {
         name: "SurveyDataEntry"
@@ -39,8 +43,20 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            let addSuveyButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->addSurveyData")
-            mouseClick(addSuveyButton)
+            // The button sits in the ListView header, which lays out after the page lands
+            let addSuveyButton = null
+            tryVerify(() => {
+                addSuveyButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->addSurveyData")
+                return addSuveyButton !== null && addSuveyButton.visible
+                        && addSuveyButton.width > 0 && addSuveyButton.height > 0
+            })
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            tryVerify(() => {
+                if (trip.chunkCount === 0) {
+                    mouseClick(addSuveyButton)
+                }
+                return trip.chunkCount === 1
+            }, 5000, "Add Survey Data should start the trip's first chunk")
 
             waitForRendering(rootId)
 
@@ -962,6 +978,74 @@ MainWindowTest {
             let quoteBox = findChild(rootId.parent, "errorBoxdataBox.2.5")
             tryVerify(()=>{ return quoteBox === null });
             verify(distanceError.checked === false);
+        }
+
+        // GitHub #721: an empty shot between KP1 and KP2, typed to fake a break
+        // in the chunk, shows one warning on its distance cell pointing at
+        // "Split chunk here" and nothing on its direction cells
+        function test_emptyShotBetweenNamedStationsWarnsOnDistanceOnly() {
+            surveyTableId.resetToViewPage(this)
+            const context = surveyTableId.openSurveyTable(this, "EmptyShotCave", "EmptyShotTrip")
+            const model = context.editorModel
+            const names = ["A1", "KP1", "KP2", "B1"]
+
+            function shotRow(shotIndex) {
+                return model.toModelRow(model.rowIndex(context.chunk, shotIndex, SurveyEditorRowIndex.ShotRow))
+            }
+
+            surveyTableId.setStationName(this, context, 0, names[0])
+            surveyTableId.setStationName(this, context, 1, names[1])
+            for (let i = 2; i < names.length; i++) {
+                model.setFocusedCell(model.cellIndex(surveyTableId.stationRow(context, i - 1),
+                                                     SurveyEditorCellIndex.StationNameCell))
+                tryCompare(model, "focusedRow", surveyTableId.stationRow(context, i - 1))
+                surveyTableId.setStationName(this, context, i, names[i])
+            }
+            tryCompare(context.chunk, "stationCount", names.length)
+
+            const readings = [
+                { cell: SurveyEditorCellIndex.ShotDistanceCell, value: "10" },
+                { cell: SurveyEditorCellIndex.ShotCompassCell, value: "10" },
+                { cell: SurveyEditorCellIndex.ShotBackCompassCell, value: "190" },
+                { cell: SurveyEditorCellIndex.ShotClinoCell, value: "0" },
+                { cell: SurveyEditorCellIndex.ShotBackClinoCell, value: "0" }
+            ]
+            const emptyShot = 1
+            for (const shot of [0, 2]) {
+                for (const reading of readings) {
+                    verify(model.setDataAt(model.cellIndex(shotRow(shot), reading.cell), reading.value))
+                }
+            }
+            tryVerify(() => context.chunk.data(SurveyChunk.ShotBackClinoRole, 2).value === "0",
+                      5000, "the last shot should carry its readings")
+            tryCompare(context.chunk, "stationCount", names.length)
+
+            model.setFocusedCell(model.cellIndex(surveyTableId.stationRow(context, 0),
+                                                 SurveyEditorCellIndex.StationNameCell))
+            tryCompare(model, "focusedRow", surveyTableId.stationRow(context, 0))
+
+            const distance = surveyTableId.cell(this, context, shotRow(emptyShot),
+                                                SurveyEditorCellIndex.ShotDistanceCell)
+            tryVerify(() => distance.errorModel !== null, 5000, "the empty shot's distance cell should carry an error")
+            tryCompare(distance.errorModel, "fatalCount", 0)
+            tryCompare(distance.errorModel, "warningCount", 1)
+            compare(distance.errorAppearance, DataBox.WarningAppearance)
+            const errors = distance.errorModel.errors
+            const message = errors.data(errors.index(0, 0), ErrorListModel.MessageRole)
+            verify(message.indexOf("Split chunk here") >= 0, message)
+            tryVerify(() => ObjectFinder.findObjectByChain(
+                          rootId.mainWindow,
+                          "rootId->tripPage->surveyEditor->view->dataBox." + shotRow(emptyShot) + "."
+                          + SurveyEditorCellIndex.ShotDistanceCell + "->coreTextInput->errorIcon") !== null,
+                      5000, "the distance cell should show its error badge")
+
+            for (const reading of readings.slice(1)) {
+                const directionCell = surveyTableId.cell(this, context, shotRow(emptyShot), reading.cell)
+                compare(directionCell.errorModel, null, "cell " + reading.cell + " should carry no error")
+                compare(directionCell.errorAppearance, DataBox.NoErrorAppearance)
+            }
+
+            surveyTableId.leaveSurveyTable()
         }
 
         function test_missingStationNameAfterClearingShotData() {

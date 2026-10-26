@@ -289,6 +289,7 @@ private:
     void checkForError(DataRole role, int index, bool emitSignal = true);
     void checkForStationError(int index);
     void checkForShotError(int index);
+    void checkForShotReadingErrors(int index);
     void checkForSplayErrors(int index);
     bool updateSplayErrors(int index);
     bool checkForSplayError(int index, int splayIndex, DataRole role);
@@ -299,6 +300,7 @@ private:
     QList<cwError> checkDataError(cwSurveyChunk::DataRole role, int index) const;
     QList<cwError> checkWithTolerance(cwSurveyChunk::DataRole frontSightRole, cwSurveyChunk::DataRole backSightRole, int index, double tolerance = 2.0, QString units = "°") const;
     QList<cwError> checkClinoMixingType(cwSurveyChunk::DataRole role, int index) const;
+    bool isEmptyShotInsideChunk(int index) const;
     bool isLrudOnlyShot(int index) const;
     static bool allDirectionReadingsEmpty(const cwShot& shot);
     bool isStationDataEmpty(int index) const;

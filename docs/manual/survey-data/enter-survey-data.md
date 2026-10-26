@@ -263,7 +263,10 @@ If the trip has no LRUDs at all, untick **LRUD** in the trip's Settings instead
 A shot with an **explicitly entered zero** distance and no compass or clino is
 special: an **LRUD-only** station, where you recorded passage dimensions without
 measuring a leg. Compass sometimes writes these. Leaving the distance **empty**
-means something else entirely, an unfinished shot, which CaveWhere marks fatal.
+means something else entirely, an unfinished shot. CaveWhere asks for the
+missing readings, or, when the whole shot sits empty in the middle of a block,
+suggests **Split chunk here** (see
+[Fix Survey Errors](survey-errors.md#empty-shot-a1--a2-use-split-chunk-here-if-a2-starts-a-new-line)).
 
 ## Next steps
 

@@ -20,9 +20,13 @@
 
 //Our includes
 #include "TestHelper.h"
+#include "EmptyShotChunkHelper.h"
 
 //Qt includes
 #include "cwSignalSpy.h"
+
+//Std includes
+#include <array>
 
 std::ostream& operator << ( std::ostream& os, QMap<int, cwTripCalibration*> const& value ) {
     os << "QMap<int, cwTripCalibration*>:[";
@@ -809,5 +813,174 @@ TEST_CASE("Zero-length LRUD-only shot warns instead of failing", "[cwSurveyChunk
         chunk->setData(cwSurveyChunk::StationNameRole, 1, "a2");
 
         checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotCompassRole, cwError::Fatal);
+    }
+}
+
+namespace {
+
+constexpr std::array<cwSurveyChunk::DataRole, 4> kDirectionRoles = {
+    cwSurveyChunk::ShotCompassRole,
+    cwSurveyChunk::ShotBackCompassRole,
+    cwSurveyChunk::ShotClinoRole,
+    cwSurveyChunk::ShotBackClinoRole
+};
+
+//The distance cell of shot index carries exactly the empty-shot warning, and
+//its direction cells are quiet
+void checkEmptyShotWarning(const cwSurveyChunk* chunk, int index)
+{
+    INFO("shot " << index);
+    const QString from = chunk->data(cwSurveyChunk::StationNameRole, index).toString();
+    const QString to = chunk->data(cwSurveyChunk::StationNameRole, index + 1).toString();
+
+    const cwErrorModel* distance = chunk->errorsAt(index, cwSurveyChunk::ShotDistanceRole);
+    REQUIRE(distance != nullptr);
+    CHECK(distance->fatalCount() == 0);
+    REQUIRE(distance->warningCount() == 1);
+    const cwError warning = distance->errors()->first();
+    CHECK(warning.type() == cwError::Warning);
+    CHECK(warning.errorTypeId() == EmptyShotChunk::emptyShotId());
+    CHECK(warning.message() == EmptyShotChunk::warningMessage(from, to));
+
+    for(const auto role : kDirectionRoles) {
+        INFO("role " << role);
+        CHECK(chunk->errorsAt(index, role) == nullptr);
+    }
+}
+
+void checkMissingReadingErrors(cwSurveyChunk* chunk, int index)
+{
+    checkNoShotDataError(chunk, index, cwSurveyChunk::ShotDistanceRole, cwError::Fatal);
+    for(const auto role : kDirectionRoles) {
+        checkNoShotDataError(chunk, index, role, cwError::Fatal);
+    }
+}
+
+}
+
+TEST_CASE("An empty shot between two named stations warns on its distance cell", "[cwSurveyChunk][EmptyShot]")
+{
+    auto fixture = EmptyShotChunk::Fixture::issue721();
+    cwSurveyChunk* chunk = fixture.chunk;
+    REQUIRE(chunk->shotCount() == 3);
+    REQUIRE(chunk->isShotDataEmpty(1));
+
+    checkEmptyShotWarning(chunk, 1);
+
+    CHECK(chunk->errorModel()->fatalCount() == 0);
+    CHECK(chunk->errorModel()->warningCount() == 1);
+    CHECK(chunk->warningCountForTypeId(EmptyShotChunk::emptyShotId()) == 1);
+    CHECK(fixture.trip->warningCountForTypeId(EmptyShotChunk::emptyShotId()) == 1);
+}
+
+TEST_CASE("The empty-shot warning needs both end stations named", "[cwSurveyChunk][EmptyShot]")
+{
+    auto fixture = EmptyShotChunk::Fixture::issue721();
+    cwSurveyChunk* chunk = fixture.chunk;
+    const int id = EmptyShotChunk::emptyShotId();
+
+    SECTION("Clearing the to-station silences it, and naming it again raises it") {
+        chunk->setData(cwSurveyChunk::StationNameRole, 2, QString());
+        CHECK(chunk->errorsAt(1, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        CHECK(chunk->warningCountForTypeId(id) == 0);
+
+        chunk->setData(cwSurveyChunk::StationNameRole, 2, QStringLiteral("KP2"));
+        checkEmptyShotWarning(chunk, 1);
+    }
+
+    SECTION("Clearing the from-station silences it, and naming it again raises it") {
+        chunk->setData(cwSurveyChunk::StationNameRole, 1, QString());
+        CHECK(chunk->errorsAt(1, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        CHECK(chunk->warningCountForTypeId(id) == 0);
+
+        chunk->setData(cwSurveyChunk::StationNameRole, 1, QStringLiteral("KP1"));
+        checkEmptyShotWarning(chunk, 1);
+    }
+}
+
+TEST_CASE("The first and last shot of a chunk keep the missing-reading errors", "[cwSurveyChunk][EmptyShot]")
+{
+    const int id = EmptyShotChunk::emptyShotId();
+
+    SECTION("An empty first shot") {
+        EmptyShotChunk::Fixture fixture({QStringLiteral("A1"), QStringLiteral("A2"), QStringLiteral("A3")},
+                                        {cwShot(), EmptyShotChunk::readings()});
+        checkMissingReadingErrors(fixture.chunk, 0);
+        CHECK(fixture.chunk->warningCountForTypeId(id) == 0);
+    }
+
+    SECTION("An empty last shot, until a shot is appended below it") {
+        EmptyShotChunk::Fixture fixture({QStringLiteral("A1"), QStringLiteral("KP1"), QStringLiteral("KP2")},
+                                        {EmptyShotChunk::readings(), cwShot()});
+        checkMissingReadingErrors(fixture.chunk, 1);
+        CHECK(fixture.chunk->warningCountForTypeId(id) == 0);
+
+        fixture.chunk->appendShot(EmptyShotChunk::station(QStringLiteral("KP2")),
+                                  EmptyShotChunk::station(QStringLiteral("B1")),
+                                  EmptyShotChunk::readings());
+        checkEmptyShotWarning(fixture.chunk, 1);
+    }
+}
+
+TEST_CASE("A zero-length LRUD-only shot inside a chunk keeps its direction warnings", "[cwSurveyChunk][EmptyShot]")
+{
+    EmptyShotChunk::Fixture fixture({QStringLiteral("A1"), QStringLiteral("KP1"), QStringLiteral("KP2"), QStringLiteral("B1")},
+                                    {EmptyShotChunk::readings(),
+                                     cwShot(QStringLiteral("0"), QString(), QString(), QString(), QString()),
+                                     EmptyShotChunk::readings()});
+    cwSurveyChunk* chunk = fixture.chunk;
+
+    CHECK(chunk->errorsAt(1, cwSurveyChunk::ShotDistanceRole) == nullptr);
+    for(const auto role : kDirectionRoles) {
+        checkNoShotDataError(chunk, 1, role, cwError::Warning);
+    }
+    CHECK(chunk->warningCountForTypeId(EmptyShotChunk::emptyShotId()) == 0);
+}
+
+TEST_CASE("Typing one reading into an empty shot brings back the per-cell errors", "[cwSurveyChunk][EmptyShot]")
+{
+    auto fixture = EmptyShotChunk::Fixture::issue721();
+    cwSurveyChunk* chunk = fixture.chunk;
+    const int id = EmptyShotChunk::emptyShotId();
+    checkEmptyShotWarning(chunk, 1);
+
+    SECTION("A compass alone") {
+        chunk->setData(cwSurveyChunk::ShotCompassRole, 1, QStringLiteral("10"));
+
+        CHECK(chunk->warningCountForTypeId(id) == 0);
+        checkNoShotDataError(chunk, 1, cwSurveyChunk::ShotDistanceRole, cwError::Fatal);
+        CHECK(chunk->errorsAt(1, cwSurveyChunk::ShotCompassRole) == nullptr);
+        checkNoShotDataError(chunk, 1, cwSurveyChunk::ShotBackCompassRole, cwError::Warning);
+        checkNoShotDataError(chunk, 1, cwSurveyChunk::ShotClinoRole, cwError::Fatal);
+        checkNoShotDataError(chunk, 1, cwSurveyChunk::ShotBackClinoRole, cwError::Fatal);
+
+        chunk->setData(cwSurveyChunk::ShotCompassRole, 1, QString());
+        checkEmptyShotWarning(chunk, 1);
+    }
+
+    SECTION("A distance alone") {
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 1, QStringLiteral("5"));
+
+        CHECK(chunk->warningCountForTypeId(id) == 0);
+        CHECK(chunk->errorsAt(1, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        for(const auto role : kDirectionRoles) {
+            checkNoShotDataError(chunk, 1, role, cwError::Fatal);
+        }
+
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 1, QString());
+        checkEmptyShotWarning(chunk, 1);
+    }
+
+    SECTION("A clino alone") {
+        chunk->setData(cwSurveyChunk::ShotClinoRole, 1, QStringLiteral("0"));
+
+        CHECK(chunk->warningCountForTypeId(id) == 0);
+        checkNoShotDataError(chunk, 1, cwSurveyChunk::ShotDistanceRole, cwError::Fatal);
+        checkNoShotDataError(chunk, 1, cwSurveyChunk::ShotCompassRole, cwError::Fatal);
+        checkNoShotDataError(chunk, 1, cwSurveyChunk::ShotBackCompassRole, cwError::Fatal);
+        checkNoShotDataError(chunk, 1, cwSurveyChunk::ShotBackClinoRole, cwError::Warning);
+
+        chunk->setData(cwSurveyChunk::ShotClinoRole, 1, QString());
+        checkEmptyShotWarning(chunk, 1);
     }
 }

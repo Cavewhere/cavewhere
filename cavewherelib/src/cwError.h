@@ -46,6 +46,7 @@ enum class cwErrorTypeId : int {
     SurveyMissingBackClino = 11,
     SurveyCompassDisagreement = 12, //!< on the frontsight compass cell
     SurveyClinoDisagreement = 13,   //!< on the frontsight clino cell
+    SurveyEmptyShot = 14,           //!< on the distance cell of an empty shot inside a chunk
 };
 
 /**

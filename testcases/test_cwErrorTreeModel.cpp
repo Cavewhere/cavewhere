@@ -305,3 +305,10 @@ TEST_CASE("cwErrorTreeModel follows a trip's chunk cells and finds their cells",
     CHECK(tree.count() == 0);
     CHECK(tree.kinds().isEmpty());
 }
+
+TEST_CASE("cwErrorTreeModel groups the empty-shot warning under missing readings", "[ErrorModelTest][cwErrorTreeModel]")
+{
+    const int emptyShot = static_cast<int>(cwErrorTypeId::SurveyEmptyShot);
+    CHECK(cwErrorTreeModel::kindForTypeId(emptyShot) == kMissingReadingKind);
+    CHECK(cwErrorTreeModel::typeIdsForKind(kMissingReadingKind).contains(emptyShot));
+}
