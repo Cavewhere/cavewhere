@@ -12,6 +12,7 @@
 #include "cwProgressNode.h"
 #include "LoadProjectHelper.h"
 #include "asyncfuture.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QBuffer>
@@ -572,9 +573,7 @@ public:
     {
         work.waitForFinished();
         AsyncFuture::waitForFinished(m_root->future());
-        while(!m_delivered) {
-            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents);
-        }
+        REQUIRE(waitUntil([this]() { return m_delivered; }));
     }
 
     const QList<int>& values() const { return m_values; }

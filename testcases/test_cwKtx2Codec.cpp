@@ -31,6 +31,7 @@
 #include "cwMipMath.h"
 #include "cwTask.h"
 #include "cwThreadCountRestorer.h"
+#include "TestHelper.h"
 
 namespace {
     constexpr ktx_uint32_t kSmokeWidth = 4;
@@ -543,19 +544,6 @@ namespace {
     constexpr int kEncodeTimeoutMs = 30000;
     constexpr int kFreeSlotTimeoutMs = 2000;
     constexpr int kLaneOccupiedTimeoutMs = 5000;
-    constexpr int kPollSliceMs = 5;
-
-    //! Spins the event loop until predicate() is true or timeoutMs elapses
-    template <typename Predicate>
-    bool spinUntil(Predicate predicate, int timeoutMs)
-    {
-        QElapsedTimer timer;
-        timer.start();
-        while(!predicate() && timer.elapsed() < timeoutMs) {
-            QCoreApplication::processEvents(QEventLoop::AllEvents, kPollSliceMs);
-        }
-        return predicate();
-    }
 
     //! Holds the encode lane's only thread until release() is called
     class LaneBlocker {
@@ -575,7 +563,7 @@ namespace {
 
         bool waitUntilOccupied()
         {
-            return spinUntil([]() {
+            return waitUntil([]() {
                 return cw::ktx2::encodeLane()->activeThreadCount() >= kSingleThread;
             }, kLaneOccupiedTimeoutMs);
         }
@@ -612,7 +600,7 @@ namespace {
 
     bool encodeFinished(const EncodeFuture& encode, int timeoutMs)
     {
-        return spinUntil([&encode]() { return encode.isFinished(); }, timeoutMs);
+        return waitUntil([&encode]() { return encode.isFinished(); }, timeoutMs);
     }
 }
 
@@ -644,7 +632,7 @@ TEST_CASE("A worker waiting on the encode lane frees its pool slot", "[Ktx2][Enc
     const EncodeFuture encode = startEncode();
     const QFuture<int> trivial = cwConcurrent::run([]() { return 1; });
 
-    CHECK(spinUntil([&trivial]() { return trivial.isFinished(); }, kFreeSlotTimeoutMs));
+    CHECK(waitUntil([&trivial]() { return trivial.isFinished(); }, kFreeSlotTimeoutMs));
     CHECK_FALSE(encode.isFinished());
 
     blocker.release();

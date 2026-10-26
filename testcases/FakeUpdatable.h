@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwUpdatable.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -94,19 +95,19 @@ signals:
 
 namespace FakeUpdatableTest {
 
-    //Event-loop turns spun to let the queued hops settle: the fake pipeline's
+    //Queued generations drained to let the hops settle: the fake pipeline's
     //queued finish, a coordinator's queued flush, and the cascade a flush starts.
     //Deliberately generous, since each extra link in a dependency chain costs
-    //several more. Deterministic rather than timing-based — processEvents() drains
-    //what is already queued and nothing here is threaded — so too small a budget
+    //several more. Deterministic rather than timing-based — each fence runs what
+    //is already queued and nothing here is threaded — so too small a budget
     //fails outright instead of flaking on a slower machine. A case needing a deeper
     //chain than this should wait on its own post-condition rather than raise it.
-    constexpr int kSettleTurns = 16;
+    constexpr int kSettleGenerations = 16;
 
     inline void settle()
     {
-        for(int i = 0; i < kSettleTurns; i++) {
-            QCoreApplication::processEvents();
+        for(int i = 0; i < kSettleGenerations; i++) {
+            waitForQueuedEvents();
         }
     }
 

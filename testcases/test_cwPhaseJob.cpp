@@ -12,24 +12,13 @@
 #include "cwPhaseJob.h"
 #include "cwFutureManagerModel.h"
 #include "cwFutureManagerToken.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
 #include <QElapsedTimer>
 
 namespace {
-
-// The model resolves rows through queued QFutureWatcher events, so pump the
-// event loop until the condition holds (or the deadline passes).
-bool processEventsUntil(const std::function<bool()>& condition, int timeoutMs = 5000)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while(!condition() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-    }
-    return condition();
-}
 
 } // namespace
 
@@ -58,7 +47,7 @@ TEST_CASE("cwPhaseJob surfaces a job in the manager and finish removes it",
     job.finish();
 
     CHECK(job.future().isFinished());
-    CHECK(processEventsUntil([&model]() { return model.rowCount() == 0; }));
+    CHECK(waitUntil([&model]() { return model.rowCount() == 0; }));
 }
 
 TEST_CASE("cwPhaseJob with an invalid token runs silently", "[cwPhaseJob]")
@@ -90,7 +79,7 @@ TEST_CASE("cwPhaseJob destructor resolves a destroyed job", "[cwPhaseJob]")
     }
 
     CHECK(future.isFinished());
-    CHECK(processEventsUntil([&model]() { return model.rowCount() == 0; }));
+    CHECK(waitUntil([&model]() { return model.rowCount() == 0; }));
 }
 
 TEST_CASE("cwPhaseJob finish is idempotent and legal after a cancel",
@@ -112,5 +101,5 @@ TEST_CASE("cwPhaseJob finish is idempotent and legal after a cancel",
     job.finish();
 
     CHECK(job.future().isFinished());
-    CHECK(processEventsUntil([&model]() { return model.rowCount() == 0; }));
+    CHECK(waitUntil([&model]() { return model.rowCount() == 0; }));
 }

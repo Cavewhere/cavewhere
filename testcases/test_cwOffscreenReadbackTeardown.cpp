@@ -9,6 +9,7 @@
 #include "cwOffscreenRenderParameters.h"
 #include "cwRhiViewer.h"
 #include "cwScene.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QColor>
@@ -33,21 +34,6 @@ constexpr int kRenderThreadHoldMs = 300;
 
 constexpr int kWaitTimeoutMs = 60000;
 constexpr int kPollIntervalMs = 2;
-
-template <typename Predicate>
-bool waitFor(Predicate predicate, int timeoutMs = kWaitTimeoutMs)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents();
-        if (predicate()) {
-            return true;
-        }
-        QThread::msleep(kPollIntervalMs);
-    }
-    return predicate();
-}
 
 } // namespace
 
@@ -81,7 +67,7 @@ TEST_CASE("destroying the window with offscreen read-backs in flight resolves ev
                          [&framesSwapped]() { framesSwapped++; }, Qt::DirectConnection);
 
         window->show();
-        REQUIRE(waitFor([&]() { return window->isExposed() && framesSwapped > 0; }));
+        REQUIRE(waitUntil([&]() { return window->isExposed() && framesSwapped > 0; }, kWaitTimeoutMs));
 
         if (window->rendererInterface()->graphicsApi() == QSGRendererInterface::Software) {
             SKIP("needs a QRhi-backed scene graph");
@@ -108,7 +94,7 @@ TEST_CASE("destroying the window with offscreen read-backs in flight resolves ev
 
         armed = true;
         job = scene.renderOffscreen(parameters);
-        REQUIRE(waitFor([&]() { return jobSynchronized.load(); }));
+        REQUIRE(waitUntil([&]() { return jobSynchronized.load(); }, kWaitTimeoutMs));
 
         QElapsedTimer timer;
         timer.start();

@@ -33,6 +33,7 @@
 #include "cwSketchManager.h"
 #include "cwTripLinePlotTask.h"
 #include "asyncfuture.h"
+#include "TestHelper.h"
 
 
 namespace {
@@ -395,17 +396,6 @@ MiniRegion buildRegionWithTrip()
     return mr;
 }
 
-// Spin the event loop until `predicate` returns true or timeout elapses.
-bool waitFor(std::function<bool()> predicate, int timeoutMs = 10000)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (!predicate() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
-    }
-    return predicate();
-}
-
 } // namespace
 
 
@@ -416,9 +406,9 @@ TEST_CASE("cwSketchManager acquireLinePlot creates a pipeline entry and populate
     CHECK(manager.latestLinePlot(mr.trip).isEmpty()); // no pipeline yet
 
     manager.acquireLinePlot(mr.trip);
-    REQUIRE(waitFor([&](){
+    REQUIRE(waitUntil([&](){
         return !manager.latestLinePlot(mr.trip).isEmpty();
-    }));
+    }, 10000));
 
     const auto components = manager.latestLinePlot(mr.trip);
     REQUIRE(components.size() == 1);
@@ -434,9 +424,9 @@ TEST_CASE("cwSketchManager re-emits linePlotUpdated after a chunk edit", "[cwSke
     cwSketchManager manager;
 
     manager.acquireLinePlot(mr.trip);
-    REQUIRE(waitFor([&](){
+    REQUIRE(waitUntil([&](){
         return !manager.latestLinePlot(mr.trip).isEmpty();
-    }));
+    }, 10000));
 
     QSignalSpy spy(&manager, &cwSketchManager::linePlotUpdated);
 
@@ -444,7 +434,7 @@ TEST_CASE("cwSketchManager re-emits linePlotUpdated after a chunk edit", "[cwSke
     auto *chunk = mr.trip->chunks().first();
     chunk->appendShot(named("a3"), named("a4"), simpleShot(10.0));
 
-    REQUIRE(waitFor([&](){ return spy.count() >= 1; }));
+    REQUIRE(waitUntil([&](){ return spy.count() >= 1; }, 10000));
 
     const auto components = manager.latestLinePlot(mr.trip);
     REQUIRE(components.size() == 1);
@@ -460,9 +450,9 @@ TEST_CASE("cwSketchManager refcounts shared acquisitions", "[cwSketchManager][Tr
     manager.acquireLinePlot(mr.trip);
     manager.acquireLinePlot(mr.trip); // second consumer
 
-    REQUIRE(waitFor([&](){
+    REQUIRE(waitUntil([&](){
         return !manager.latestLinePlot(mr.trip).isEmpty();
-    }));
+    }, 10000));
 
     manager.releaseLinePlot(mr.trip);
     // Still held by the second consumer.

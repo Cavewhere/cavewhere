@@ -21,6 +21,7 @@
 #include "cwRemoteAuthProvider.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
+#include "TestHelper.h"
 
 // -----------------------------------------------------------------------
 // Helpers
@@ -28,17 +29,6 @@
 
 namespace {
 
-constexpr int DefaultTimeoutMs = 5000;
-
-bool waitUntil(const std::function<bool()>& condition, int timeoutMs = DefaultTimeoutMs)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (!condition() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-    }
-    return condition();
-}
 
 // Adds an HTTPS remote to the project's repository (synchronous).
 void addHttpsRemote(cwProject& project, const QString& url = QStringLiteral("https://github.com/example/repo.git"))

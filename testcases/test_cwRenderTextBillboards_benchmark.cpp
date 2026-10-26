@@ -27,6 +27,7 @@
 #include "cwRhiViewer.h"
 #include "cwScene.h"
 #include "cwStationPositionLookup.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QBox3D>
@@ -61,25 +62,9 @@ constexpr float kOrbitPitchDegrees = -45.0f;
 constexpr double kFramingMargin = 1.1;
 
 constexpr int kWaitTimeoutMs = 60000;
-constexpr int kPollIntervalMs = 2;
 constexpr int kSettleFrames = 10;
 
 const QString kProfilePrefix = QStringLiteral("textBillboards");
-
-template <typename Predicate>
-bool waitFor(Predicate predicate, int timeoutMs = kWaitTimeoutMs)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents();
-        if (predicate()) {
-            return true;
-        }
-        QThread::msleep(kPollIntervalMs);
-    }
-    return predicate();
-}
 
 QBox3D stationBounds(const cwCavingRegion* region)
 {
@@ -172,7 +157,7 @@ TEST_CASE("Station label Overlay pass time on the large cave", "[.][Benchmark][T
                      [&framesSwapped]() { framesSwapped++; }, Qt::DirectConnection);
 
     window.show();
-    REQUIRE(waitFor([&]() { return window.isExposed() && framesSwapped > 0; }));
+    REQUIRE(waitUntil([&]() { return window.isExposed() && framesSwapped > 0; }, kWaitTimeoutMs));
 
     if (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software) {
         SKIP("needs a QRhi-backed scene graph");
@@ -180,15 +165,15 @@ TEST_CASE("Station label Overlay pass time on the large cave", "[.][Benchmark][T
 
     const auto framesFrom = [&](int count) {
         const int target = framesSwapped + count;
-        return waitFor([&]() {
+        return waitUntil([&]() {
             viewer->update();
             return framesSwapped >= target;
-        });
+        }, kWaitTimeoutMs);
     };
 
     cwCamera* camera = viewer->camera();
     REQUIRE(camera != nullptr);
-    REQUIRE(waitFor([&]() { return !camera->viewport().isEmpty(); }));
+    REQUIRE(waitUntil([&]() { return !camera->viewport().isEmpty(); }, kWaitTimeoutMs));
     const QSize viewportSize = camera->viewport().size();
 
     const QVector3D center = bounds.center();

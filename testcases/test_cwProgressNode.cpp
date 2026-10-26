@@ -11,6 +11,7 @@
 
 //Our includes
 #include "cwProgressNode.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -23,18 +24,6 @@
 #include <memory>
 
 namespace {
-
-//Promise updates travel through queued events, so pump the event loop until
-//the condition holds (or the deadline passes).
-bool processEventsUntil(const std::function<bool()>& condition, int timeoutMs = 5000)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while(!condition() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-    }
-    return condition();
-}
 
 bool atMaximum(const QFuture<void>& future)
 {
@@ -123,7 +112,7 @@ TEST_CASE("cwProgressNode parent without a hint stalls instead of stepping back"
 
     root->addChild(QStringLiteral("First"))->finish();
     CHECK(root->fraction() == Catch::Approx(1.0));
-    CHECK(processEventsUntil([&root]() { return atMaximum(root->future()); }));
+    CHECK(waitUntil([&root]() { return atMaximum(root->future()); }));
 
     auto second = root->addChild(QStringLiteral("Second"));
     CHECK(root->fraction() == Catch::Approx(0.5));
@@ -174,7 +163,7 @@ TEST_CASE("cwProgressNode cancel deadens the tree", "[cwProgressNode]")
     root->cancel();
 
     CHECK(root->future().isCanceled());
-    CHECK(processEventsUntil([&root]() { return root->future().isFinished(); }));
+    CHECK(waitUntil([&root]() { return root->future().isFinished(); }));
 
     worker->advance(5);
     CHECK(worker->done() == 10);
@@ -219,7 +208,7 @@ TEST_CASE("cwProgressNode counts concurrent advances", "[cwProgressNode]")
 
     CHECK(leaf->done() == qsizetype(kWorkerCount) * kAdvancesPerWorker);
     CHECK(leaf->fraction() == Catch::Approx(1.0));
-    CHECK(processEventsUntil([&root]() { return atMaximum(root->future()); }));
+    CHECK(waitUntil([&root]() { return atMaximum(root->future()); }));
 
     leaf->finish();
     root->finish();

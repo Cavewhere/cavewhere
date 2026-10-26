@@ -23,6 +23,7 @@
 #include "cwRenderSpriteBillboards.h"
 #include "cwRhiViewer.h"
 #include "cwScene.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -60,24 +61,8 @@ constexpr int kSpriteSize = 20;
 constexpr int kProfileFrames = 20;
 constexpr int kSettleFrames = 10;
 constexpr int kWaitTimeoutMs = 60000;
-constexpr int kPollIntervalMs = 2;
 
 const QString kProfilePrefix = QStringLiteral("spriteBillboards");
-
-template <typename Predicate>
-bool waitFor(Predicate predicate, int timeoutMs = kWaitTimeoutMs)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents();
-        if (predicate()) {
-            return true;
-        }
-        QThread::msleep(kPollIntervalMs);
-    }
-    return predicate();
-}
 
 cwRenderSpriteBillboards::SpriteBillboard gridBillboard(int index)
 {
@@ -155,7 +140,7 @@ void profileGather(const QList<QByteArray>& slotColors)
                      [&framesSwapped]() { framesSwapped++; }, Qt::DirectConnection);
 
     window.show();
-    REQUIRE(waitFor([&]() { return window.isExposed() && framesSwapped > 0; }));
+    REQUIRE(waitUntil([&]() { return window.isExposed() && framesSwapped > 0; }, kWaitTimeoutMs));
 
     if (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software) {
         SKIP("needs a QRhi-backed scene graph");
@@ -163,10 +148,10 @@ void profileGather(const QList<QByteArray>& slotColors)
 
     const auto framesFrom = [&](int count) {
         const int target = framesSwapped + count;
-        return waitFor([&]() {
+        return waitUntil([&]() {
             viewer->update();
             return framesSwapped >= target;
-        });
+        }, kWaitTimeoutMs);
     };
 
     cwRenderSpriteBillboards* layer = scene.spriteBillboardLayer();

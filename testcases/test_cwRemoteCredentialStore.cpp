@@ -10,6 +10,7 @@
 #include <qtkeychain/keychain.h>
 
 #include "cwRemoteCredentialStore.h"
+#include "TestHelper.h"
 
 namespace {
 constexpr int KeychainWaitMs = 5000;
@@ -85,19 +86,6 @@ QString pidScopedAccountId(const char* label)
         .arg(QCoreApplication::applicationPid());
 }
 
-bool waitFor(const std::function<bool()>& predicate, int timeoutMs = KeychainWaitMs)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        if (predicate()) {
-            return true;
-        }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-    }
-    return predicate();
-}
-
 struct KeychainRestoreGuard
 {
     KeychainState previous;
@@ -150,10 +138,10 @@ TEST_CASE("cwRemoteCredentialStore blob write/read/delete round-trip", "[cwRemot
 
     store.writeCredentialBlob(provider, accountId, expected, &store);
 
-    REQUIRE(waitFor([&]() {
+    REQUIRE(waitUntil([&]() {
         const KeychainState state = readKeychainRaw(key);
         return state.success && state.found && state.value == expected;
-    }));
+    }, KeychainWaitMs));
 
     bool callbackReceived = false;
     cwRemoteCredentialStore::BlobReadResult readResult;
@@ -163,16 +151,16 @@ TEST_CASE("cwRemoteCredentialStore blob write/read/delete round-trip", "[cwRemot
             readResult = result;
         });
 
-    REQUIRE(waitFor([&]() { return callbackReceived; }));
+    REQUIRE(waitUntil([&]() { return callbackReceived; }, KeychainWaitMs));
     CHECK(readResult.success);
     CHECK(readResult.found);
     CHECK(readResult.value == expected);
 
     store.deleteCredentialBlob(provider, accountId, &store);
-    REQUIRE(waitFor([&]() {
+    REQUIRE(waitUntil([&]() {
         const KeychainState state = readKeychainRaw(key);
         return state.success && !state.found;
-    }));
+    }, KeychainWaitMs));
 }
 
 TEST_CASE("cwRemoteCredentialStore read of absent key reports not-found", "[cwRemoteCredentialStore]")
@@ -196,7 +184,7 @@ TEST_CASE("cwRemoteCredentialStore read of absent key reports not-found", "[cwRe
             readResult = result;
         });
 
-    REQUIRE(waitFor([&]() { return callbackReceived; }));
+    REQUIRE(waitUntil([&]() { return callbackReceived; }, KeychainWaitMs));
     CHECK(readResult.success);
     CHECK_FALSE(readResult.found);
     CHECK(readResult.value.isEmpty());
@@ -240,7 +228,7 @@ TEST_CASE("cwRemoteCredentialStore concurrent reads observe identical content",
             second = result;
         });
 
-    REQUIRE(waitFor([&]() { return firstReceived && secondReceived; }));
+    REQUIRE(waitUntil([&]() { return firstReceived && secondReceived; }, KeychainWaitMs));
     CHECK(first.success);
     CHECK(first.found);
     CHECK(first.value == blob);
@@ -266,10 +254,10 @@ TEST_CASE("cwRemoteCredentialStore writing an empty blob keeps the item present"
 
     store.writeCredentialBlob(provider, accountId, QByteArray(), &store);
 
-    REQUIRE(waitFor([&]() {
+    REQUIRE(waitUntil([&]() {
         const KeychainState state = readKeychainRaw(key);
         return state.success && state.found && state.value.isEmpty();
-    }));
+    }, KeychainWaitMs));
 
     bool callbackReceived = false;
     cwRemoteCredentialStore::BlobReadResult readResult;
@@ -278,7 +266,7 @@ TEST_CASE("cwRemoteCredentialStore writing an empty blob keeps the item present"
             callbackReceived = true;
             readResult = result;
         });
-    REQUIRE(waitFor([&]() { return callbackReceived; }));
+    REQUIRE(waitUntil([&]() { return callbackReceived; }, KeychainWaitMs));
     CHECK(readResult.success);
     CHECK(readResult.found);
     CHECK(readResult.value.isEmpty());
@@ -312,7 +300,7 @@ TEST_CASE("cwRemoteCredentialStore read of malformed bytes returns them verbatim
             callbackReceived = true;
             readResult = result;
         });
-    REQUIRE(waitFor([&]() { return callbackReceived; }));
+    REQUIRE(waitUntil([&]() { return callbackReceived; }, KeychainWaitMs));
     CHECK(readResult.success);
     CHECK(readResult.found);
     CHECK(readResult.value == garbage);

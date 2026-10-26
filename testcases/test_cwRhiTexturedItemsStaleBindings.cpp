@@ -19,6 +19,7 @@
 #include "cwRhiViewer.h"
 #include "cwScene.h"
 #include "cwStreamedTexture.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QColor>
@@ -67,24 +68,8 @@ const QSize kCroppedTileSize(64, 64);
 constexpr int kOutstandingJobs = 64;
 
 constexpr int kWaitTimeoutMs = 60000;
-constexpr int kPollIntervalMs = 2;
 constexpr int kSettleFrames = 60;
 constexpr int kHiddenGraceMs = 5000;
-
-template <typename Predicate>
-bool waitFor(Predicate predicate, int timeoutMs = kWaitTimeoutMs)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents();
-        if (predicate()) {
-            return true;
-        }
-        QThread::msleep(kPollIntervalMs);
-    }
-    return predicate();
-}
 
 cwGeometry quadAt(const QVector3D& center)
 {
@@ -192,7 +177,7 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
                      [&framesSwapped]() { framesSwapped++; }, Qt::DirectConnection);
 
     window.show();
-    REQUIRE(waitFor([&]() { return window.isExposed() && framesSwapped > 0; }));
+    REQUIRE(waitUntil([&]() { return window.isExposed() && framesSwapped > 0; }, kWaitTimeoutMs));
 
     if (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software) {
         SKIP("needs a QRhi-backed scene graph");
@@ -227,7 +212,7 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
     const auto waitWhileShown = [&](const auto& predicate) {
         QElapsedTimer hiddenFor;
         bool met = false;
-        waitFor([&]() {
+        waitUntil([&]() {
             met = predicate();
             if (window.isExposed()) {
                 hiddenFor.invalidate();
@@ -235,7 +220,7 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
                 hiddenFor.start();
             }
             return met || (hiddenFor.isValid() && hiddenFor.elapsed() > kHiddenGraceMs);
-        });
+        }, kWaitTimeoutMs);
         if (!met && !window.isExposed()) {
             SKIP("the test window was hidden, so it stopped receiving frames");
         }
