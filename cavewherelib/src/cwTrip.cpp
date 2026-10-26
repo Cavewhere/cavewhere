@@ -247,11 +247,10 @@ void cwTrip::addShotToLastChunk(const cwStation &fromStation, const cwStation &t
   \brief Remove the chunks
   */
 void cwTrip::removeChunks(int begin, int end) {
-    if(end < begin) { return; }
-
-    //Clamp the end and the beginning
+    //The range is inclusive, so clamp to the first and last index
     begin = qMax(0, begin);
-    end = qMin(end, chunkCount());
+    end = qMin(end, chunkCount() - 1);
+    if(end < begin) { return; }
 
     emit chunksAboutToBeRemoved(begin, end);
 
