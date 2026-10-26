@@ -177,8 +177,11 @@ std::unique_ptr<ContainmentFixture> makeFixture(const char* includeTarget,
     REQUIRE_FALSE(fixture->includeTargetPath.isEmpty());
     REQUIRE_FALSE(fixture->projectRootDir.isEmpty());
 
-    fixture->rootData->futureManagerModel()->waitForFinished();
-    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
+    // The root's own manager watches the attachment once its scan lands, and
+    // the writes above are edits under the data root, so the project may read
+    // modified here by design. The baseline this fixture needs is quiet
+    // pipelines before scanFixture runs its own manager.
+    waitForQuietPipelines(fixture->rootData.get());
     return fixture;
 }
 

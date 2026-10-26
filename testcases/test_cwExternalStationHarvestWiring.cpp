@@ -86,8 +86,10 @@ std::unique_ptr<ProjectFixture> makeProjectFixture(const QByteArray& entryConten
     fixture->entryPath = QDir(attachmentDir).filePath(QStringLiteral("entry.svx"));
     overwriteFile(fixture->entryPath, entryContents);
 
-    fixture->rootData->futureManagerModel()->waitForFinished();
-    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
+    // The entry write above is an edit under the data root, which the root's
+    // manager reports as a project modification once it watches the file, so
+    // the baseline here is quiet pipelines rather than a clean modified bit.
+    waitForQuietPipelines(fixture->rootData.get());
     return fixture;
 }
 

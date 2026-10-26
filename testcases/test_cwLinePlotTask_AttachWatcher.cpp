@@ -310,10 +310,10 @@ std::unique_ptr<RememberedSourceFixture> makeRememberedSourceFixture()
     REQUIRE(QDir().mkpath(fixture->attachmentDir));
     seedAttachment(fixture->attachmentDir, fixture->sourcePath);
 
-    // Drain the queued fileSaved delivery so modified() is settled false
-    // before tests take a baseline (same idiom as the attach tests).
-    fixture->rootData->futureManagerModel()->waitForFinished();
-    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
+    // seedAttachment writes under the data root, which the root's manager
+    // reports as a project modification once it watches the copy, so the
+    // modified() baseline is taken after the save in the gate test instead.
+    waitForQuietPipelines(fixture->rootData.get());
     return fixture;
 }
 
