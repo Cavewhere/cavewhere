@@ -38,12 +38,14 @@
 
 namespace {
 
-// Drain pending queued signals/events so cwSketch's queued dataChanged
-// coalescer and any AsyncFuture .context(this, ...) continuations have a
-// chance to fire.
-void drainEventLoop() {
-    QCoreApplication::sendPostedEvents();
-    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+// True once the sketch's 2D geometry source has finished a result without an
+// error that carries stations.
+bool geometryReady(cwSketch *sketch) {
+    auto future = sketch->survey2DGeometry()->geometryResult();
+    return future.isFinished()
+           && future.resultCount() > 0
+           && !future.result().hasError()
+           && !future.result().value().stations.isEmpty();
 }
 
 // Waits for the sketch's 2D geometry source to produce a non-empty result.
@@ -69,7 +71,6 @@ TEST_CASE("cwLinePlotManager exposes region-wide cwSurveyNetworkSource", "[cwSke
     linePlotManager.setFutureManagerToken(futureManager.token());
     linePlotManager.setRegion(region);
     linePlotManager.waitToFinish();
-    drainEventLoop();
 
     auto *networkSource = linePlotManager.surveyNetworkSource();
     REQUIRE(networkSource != nullptr);
@@ -131,7 +132,6 @@ TEST_CASE("cwSketch produces 2D geometry from the shared survey network source",
     linePlotManager.setFutureManagerToken(futureManager.token());
     linePlotManager.setRegion(region);
     linePlotManager.waitToFinish();
-    drainEventLoop();
 
     // Attach a fresh sketch to the region's first cave's first trip. The
     // sketch defaults to Plan view (iteration 1 only supports Plan).
@@ -147,7 +147,7 @@ TEST_CASE("cwSketch produces 2D geometry from the shared survey network source",
     REQUIRE(sketch.survey2DGeometry() != nullptr);
 
     sketch.setSurveyNetworkSource(linePlotManager.surveyNetworkSource());
-    drainEventLoop();
+    REQUIRE(waitUntil([&]() { return geometryReady(&sketch); }));
 
     const cwSurvey2DGeometry geometry = waitForGeometry(&sketch);
     CHECK_FALSE(geometry.stations.isEmpty());
@@ -165,11 +165,10 @@ TEST_CASE("cwCenterlineSketchPainterModel populates three rows from survey2DGeom
     linePlotManager.setFutureManagerToken(futureManager.token());
     linePlotManager.setRegion(region);
     linePlotManager.waitToFinish();
-    drainEventLoop();
 
     cwSketch sketch;
     sketch.setSurveyNetworkSource(linePlotManager.surveyNetworkSource());
-    drainEventLoop();
+    REQUIRE(waitUntil([&]() { return geometryReady(&sketch); }));
     waitForGeometry(&sketch); // ensure the builder has settled
 
     cwCenterlineSketchPainterModel centerline;

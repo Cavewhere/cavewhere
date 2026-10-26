@@ -108,7 +108,6 @@ TEST_CASE("Deleting a cave must not read the dying trip through a sibling scrap"
     region->removeCave(0);
     rootData->undoStack()->clear();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    QCoreApplication::processEvents();
 
     //The window really was the one #637 describes: the trip died before the
     //scraps it owns.

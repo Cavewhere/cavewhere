@@ -72,6 +72,10 @@ namespace {
     //items, so scanning this far covers them all.
     constexpr uint32_t kMaxScannedRenderId = 64;
 
+    //How long a solve and triangulation cascade may take to drain on a loaded
+    //machine.
+    constexpr int kPipelineDrainTimeoutMs = 30000;
+
     //How many render items carry a streamed-texture descriptor. cwScrapManager
     //sets one when it delivers a scrap, so this counts the scraps the renderer
     //has been given.
@@ -262,15 +266,12 @@ TEST_CASE("A single Run resolves the line-plot to scraps cascade with automatic 
 
     // Drain the whole cascade: the line-plot solve completes, dirties the
     // scraps, and the still-open forced update runs them too.
-    for(int i = 0; i < 20 && (coordinator->needsUpdate()
-                              || rootData->futureManagerModel()->rowCount() > 0
-                              || linePlotManager->updateState() == cwUpdatable::State::Working
-                              || scrapManager->updateState() == cwUpdatable::State::Working); ++i) {
-        rootData->futureManagerModel()->waitForFinished();
-        linePlotManager->waitToFinish();
-        scrapManager->waitForFinish();
-        QCoreApplication::processEvents();
-    }
+    REQUIRE(waitUntil([&]() {
+        return !coordinator->needsUpdate()
+               && rootData->futureManagerModel()->rowCount() == 0
+               && linePlotManager->updateState() != cwUpdatable::State::Working
+               && scrapManager->updateState() != cwUpdatable::State::Working;
+    }, kPipelineDrainTimeoutMs));
 
     // The cascade actually fired for THIS scrap — assert the scrap itself
     // appears in a stationPositionInScrapsChanged payload, not merely that some
@@ -308,8 +309,8 @@ TEST_CASE("Scrap pipeline reports Working while a triangulation task is in fligh
     // Settle to Clean.
     scrapManager->waitForFinish();
     rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    REQUIRE(scrapManager->updateState() == cwUpdatable::State::Clean);
+    REQUIRE(waitUntil([&]() { return scrapManager->updateState() == cwUpdatable::State::Clean; }));
+    REQUIRE(waitForQueuedEvents());
 
     // Recompute every scrap. Marking makes the pipeline Dirty, so the drive
     // dispatches a task; the restarter's start is queued, so the pipeline is
@@ -318,11 +319,8 @@ TEST_CASE("Scrap pipeline reports Working while a triangulation task is in fligh
     CHECK(scrapManager->updateState() == cwUpdatable::State::Working);
 
     // Drain to completion — back to Clean, never stuck Working.
-    for(int i = 0; i < 20 && scrapManager->updateState() != cwUpdatable::State::Clean; ++i) {
-        rootData->futureManagerModel()->waitForFinished();
-        scrapManager->waitForFinish();
-        QCoreApplication::processEvents();
-    }
+    REQUIRE(waitUntil([&]() { return scrapManager->updateState() == cwUpdatable::State::Clean; },
+                      kPipelineDrainTimeoutMs));
     CHECK(scrapManager->updateState() == cwUpdatable::State::Clean);
 }
 
@@ -344,7 +342,11 @@ TEST_CASE("Each scrap reaches the render items as it finishes", "[cwScrapManager
     fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
     rootData->futureManagerModel()->waitForFinished();
     scrapManager->waitForFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&]() {
+        return scrapManager->updateState() == cwUpdatable::State::Clean
+               && rootData->futureManagerModel()->rowCount() == 0;
+    }));
+    REQUIRE(waitForQueuedEvents());
 
     auto note = project->cavingRegion()->cave(0)->trip(0)->notes()->notes().first();
     REQUIRE(note->scraps().size() == 1);
@@ -442,7 +444,10 @@ TEST_CASE("Each scrap reaches the render items as it finishes", "[cwScrapManager
 
     scrapManager->waitForFinish();
     rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&]() { return deliveredScrapCount(renderItems) == totalScraps; }));
+    // The deliveries can all land inside the run loop above; the fence runs any
+    // queued late delivery before the exactly-once checks.
+    REQUIRE(waitForQueuedEvents());
 
     // Every scrap ended up delivered, exactly one texture descriptor each.
     CHECK(deliveredScrapCount(renderItems) == totalScraps);
@@ -527,8 +532,8 @@ TEST_CASE("Deleting the last dirty scrap announces the pipeline is clean",
     // Settle to Clean so the dirty set is exactly what this test puts in it.
     scrapManager->waitForFinish();
     rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    REQUIRE(scrapManager->updateState() == cwUpdatable::State::Clean);
+    REQUIRE(waitUntil([&]() { return scrapManager->updateState() == cwUpdatable::State::Clean; }));
+    REQUIRE(waitForQueuedEvents());
 
     // Dirty the one scrap without running it: with automatic update off, moving a
     // station marks the scrap and leaves the run to the coordinator. This is the
@@ -549,7 +554,11 @@ TEST_CASE("Deleting the last dirty scrap announces the pipeline is clean",
     // ask for them explicitly — the manager reacts to the scrap's destroyed().
     note->removeScraps(0, 0);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&]() {
+        return scrapManager->updateState() == cwUpdatable::State::Clean
+               && !coordinator->needsUpdate();
+    }));
+    REQUIRE(waitForQueuedEvents());
 
     CHECK(scrapManager->updateState() == cwUpdatable::State::Clean);
     CHECK(pipelineSpy.count() > 0);
@@ -731,7 +740,7 @@ TEST_CASE("Scrap keyword items are cleaned up across a project reload", "[cwScra
         rootData->scrapManager()->waitForFinish();
         // Drain deferred deletions so removed keyword items leave the model.
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        QCoreApplication::processEvents();
+        waitForQuietPipelines(rootData.get());
     };
 
     loadAndSettle();

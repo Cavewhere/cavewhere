@@ -289,7 +289,6 @@ TEST_CASE("Two-stroke chain around stations produces one anchored scrap",
 
     // Drain deleteLater for the single-stroke scrap retired when stroke 2
     // changed the membership key.
-    QCoreApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     CHECK(f.sketchDerivedScrapCount() == 1);
@@ -317,7 +316,6 @@ TEST_CASE("Chain scrap identity is preserved across unrelated stroke edits",
     f.drawPolyline(cwPenStroke::Wall,
                    {{3.0, 13.0}, {-3.0, 13.0}, {-3.0, -3.0}});
 
-    QCoreApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     REQUIRE(f.sketchDerivedScrapCount() == 1);
@@ -330,7 +328,6 @@ TEST_CASE("Chain scrap identity is preserved across unrelated stroke edits",
     f.drawPolyline(cwPenStroke::Feature,
                    {{100.0, 100.0}, {101.0, 100.0}, {101.0, 101.0}});
 
-    QCoreApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     REQUIRE(f.sketchDerivedScrapCount() == 1);
