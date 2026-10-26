@@ -174,12 +174,12 @@ MainWindowTest {
                    "B-Trip should still exist but remaining trips are: [" + remainingNames + "]")
         }
 
-        function showTripRemoveAskBox(cavePage) {
+        function showTripRemoveAskBox(cavePage, removeName) {
             let removeAskBox = findChild(cavePage, "removeChallange")
             verify(removeAskBox !== null, "the cave page should declare a remove ask box")
 
             removeAskBox.indexToRemove = 0
-            removeAskBox.removeName = "C-Trip"
+            removeAskBox.removeName = removeName
             removeAskBox.show()
             tryVerify(() => removeAskBox.visible, 5000, "show() should open the remove ask box")
             return removeAskBox
@@ -189,7 +189,7 @@ MainWindowTest {
         function test_escapeClosesRemoveAskBox() {
             let cave = setupCaveWithTrips("EscapeCave")
             let cavePage = RootData.pageView.currentPageItem
-            let removeAskBox = showTripRemoveAskBox(cavePage)
+            let removeAskBox = showTripRemoveAskBox(cavePage, "C-Trip")
 
             keyClick(Qt.Key_Escape)
             tryVerify(() => !removeAskBox.visible, 5000, "Escape should close the remove ask box")
@@ -200,7 +200,7 @@ MainWindowTest {
         function test_pressOutsideClosesRemoveAskBox() {
             let cave = setupCaveWithTrips("OutsidePressCave")
             let cavePage = RootData.pageView.currentPageItem
-            let removeAskBox = showTripRemoveAskBox(cavePage)
+            let removeAskBox = showTripRemoveAskBox(cavePage, "C-Trip")
 
             // show() leaves the box at the page's top-left; the trip table is
             // only as tall as its rows, so the bottom-right corner is empty page.
@@ -208,6 +208,35 @@ MainWindowTest {
             mouseClick(cavePage, cavePage.width - outsideInset, cavePage.height - outsideInset)
             tryVerify(() => !removeAskBox.visible, 5000, "a press outside should close the remove ask box")
             compare(cave.rowCount(), 3, "closing the box with an outside press should keep every trip")
+        }
+
+        // Issue #720: the removed name shows as plain text, so markup characters stay literal.
+        function test_removeNameRendersAsPlainText() {
+            setupCaveWithTrips("PlainTextCave")
+            const markupName = "<i>A</i> & B"
+            let removeAskBox = showTripRemoveAskBox(RootData.pageView.currentPageItem, markupName)
+
+            let nameLabel = findChild(removeAskBox, "removeNameLabel")
+            verify(nameLabel !== null, "the remove ask box should show the name in its own label")
+            compare(nameLabel.text, markupName)
+            compare(nameLabel.textFormat, Text.PlainText)
+            verify(nameLabel.visible, "the name label should show a non-empty name")
+
+            keyClick(Qt.Key_Escape)
+            tryVerify(() => !removeAskBox.visible, 5000, "Escape should close the remove ask box")
+        }
+
+        // Issue #720: a box without a name shows only its buttons.
+        function test_emptyRemoveNameHidesNameLabel() {
+            setupCaveWithTrips("EmptyNameCave")
+            let removeAskBox = showTripRemoveAskBox(RootData.pageView.currentPageItem, "")
+
+            let nameLabel = findChild(removeAskBox, "removeNameLabel")
+            verify(nameLabel !== null, "the remove ask box should declare its name label")
+            verify(!nameLabel.visible, "an empty name should hide the name label")
+
+            keyClick(Qt.Key_Escape)
+            tryVerify(() => !removeAskBox.visible, 5000, "Escape should close the remove ask box")
         }
     }
 }

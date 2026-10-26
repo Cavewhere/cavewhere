@@ -41,10 +41,28 @@ QC.Popup {
     contentItem: QQ.Row {
         spacing: Theme.popupPadding
 
-        QC.Label {
+        QQ.Row {
             anchors.verticalCenter: parent.verticalCenter
-            text: "Remove <b>" + removeChallenge.removeName + "</b>?"
+            spacing: Theme.popupPadding
             visible: removeChallenge.removeName.length !== 0
+
+            QC.Label {
+                text: "Remove"
+            }
+
+            QQ.Row {
+                QC.Label {
+                    objectName: "removeNameLabel"
+
+                    text: removeChallenge.removeName
+                    textFormat: QQ.Text.PlainText
+                    font.bold: true
+                }
+
+                QC.Label {
+                    text: "?"
+                }
+            }
         }
 
         QC.Button {
