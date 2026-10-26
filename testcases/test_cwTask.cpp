@@ -7,21 +7,20 @@
 #include "cwJobSettings.h"
 
 //Qt includes
-#include <QThreadPool>
+#include <QThread>
 
 TEST_CASE("cwTask should complete with asyncfuture", "[cwTask]") {
 
+    // The thread count sizes CaveWhere's own task pool and leaves the global pool as Qt set it.
     cwJobSettings::initialize();
 
     SECTION("Thread Count idleCount") {
         cwJobSettings::instance()->setThreadCount(QThread::idealThreadCount());
-        CHECK(cwTask::maxThreadCount() == QThreadPool::globalInstance()->maxThreadCount());
         CHECK(cwTask::maxThreadCount() == QThread::idealThreadCount());
     }
 
     SECTION("Thread Count of 1") {
         cwJobSettings::instance()->setThreadCount(1);
-        CHECK(cwTask::maxThreadCount() == QThreadPool::globalInstance()->maxThreadCount());
         CHECK(cwTask::maxThreadCount() == 1);
     }
 
@@ -34,6 +33,5 @@ TEST_CASE("cwTask should complete with asyncfuture", "[cwTask]") {
     CHECK(task.result() == 2318350);
 
     cwJobSettings::instance()->setThreadCount(QThread::idealThreadCount());
-    CHECK(cwTask::maxThreadCount() == QThreadPool::globalInstance()->maxThreadCount());
     CHECK(cwTask::maxThreadCount() == QThread::idealThreadCount());
 }
