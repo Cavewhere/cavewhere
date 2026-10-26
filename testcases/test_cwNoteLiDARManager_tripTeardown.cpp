@@ -18,6 +18,7 @@
 #include "cwUpdatable.h"
 #include "cwUpdateCoordinator.h"
 #include "LoadProjectHelper.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -146,8 +147,10 @@ TEST_CASE("Removing a cave takes its LiDAR notes out of the dirty set before the
     //Clearing the stack is what destroys the removed cave, and with it the trip
     //and its notes.
     rootData->undoStack()->clear();
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] {
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        return firstNote.isNull() && siblingNote.isNull();
+    }));
 
     CHECK(firstNote.isNull());
     CHECK(siblingNote.isNull());
@@ -200,7 +203,6 @@ TEST_CASE("Shutting down must not read the dying trip through a sibling LiDAR no
     //notes reach their own destructors still in the dirty set.
     rootData.reset();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    QCoreApplication::processEvents();
 
     //The window really was the one #637 describes: the trip died before the notes
     //it owns, and the sibling was still there to be read. Both are what give the

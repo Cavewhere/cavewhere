@@ -42,6 +42,7 @@
 #include "cwScrapManager.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwTrip.h"
+#include "LiDARTestHelpers.h"
 #include "LoadProjectHelper.h"
 #include "TestHelper.h"
 
@@ -92,7 +93,7 @@ void checkDestructorDeliversNothing(Manager* manager)
 
     //Run the probe when the destructor left it queued, so `fired` separates
     //"delivered after the destructor" from "never delivered at all".
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&state] { return state->fired; }));
 
     CHECK(state->fired);
     CHECK_FALSE(state->deliveredDuringDestructor);
@@ -195,7 +196,7 @@ TEST_CASE("issue #638: ~cwNoteLiDARManager delivers no queued events",
 
     rootData->noteLiDARManager()->waitForFinish();
     rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(pumpUntilLiDARSettles(rootData.get(), rootData->noteLiDARManager()));
 
     //A manager of its own, so only its destructor is under test.
     auto* liDARManager = new cwNoteLiDARManager();

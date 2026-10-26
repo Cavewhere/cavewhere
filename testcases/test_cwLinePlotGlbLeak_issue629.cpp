@@ -33,6 +33,8 @@
 #include "cwLinePlotManager.h"
 #include "cwFutureManagerModel.h"
 #include "cwJobSettings.h"
+#include "cwUpdatable.h"
+#include "TestHelper.h"
 
 #include <QtTest/QSignalSpy>
 #include <QCoreApplication>
@@ -150,9 +152,11 @@ TEST_CASE("issue #629: stepping declination with a GLB note does not grow memory
         root->linePlotManager()->waitToFinish();
         root->noteLiDARManager()->waitForFinish();
         root->futureManagerModel()->waitForFinished();
-        QCoreApplication::processEvents();
-        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        QCoreApplication::processEvents();
+        REQUIRE(waitUntil([&] {
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            return root->noteLiDARManager()->updateState() == cwUpdatable::State::Clean
+                   && root->futureManagerModel()->rowCount() == 0;
+        }));
     };
 
     auto* calibration = trip->calibrations();

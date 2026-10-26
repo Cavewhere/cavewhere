@@ -279,7 +279,7 @@ TEST_CASE("A limit of one delivers both LiDAR notes, in order, one at a time",
 
     REQUIRE(waitUntil([&]() { return allSettled(futures) && limited.all.isFinished(); },
                       kLimitedRunTimeoutMs));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&]() { return settledOrder.size() == kTwoNotes; }));
 
     CHECK(settledOrder == QList<int>({0, 1}));
     CHECK_FALSE(secondSettledAtFirstDelivery);

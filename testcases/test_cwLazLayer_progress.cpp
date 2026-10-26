@@ -243,6 +243,7 @@ TEST_CASE("cwLazLayer: a layer destroyed mid-build writes no manifest",
     delete layer;
 
     // Give the cancelled build every chance to finish writing: it must not.
+    // Kept window: the absence depends on a worker, so no queued-event fence or positive event proves it.
     constexpr int kSettleMs = 2000;
     QElapsedTimer elapsed;
     elapsed.start();
@@ -328,6 +329,7 @@ TEST_CASE("cwLazLayer: a build superseded by a cache hit never publishes its oct
     // Let the superseded build run to completion. Publishing it now would swap
     // the octree under a status that never changes, so the renderer — which
     // hears only loadStatusChanged — would keep drawing the wrong one.
+    // Kept window: the absence depends on a worker, so no queued-event fence or positive event proves it.
     constexpr int kSettleMs = 6000;
     QElapsedTimer elapsed;
     elapsed.start();

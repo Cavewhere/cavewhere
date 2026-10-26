@@ -482,7 +482,7 @@ TEST_CASE("A limit of one delivers both scraps, in order, one at a time",
     REQUIRE(spinUntilSettled(futures, [&]() {
         peakActiveScraps = std::max(peakActiveScraps, run.root->activeChildren().size());
     }));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&]() { return settledOrder.size() == kTwoScraps; }));
 
     CHECK(peakActiveScraps == kSingleThread);
     CHECK(settledOrder == QList<int>({0, 1}));
