@@ -706,7 +706,8 @@ void cwSurveyChunk::setStation(cwStation station, int index){
         announceStationSplaysChanged(index);
     }
 
-    checkForStationError(index);
+    //A rename can move the neighboring shots in or out of the empty-shot case
+    checkForErrorOnDataChanged(StationNameRole, index);
 }
 
 /**

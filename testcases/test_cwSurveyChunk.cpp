@@ -898,6 +898,46 @@ TEST_CASE("The empty-shot warning needs both end stations named", "[cwSurveyChun
     }
 }
 
+TEST_CASE("Renaming a station with setStation updates the empty-shot warning", "[cwSurveyChunk][EmptyShot]")
+{
+    auto fixture = EmptyShotChunk::Fixture::issue721();
+    cwSurveyChunk* chunk = fixture.chunk;
+    const int id = EmptyShotChunk::emptyShotId();
+    checkEmptyShotWarning(chunk, 1);
+
+    const auto rename = [chunk](int index, const QString& name) {
+        cwStation station = chunk->station(index);
+        station.setName(name);
+        chunk->setStation(station, index);
+    };
+
+    SECTION("The to-station") {
+        rename(2, QString());
+        CHECK(chunk->errorsAt(1, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        CHECK(chunk->warningCountForTypeId(id) == 0);
+
+        rename(2, QStringLiteral("KP2"));
+        checkEmptyShotWarning(chunk, 1);
+    }
+
+    SECTION("The from-station") {
+        rename(1, QString());
+        CHECK(chunk->errorsAt(1, cwSurveyChunk::ShotDistanceRole) == nullptr);
+        CHECK(chunk->warningCountForTypeId(id) == 0);
+
+        rename(1, QStringLiteral("KP1"));
+        checkEmptyShotWarning(chunk, 1);
+    }
+
+    SECTION("Naming an unnamed station raises it") {
+        chunk->setData(cwSurveyChunk::StationNameRole, 2, QString());
+        REQUIRE(chunk->warningCountForTypeId(id) == 0);
+
+        rename(2, QStringLiteral("KP2"));
+        checkEmptyShotWarning(chunk, 1);
+    }
+}
+
 TEST_CASE("The first and last shot of a chunk keep the missing-reading errors", "[cwSurveyChunk][EmptyShot]")
 {
     const int id = EmptyShotChunk::emptyShotId();
