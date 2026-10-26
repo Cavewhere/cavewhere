@@ -8208,6 +8208,7 @@ TEST_CASE("cwProject sync stress under remote churn retries safely and converges
         appendLine(localChurnFilePath, QStringLiteral("local-%1\n").arg(remotePushCount).toUtf8());
         cave->setName(QStringLiteral("Retry Stress Cave %1").arg(remotePushCount));
 
+        //Interleaving mutation with pumping is the point; a condition wait would stop the churn
         QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
         QThread::msleep(5);
     }
@@ -13868,6 +13869,7 @@ struct SaveReceiptFixture {
         settle();
         REQUIRE(project->save());
         settle();
+        REQUIRE(waitUntil([this] { return !project->modified(); }));
         REQUIRE_FALSE(project->modified());
     }
 
@@ -13876,7 +13878,7 @@ struct SaveReceiptFixture {
         project->waitSaveToFinish();
         rootData->futureManagerModel()->waitForFinished();
         project->waitSaveToFinish();
-        QCoreApplication::processEvents();
+        REQUIRE(waitForQueuedEvents());
     }
 
     cwSaveLoad* saveLoad() const { return project->saveLoad(); }
@@ -13910,7 +13912,6 @@ std::unique_ptr<cwRootData> reopenSavedProject(const QString& projectPath)
     rootData->project()->loadFile(projectPath);
     rootData->project()->waitLoadToFinish();
     rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
     return rootData;
 }
 

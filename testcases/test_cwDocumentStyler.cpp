@@ -1,5 +1,6 @@
 //Our includes
 #include "cwDocumentStyler.h"
+#include "TestHelper.h"
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -88,12 +89,12 @@ TEST_CASE("cwDocumentStyler restyles a rendered Markdown document", "[cwDocument
                        "![alt](%1)\n").arg(imagePath);
 
     edit->setProperty("text", markdown);
-    QCoreApplication::processEvents();
 
     QQuickTextDocument* quickDocument = qvariant_cast<QQuickTextDocument*>(edit->property("textDocument"));
     REQUIRE(quickDocument != nullptr);
     QTextDocument* doc = quickDocument->textDocument();
     REQUIRE(doc != nullptr);
+    REQUIRE(waitUntil([doc] { return doc->blockCount() >= 5; }));
     REQUIRE(doc->blockCount() >= 5); //h1, lead, h2, body, image — the parse is ready
 
     cwDocumentStyler styler;

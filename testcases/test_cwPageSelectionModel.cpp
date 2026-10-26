@@ -189,7 +189,6 @@ TEST_CASE("cwPageSelectionModel clearHistory prevents stale pages in history aft
 
     // Unregister old cave page (simulates Instantiator cleanup when caves are removed)
     model.unregisterPage(caveA);
-    QCoreApplication::processEvents();
 
     // Old trip address should not resolve anymore
     model.setCurrentPageAddress(QStringLiteral("Source/Data/Cave=Phake Cave/Trip=Trip 1"));
@@ -272,7 +271,6 @@ TEST_CASE("cwPageSelectionModel unregisterPage removes page from address resolut
 
     REQUIRE(pages.source->childPage(QStringLiteral("Data")) == pages.data);
     model.unregisterPage(pages.data);
-    QCoreApplication::processEvents();
 
     REQUIRE(pages.source->childPage(QStringLiteral("Data")) == nullptr);
     const QString dataAddress = QStringLiteral("Source/Data");
@@ -351,7 +349,6 @@ TEST_CASE("cwPageSelectionModel unregister note page removes from tree", "[cwPag
 
     // Unregister note1
     model.unregisterPage(note1);
-    QCoreApplication::processEvents();
 
     REQUIRE(pages.trip->childPage(QStringLiteral("Note=photo.png")) == nullptr);
     REQUIRE(pages.trip->childPage(QStringLiteral("Note=scan.glb")) == note2);

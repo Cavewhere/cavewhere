@@ -6,6 +6,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwProgressNode.h"
 #include "SpyChecker.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QtConcurrent>
@@ -62,9 +63,9 @@ namespace {
             model->addJob({m_promise.future(), name});
 
             //Attaching the watcher posts the sync of the range and the value,
-            //each of which announces progress in its own right. Drained here so
-            //a later assertion isn't racing callouts posted at attach time.
-            QCoreApplication::processEvents();
+            //each of which announces progress in its own right. Run here so a
+            //later assertion isn't racing callouts posted at attach time.
+            REQUIRE(waitForQueuedEvents());
         }
 
         void setSteps(int steps) { m_promise.setProgressRange(0, steps); }

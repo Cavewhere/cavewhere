@@ -269,8 +269,8 @@ TEST_CASE("cwProject::setAuthProvider same-instance guard and disconnect on repl
     {
         QSignalSpy spy(syncHealth, &cwProjectSyncHealth::statusChanged);
         mock1.setToken(QStringLiteral("tok"));
-        // Process events so any duplicate-fired signals can land.
-        QCoreApplication::processEvents();
+        // Run the queued calls so any duplicate-fired signals can land.
+        REQUIRE(waitForQueuedEvents());
         // statusChanged must fire at most once per token change (no duplicates).
         CHECK(spy.count() <= 1);
     }
@@ -280,11 +280,11 @@ TEST_CASE("cwProject::setAuthProvider same-instance guard and disconnect on repl
     {
         QSignalSpy spy(syncHealth, &cwProjectSyncHealth::statusChanged);
         mock1.setToken(QStringLiteral("should-not-fire"));
-        QCoreApplication::processEvents();
+        REQUIRE(waitForQueuedEvents());
         CHECK(spy.count() == 0); // mock1 is disconnected
 
         mock2.setToken(QStringLiteral("tok2"));
-        QCoreApplication::processEvents();
+        REQUIRE(waitForQueuedEvents());
         CHECK(spy.count() <= 1); // mock2 is connected
     }
 
@@ -293,7 +293,7 @@ TEST_CASE("cwProject::setAuthProvider same-instance guard and disconnect on repl
     {
         QSignalSpy spy(syncHealth, &cwProjectSyncHealth::statusChanged);
         mock2.setToken(QStringLiteral("should-not-fire-either"));
-        QCoreApplication::processEvents();
+        REQUIRE(waitForQueuedEvents());
         CHECK(spy.count() == 0); // mock2 is disconnected
     }
 
