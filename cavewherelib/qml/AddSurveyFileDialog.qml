@@ -171,13 +171,15 @@ QQ.Item {
                             objectName: "attachExplainerText"
                             Layout.fillWidth: true
                             wrapMode: QC.Label.WordWrap
-                            text: qsTr("The file stays the source of truth — keep "
-                                     + "editing it in your survey tool and Reload "
-                                     + "brings the changes in. A copy travels with "
-                                     + "your project for git sync, backups, and "
-                                     + "sharing; CaveWhere never writes to your "
-                                     + "original files. Survey data is read-only "
-                                     + "in CaveWhere.")
+                            // The scan names the tool and counts the files before the box shows.
+                            text: (pickerId.fileCount === 1
+                                   ? qsTr("Keep editing in %1; Reload picks up the "
+                                          + "changes. The survey file is read-only in "
+                                          + "CaveWhere, and a copy ships with your project.")
+                                   : qsTr("Keep editing in %1; Reload picks up the "
+                                          + "changes. The survey files are read-only in "
+                                          + "CaveWhere, and a copy ships with your project."))
+                                  .arg(pickerId.formatName)
                         }
 
                         QQ.Item { Layout.fillHeight: true }
@@ -228,9 +230,8 @@ QQ.Item {
                             objectName: "importExplainerText"
                             Layout.fillWidth: true
                             wrapMode: QC.Label.WordWrap
-                            text: qsTr("Copies the data into CaveWhere. You edit "
-                                     + "it here; the original file is never read "
-                                     + "again.")
+                            text: qsTr("Copies the survey into this trip for editing "
+                                     + "here. The file is read once.")
                         }
 
                         QQ.Item { Layout.fillHeight: true }

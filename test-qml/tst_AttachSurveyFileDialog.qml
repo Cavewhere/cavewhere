@@ -267,13 +267,15 @@ MainWindowTest {
             compare(findChild(dialog, "blockPreview"), null, "no subtree preview")
             compare(findChild(dialog, "blockPreviewList"), null, "no subtree preview rows")
 
-            // The same sentence the Add survey file dialog shows.
-            compare(findChild(dialog, "attachExplainerText").text,
-                    "The file stays the source of truth — keep editing it in your "
-                    + "survey tool and Reload brings the changes in. A copy travels "
-                    + "with your project for git sync, backups, and sharing; "
-                    + "CaveWhere never writes to your original files. Survey data "
-                    + "is read-only in CaveWhere.")
+            // The same sentence the Add survey file dialog shows, naming the
+            // scanned tool and counting its files.
+            tryCompare(findChild(dialog, "attachExplainerText"), "text",
+                       "Keep editing in Compass; Reload picks up the changes. The "
+                       + "survey files are read-only in CaveWhere, and a copy ships "
+                       + "with your project.")
+            compare(findChild(dialog, "importExplainerText").text,
+                    "Copies the survey into a new cave you edit here. The file is "
+                    + "read once.")
 
             cancelDialog(dialog)
         }

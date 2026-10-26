@@ -39,6 +39,8 @@ ColumnLayout {
     readonly property alias sourcePath: previewId.sourcePath
     readonly property alias valid: previewId.valid
     readonly property alias importSupported: previewId.importSupported
+    readonly property alias formatName: previewId.formatName
+    readonly property alias fileCount: previewId.fileCount
 
     signal pathEdited()
 
