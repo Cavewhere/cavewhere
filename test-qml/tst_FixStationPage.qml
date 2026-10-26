@@ -2075,7 +2075,7 @@ MainWindowTest {
 
     // The tree's rows on the project's page, checked against the model as the
     // tree opens, closes and changes shape.
-    TestCase {
+    ExternalCenterlineTestCase {
         name: "FixStationPageTreeRows"
         when: windowShown
 
@@ -2110,6 +2110,10 @@ MainWindowTest {
             const a = RootData.region.addNode(null, SurveyNodeKind.Cave, "A")
             const sub = RootData.region.addNode(a, SurveyNodeKind.Folder, "Sub")
             const b = RootData.region.addNode(null, SurveyNodeKind.Cave, "B")
+            // A fix on a node with nothing to solve is an unknown station (#727).
+            addTripNamingStations(a, ["dup", "x"])
+            addTripNamingStations(sub, ["s0", "s1"])
+            addTripNamingStations(b, ["b0", "b1", "b2", "b3"])
             compare(a.fixStations.addFixStation("dup"), 0)
             compare(a.fixStations.addFixStation("x"), 1)
             compare(a.fixStations.addFixStation("dup2"), 2)

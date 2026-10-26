@@ -545,8 +545,13 @@ StandardPage {
 
     // A reused row delegate misses the page-row and diagnostics updates sent
     // while its row was moving, so they are sent again once the rows settle.
+    // Opening or closing a node moves the rows below it the same way, though
+    // only inside the view: a diagnostics update landing before the next
+    // layout reaches the delegate still sitting on the row's new position.
     QQ.Connections {
         target: treeViewId
+        function onExpanded() { fixStationPage.rowsShifted = true }
+        function onCollapsed() { fixStationPage.rowsShifted = true }
         function onLayoutChanged() {
             if (fixStationPage.rowsShifted) {
                 fixStationPage.rowsShifted = false
