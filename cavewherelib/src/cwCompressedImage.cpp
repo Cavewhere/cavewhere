@@ -15,8 +15,9 @@
 namespace {
 // zlib's fastest level. Export tiles are dominated by runs of transparent
 // (zero) bytes, which every level collapses almost equally well — higher
-// levels only add per-tile CPU on the GUI thread during the grab loop.
-constexpr int CompressionLevel = 1;
+// levels only add per-tile CPU on the compression worker, delaying when each
+// tile's raw pixels are freed.
+constexpr int kCompressionLevel = 1;
 }
 
 cwCompressedImage::cwCompressedImage(const QImage& image)
@@ -28,7 +29,7 @@ cwCompressedImage::cwCompressedImage(const QImage& image)
     m_bytesPerLine = image.bytesPerLine();
     m_format = image.format();
     m_rawSizeInBytes = image.sizeInBytes();
-    m_compressed = qCompress(image.constBits(), image.sizeInBytes(), CompressionLevel);
+    m_compressed = qCompress(image.constBits(), image.sizeInBytes(), kCompressionLevel);
 }
 
 QImage cwCompressedImage::decompress() const

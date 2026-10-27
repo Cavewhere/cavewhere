@@ -24,6 +24,7 @@ class cwCamera;
 class cwCaptureCenterline;
 class cwCaptureLeads;
 class cwCaptureLeadLines;
+class cwCaptureTileRun;
 #include "cwFutureManagerToken.h"
 #include "cwScaleBarItem.h"
 #include "cwScale.h"
@@ -221,15 +222,11 @@ private:
     // — so nothing may key off it (see the continuation-contract test in
     // test_cwLabelPlacementThreading.cpp).
     QFutureWatcher<void> m_labelPlacementWatcher;
-    // The tile-rendering phase's job-list future (see capture()). Backed by a
-    // GUI-thread cwPhaseJob owned by the run; held here so cancelCapture()
-    // can resolve the job-list entry immediately instead of at the next tile
-    // boundary, and so deleteSceneItems() can resolve it on destruction.
-    // Canceling a finished/default future is a no-op.
-    QFuture<void> m_tileGrabFuture;
-    // Set by cancelCapture() so the tile-grab chain (which polls it per tile)
-    // can end the run at the next tile boundary. Reset by capture().
-    bool m_cancelRequested = false;
+    // The in-flight (or last finished) tile phase, one object per capture run
+    // (see capture()). A child of this viewport, so destruction mid-run drops
+    // its pending handlers; cancelCapture()/deleteSceneItems() cancel it and
+    // its finished() handler runs the viewport's cancel/restart policy.
+    cwCaptureTileRun* m_tileRun = nullptr;
     // Whether the in-flight run is a preview, snapshotted when the run starts.
     // The live previewCapture() flag can be flipped mid-run (the manager sets
     // it to false right before requesting the export), so mid-run code must

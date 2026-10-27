@@ -30,6 +30,10 @@ public:
 
     void setImage(const QImage& image);
 
+    //Adopt an already-compressed image — export tiles compress on a worker
+    //thread, and only the item construction stays on the GUI thread.
+    void setCompressedImage(const cwCompressedImage& image);
+
     //The stored image, for consumers (the label placer) that share the
     //compressed blob or read its pixel geometry without decompressing here.
     const cwCompressedImage& compressedImage() const { return m_image; }

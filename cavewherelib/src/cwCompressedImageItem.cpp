@@ -18,8 +18,13 @@ cwCompressedImageItem::cwCompressedImageItem(QGraphicsItem* parent)
 
 void cwCompressedImageItem::setImage(const QImage& image)
 {
+    setCompressedImage(cwCompressedImage(image));
+}
+
+void cwCompressedImageItem::setCompressedImage(const cwCompressedImage& image)
+{
     prepareGeometryChange();
-    m_image = cwCompressedImage(image);
+    m_image = image;
 }
 
 QRectF cwCompressedImageItem::boundingRect() const
