@@ -233,6 +233,10 @@ MainWindowTest {
             const tripLink = findChild(tripRow, "tripLink")
             verify(tripLink !== null, "a trip row shows its name as a link")
             compare(tripLink.text, "Trip A")
+            const tripIcon = findChild(tripRow, "kindIcon")
+            verify(tripIcon !== null && tripIcon.visible, "a trip row carries its kind icon")
+            verify(String(tripIcon.source).indexOf("journal-text.svg") >= 0,
+                   "a trip draws the trip icon")
 
             tree.collapse(0)
             tryCompare(tree, "rows", 2, 5000)

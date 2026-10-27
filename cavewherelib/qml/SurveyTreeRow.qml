@@ -449,11 +449,13 @@ QQ.Item {
                                    : ""
                 }
 
-                //A native node row draws its kind ahead of its name.
+                //A trip row and a native node row draw their kind ahead of
+                //the name.
                 KindIcon {
                     objectName: rowId.cellName("kindIcon")
 
                     node: rowId.node
+                    trip: rowId.trip
                     sourceSize: Qt.size(Theme.treeKindIconSize, Theme.treeKindIconSize)
                 }
 

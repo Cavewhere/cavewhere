@@ -193,6 +193,12 @@ MainWindowTest {
                 verify(nameLinks[i].text.indexOf("📎 ") === 0,
                        "a derived trip row is marked as externally backed: "
                        + nameLinks[i].text)
+                const tripIcon = findChild(nameLinks[i].parent, "kindIcon")
+                verify(tripIcon !== null && tripIcon.visible,
+                       "a derived trip row draws the trip icon beside its paperclip: "
+                       + nameLinks[i].text)
+                verify(String(tripIcon.source).indexOf("journal-text.svg") >= 0,
+                       "a derived trip draws the trip icon")
             }
 
             //survex_blocks.svx sets no declination, so cavern applies 0.
