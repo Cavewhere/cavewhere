@@ -22,6 +22,7 @@
 #include "cwScopeLabels.h"
 #include "cwDeclination.h"
 #include "cwSurvexCS.h"
+#include "cwSurvexExporterUtils.h"
 
 //Qt includes
 #include <QDebug>
@@ -64,47 +65,85 @@ namespace {
                && node != nullptr && node->sourceRoot() != nullptr;
     }
 
+    // The key each of the spellings names a station by. A trip's own attached
+    // file keeps case, so two spellings in one source that lowercase alike are
+    // a case pair and each keeps its spelling; everything else, a native
+    // trip's names above all (cavern lowercases them), keys canonically.
+    QHash<QString, QString> stationKeys(const QStringList& spellings, bool keepsCase)
+    {
+        if (keepsCase) {
+            return cwSurvexExporterUtils::stationKeysBySpelling(QString(), spellings);
+        }
+        QHash<QString, QString> keys;
+        keys.reserve(spellings.size());
+        for (const QString& spelling : spellings) {
+            keys.insert(spelling, cwStation::canonicalKey(spelling));
+        }
+        return keys;
+    }
+
+    struct MergedStation {
+        QString name;
+        QString key;
+    };
+
     // The single "what stations does this trip have?" policy, shared by
     // knownStations() and its cwTripData overload — which sources answer, and
     // which one's spelling wins when they disagree.
     //
     // The union of all three, never a precedence: one entry per station, the
-    // first spelling seen for a canonical key. \a authored comes first because
-    // a chunk name is the only spelling a person typed, and the two derived
-    // sources echo it back lowercased. Natural order, so a station list reads
-    // the way a caver counts ("a2" before "a10").
+    // first spelling seen for a station's key (stationKeys). \a authored comes
+    // first because a chunk name is the only spelling a person typed, and the
+    // two derived sources echo it back lowercased. Pairs are found per source,
+    // so the harvest's Q1 and the solve's q1 stay one station. Natural order,
+    // so a station list reads the way a caver counts ("a2" before "a10").
     //
     // Takes the three lists rather than one concatenation so that adding a
     // fourth source, or reordering these, is one edit here instead of one per
     // caller.
-    QStringList mergeStationSpellings(const QStringList& authored,
-                                      const QStringList& harvested,
-                                      const QStringList& solved)
+    QList<MergedStation> mergeStationSpellings(const QStringList& authored,
+                                               const QStringList& harvested,
+                                               const QStringList& solved,
+                                               bool fileKeepsCase)
     {
-        QStringList merged;
-        QSet<QString> seen;
+        QList<MergedStation> merged;
+        QSet<QString> seenKeys;
+        QSet<QString> seenNames;
         merged.reserve(authored.size() + harvested.size() + solved.size());
 
-        const auto mergeSource = [&merged, &seen](const QStringList& spellings) {
+        const auto mergeSource = [&](const QStringList& spellings, bool keepsCase) {
+            const QHash<QString, QString> keys = stationKeys(spellings, keepsCase);
             for (const QString& spelling : spellings) {
-                const QString key = cwStation::canonicalKey(spelling);
-                if (key.isEmpty() || seen.contains(key)) {
+                const QString key = keys.value(spelling);
+                // A spelling already listed under another source's key is the
+                // same station, as when a lone harvest P2 meets a solved pair's P2.
+                if (key.isEmpty() || seenKeys.contains(key) || seenNames.contains(spelling)) {
                     continue;
                 }
-                seen.insert(key);
-                merged.append(spelling);
+                seenKeys.insert(key);
+                seenNames.insert(spelling);
+                merged.append({spelling, key});
             }
         };
 
-        mergeSource(authored);
-        mergeSource(harvested);
-        mergeSource(solved);
+        mergeSource(authored, false);
+        mergeSource(harvested, fileKeepsCase);
+        mergeSource(solved, fileKeepsCase);
 
         //Stable: two spellings can compare equivalent without being equal
         //("a01" and "a1" share a natural order), and the caller's source order
         //is the only tie-break that means anything.
-        std::stable_sort(merged.begin(), merged.end(), cwNameUtils::naturalLess);
+        std::stable_sort(merged.begin(), merged.end(),
+                         [](const MergedStation& a, const MergedStation& b) {
+                             return cwNameUtils::naturalLess(a.name, b.name);
+                         });
         return merged;
+    }
+
+    // True when the trip's own stations come from a file that keeps case.
+    bool ownsAttachedFile(const QString& sourcePath, const cwExternalCenterline& centerline)
+    {
+        return !sourcePath.isEmpty() || !centerline.isEmpty();
     }
 }
 
@@ -975,12 +1014,14 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
         //station two units share belongs to both.
         const QString prefix = scopePrefix();
         QSet<QString> listed;
+        const QString prefixKey = cwStation::canonicalKey(prefix);
         for(const QString& station : m_externalStations) {
-            const QString key = cwStation::canonicalKey(prefix + station);
-            listed.insert(key);
-            if(lookup.hasPosition(key)) {
-                solved.append({station, lookup.position(key)});
+            const QString key = lookup.key(prefixKey + station);
+            if(key.isEmpty()) {
+                continue;
             }
+            listed.insert(key);
+            solved.append({station, lookup.position(key)});
         }
 
         if(windowsWholeNode()) {
@@ -1004,8 +1045,11 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
         const QList<cwStation> unique = uniqueStations();
         solved.reserve(unique.size());
         for(const cwStation& station : unique) {
-            if(lookup.hasPosition(station.name())) {
-                solved.append({station.name(), lookup.position(station.name())});
+            //Cavern lowercases a native name, so a cave-level file's P2 is
+            //another station than a native P2.
+            const QString key = cwStation::canonicalKey(station.name());
+            if(lookup.hasPosition(key)) {
+                solved.append({station.name(), lookup.position(key)});
             }
         }
         return solved;
@@ -1027,11 +1071,19 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
 QList<cwTrip::KnownStation> cwTrip::knownStations() const
 {
     const QList<QPair<QString, QVector3D>> solved = solvedStations();
+    const bool fileKeepsCase = ownsAttachedFile(m_sourcePath, m_externalCenterline);
 
+    QStringList solvedNames;
+    solvedNames.reserve(solved.size());
+    for(const QPair<QString, QVector3D>& station : solved) {
+        solvedNames.append(station.first);
+    }
+
+    const QHash<QString, QString> solvedKeys = stationKeys(solvedNames, fileKeepsCase);
     QHash<QString, QVector3D> placed;
     placed.reserve(solved.size());
     for(const QPair<QString, QVector3D>& station : solved) {
-        placed.insert(cwStation::canonicalKey(station.first), station.second);
+        placed.insert(solvedKeys.value(station.first), station.second);
     }
 
     const QList<cwStation> chunkStations = uniqueStations();
@@ -1041,19 +1093,14 @@ QList<cwTrip::KnownStation> cwTrip::knownStations() const
         authored.append(station.name());
     }
 
-    QStringList solvedNames;
-    solvedNames.reserve(solved.size());
-    for(const QPair<QString, QVector3D>& station : solved) {
-        solvedNames.append(station.first);
-    }
-
-    const QStringList names = mergeStationSpellings(authored, m_externalStations, solvedNames);
+    const QList<MergedStation> merged =
+        mergeStationSpellings(authored, m_externalStations, solvedNames, fileKeepsCase);
 
     QList<KnownStation> stations;
-    stations.reserve(names.size());
-    for(const QString& name : names) {
-        const auto position = placed.constFind(cwStation::canonicalKey(name));
-        stations.append(KnownStation{name,
+    stations.reserve(merged.size());
+    for(const MergedStation& station : merged) {
+        const auto position = placed.constFind(station.key);
+        stations.append(KnownStation{station.name,
                                      position == placed.constEnd()
                                          ? std::optional<QVector3D>()
                                          : std::optional<QVector3D>(*position)});
@@ -1071,7 +1118,15 @@ QStringList cwTrip::knownStationNames(const cwTripData& trip,
         }
     }
 
-    return mergeStationSpellings(authored, trip.externalStations, scopeLocalSolved);
+    const QList<MergedStation> merged =
+        mergeStationSpellings(authored, trip.externalStations, scopeLocalSolved,
+                              ownsAttachedFile(trip.sourcePath, trip.externalCenterline));
+    QStringList names;
+    names.reserve(merged.size());
+    for(const MergedStation& station : merged) {
+        names.append(station.name);
+    }
+    return names;
 }
 
 cwStationHandle cwTrip::stationHandle(const QString& tail) const

@@ -10,6 +10,7 @@
 #include "cwCavernNaming.h"
 #include "cwStation.h"
 #include "cwStationPositionLookup.h"
+#include "cwSurvexExporterUtils.h"
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
 
@@ -242,15 +243,18 @@ void cwScopeStationListModel::appendNodeRows()
     const cwStationPositionLookup solved = m_node->scopedPositions();
     QSet<QString> seen;
 
-    const auto appendRow = [&](const QString& name, const cwStationHandle& handle,
+    // station is the key name resolves to: canonical, or the spelling for a
+    // member of a case pair, as writeFixStations keys it.
+    const auto appendRow = [&](const QString& name, const QString& station,
+                               const cwStationHandle& handle,
                                const std::optional<QVector3D>& position) {
         const QString key = cwStation::canonicalKey(name);
         const QString solvedKey = solved.key(name);
         const bool fixedByFile = fileFixed.contains(solvedKey.isEmpty() ? key : solvedKey);
-        if (key.isEmpty() || fixedByFile || seen.contains(key)) {
+        if (key.isEmpty() || fixedByFile || seen.contains(station)) {
             return;
         }
-        seen.insert(key);
+        seen.insert(station);
         m_rows.append({ name, key, handle, position });
     };
 
@@ -266,9 +270,16 @@ void cwScopeStationListModel::appendNodeRows()
         const QUuid containerId = nativeCave ? (parent != nullptr ? parent->id() : QUuid())
                                              : trip->id();
         const QList<cwTrip::KnownStation> known = trip->knownStations();
+        QStringList names;
+        names.reserve(known.size());
         for (const cwTrip::KnownStation& station : known) {
-            appendRow(prefix + station.name, cwStationHandle(scope, containerId, station.name),
-                      station.position);
+            names.append(station.name);
+        }
+        const QHash<QString, QString> stations =
+            cwSurvexExporterUtils::stationKeysBySpelling(prefix, names);
+        for (const cwTrip::KnownStation& station : known) {
+            appendRow(prefix + station.name, stations.value(station.name),
+                      cwStationHandle(scope, containerId, station.name), station.position);
         }
     };
 
@@ -298,7 +309,9 @@ void cwScopeStationListModel::appendNodeRows()
     }
 
     const QStringList nodeStations = m_node->externalStations();
+    const QHash<QString, QString> stations =
+        cwSurvexExporterUtils::stationKeysBySpelling(QString(), nodeStations);
     for (const QString& station : nodeStations) {
-        appendRow(station, cwStationHandle(), std::nullopt);
+        appendRow(station, stations.value(station), cwStationHandle(), std::nullopt);
     }
 }

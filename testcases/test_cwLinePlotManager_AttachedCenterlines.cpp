@@ -1137,6 +1137,86 @@ TEST_CASE("A Compass .mak fix on one member of a case pair blocks that member on
     }
 }
 
+namespace {
+
+//! The derived trip that windows \a root's attached file.
+cwTrip* fileTripOf(const cwSurveyNode* root)
+{
+    const QList<cwTrip*> trips = root->trips();
+    const auto fileTrip = std::find_if(trips.cbegin(), trips.cend(), [](const cwTrip* trip) {
+        return !trip->sourcePath().isEmpty();
+    });
+    REQUIRE(fileTrip != trips.cend());
+    return *fileTrip;
+}
+
+} // namespace
+
+TEST_CASE("A tie to one member of a source root's case pair moves that member only",
+          "[LinePlotManager][Attach][SourcedFixtures][CasePairs][Equate]")
+{
+    auto project = makeSavedProject(QStringLiteral("case-pairs-tie"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    auto* root = qobject_cast<cwCave*>(attachSourceAndSolve(project.get(), casePairs::kFileName));
+    REQUIRE(root != nullptr);
+    requireSolved(project.get());
+    cwTrip* fileTrip = fileTripOf(root);
+
+    const QString tied = GENERATE(QStringLiteral("P2"), QStringLiteral("p2"));
+    const QString other = tied == QStringLiteral("P2") ? QStringLiteral("p2") : QStringLiteral("P2");
+    INFO("the tie names " << tied.toStdString());
+
+    // The native trip is written in the root's block under its own label, so
+    // the tie is the only thing that places it.
+    cwTrip* native = addNativeTripWithShot(root, QStringLiteral("Native"),
+                                           QStringLiteral("N0"), QStringLiteral("N1"));
+    project->project->cavingRegion()->equates()->appendEquate(
+        cwEquate({native->stationHandle(QStringLiteral("N1")), fileTrip->stationHandle(tied)}));
+    drainPipelines(project.get());
+    requireSolved(project.get());
+    INFO("driver:\n" << project->rootData->linePlotManager()->driverSource().toStdString());
+
+    checkFixesTied(project.get());
+    CHECK_FALSE(project->rootData->linePlotManager()->floatingSurveyModel()->isFloating(native->id()));
+
+    const cwStationPositionLookup lookup = root->scopedPositions();
+    INFO("stored keys: " << casePairs::storedKeys(lookup));
+    const QString nativeN1 = cwStation::canonicalKey(native->scopePrefix()) + QStringLiteral("n1");
+    REQUIRE(lookup.hasPosition(nativeN1));
+    CHECK(casePairs::samePoint(lookup.position(nativeN1), lookup.position(tied)));
+
+    // The other member stays where its own shots put it, and each member keeps
+    // its own legs.
+    CHECK(lookup.position(other).distanceToPoint(lookup.position(nativeN1))
+          == Catch::Approx(casePairs::kSeparationMeters).margin(casePairs::kLegMarginMeters));
+    casePairs::checkStations(lookup, root->scopedNetwork(), QString());
+}
+
+TEST_CASE("A source root's derived trip reads each case-pair member at its own position",
+          "[LinePlotManager][Attach][SourcedFixtures][CasePairs]")
+{
+    // The line-plot labels draw solvedStations(), so P2's label sits where
+    // this puts P2.
+    auto project = makeSavedProject(QStringLiteral("case-pairs-solved-stations"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceAndSolve(project.get(), casePairs::kFileName);
+    REQUIRE(root != nullptr);
+    requireSolved(project.get());
+
+    const cwStationPositionLookup lookup = root->scopedPositions();
+    INFO("stored keys: " << casePairs::storedKeys(lookup));
+    const QList<QPair<QString, QVector3D>> stations = fileTripOf(root)->solvedStations();
+    QStringList names;
+    for (const auto& station : stations) {
+        INFO("station " << station.first.toStdString());
+        names.append(station.first);
+        REQUIRE(lookup.hasPosition(station.first));
+        CHECK(casePairs::samePoint(station.second, lookup.position(station.first)));
+    }
+    // Each station once, under the file's spelling.
+    CHECK(casePairs::joined(names) == casePairs::joined(casePairs::harvest()));
+}
+
 TEST_CASE("survex_mixed_case measures its length and depth as a source root",
           "[LinePlotManager][Attach][SourcedFixtures]")
 {

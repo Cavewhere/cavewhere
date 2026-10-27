@@ -201,8 +201,9 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
         visit(visit, cave);
     }
 
-    // Each tie joins its operands as the driver writes them; a tie the driver
-    // drops (an operand it cannot render) joins nothing.
+    // Each tie joins its operands as the driver writes them, keyed the way the
+    // reader keys a case pair; a tie the driver drops (an operand it cannot
+    // render) joins nothing.
     for (const cwEquate& equate : region.equates) {
         if (!equate.isValid()) {
             continue;
@@ -215,7 +216,7 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
                 operands.clear();
                 break;
             }
-            operands.append(cwStation::canonicalKey(operand));
+            operands.append(cwStation::keyIn(operand, anchors));
         }
         for (const QString& operand : std::as_const(operands)) {
             stations.join(operands.first(), operand);

@@ -64,6 +64,13 @@ inline QStringList keys(const QString& prefix)
     return keys;
 }
 
+//! The file's harvest: each station as the file spells it.
+inline QStringList harvest()
+{
+    return {QStringLiteral("P1"), QStringLiteral("P2"), QStringLiteral("P3"), QStringLiteral("Q1"),
+            QStringLiteral("p1"), QStringLiteral("p2"), QStringLiteral("p3")};
+}
+
 //! The file's six shots as solved keys under \a prefix.
 inline QList<QPair<QString, QString>> shots(const QString& prefix)
 {
@@ -182,6 +189,18 @@ inline cwStationPositionLookup solvedLookup()
     lookup.setPositionAtKey(QStringLiteral("p1"), at(0.0, kSeparationMeters));
     lookup.setPositionAtKey(QStringLiteral("p2"), at(kLegMeters, kSeparationMeters));
     lookup.setPositionAtKey(QStringLiteral("p3"), at(2.0 * kLegMeters, kSeparationMeters));
+    return lookup;
+}
+
+//! solvedLookup() keyed under \a prefix, as a solve of the file under that
+//! scope stores it.
+inline cwStationPositionLookup solvedLookupUnder(const QString& prefix)
+{
+    cwStationPositionLookup lookup;
+    const QMap<QString, QVector3D> solved = solvedLookup().positions();
+    for (auto it = solved.constBegin(); it != solved.constEnd(); ++it) {
+        lookup.setPositionAtKey(prefix + it.key(), it.value());
+    }
     return lookup;
 }
 

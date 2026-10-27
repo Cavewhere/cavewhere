@@ -66,10 +66,12 @@ bool subtreeUsesAutoDeclination(const cwCaveData& node)
 
 cwSurvexExporterCaveTask::DriverTree::DriverTree(const QList<cwCaveData>& nodes,
                                                  const cwScopeLabels& labels,
-                                                 const QSet<QUuid>& excludedExternalOwners) :
+                                                 const QSet<QUuid>& excludedExternalOwners,
+                                                 const QHash<QUuid, QHash<QString, QString>>& externalStationLabels) :
     m_nodes(nodes),
     m_labels(labels),
-    m_excludedExternalOwners(excludedExternalOwners)
+    m_excludedExternalOwners(excludedExternalOwners),
+    m_externalStationLabels(externalStationLabels)
 {
     for (const cwCaveData& node : m_nodes) {
         index(node, false);
@@ -151,18 +153,13 @@ QString cwSurvexExporterCaveTask::DriverTree::sourcedTripOperand(const Owner& ow
     if (!owner.trip->sourcePath.isEmpty()) {
         // The unit spells each name the way cavern reads it from the file, so
         // that spelling, not the handle's, is what the tie names.
-        const QString key = cwStation::canonicalKey(tail);
-        const auto spelled = std::find_if(owner.trip->externalStations.cbegin(),
-                                          owner.trip->externalStations.cend(),
-                                          [&key](const QString& station) {
-                                              return cwStation::canonicalKey(station) == key;
-                                          });
-        if (spelled == owner.trip->externalStations.cend()) {
+        const QString spelled = cwStation::spellingIn(tail, owner.trip->externalStations);
+        if (spelled.isEmpty()) {
             return QString();
         }
         return cwStation::canonicalKey(rootPrefix + m_labels.cavernPath(owner.node->id)
                                        + cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id))
-               + *spelled;
+               + spelled;
     }
 
     const QString tripScope = cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id);
@@ -213,9 +210,19 @@ QString cwSurvexExporterCaveTask::DriverTree::operand(const cwStationHandle& han
     if (owner.trip == nullptr) {
         return cwStation::canonicalKey(nodePrefix + handle.tail());
     }
-    return cwStation::canonicalKey(nodePrefix
-                                   + cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id)
-                                   + handle.tail());
+    const QString tripScope = nodePrefix
+                              + cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id);
+
+    // An attached file keeps its names' case, so the tie names the station as
+    // cavern labels it. A name the harvest has not reached stays canonical.
+    if (!owner.trip->externalCenterline.isEmpty()) {
+        const QString spelling = cwStation::spellingIn(handle.tail(), owner.trip->externalStations);
+        if (!spelling.isEmpty()) {
+            return cwStation::canonicalKey(tripScope)
+                   + m_externalStationLabels.value(owner.trip->id).value(spelling, spelling);
+        }
+    }
+    return cwStation::canonicalKey(tripScope + handle.tail());
 }
 
 cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
@@ -235,7 +242,8 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
     // A single-cave export has no region and no siblings, so the cave stands
     // alone under its own sanitized name.
     const QList<cwCaveData> nodes = {cave};
-    const DriverTree tree(nodes, cwScopeLabels::forNode(cave), ExportOptions.excludedExternalOwners);
+    const DriverTree tree(nodes, cwScopeLabels::forNode(cave), ExportOptions.excludedExternalOwners,
+                          ExportOptions.externalStationLabels);
 
     if (!tree.emits(cave.id)) {
         // An excluded cave-level attachment is skipped, not failed: the

@@ -141,7 +141,8 @@ inline QByteArray readFile(const QString& path)
 
 //! Stands in for a solve of \a node's subtree: writes \a positions, named as
 //! the node names its stations, into the region's lookup in place of whatever
-//! the subtree held there. The node must hang in a region.
+//! the subtree held there. The node must hang in a region. Keys are copied as
+//! stored, so a case pair set through setPositionAtKey stays two stations.
 inline void setScopedPositions(cwSurveyNode* node, const cwStationPositionLookup& positions)
 {
     cwCavingRegion* region = node->parentRegion();
@@ -153,12 +154,12 @@ inline void setScopedPositions(cwSurveyNode* node, const cwStationPositionLookup
     const QMap<QString, QVector3D> existing = region->stationPositions().positions();
     for (auto it = existing.constBegin(); it != existing.constEnd(); ++it) {
         if (!it.key().startsWith(prefix)) {
-            merged.setPosition(it.key(), it.value());
+            merged.setPositionAtKey(it.key(), it.value());
         }
     }
     const QMap<QString, QVector3D> scoped = positions.positions();
     for (auto it = scoped.constBegin(); it != scoped.constEnd(); ++it) {
-        merged.setPosition(prefix + it.key(), it.value());
+        merged.setPositionAtKey(prefix + it.key(), it.value());
     }
     region->setStationPositions(merged);
 }

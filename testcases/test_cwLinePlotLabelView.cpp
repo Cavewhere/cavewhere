@@ -25,6 +25,7 @@
 #include "cwRenderTextBillboards.h"
 
 //Test helpers
+#include "CasePairTestHelpers.h"
 #include "ExternalCenterlineTestHelpers.h"
 #include "TestHelper.h"
 
@@ -1069,5 +1070,46 @@ TEST_CASE("cwLabel3dView draws placed station labels through the shared text lay
         camera.setViewMatrix(viewLookingAt(center, 1.0f));
         CHECK(placedTexts(layer) == QStringList({QStringLiteral("a2"),
                                                  QStringLiteral("a3")}));
+    }
+}
+
+TEST_CASE("cwLinePlotLabelView draws each case-pair member's label at its own station",
+          "[cwLinePlotLabelView][Attach][Compass][CasePairs]")
+{
+    auto project = makeSavedProject(QStringLiteral("labels-case-pairs"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwCavingRegion* region = project->project->cavingRegion();
+    // Declared after the project so the view, which removes its items from the
+    // root data's keyword model on destruction, goes first.
+    auto host = makeLabelViewHost();
+    cwKeywordItemModel* keywordModel = project->rootData->keywordItemModel();
+    host->labelView->setKeywordItemModel(keywordModel);
+    host->labelView->setRegion(region);
+    drainPipelines(project.get());
+
+    cwSurveyNode* sourceRoot = attachSourceThroughManager(project.get(), region->rootNode(),
+                                                          fixturePath(casePairs::kFileName));
+    drainPipelines(project.get());
+    REQUIRE_FALSE(project->rootData->linePlotManager()->hasSolveError());
+
+    const cwStationPositionLookup lookup = sourceRoot->scopedPositions();
+    INFO("stored keys: " << casePairs::storedKeys(lookup));
+    for (const QString& station : {QStringLiteral("P2"), QStringLiteral("p2")}) {
+        INFO("station " << station.toStdString());
+        REQUIRE(lookup.hasPosition(station));
+        QList<QVector3D> drawnAt;
+        for (int i = 0; i < keywordModel->rowCount(); ++i) {
+            const cwLabel3dGroup* group = groupForKeywordItem(keywordModel->item(i));
+            if (group == nullptr) {
+                continue;
+            }
+            for (const cwLabel3dItem& label : group->labels()) {
+                if (label.text() == station) {
+                    drawnAt.append(label.position());
+                }
+            }
+        }
+        REQUIRE(drawnAt.size() == 1);
+        CHECK(casePairs::samePoint(drawnAt.first(), lookup.position(station)));
     }
 }

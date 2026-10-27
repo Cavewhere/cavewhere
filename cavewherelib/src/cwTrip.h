@@ -358,11 +358,12 @@ public:
     //! would make each consumer's answer depend on which one it picked, which is
     //! the disagreement this accessor exists to end.
     //!
-    //! Deduplicated by canonical key, keeping the authored spelling where a
-    //! source has one, and sorted in natural order ("a2" before "a10"). The one
-    //! answer to "what stations does this trip have?" — every consumer asking it
-    //! of a live trip calls this, and knownStationsChanged() is the single pulse
-    //! that says the answer moved.
+    //! Deduplicated by the station each name resolves to, so both members of
+    //! an attached file's case pair (P2 and p2) list; keeping the authored
+    //! spelling where a source has one, and sorted in natural order ("a2"
+    //! before "a10"). The one answer to "what stations does this trip have?" —
+    //! every consumer asking it of a live trip calls this, and
+    //! knownStationsChanged() is the single pulse that says the answer moved.
     QList<KnownStation> knownStations() const;
 
     //! Snapshot overload: the same union over a cwTripData, for the worker-side

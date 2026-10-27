@@ -60,7 +60,8 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     // its siblings, so the whole tree is needed to assign one, and the "*begin"
     // lines and the equate operands below both have to name the same ones.
     const cwSurvexExporterCaveTask::DriverTree tree(region.caves, cwScopeLabels(region),
-                                                    options.excludedExternalOwners);
+                                                    options.excludedExternalOwners,
+                                                    options.externalStationLabels);
 
     cwSurvexExporterCaveTask nodeExporter;
     nodeExporter.setExportOptions(options);

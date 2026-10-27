@@ -7,6 +7,7 @@
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 //Our includes
 #include "cwFindUnconnectedSurveyChunks.h"
@@ -15,10 +16,18 @@
 #include "cwCavingRegionData.h"
 #include "cwEquate.h"
 #include "cwFixStation.h"
+#include "cwScopeLabels.h"
+#include "cwSurvexExporterCaveTask.h"
 #include "cwTrip.h"
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
+
+//Test helpers
+#include "CasePairTestHelpers.h"
+
+//Std includes
+#include <string>
 
 using Results = QHash<QUuid, QList<cwFindUnconnectedSurveyChunks::Result>>;
 
@@ -435,5 +444,135 @@ TEST_CASE("A native trip under a derived node connects only through a tie",
         region.equates.append(cwEquate({cwStationHandle(cwStationHandle::Trip, native.id, QStringLiteral("D1")),
                                         cwStationHandle(cwStationHandle::Trip, derived.id, QStringLiteral("b9"))}));
         CHECK(cwFindUnconnectedSurveyChunks::find(region).value(alpha.id).size() == 1);
+    }
+}
+
+namespace {
+
+cwStationHandle tripHandle(const cwTripData& trip, const QString& tail)
+{
+    return cwStationHandle(cwStationHandle::Trip, trip.id, tail);
+}
+
+//! The operand \a tree writes for \a trip's \a tail, printable on failure.
+std::string operandOf(const cwSurvexExporterCaveTask::DriverTree& tree, const cwTripData& trip,
+                      const QString& tail)
+{
+    return tree.operand(tripHandle(trip, tail)).toStdString();
+}
+
+} // namespace
+
+TEST_CASE("A tie to a member of a derived trip's case pair names that member",
+          "[FindUnconnectedSurveyChunksTask][Equate][CasePairs]")
+{
+    // The shape of "A native trip under a derived node connects only through a
+    // tie", with a Compass case pair in the derived trip's unit.
+    cwTripData derived = tripOf(QStringLiteral("ALPHA1"), {});
+    derived.sourcePath = QStringLiteral("ALPHA.DAT/ALPHA1");
+    derived.externalStations = casePairs::harvest();
+
+    cwTripData native = tripOf(QStringLiteral("Dig"),
+                               {chunkOf({QStringLiteral("D1"), QStringLiteral("D2")})});
+
+    cwCaveData alpha = nodeOf(QStringLiteral("Alpha"), {derived, native});
+    alpha.sourcePath = QStringLiteral("ALPHA.DAT");
+    alpha.cavernLabel = QStringLiteral("alpha");
+
+    cwCaveData root = nodeOf(QStringLiteral("Project"), {});
+    root.sourceId = QUuid::createUuid();
+    root.externalCenterline = cwExternalCenterline(QStringLiteral("PROJECT.MAK"));
+    for (const QString& station : casePairs::harvest()) {
+        root.externalStations.append(QStringLiteral("alpha.") + station);
+    }
+    alpha.sourceId = root.sourceId;
+    root.nodes.append(alpha);
+
+    cwCavingRegionData region;
+    region.caves.append(root);
+
+    const cwScopeLabels labels(region);
+    const cwSurvexExporterCaveTask::DriverTree tree(region.caves, labels);
+    const QString rootPrefix = labels.prefix(root.id);
+    REQUIRE_FALSE(rootPrefix.isEmpty());
+
+    CHECK(operandOf(tree, derived, QStringLiteral("P2"))
+          == (rootPrefix + QStringLiteral("alpha.P2")).toStdString());
+    CHECK(operandOf(tree, derived, QStringLiteral("p2"))
+          == (rootPrefix + QStringLiteral("alpha.p2")).toStdString());
+    // Q1 pairs with nothing: the tie names the file's spelling.
+    CHECK(operandOf(tree, derived, QStringLiteral("q1"))
+          == (rootPrefix + QStringLiteral("alpha.Q1")).toStdString());
+
+    SECTION("a native trip tied to p2 is connected") {
+        region.equates.append(cwEquate({tripHandle(native, QStringLiteral("D1")),
+                                        tripHandle(derived, QStringLiteral("p2"))}));
+        CHECK(cwFindUnconnectedSurveyChunks::find(region).isEmpty());
+    }
+}
+
+TEST_CASE("A tie to a trip-attached Compass station names the file's station",
+          "[FindUnconnectedSurveyChunksTask][Equate][CasePairs]")
+{
+    // Compass keeps a name's case, so the tie has to name P2, p2 or Q1 as the
+    // file spells it; cavern reads a lowercased q1 as a new station.
+    cwTripData attached = tripOf(QStringLiteral("Attached"), {});
+    attached.externalCenterline = cwExternalCenterline(casePairs::kFileName);
+    attached.externalStations = casePairs::harvest();
+
+    cwTripData native = tripOf(QStringLiteral("Native"),
+                               {chunkOf({QStringLiteral("A1"), QStringLiteral("A2")}),
+                                chunkOf({QStringLiteral("C1"), QStringLiteral("C2")})});
+
+    cwCaveData cave = nodeOf(QStringLiteral("Alpha"), {native, attached});
+    cave.fixStations.append(fixAt(QStringLiteral("A1")));
+
+    cwCavingRegionData region;
+    region.caves.append(cave);
+
+    const cwScopeLabels labels(region);
+    const QString scope = labels.prefix(cave.id) + cwTrip::scopePrefix(attached, labels, cave.id);
+    REQUIRE(scope == QStringLiteral("alpha.attached."));
+
+    SECTION("each spelling names its own station") {
+        const cwSurvexExporterCaveTask::DriverTree tree(region.caves, labels);
+        CHECK(operandOf(tree, attached, QStringLiteral("P2"))
+              == (scope + QStringLiteral("P2")).toStdString());
+        CHECK(operandOf(tree, attached, QStringLiteral("p2"))
+              == (scope + QStringLiteral("p2")).toStdString());
+        CHECK(operandOf(tree, attached, QStringLiteral("Q1"))
+              == (scope + QStringLiteral("Q1")).toStdString());
+        CHECK(operandOf(tree, attached, QStringLiteral("q1"))
+              == (scope + QStringLiteral("Q1")).toStdString());
+    }
+
+    SECTION("a station whose cavern label differs is named by that label") {
+        // A Walls #PREFIX XY: the harvest spells the station xy.P2, cavern
+        // labels it XY.P2.
+        cwCavingRegionData prefixed = region;
+        prefixed.caves[0].trips[1].externalStations = {QStringLiteral("xy.P1"), QStringLiteral("xy.P2")};
+        const QHash<QUuid, QHash<QString, QString>> stationLabels = {
+            {attached.id, {{QStringLiteral("xy.P1"), QStringLiteral("XY.P1")},
+                           {QStringLiteral("xy.P2"), QStringLiteral("XY.P2")}}}};
+        const cwSurvexExporterCaveTask::DriverTree tree(prefixed.caves, labels, {}, stationLabels);
+        CHECK(operandOf(tree, attached, QStringLiteral("xy.P2"))
+              == (scope + QStringLiteral("XY.P2")).toStdString());
+    }
+
+    SECTION("a name the harvest has not reached falls back to the lowercase operand") {
+        cwCavingRegionData unharvested = region;
+        unharvested.caves[0].trips[1].externalStations.clear();
+        const cwSurvexExporterCaveTask::DriverTree tree(unharvested.caves, labels);
+        CHECK(operandOf(tree, attached, QStringLiteral("K1"))
+              == (scope + QStringLiteral("k1")).toStdString());
+    }
+
+    SECTION("a chunk tied to a pair member or to Q1 is connected") {
+        REQUIRE(cwFindUnconnectedSurveyChunks::find(region).value(cave.id).size() == 1);
+        const QString tail = GENERATE(QStringLiteral("P2"), QStringLiteral("p2"), QStringLiteral("Q1"));
+        INFO("tied to " << tail.toStdString());
+        region.equates.append(cwEquate({nativeHandle(cave, QStringLiteral("C1")),
+                                        tripHandle(attached, tail)}));
+        CHECK(cwFindUnconnectedSurveyChunks::find(region).isEmpty());
     }
 }

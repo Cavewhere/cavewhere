@@ -14,6 +14,7 @@
 #include "cwScopeLabels.h"
 #include "cwStation.h"
 #include "cwStationHandle.h"
+#include "cwSurvexExporterUtils.h"
 #include "cwSurveyNetwork.h"
 #include "cwTrip.h"
 
@@ -230,23 +231,25 @@ ScopeKey anchorScopeOf(const cwCaveData& cave, const SolvedScopes& solved)
 //! banner entirely. A derived trip is a view onto stations its root already
 //! solved, so neither pass has anything to report about one.
 //!
-//! Canonicalized, because Result::stations promises a spelling a caller can
-//! look up. The accessor keeps the authored spelling instead, which is right for
-//! the surfaces that show a station to a person but not for a record; the
-//! difference is invisible today only because an external scope has no chunks to
-//! author one.
+//! Keyed the way the solve keys them, because Result::stations promises a
+//! spelling a caller can look up: canonical, except that each member of a case
+//! pair keeps its own spelling. The accessor keeps the authored spelling
+//! instead, which is right for the surfaces that show a station to a person but
+//! not for a record; the difference is invisible today only because an
+//! external scope has no chunks to author one.
 QStringList caveLocalStationsOf(const cwTripData& trip,
                                 const cwScopeLabels& labels,
                                 const QUuid& caveId,
                                 const QStringList& scopeLocalSolved)
 {
-    const QString prefix = cwStation::canonicalKey(cwTrip::scopePrefix(trip, labels, caveId));
+    const QString prefix = cwTrip::scopePrefix(trip, labels, caveId);
     const QStringList names = cwTrip::knownStationNames(trip, scopeLocalSolved);
+    const QHash<QString, QString> keys = cwSurvexExporterUtils::stationKeysBySpelling(prefix, names);
 
     QStringList stations;
     stations.reserve(names.size());
     for (const QString& station : names) {
-        stations.append(prefix + cwStation::canonicalKey(station));
+        stations.append(keys.value(station));
     }
     return stations;
 }

@@ -24,6 +24,7 @@
 #include "cwSurveyChunk.h"
 
 //Test helpers
+#include "CasePairTestHelpers.h"
 #include "ExternalCenterlineTestHelpers.h"
 #include "SurveyTreeTestHelper.h"
 
@@ -804,4 +805,95 @@ TEST_CASE("Node scope on a source root lists native trips across its subtree",
     QCoreApplication::processEvents();
 
     CHECK(model.containsStation(another->scopePrefix() + QStringLiteral("c1")));
+}
+
+namespace {
+
+QStringList prefixed(const QString& prefix, const QStringList& names)
+{
+    QStringList result;
+    for (const QString& name : names) {
+        result.append(prefix + name);
+    }
+    return result;
+}
+
+//! The position row \a name holds, or a null QVariant when no row has it.
+QVariant positionOfRow(const cwScopeStationListModel& model, const QString& name)
+{
+    for (int i = 0; i < model.rowCount(); ++i) {
+        const QModelIndex index = model.index(i, 0);
+        if (model.data(index, cwScopeStationListModel::StationNameRole).toString() == name) {
+            return model.data(index, cwScopeStationListModel::PositionRole);
+        }
+    }
+    return QVariant();
+}
+
+} // namespace
+
+TEST_CASE("Node scope lists both members of the node's own file's case pair",
+          "[Model][ScopeStations][CasePairs]")
+{
+    // The fix-station autocomplete: P2 and p2 are two stations a fix can name.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cave->setExternalCenterline(cwExternalCenterline(casePairs::kFileName));
+    cave->setExternalStations(casePairs::harvest());
+
+    cwScopeStationListModel model;
+    model.setNode(cave);
+
+    CHECK(casePairs::joined(roleValues(model, cwScopeStationListModel::StationNameRole))
+          == casePairs::joined(casePairs::harvest()));
+}
+
+TEST_CASE("Both scopes list both members of an attached trip's case pair",
+          "[Model][ScopeStations][CasePairs]")
+{
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    // Compass names keep their case, so the file's harvest can hold a pair.
+    cwTrip* trip = new cwTrip();
+    trip->setName(QStringLiteral("trip1"));
+    cave->addTrip(trip);
+    trip->setExternalCenterline(cwExternalCenterline(casePairs::kFileName));
+    trip->setExternalStations(casePairs::harvest());
+    REQUIRE(trip->scopePrefix() == QStringLiteral("trip1."));
+
+    // Solved as the reader keys the file: a pair member by its spelling.
+    SurveyTreeTestHelper::setScopedPositions(cave, casePairs::solvedLookupUnder(QStringLiteral("trip1.")));
+
+    cwScopeStationListModel model;
+
+    SECTION("node scope") {
+        model.setNode(cave);
+        const QStringList expected = prefixed(QStringLiteral("trip1."), casePairs::harvest());
+        CHECK(casePairs::joined(roleValues(model, cwScopeStationListModel::StationNameRole))
+              == casePairs::joined(expected));
+        for (const QString& station : { QStringLiteral("P2"), QStringLiteral("p2") }) {
+            INFO("station " << station.toStdString());
+            const QVariant position = positionOfRow(model, QStringLiteral("trip1.") + station);
+            REQUIRE(position.isValid());
+            CHECK(casePairs::samePoint(position.value<QVector3D>(),
+                                       casePairs::solvedLookup().position(station)));
+        }
+    }
+
+    SECTION("trip scope") {
+        model.setTrip(trip);
+        CHECK(casePairs::joined(roleValues(model, cwScopeStationListModel::StationNameRole))
+              == casePairs::joined(casePairs::harvest()));
+        for (const QString& station : { QStringLiteral("P2"), QStringLiteral("p2") }) {
+            INFO("station " << station.toStdString());
+            const QVariant position = positionOfRow(model, station);
+            REQUIRE(position.isValid());
+            CHECK(casePairs::samePoint(position.value<QVector3D>(),
+                                       casePairs::solvedLookup().position(station)));
+        }
+    }
 }

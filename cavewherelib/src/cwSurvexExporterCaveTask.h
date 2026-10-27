@@ -42,10 +42,13 @@ public:
     {
     public:
         //! \a nodes are the snapshot's top-level nodes and \a labels the pool
-        //! built from that same snapshot.
+        //! built from that same snapshot. \a externalStationLabels is
+        //! cwSurvexExporterRegion::Options::externalStationLabels: per owner,
+        //! cavern's label of each harvested spelling whose label differs.
         DriverTree(const QList<cwCaveData>& nodes,
                    const cwScopeLabels& labels,
-                   const QSet<QUuid>& excludedExternalOwners = {});
+                   const QSet<QUuid>& excludedExternalOwners = {},
+                   const QHash<QUuid, QHash<QString, QString>>& externalStationLabels = {});
         Q_DISABLE_COPY_MOVE(DriverTree)
 
         const cwScopeLabels& labels() const { return m_labels; }
@@ -63,7 +66,8 @@ public:
         //! handle's trip scope, then the tail. Inside a sourced subtree a
         //! derived trip's station is the root's label path, the trip's node's
         //! cavern path, then the tail, and a native trip's is the root's label
-        //! path, the trip's label in the root's block, then the tail.
+        //! path, the trip's label in the root's block, then the tail. A tail on
+        //! a trip's own attached file names the station as cavern labels it.
         //!
         //! Empty when the driver opens no scope for the handle: its container is
         //! in no node of the tree, sits inside an excluded owner or below a
@@ -99,6 +103,7 @@ public:
         const QList<cwCaveData> m_nodes;
         const cwScopeLabels m_labels;
         const QSet<QUuid> m_excludedExternalOwners;
+        const QHash<QUuid, QHash<QString, QString>> m_externalStationLabels;
         QSet<QUuid> m_emittingNodeIds;
         QHash<QUuid, Owner> m_nodeOwners;
         QHash<QUuid, Owner> m_tripOwners;
