@@ -580,3 +580,59 @@ TEST_CASE("cwKeywordGroupByKeyModel keeps an object accepted by a checked value 
         CHECK_FALSE(isAccepted(model, &object));
     }
 }
+
+TEST_CASE("cwKeywordGroupByKeyModel files an object under its own Type rather than its extension's Type",
+          "[cwKeywordGroupByKeyModel]")
+{
+    cwKeywordModel scrapModel;
+    scrapModel.addKeywords({{QStringLiteral("Type"), QStringLiteral("Plan")},
+                            {QStringLiteral("Orientation"), QStringLiteral("Plan")}});
+
+    cwKeywordModel leadModel;
+    leadModel.add({QStringLiteral("Type"), QStringLiteral("Lead")});
+    leadModel.addExtension(&scrapModel);
+
+    cwKeywordItemModel items;
+    QObject scrap;
+    addItem(items, &scrap, {{QStringLiteral("Type"), QStringLiteral("Plan")}});
+
+    QObject lead;
+    auto leadItem = addItem(items, &lead, {});
+    leadItem->keywordModel()->addExtension(&leadModel);
+
+    cwKeywordGroupByKeyModel model;
+    model.setSourceModel(&items);
+    model.setKey(QStringLiteral("Type"));
+
+    CHECK(objectCount(valueIndex(model, QStringLiteral("Lead"))) == 1);
+    CHECK(objectCount(valueIndex(model, QStringLiteral("Plan"))) == 1);
+    CHECK(objectCount(model.otherIndex()) == 0);
+    CHECK(isAccepted(model, &lead));
+
+    SECTION("Unchecking Lead rejects the object") {
+        REQUIRE(model.setData(valueIndex(model, QStringLiteral("Lead")), false, cwKeywordGroupByKeyModel::AcceptedRole));
+        CHECK_FALSE(isAccepted(model, &lead));
+        CHECK(isAccepted(model, &scrap));
+    }
+
+    SECTION("Removing the object's own Type files it under the extension's Type") {
+        QSignalSpy groupChanged(&model, &QAbstractItemModel::dataChanged);
+
+        leadModel.removeAll(QStringLiteral("Type"));
+
+        const QModelIndex planIndex = valueIndex(model, QStringLiteral("Plan"));
+        CHECK_FALSE(valueIndex(model, QStringLiteral("Lead")).isValid());
+        CHECK(objectCount(planIndex) == 2);
+        CHECK(isAccepted(model, &lead));
+
+        const bool planCountChanged = std::any_of(groupChanged.cbegin(), groupChanged.cend(),
+                                                  [&](const QList<QVariant>& arguments) {
+            const QModelIndex topLeft = arguments.at(0).value<QModelIndex>();
+            const QModelIndex bottomRight = arguments.at(1).value<QModelIndex>();
+            const QList<int> roles = arguments.at(2).value<QList<int>>();
+            return topLeft.row() <= planIndex.row() && planIndex.row() <= bottomRight.row()
+                   && roles.contains(cwKeywordGroupByKeyModel::ObjectCountRole);
+        });
+        CHECK(planCountChanged);
+    }
+}
