@@ -126,6 +126,17 @@ namespace {
     //Request::memoryBudgetBytes asking for kDefaultBuildMemoryBudgetBytes
     constexpr qint64 kAskForTheDefaultBudget = 0;
 
+    //The longest a freed pass B slot may typically wait for the next column. A
+    //column is admitted the moment one finishes, so the wait is scheduling alone.
+    constexpr qint64 kMaxMedianAdmissionGapUs = 5000;
+
+    //A cancel lands while at most the one column a one-at-a-time budget runs
+    //is still going, so at most that one reports after it
+    constexpr qsizetype kMostColumnsAfterCancel = 1;
+
+    //Long enough for a build on a loaded CI machine to reach its first column
+    constexpr int kFirstColumnTimeoutMs = 60000;
+
     //How often the temp directory is looked at while a build runs. The poll
     //reads the temp bytes at the moment the manifest appears rather than
     //hunting a gap, so it can be gentle on the build's own workers.
@@ -296,6 +307,31 @@ namespace {
     int expectedWorkers(int requested)
     {
         return std::min(requested, std::max(1, cwTask::threadPool()->maxThreadCount() - 1));
+    }
+
+    //One "build column" line: when on pass B's clock the column started and how it ended
+    struct ColumnSpan {
+        qint64 startUs = 0;
+        qint64 endUs = 0;
+        qint64 errorCode = 0;
+    };
+
+    QVector<ColumnSpan> columnSpans(const QStringList& lines)
+    {
+        QVector<ColumnSpan> spans;
+        spans.reserve(lines.size());
+        for(const QString& line : lines) {
+            const qint64 startUs = buildLogField(line, QStringLiteral("startUs"));
+            spans.append(ColumnSpan {
+                startUs,
+                startUs + buildLogField(line, QStringLiteral("us")),
+                buildLogField(line, QStringLiteral("error"))
+            });
+        }
+        std::sort(spans.begin(), spans.end(), [](const ColumnSpan& left, const ColumnSpan& right) {
+            return left.startUs < right.startUs;
+        });
+        return spans;
     }
 
     QMutex& profileLogMutex()
@@ -1636,6 +1672,95 @@ TEST_CASE("cwPointOctreeBuilder: a budget of one chunk at a time builds the same
 
     requireSameCache(unbounded.request, unbounded.manifest,
                      several.request, several.manifest);
+}
+
+TEST_CASE("cwPointOctreeBuilder: pass B starts the next column as soon as one finishes",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-admission-gap"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    //One column at a time, so every column after the first starts in the slot
+    //the one before it freed
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kManyChunkTarget,
+        .decodeWorkerCount = kEvenWorkerCount,
+        .memoryBudgetBytes = kOneChunkAtATimeBudget
+    };
+
+    BuildLog log;
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+
+    const QStringList passB = log.linesStartingWith(QStringLiteral("build passB"));
+    REQUIRE(passB.size() == 1);
+    const QVector<ColumnSpan> spans =
+        columnSpans(log.linesStartingWith(QStringLiteral("build column")));
+    REQUIRE(spans.size() == buildLogField(passB.constFirst(), QStringLiteral("columns")));
+    REQUIRE(spans.size() >= 2);
+
+    QVector<qint64> gapsUs;
+    gapsUs.reserve(spans.size() - 1);
+    for(qsizetype i = 1; i < spans.size(); i++) {
+        //One at a time: a column never starts before the one ahead of it ends
+        REQUIRE(spans.at(i).startUs >= spans.at(i - 1).endUs);
+        gapsUs.append(spans.at(i).startUs - spans.at(i - 1).endUs);
+    }
+
+    //The median, so one column a busy machine scheduled late does not decide it
+    std::sort(gapsUs.begin(), gapsUs.end());
+    const qint64 medianGapUs = gapsUs.at(gapsUs.size() / 2);
+    INFO("median gap " << medianGapUs << " us over " << gapsUs.size() << " gaps");
+    CHECK(medianGapUs < kMaxMedianAdmissionGapUs);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cancel in pass B admits no more columns",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-admission-stop"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kManyChunkTarget,
+        .decodeWorkerCount = kEvenWorkerCount,
+        .memoryBudgetBytes = kOneChunkAtATimeBudget
+    };
+
+    BuildLog log;
+    const QString columnPrefix = QStringLiteral("build column");
+
+    QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
+
+    //Cancel once the first column is done, so the rest are still to admit
+    REQUIRE(waitUntil([&] { return log.hasLineContaining(columnPrefix) || future.isFinished(); },
+                      kFirstColumnTimeoutMs));
+    future.cancel();
+    const qsizetype columnsAtCancel = log.linesStartingWith(columnPrefix).size();
+    future.waitForFinished();
+
+    //The halo line, since a canceled pass B writes its line without the counts
+    const QStringList halo = log.linesStartingWith(QStringLiteral("build halo"));
+    REQUIRE(halo.size() == 1);
+    const qint64 columnCount = buildLogField(halo.constFirst(), QStringLiteral("columns"));
+
+    //A build that finished before the cancel proves nothing about admission
+    REQUIRE(columnsAtCancel + kMostColumnsAfterCancel < columnCount);
+
+    const QVector<ColumnSpan> spans = columnSpans(log.linesStartingWith(columnPrefix));
+    CHECK(spans.size() <= columnsAtCancel + kMostColumnsAfterCancel);
+
+    REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+    REQUIRE(octreeTempDirCount() == 0);
 }
 
 TEST_CASE("cwPointOctreeBuilder: a request with no memory budget builds under the default",
