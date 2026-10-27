@@ -335,7 +335,7 @@ TEST_CASE("cwKtx2Codec loads streamed levels out of the disk cache", "[Ktx2Codec
     const cwStreamedTexture texture = streamedTexture(tempDir.path(), key);
 
     SECTION("A stored entry transcodes to the requested levels") {
-        const auto loaded = cw::ktx2::loadStreamedLevels(texture, QRhiTexture::BC7, kSliceLevel);
+        const auto loaded = cw::ktx2::loadStreamedLevels(texture, QRhiTexture::BC7, kSliceLevel, []() { return false; });
         REQUIRE_FALSE(loaded.hasError());
         CHECK(loaded.value().size == QSize(kSlicedWidth, kSlicedHeight));
         CHECK(loaded.value().mipLevels.size() == kGradientMipCount - kSliceLevel);
@@ -345,7 +345,7 @@ TEST_CASE("cwKtx2Codec loads streamed levels out of the disk cache", "[Ktx2Codec
         cwStreamedTexture missing = texture;
         missing.key.id = QStringLiteral("not-cached");
 
-        const auto loaded = cw::ktx2::loadStreamedLevels(missing, QRhiTexture::BC7, 0);
+        const auto loaded = cw::ktx2::loadStreamedLevels(missing, QRhiTexture::BC7, 0, []() { return false; });
         CHECK(loaded.hasError());
         CHECK(loaded.errorMessage().contains(QStringLiteral("not-cached")));
     }
@@ -354,7 +354,7 @@ TEST_CASE("cwKtx2Codec loads streamed levels out of the disk cache", "[Ktx2Codec
         cwStreamedTexture wrongChecksum = texture;
         wrongChecksum.key.checksum = QStringLiteral("stale-checksum");
 
-        const auto loaded = cw::ktx2::loadStreamedLevels(wrongChecksum, QRhiTexture::BC7, 0);
+        const auto loaded = cw::ktx2::loadStreamedLevels(wrongChecksum, QRhiTexture::BC7, 0, []() { return false; });
         CHECK(loaded.hasError());
         CHECK_FALSE(loaded.errorMessage().isEmpty());
     }

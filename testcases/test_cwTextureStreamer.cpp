@@ -89,7 +89,8 @@ namespace {
     {
         return [state](const cwStreamedTexture& source,
                        QRhiTexture::Format target,
-                       int firstLevel) -> Monad::Result<cwCompressedTexture> {
+                       int firstLevel,
+                       const std::function<bool()>& /*isCanceled*/) -> Monad::Result<cwCompressedTexture> {
             int ticket = 0;
             {
                 QMutexLocker locker(&state->mutex);

@@ -186,7 +186,8 @@ private:
     // nothing: everything it touches travels on the source, and a pack is
     // immutable after it opens.
     static Monad::Result<cwPointOctreeNodePayload> loadNode(const cwPointOctreeNodeSource& source,
-                                                            int level);
+                                                            int level,
+                                                            const std::function<bool()>& isCanceled);
 
     void initializeResources(const ResourceUpdateData& data);
     bool ensurePipeline(const RenderData& data);

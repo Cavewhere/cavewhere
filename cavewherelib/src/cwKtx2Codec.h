@@ -115,10 +115,14 @@ namespace cw::ktx2 {
      * dataRootPath and transcodeLevels() them. A missing or damaged entry is an
      * error Result naming the file — producers own the encode, so this never
      * writes to the cache. Pure and safe to call from a worker thread.
+     *
+     * Checks isCanceled after the read and after the transcode, and returns an
+     * error Result once it is true.
      */
     CAVEWHERE_LIB_EXPORT Monad::Result<cwCompressedTexture> loadStreamedLevels(const cwStreamedTexture& texture,
                                                                                QRhiTexture::Format target,
-                                                                               int firstLevel);
+                                                                               int firstLevel,
+                                                                               const std::function<bool()>& isCanceled);
 
     /**
      * Returns BC7 when rhi supports it, otherwise ASTC_4x4, otherwise
