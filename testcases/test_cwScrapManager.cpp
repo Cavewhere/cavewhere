@@ -35,6 +35,7 @@
 #include "cwStationPositionLookup.h"
 #include "cwExternalCenterlineManager.h"
 #include "ExternalCenterlineTestHelpers.h"
+#include "CasePairTestHelpers.h"
 #include "cwLead.h"
 #include "cwFutureManagerModel.h"
 #include "SurveyTreeTestHelper.h"
@@ -1132,6 +1133,39 @@ TEST_CASE("auto-calculate computes the note transform on the survey trip of a lo
 
     CHECK(scrap->noteTransformation()->scale()
           == Catch::Approx(kHalfScale / kMetersPerFoot).epsilon(kScaleTolerance));
+}
+
+TEST_CASE("auto-calculate computes the note transform for a scrap holding both members of a case pair",
+          "[cwScrapManager][Attach][NoteTransform][CasePairs]")
+{
+    requireAutomaticUpdatesEnabled();
+    auto fixture = makeSavedProject(QStringLiteral("note-auto-case-pairs"),
+                                    QStringLiteral("ScrapCave"),
+                                    QStringLiteral("ScrapTrip"));
+    cwTrip* trip = fixture->trip;
+    attachThroughManager(fixture.get(), trip, fixturePath(casePairs::kFileName));
+    settleScraps(fixture.get());
+
+    const cwStationPositionLookup lookup = trip->solvedStationPositions();
+    INFO("stored keys: " << casePairs::storedKeys(lookup));
+    REQUIRE(lookup.key(QStringLiteral("P2")) == QStringLiteral("P2"));
+    REQUIRE(lookup.key(QStringLiteral("p2")) == QStringLiteral("p2"));
+
+    cwScrap* scrap = addEmptySizedScrap(trip);
+    for (const auto& [name, key] : casePairs::turnedNoteStations()) {
+        cwNoteStation noteStation;
+        noteStation.setName(name);
+        noteStation.setPositionOnNote(casePairs::turnedOnNote(key));
+        scrap->addStation(noteStation);
+    }
+    settleScraps(fixture.get());
+
+    constexpr double kPageMeters = static_cast<double>(kAttachedNotePixels) / kAttachedNoteDotsPerMeter;
+    CHECK(scrap->noteTransformation()->scale()
+          == Catch::Approx(casePairs::kLegOnNote * kPageMeters / casePairs::kLegMeters)
+                 .epsilon(kScaleTolerance));
+    CHECK(scrap->noteTransformation()->northUp()
+          == Catch::Approx(casePairs::kTurnedNorthUp).margin(casePairs::kNorthToleranceDegrees));
 }
 
 namespace {
