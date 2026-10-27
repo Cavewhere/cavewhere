@@ -223,8 +223,9 @@ QString cwSurvexExporterCaveTask::DriverTree::operand(const cwStationHandle& han
 // Walks the tree in writeNodeBlock's output order, validating each written
 // node's fixes and listing the fallbacks today's top-down rule would write.
 // Then it joins stations the way cavern does (a chunk's shots, each attached
-// file taken as one piece, every written tie) and keeps a fallback only for a
-// group of stations that no real fix and no earlier fallback reaches.
+// file's harvested piece, a sourced root's remaining stations, every written
+// tie) and keeps a fallback only for a group of stations that no real fix and
+// no earlier fallback reaches.
 class cwSurvexExporterCaveTask::AnchorPlan::Builder
 {
 public:
@@ -294,8 +295,9 @@ private:
         }
     }
 
-    // An attached file is one piece: cavern may still find it split, but
-    // nothing short of solving it tells.
+    // A file's harvest is one piece: the harvest solves the file alone, so its
+    // list holds exactly the stations the file's own fixes, or its origin
+    // station, reach.
     void addFile(const QString& prefix, const QUuid& ownerId, const QString& scope,
                  QSet<QString> keys)
     {
@@ -365,13 +367,18 @@ private:
     }
 
     // A sourced root is one block: its *include, whose stations include every
-    // derived trip's, and its subtree's native trips.
+    // derived trip's, and its subtree's native trips. The derived trips name
+    // every station the scan found, so the ones outside the harvest form a
+    // second piece that a tie anchors without reaching the origin station.
     void walkSourcedRoot(const cwCaveData& root, const QString& prefix, const NodeFixes& fixes,
                          const NodeStations& stations, bool anchoredAbove)
     {
-        QSet<QString> fileKeys = stations.fileKeys.value(root.id);
-        addDerivedStations(root, fileKeys);
-        addFile(prefix, root.id, QString(), fileKeys);
+        const QSet<QString> harvestKeys = stations.fileKeys.value(root.id);
+        addFile(prefix, root.id, QString(), harvestKeys);
+        QSet<QString> restKeys;
+        addDerivedStations(root, restKeys);
+        restKeys.subtract(harvestKeys);
+        joinAll(prefix, restKeys);
         if (!anchoredAbove && fixes.kept.isEmpty()) {
             addFileFallback(root.id, prefix, root.externalCenterline, root.externalStations);
         }

@@ -981,3 +981,220 @@ TEST_CASE("A file whose fixes name their own system leaves a native fix's frame 
     CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::FixStation);
     CHECK(geoReference->localCoordinateSystem() == before);
 }
+
+namespace {
+
+// survex_two_pieces' and walls_two_pieces_fix_one's tapes.
+constexpr double kPieceTapeMeters = 10.0;
+constexpr double kPiecesNativeEasting = 500000.0;
+
+//! A trip A1-A2 in \a project's native cave, fixed on A1 in the Compass
+//! fixtures' UTM zone when \a fixed.
+cwTrip* addPiecesNativeTrip(SavedProjectFixture* project, bool fixed)
+{
+    cwTrip* trip = addNativeTripWithShot(project->cave, QStringLiteral("Native"),
+                                         QStringLiteral("A1"), QStringLiteral("A2"));
+    if (fixed) {
+        cwFixStation fix;
+        fix.setStationName(QStringLiteral("A1"));
+        fix.setInputCS(kCompassProjectCS);
+        fix.setCoordinate(kPiecesNativeEasting, kCompassNorthing, kCompassElevation);
+        project->cave->fixStations()->appendFixStation(fix);
+    }
+    return trip;
+}
+
+cwTrip* tripNamedUnder(const cwSurveyNode* node, const QString& name)
+{
+    for (cwTrip* trip : node->allTrips()) {
+        if (trip->name() == name) {
+            return trip;
+        }
+    }
+    return nullptr;
+}
+
+void tieAndSolve(SavedProjectFixture* project, const cwStationHandle& native,
+                 const cwStationHandle& attached)
+{
+    project->project->cavingRegion()->equates()->appendEquate(cwEquate({native, attached}));
+    drainPipelines(project);
+}
+
+//! Checks that cavern placed both ends of a leg, \a tapeMeters apart.
+void checkLeg(const cwStationPositionLookup& lookup, const QString& from, const QString& to,
+              double tapeMeters)
+{
+    INFO("leg " << from.toStdString() << " to " << to.toStdString());
+    CHECK(lookup.hasPosition(from));
+    CHECK(lookup.hasPosition(to));
+    if (lookup.hasPosition(from) && lookup.hasPosition(to)) {
+        CHECK(solvedDistance(lookup, from, to)
+              == Catch::Approx(tapeMeters).margin(kSolvedLengthMarginMeters));
+    }
+}
+
+//! Checks that \a station of \a lookup sits on the native cave's A2.
+void checkOnNativeA2(SavedProjectFixture* project, const cwStationPositionLookup& lookup,
+                     const QString& station)
+{
+    const cwStationPositionLookup nativePositions = project->cave->scopedPositions();
+    REQUIRE(nativePositions.hasPosition(QStringLiteral("a2")));
+    const QVector3D a2 = nativePositions.position(QStringLiteral("a2"));
+    checkPosition(lookup, station, a2.x(), a2.y(), a2.z());
+}
+
+//! A Survex file of two surveys sharing no station, in the two shapes the
+//! scan derives trips from: a block per survey, or one block for both.
+struct TwoPiecesForm {
+    QString fixture;
+    //! The derived trips holding each survey.
+    QString originTrip;
+    QString otherTrip;
+    //! The root block's prefix of each survey's stations.
+    QString originScope;
+    QString otherScope;
+};
+
+//! Catch2 keys a generator by its source line, so call this once per test case.
+TwoPiecesForm twoPiecesForm()
+{
+    return GENERATE(
+        TwoPiecesForm{QStringLiteral("survex_two_pieces.svx"), QStringLiteral("s"),
+                      QStringLiteral("t"), QStringLiteral("s."), QStringLiteral("t.")},
+        TwoPiecesForm{QStringLiteral("survex_two_pieces_one_block.svx"),
+                      QStringLiteral("survex_two_pieces_one_block"),
+                      QStringLiteral("survex_two_pieces_one_block"), QString(), QString()});
+}
+
+QString originFixLine(const TwoPiecesForm& form)
+{
+    return QStringLiteral("*fix %1s1 0 0 0").arg(form.originScope);
+}
+
+} // namespace
+
+TEST_CASE("A tie into an attached file's second survey keeps the first survey on its origin fix",
+          "[LinePlotManager][Attach][Equate][Anchor][Pieces]")
+{
+    const TwoPiecesForm form = twoPiecesForm();
+    INFO("fixture " << form.fixture.toStdString());
+    auto project = makeSavedProject(QStringLiteral("pieces-second"),
+                                    QStringLiteral("Fixed"), QStringLiteral("Empty"));
+    cwTrip* native = addPiecesNativeTrip(project.get(), true);
+    cwSurveyNode* root = attachSourceAndSolve(project.get(), form.fixture);
+    cwTrip* other = tripNamedIn(root, form.otherTrip);
+    REQUIRE(other != nullptr);
+
+    tieAndSolve(project.get(), native->stationHandle(QStringLiteral("A2")),
+                other->stationHandle(QStringLiteral("t1")));
+    requireSolved(project.get());
+
+    const cwLinePlotManager* linePlot = project->rootData->linePlotManager();
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    CHECK(linePlot->driverSource().contains(originFixLine(form)));
+
+    const cwStationPositionLookup positions = root->scopedPositions();
+    checkLeg(positions, form.originScope + QStringLiteral("s1"),
+             form.originScope + QStringLiteral("s2"), kPieceTapeMeters);
+    checkLeg(positions, form.otherScope + QStringLiteral("t1"),
+             form.otherScope + QStringLiteral("t2"), kPieceTapeMeters);
+    checkOnNativeA2(project.get(), positions, form.otherScope + QStringLiteral("t1"));
+}
+
+TEST_CASE("A tie into the survey holding an attached file's origin station drops the origin fix",
+          "[LinePlotManager][Attach][Equate][Anchor][Pieces]")
+{
+    const TwoPiecesForm form = twoPiecesForm();
+    INFO("fixture " << form.fixture.toStdString());
+    auto project = makeSavedProject(QStringLiteral("pieces-origin"),
+                                    QStringLiteral("Fixed"), QStringLiteral("Empty"));
+    cwTrip* native = addPiecesNativeTrip(project.get(), true);
+    cwSurveyNode* root = attachSourceAndSolve(project.get(), form.fixture);
+    cwTrip* origin = tripNamedIn(root, form.originTrip);
+    REQUIRE(origin != nullptr);
+
+    tieAndSolve(project.get(), native->stationHandle(QStringLiteral("A2")),
+                origin->stationHandle(QStringLiteral("s2")));
+    requireSolved(project.get());
+
+    const cwLinePlotManager* linePlot = project->rootData->linePlotManager();
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    CHECK_FALSE(linePlot->driverSource().contains(originFixLine(form)));
+
+    const cwStationPositionLookup positions = root->scopedPositions();
+    checkLeg(positions, form.originScope + QStringLiteral("s1"),
+             form.originScope + QStringLiteral("s2"), kPieceTapeMeters);
+    checkOnNativeA2(project.get(), positions, form.originScope + QStringLiteral("s2"));
+}
+
+TEST_CASE("An untied attached file of two surveys keeps its origin fix",
+          "[LinePlotManager][Attach][Equate][Anchor][Pieces]")
+{
+    const TwoPiecesForm form = twoPiecesForm();
+    INFO("fixture " << form.fixture.toStdString());
+    auto project = makeSavedProject(QStringLiteral("pieces-untied"),
+                                    QStringLiteral("Fixed"), QStringLiteral("Empty"));
+    addPiecesNativeTrip(project.get(), true);
+    cwSurveyNode* root = attachSourceAndSolve(project.get(), form.fixture);
+    requireSolved(project.get());
+
+    const cwLinePlotManager* linePlot = project->rootData->linePlotManager();
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    CHECK(linePlot->driverSource().contains(originFixLine(form)));
+    checkLeg(root->scopedPositions(), form.originScope + QStringLiteral("s1"),
+             form.originScope + QStringLiteral("s2"), kPieceTapeMeters);
+}
+
+TEST_CASE("An unfixed cave tied into an attached file's unfixed survey keeps its own fallback",
+          "[LinePlotManager][Attach][Equate][Anchor][Pieces]")
+{
+    struct FixOneCase {
+        QString fixture;
+        //! The derived trip holding the survey without a fix, and its station the tie names.
+        QString tiedTrip;
+        QString tiedTail;
+        //! That survey's leg, named under the root's block.
+        QString tiedKey;
+        QString otherKey;
+        double tapeMeters;
+        //! A leg of the survey the file fixes.
+        QString fixedKey;
+        QString fixedOtherKey;
+    };
+    const FixOneCase fixOne = GENERATE(
+        FixOneCase{QStringLiteral("survex_two_pieces_fix_one.svx"), QStringLiteral("s"),
+                   QStringLiteral("s1"), QStringLiteral("s.s1"), QStringLiteral("s.s2"),
+                   kPieceTapeMeters, QStringLiteral("t.t1"), QStringLiteral("t.t2")},
+        FixOneCase{QStringLiteral("compass_two_pieces_fix_one/two_pieces.mak"), QStringLiteral("U"),
+                   QStringLiteral("U1"), QStringLiteral("b.u1"), QStringLiteral("b.u2"),
+                   kCompassTapeFeet * kFeetToMeters, QStringLiteral("a.s1"),
+                   QStringLiteral("a.s2")},
+        FixOneCase{QStringLiteral("walls_two_pieces_fix_one.srv"),
+                   QStringLiteral("walls_two_pieces_fix_one"), QStringLiteral("T1"),
+                   QStringLiteral("t1"), QStringLiteral("t2"), kPieceTapeMeters,
+                   QStringLiteral("s1"), QStringLiteral("s2")});
+    INFO("fixture " << fixOne.fixture.toStdString());
+    auto project = makeSavedProject(QStringLiteral("pieces-fix-one"),
+                                    QStringLiteral("Unfixed"), QStringLiteral("Empty"));
+    cwTrip* native = addPiecesNativeTrip(project.get(), false);
+    cwSurveyNode* root = attachSourceAndSolve(project.get(), fixOne.fixture);
+    cwTrip* tied = tripNamedUnder(root, fixOne.tiedTrip);
+    REQUIRE(tied != nullptr);
+
+    tieAndSolve(project.get(), native->stationHandle(QStringLiteral("A2")),
+                tied->stationHandle(fixOne.tiedTail));
+    requireSolved(project.get());
+
+    const cwLinePlotManager* linePlot = project->rootData->linePlotManager();
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    checkLeg(project->cave->scopedPositions(), QStringLiteral("a1"), QStringLiteral("a2"),
+             kPieceTapeMeters);
+    const cwStationPositionLookup positions = root->scopedPositions();
+    checkLeg(positions, fixOne.tiedKey, fixOne.otherKey, fixOne.tapeMeters);
+    checkLeg(positions, fixOne.fixedKey, fixOne.fixedOtherKey, fixOne.tapeMeters);
+    checkOnNativeA2(project.get(), positions, fixOne.tiedKey);
+}

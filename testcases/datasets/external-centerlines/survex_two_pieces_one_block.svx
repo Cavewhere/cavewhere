@@ -1,0 +1,5 @@
+; survex_two_pieces.svx's legs in one block: one derived trip holds both
+; pieces.
+*data normal from to tape compass clino
+s1 s2 10 0 0
+t1 t2 10 90 0

@@ -1,0 +1,5 @@
+#units d=meters a=degrees v=degrees decl=0
+;Two surveys that share no station; only S1-S2 holds a #FIX.
+#FIX S1 0 0 0
+S1	S2	10	0	0
+T1	T2	10	90	0
