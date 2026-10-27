@@ -211,11 +211,12 @@ SolveView solveView(const QList<cwScanRow>& rows, bool preserveCase)
         QStringList sorted;
         for (const QString& station : row.stations) {
             const QString key = cwStation::canonicalKey(station);
-            if (!key.startsWith(rowPath) || seen.contains(key)) {
+            const QString stored = preserveCase ? station : key;
+            if (!key.startsWith(rowPath) || seen.contains(stored)) {
                 continue;
             }
-            seen.insert(key);
-            sorted.append((preserveCase ? station : key).sliced(rowPath.size()));
+            seen.insert(stored);
+            sorted.append(stored.sliced(rowPath.size()));
         }
         sorted.sort();
         const QString unitSourcePath = cwExternalCenterlineAttach::unitSourcePath(row);

@@ -657,7 +657,7 @@ cwSurveyNetwork cwCavingRegion::scopedNetwork(const QString& prefix) const
 
 namespace {
 
-//! \a key, a canonical name in a source root's view, as \a node's view names
+//! \a key, a solved key in a source root's view, as \a node's view names
 //! it: the node's cavern path comes off when the name carries it.
 QString memberLocalKey(const QString& key, const QString& nodeCavernPath)
 {
@@ -683,14 +683,14 @@ cwStationPositionLookup cwCavingRegion::memberPositions(const cwSurveyNode* node
         for (const QString& station : members.stations) {
             const auto position = positions.constFind(station);
             if (position != positions.constEnd()) {
-                lookup.setPosition(memberLocalKey(station, cavernPath), position.value());
+                lookup.setPositionAtKey(memberLocalKey(station, cavernPath), position.value());
             }
         }
         for (const QString& prefix : members.scopePrefixes) {
             for (auto position = positions.lowerBound(prefix);
                  position != positions.constEnd() && position.key().startsWith(prefix);
                  ++position) {
-                lookup.setPosition(memberLocalKey(position.key(), cavernPath), position.value());
+                lookup.setPositionAtKey(memberLocalKey(position.key(), cavernPath), position.value());
             }
         }
     }
@@ -716,17 +716,17 @@ cwSurveyNetwork cwCavingRegion::memberNetwork(const cwSurveyNode* node) const
             const QStringList neighbors = rootNetwork.neighbors(station);
             for (const QString& neighbor : neighbors) {
                 if (members.contains(neighbor)) {
-                    network.addShot(local, memberLocalKey(neighbor, cavernPath));
+                    network.addShotKeys(local, memberLocalKey(neighbor, cavernPath));
                 } else {
-                    network.addNeighbor(local, neighbor);
+                    network.addNeighborKey(local, neighbor);
                 }
             }
             if (rootNetwork.hasPosition(station)) {
-                network.setPosition(local, rootNetwork.position(station));
+                network.setPositionAtKey(local, rootNetwork.position(station));
             }
         };
 
-        //Member keys are canonical, like the root view's, so looking each one
+        //Member keys are solved keys, like the root view's, so looking each one
         //up visits the same stations a scan of the root view would.
         for (const QString& station : members.stations) {
             addMember(station);

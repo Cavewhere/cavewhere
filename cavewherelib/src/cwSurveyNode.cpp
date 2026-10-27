@@ -38,6 +38,14 @@ namespace {
     //! search groups by. A node directly under the region has only its own name
     //! in its path, so the separator shows up once a project has folders.
     constexpr auto kNodePathSeparator = QLatin1StringView(" / ");
+
+    //! The solved key \a name resolves to in \a view, or its canonical key
+    //! before a solve.
+    QString solvedKeyOf(const cwStationPositionLookup& view, const QString& name)
+    {
+        const QString key = view.key(name);
+        return key.isEmpty() ? cwStation::canonicalKey(name) : key;
+    }
 }
 
 cwSurveyNode::cwSurveyNode(QObject* parent) :
@@ -1603,11 +1611,12 @@ void cwSurveyNode::setFileFixedStations(const QHash<QUuid, QStringList>& station
 QHash<QString, QString> cwSurveyNode::fileFixedStations() const
 {
     QHash<QString, QString> stations;
+    const cwStationPositionLookup view = scopedPositions();
     const auto addOwner = [&](const QUuid& ownerId, const QString& scope,
                               const cwExternalCenterline& centerline) {
         const QString fileName = QFileInfo(centerline.entryFile()).fileName();
         for (const QString& station : m_fileFixedStations.value(ownerId)) {
-            stations.insert(cwStation::canonicalKey(scope + station), fileName);
+            stations.insert(solvedKeyOf(view, scope + station), fileName);
         }
     };
     addOwner(id(), QString(), m_externalCenterline);
@@ -1732,12 +1741,12 @@ QString cwSurveyNode::cavernPath() const
     return path;
 }
 
-bool cwSurveyNode::SourceMembers::contains(const QString& canonicalKey) const
+bool cwSurveyNode::SourceMembers::contains(const QString& key) const
 {
-    return stations.contains(canonicalKey)
+    return stations.contains(key)
            || std::any_of(scopePrefixes.cbegin(), scopePrefixes.cend(),
-                          [&canonicalKey](const QString& prefix) {
-                              return canonicalKey.startsWith(prefix);
+                          [&key](const QString& prefix) {
+                              return key.startsWith(prefix);
                           });
 }
 
@@ -1750,13 +1759,14 @@ cwSurveyNode::SourceMembers cwSurveyNode::sourceMembers() const
     }
 
     const QHash<QUuid, QString> nativeLabels = root->sourcedTripScopeLabels();
+    const cwStationPositionLookup rootView = root->scopedPositions();
     walk([&](const cwSurveyNode* node) {
         const QString nodePath = cwStation::canonicalKey(node->cavernPath());
         for (const cwTrip* trip : node->trips()) {
             if (!trip->sourcePath().isEmpty()) {
                 const QString tripPath = nodePath + cwStation::canonicalKey(trip->scopePrefix());
                 for (const QString& station : trip->externalStations()) {
-                    members.stations.insert(tripPath + cwStation::canonicalKey(station));
+                    members.stations.insert(solvedKeyOf(rootView, tripPath + station));
                 }
                 continue;
             }

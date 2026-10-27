@@ -181,13 +181,13 @@ public:
     QString cavernPath() const;
 
     //! The stations a node of a sourced subtree holds, in its source root's
-    //! view (cavern-relative names, canonical): every derived trip's unit set
+    //! view (cavern-relative solved keys): every derived trip's unit set
     //! below it, and the label scope of every native trip below it.
     struct SourceMembers {
         QSet<QString> stations;
         QStringList scopePrefixes;
 
-        bool contains(const QString& canonicalKey) const;
+        bool contains(const QString& key) const;
     };
 
     //! This node's SourceMembers, computed on each call. Empty for a native
@@ -215,9 +215,9 @@ public:
     void setFileFixedStations(const QHash<QUuid, QStringList>& stationsByOwner);
 
     //! The stations a node fix may not name because an attached file fixes
-    //! them itself, keyed by cwStation::canonicalKey() of the name a fix on
-    //! this node uses (a trip's file stations under its scopePrefix()), each
-    //! with the attached file's name.
+    //! them itself, keyed by the solved key in scopedPositions() of the name a
+    //! fix on this node uses (a trip's file stations under its scopePrefix()),
+    //! each with the attached file's name.
     QHash<QString, QString> fileFixedStations() const;
 
     //! True when an external survey file — this node's own attachment, or one an

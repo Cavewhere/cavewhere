@@ -678,15 +678,15 @@ private:
                 continue;
             }
 
-            lookup.setPosition(name, position);
+            lookup.setPositionAtKey(name, position);
         }
 
         return lookup;
     }
 
     // The owning-node split for the splay tips.
-    // A tip lands only in its owning node's slice, keyed node-locally and
-    // canonically: that node's own trips are the ones that draw it. Positions
+    // A tip lands only in its owning node's slice, keyed by its node-local
+    // solved key: that node's own trips are the ones that draw it. Positions
     // are kept as cavern gave them: a tip only ever feeds geometry, so it is
     // never compared against a previous solve the way station positions are.
     QHash<QUuid, cwSplayTipsByStation> splitSplayTipsByNode(
@@ -704,7 +704,7 @@ private:
                 continue;
             }
 
-            nodeSplayTips[owner->id()].insert(cwStation::canonicalKey(tail), iter.value());
+            nodeSplayTips[owner->id()].insert(tail, iter.value());
         }
 
         return nodeSplayTips;
@@ -724,8 +724,8 @@ private:
 
             const int prefixSize = ScopeLabels.prefix(owner->id()).size();
             nodeLegErrors[owner->id()].insert(
-                cwSurvex3DFileReader::legKey(iter.key().first.sliced(prefixSize),
-                                             iter.key().second.sliced(prefixSize)),
+                cwSurvex3DFileReader::legKeyOfKeys(iter.key().first.sliced(prefixSize),
+                                                   iter.key().second.sliced(prefixSize)),
                 iter.value());
         }
 

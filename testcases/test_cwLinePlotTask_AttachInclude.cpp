@@ -51,6 +51,7 @@
 
 // Test helpers
 #include "BoulderFixtureHelper.h"
+#include "CasePairTestHelpers.h"
 #include "LoadProjectHelper.h"
 #include "TestHelper.h"
 
@@ -70,6 +71,7 @@
 
 // Std
 #include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -675,6 +677,119 @@ TEST_CASE("Cave-attached Compass file solves with X-flagged shots that carry LRU
     }
 
     CHECK(lookup.positions().size() == kept.size());
+}
+
+TEST_CASE("Cave-attached Compass file keeps each member of a case pair as its own station",
+          "[Attach][Cave][Compass][CasePairs]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("compass-case-pairs")),
+                                             fixturePath(casePairs::kFileName));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Pairs"));
+    cave->setExternalCenterline(cwExternalCenterline(casePairs::kFileName));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{cave->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    CHECK(casePairs::storedKeys(lookup) == casePairs::joined(casePairs::keys(QString())));
+    casePairs::checkStations(lookup, cave->scopedNetwork(), QString());
+}
+
+TEST_CASE("Trip-attached Compass file draws each member of a case pair with its own legs",
+          "[Attach][Geometry][Compass][CasePairs]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("trip-case-pairs")),
+                                             fixturePath(casePairs::kFileName));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Pairs"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(casePairs::kFileName));
+
+    // linePlot must outlive manager: the manager holds a raw pointer to it.
+    cwRenderLinePlot linePlot;
+    cwLinePlotManager manager;
+    manager.setRenderLinePlot(&linePlot);
+    manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const QString prefix = tripScopeLabel(attached) + QStringLiteral(".");
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    CHECK(casePairs::storedKeys(lookup) == casePairs::joined(casePairs::keys(prefix)));
+    casePairs::checkStations(lookup, cave->scopedNetwork(), prefix);
+    casePairs::checkDrawsShots(linePlot.points(), lookup, prefix);
+}
+
+TEST_CASE("Trip-attached Survex file draws each case-pair member's splays from that member",
+          "[Attach][Geometry][Splay][CasePairs]")
+{
+    // survex_case_pair_splays.svx: P1 -> P2 10 m east, P1 -> p1 30 m north,
+    // p1 -> p2 10 m east; a 2 m splay off P2 and a 3 m splay off p2.
+    constexpr qsizetype kLegVertices = 6;
+    constexpr qsizetype kSplayVertices = 4;
+    constexpr double kUpperSplayMeters = 2.0;
+    constexpr double kLowerSplayMeters = 3.0;
+
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString fileName = QStringLiteral("survex_case_pair_splays.svx");
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("splay-case-pairs")),
+                                             fixturePath(fileName));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Pairs"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(fileName));
+
+    // linePlot must outlive manager: the manager holds a raw pointer to it.
+    cwRenderLinePlot linePlot;
+    cwLinePlotManager manager;
+    manager.setRenderLinePlot(&linePlot);
+    manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const QString prefix = tripScopeLabel(attached) + QStringLiteral(".");
+    const QMap<QString, QVector3D> positions = cave->scopedPositions().positions();
+    INFO("stored keys: " << casePairs::storedKeys(cave->scopedPositions()));
+    REQUIRE(positions.contains(prefix + QStringLiteral("P2")));
+    REQUIRE(positions.contains(prefix + QStringLiteral("p2")));
+
+    const QVector<QVector3D> points = linePlot.points();
+    REQUIRE(points.size() == kLegVertices + kSplayVertices);
+
+    // A splay is a segment from its station out to its tip, after the legs.
+    const auto hasSplay = [&](const QString& station, double length) {
+        const QVector3D from = positions.value(prefix + station);
+        for (qsizetype i = kLegVertices; i + 1 < points.size(); i += 2) {
+            if (casePairs::samePoint(points.at(i), from)
+                && std::abs(points.at(i).distanceToPoint(points.at(i + 1)) - length)
+                       < casePairs::kLegMarginMeters) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(hasSplay(QStringLiteral("P2"), kUpperSplayMeters));
+    CHECK(hasSplay(QStringLiteral("p2"), kLowerSplayMeters));
 }
 
 TEST_CASE("Mixed cave: native trip and attached trip both resolve",

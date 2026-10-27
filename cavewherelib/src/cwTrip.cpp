@@ -915,7 +915,7 @@ cwStationPositionLookup cwTrip::solvedStationPositions() const {
     const QMap<QString, QVector3D> positions = lookup.positions();
     for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
         if(it.key().startsWith(prefix, Qt::CaseInsensitive)) {
-            lookup.setPosition(it.key().mid(prefix.size()), it.value());
+            lookup.setPositionAtKey(it.key().mid(prefix.size()), it.value());
         }
     }
     return lookup;
@@ -950,11 +950,11 @@ cwSurveyNetwork cwTrip::solvedNetwork() const {
             const QString localNeighbor = neighbor.startsWith(prefix, Qt::CaseInsensitive)
                     ? neighbor.mid(prefix.size())
                     : neighbor;
-            network.addShot(localStation, localNeighbor);
+            network.addShotKeys(localStation, localNeighbor);
         }
 
         if(network.hasPosition(station)) {
-            network.setPosition(localStation, network.position(station));
+            network.setPositionAtKey(localStation, network.position(station));
         }
     }
     return network;

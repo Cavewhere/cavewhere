@@ -65,13 +65,14 @@ struct ScopeExtent {
 };
 
 // A region-wide network key ("fisher_ridge.topo1.a1") as the node-local
-// canonical key its node's position lookup and splay tips use ("topo1.a1").
+// key its node's position lookup and splay tips use ("topo1.a1"). Only the
+// prefix is matched ignoring case; the station keeps its solved spelling.
 QString nodeLocalKey(const QString& networkKey, const QString& nodePrefix)
 {
     if (networkKey.startsWith(nodePrefix, Qt::CaseInsensitive)) {
-        return cwStation::canonicalKey(networkKey.sliced(nodePrefix.size()));
+        return networkKey.sliced(nodePrefix.size());
     }
-    return cwStation::canonicalKey(networkKey);
+    return networkKey;
 }
 
 // The stations an external-centerline scope (a trip attached to an external
@@ -168,11 +169,11 @@ void appendSplaySegments(const QVector3D& stationPoint,
     }
 }
 
-// The closure error of the leg between two node-local station names, or
+// The closure error of the leg between two node-local station keys, or
 // kNoErrorValue when the leg sits in no loop.
 float segmentErrorFor(const cwLegErrorsByShot& legErrors, const QString& from, const QString& to)
 {
-    const auto it = legErrors.constFind(cwSurvex3DFileReader::legKey(from, to));
+    const auto it = legErrors.constFind(cwSurvex3DFileReader::legKeyOfKeys(from, to));
     return it == legErrors.constEnd() ? cwLinePlotGeometry::kNoErrorValue : it->e;
 }
 
@@ -296,7 +297,9 @@ ScopeExtent emitChunkGeometry(const cwTripData& trip, const Resolve& resolve,
             // so the pair [2i, 2i+1] is one segment.
             result.points.append(previousPoint);
             result.points.append(currentPoint);
-            result.segmentErrors.append(segmentErrorFor(legErrors, previousName, currentName));
+            result.segmentErrors.append(segmentErrorFor(legErrors,
+                                                        cwStation::canonicalKey(previousName),
+                                                        cwStation::canonicalKey(currentName)));
 
             previousPoint = currentPoint;
             previousName = currentName;
@@ -487,8 +490,8 @@ public:
         m_splayTips(splayTips),
         m_legErrors(legErrors)
     {
-        // The root's view, canonical and keyed below the root's label path,
-        // as every member set names it.
+        // The root's view, in solved keys below the root's label path, as
+        // every member set names it.
         const QString rootPrefix = scopeLabels.prefix(root.id);
         if (!rootPrefix.isEmpty()) {
             m_positions = nodeStationPositions(regionPositions, rootPrefix);
@@ -496,17 +499,15 @@ public:
             QStringList stations = network.stations();
             std::sort(stations.begin(), stations.end());
             for (const QString& station : std::as_const(stations)) {
-                const QString key = cwStation::canonicalKey(station);
-                if (!key.startsWith(rootKey)) {
+                if (!station.startsWith(rootKey)) {
                     continue;
                 }
-                const QString local = key.sliced(rootKey.size());
+                const QString local = station.sliced(rootKey.size());
                 QStringList& neighbors = m_neighbors[local];
                 const QStringList networkNeighbors = network.neighbors(station);
                 for (const QString& neighbor : networkNeighbors) {
-                    const QString neighborKey = cwStation::canonicalKey(neighbor);
-                    if (neighborKey.startsWith(rootKey)) {
-                        neighbors.append(neighborKey.sliced(rootKey.size()));
+                    if (neighbor.startsWith(rootKey)) {
+                        neighbors.append(neighbor.sliced(rootKey.size()));
                     }
                 }
                 std::sort(neighbors.begin(), neighbors.end());
@@ -610,7 +611,10 @@ private:
                     cavernPath + cwStation::canonicalKey(cwTrip::scopePrefix(trip, m_labels, node.id));
                 QSet<QString> members;
                 for (const QString& station : trip.externalStations) {
-                    members.insert(tripPath + cwStation::canonicalKey(station));
+                    const QString spelled = tripPath + station;
+                    members.insert(m_positions.contains(spelled)
+                                       ? spelled
+                                       : cwStation::canonicalKey(spelled));
                 }
                 if (cwTrip::windowsWholeNode(trip, node)) {
                     m_windowTripId = trip.id;
