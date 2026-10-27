@@ -10,7 +10,7 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// The Attach survey file dialog (SURVEY_TREE_PLAN C7.4a). Pick an entry file,
+// The Add survey file dialog (SURVEY_TREE_PLAN C7.4a). Pick an entry file,
 // then Attach: the file's tree becomes a read-only subtree under target. Import
 // a copy stays beside it for Survex files, where the target takes caves: the
 // parsed shots land in a native trip of a new cave there.
@@ -148,7 +148,7 @@ QQ.Item {
                     ? Math.min(target, overlayItem.width - 2 * Theme.actionBarSpacing)
                     : target
         }
-        title: qsTr("Attach survey file")
+        title: qsTr("Add survey file")
         closePolicy: QC.Popup.NoAutoClose
 
         contentItem: ColumnLayout {

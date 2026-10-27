@@ -95,7 +95,7 @@ ColumnLayout {
 
     spacing: 0
 
-    //Asks the host page to open its Attach survey file dialog for \a node.
+    //Asks the host page to open its Add survey file dialog for \a node.
     signal attachSurveyFileRequested(node: SurveyNode)
 
     //The cwSurveyNode or cwTrip a proxy index stands for, null for a row that
@@ -446,7 +446,7 @@ ColumnLayout {
         }
     }
 
-    //Asks the host page to open its Attach survey file dialog with \a node as
+    //Asks the host page to open its Add survey file dialog with \a node as
     //the place the file's subtree goes. The page owns the dialog because it
     //can hide this tree, which takes the tree out of the window.
     function attachSurveyFile(node: SurveyNode) {

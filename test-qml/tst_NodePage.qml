@@ -482,7 +482,7 @@ MainWindowTest {
             compare(findChild(findChild(page, "addTrip"), "addButton").text, "Add Trip")
             const menu = openAddCaret(page)
             compare(visibleEntryNames(menu),
-                    ["addSectionMenuItem", "attachSurveyFileMenuItem", "addExternalTripMenuItem"],
+                    ["addSectionMenuItem", "addSurveyFileSeparator", "attachSurveyFileMenuItem", "addExternalTripMenuItem"],
                     "inside a cave the button adds the trip and the menu the rest")
 
             mouseClick(findChild(menu, "addSectionMenuItem"))
@@ -506,7 +506,7 @@ MainWindowTest {
             compare(addButton.text, "Add Cave")
 
             const menu = openAddCaret(page)
-            compare(visibleEntryNames(menu), ["addFolderMenuItem", "attachSurveyFileMenuItem"],
+            compare(visibleEntryNames(menu), ["addFolderMenuItem", "addSurveyFileSeparator", "attachSurveyFileMenuItem"],
                     "a Folder outside every cave takes caves from the button and folders from the menu")
             menu.close()
             tryVerify(() => !menu.opened, 5000)
@@ -958,8 +958,8 @@ MainWindowTest {
                 compare(findChild(findChild(page, "addTrip"), "addButton").text, "Add Trip",
                         entry.address + " adds a trip from the button")
                 const menu = openAddCaret(page)
-                compare(visibleEntryNames(menu), ["addSectionMenuItem", "attachSurveyFileMenuItem"],
-                        entry.address + " offers Add Section and Attach survey file… beside it")
+                compare(visibleEntryNames(menu), ["addSectionMenuItem", "addSurveyFileSeparator", "attachSurveyFileMenuItem"],
+                        entry.address + " offers Add Section and Add Survey File… beside it")
                 menu.close()
                 tryVerify(() => !menu.opened, 5000)
             }

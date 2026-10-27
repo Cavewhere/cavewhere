@@ -32,7 +32,7 @@ StandardPage {
         return "Node=" + cave.name;
     }
 
-    // Opens the page's Attach survey file dialog with \a node as the place
+    // Opens the page's Add survey file dialog with \a node as the place
     // the file's subtree goes.
     function attachSurveyFile(node: SurveyNode) {
         attachDialogLoaderId.active = true;
@@ -541,7 +541,7 @@ StandardPage {
     }
 
     // The Add button's menu: Add Cave is the button itself, so the menu
-    // holds Add Folder and Attach survey file….
+    // holds Add Folder and Add Survey File….
     AddVerbsMenu {
         id: addCaveMenuId
         objectName: "addCaveMenu"
@@ -553,7 +553,7 @@ StandardPage {
         onAttachSurveyFileRequested: (node) => pageId.attachSurveyFile(node)
     }
 
-    // Built on the first Attach survey file…: the dialog carries a file
+    // Built on the first Add Survey File…: the dialog carries a file
     // dialog and a scan preview that most visits to a page never open.
     QQ.Loader {
         id: attachDialogLoaderId

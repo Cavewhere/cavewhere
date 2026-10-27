@@ -61,7 +61,7 @@ MainWindowTest {
         }
 
         // The Add button adds a cave itself, so its menu holds Add Folder and
-        // Attach survey file…, and nothing else.
+        // Add Survey File…, and nothing else.
         function test_addMenuHoldsFolderAndSurveyFileOnly() {
             const dataPage = gotoDataMainPage()
             const menu = openAddMenu(dataPage)
@@ -70,15 +70,15 @@ MainWindowTest {
             for (let i = 0; i < menu.count; i++) {
                 names.push(menu.itemAt(i).objectName)
             }
-            compare(names, ["addFolderMenuItem", "attachSurveyFileMenuItem"])
+            compare(names, ["addFolderMenuItem", "addSurveyFileSeparator", "attachSurveyFileMenuItem"])
             compare(menu.itemAt(0).text, "Add Folder")
-            compare(menu.itemAt(1).text, "Attach survey file…")
+            compare(menu.itemAt(2).text, "Add Survey File…")
             verify(String(menu.itemAt(0).icon.source).indexOf("folder.svg") >= 0,
                    "Add Folder carries the folder glyph")
             menu.close()
         }
 
-        // Attach survey file… opens the dialog with both choices: Attach keeps
+        // Add Survey File… opens the dialog with both choices: Attach keeps
         // the file as the source, Import copies it into a native trip.
         function test_addFromSurveyFileOffersAttachAndImport() {
             const dataPage = gotoDataMainPage()

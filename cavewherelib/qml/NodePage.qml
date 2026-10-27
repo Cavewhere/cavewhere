@@ -87,7 +87,7 @@ StandardPage {
         addSurveyFileDialogId.open()
     }
 
-    // Opens the page's Attach survey file dialog with \a node as the place
+    // Opens the page's Add survey file dialog with \a node as the place
     // the file's subtree goes.
     function attachSurveyFile(node: SurveyNode) {
         attachDialogLoaderId.active = true
@@ -596,7 +596,7 @@ StandardPage {
                                : Qt.point(0, 0)
     }
 
-    // The Add verbs for this node's position, Attach survey file… among them,
+    // The Add verbs for this node's position, Add Survey File… among them,
     // then the trip's survey-file entry, which makes a trip and so belongs only
     // where native trips go: a sourced node takes its files through Attach.
     AddVerbsMenu {
@@ -653,7 +653,7 @@ StandardPage {
         }
     }
 
-    // Built on the first Attach survey file…: the dialog carries a file
+    // Built on the first Add Survey File…: the dialog carries a file
     // dialog and a scan preview that most visits to a page never open.
     QQ.Loader {
         id: attachDialogLoaderId

@@ -4,7 +4,7 @@ import cavewherelib
 import cw.TestLib
 import QmlTestRecorder
 
-// C7.4a: the Data page's Add ▾ → Attach survey file… and the
+// C7.4a: the Data page's Add ▾ → Add Survey File… and the
 // AttachSurveyFileDialog it opens - the picker's lines as the one summary,
 // the happy path (a source root under the target, named from the file, with
 // the file's blocks as nodes), Attach under a Folder through a row's Add
@@ -47,7 +47,7 @@ MainWindowTest {
         }
 
         // Opens the split button's chevron menu on the data page and
-        // returns its Attach survey file… item.
+        // returns its Add Survey File… item.
         function openAddCaveMenu(dataPage) {
             const addBar = findChild(dataPage, "addCave")
             verify(addBar !== null, "addCave bar must exist")
@@ -59,7 +59,7 @@ MainWindowTest {
             verify(menu !== null, "addCaveMenu must exist")
             tryVerify(() => menu.opened, 5000, "menu opens on chevron click")
             const item = findChild(menu, "attachSurveyFileMenuItem")
-            verify(item !== null, "the menu offers Attach survey file…")
+            verify(item !== null, "the menu offers Add Survey File…")
             return item
         }
 
@@ -207,7 +207,7 @@ MainWindowTest {
             const dataPage = gotoDataMainPage()
 
             const item = openAddCaveMenu(dataPage)
-            compare(item.text, "Attach survey file…")
+            compare(item.text, "Add Survey File…")
         }
 
         function test_happyPathBuildsTheSubtreeUnderTheRegion() {

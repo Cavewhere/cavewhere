@@ -15,8 +15,8 @@ import cavewherelib
 // Section, a Section being a Folder named for where it sits. A cave is
 // therefore never offered inside a cave.
 //
-// Every place also offers Attach survey file…, which builds the file's subtree
-// under the menu's node.
+// Every place also offers Add Survey File…, set apart below the native verbs,
+// which attaches the file's subtree under the menu's node.
 //
 // The menu adds the node or trip itself and hands it to added(), so each host
 // decides only where the user lands afterwards. Attach needs a dialog first, so
@@ -42,16 +42,16 @@ QC.Menu {
     //Verbs the host's own button already runs, which the menu leaves out.
     property list<int> hiddenVerbs: []
 
+    //The verbs that make native nodes and trips; Add Survey File… follows them.
     readonly property list<int> verbs: (addVerbsMenuId.takesCaves
                                         ? [AddVerbsMenu.AddCave, AddVerbsMenu.AddFolder]
                                         : [AddVerbsMenu.AddTrip, AddVerbsMenu.AddSection])
-                                       .concat([AddVerbsMenu.AttachSurveyFile])
                                        .filter(verb => !addVerbsMenuId.hiddenVerbs.includes(verb))
 
     //\a verb ran: \a object is the new cwSurveyNode or cwTrip.
     signal added(object: QQ.QtObject, verb: int)
 
-    //Attach survey file… ran: the host opens its dialog with \a node as the
+    //Add Survey File… ran: the host opens its dialog with \a node as the
     //target, the region's root for the top level.
     signal attachSurveyFileRequested(node: SurveyNode)
 
@@ -66,7 +66,7 @@ QC.Menu {
         case AddVerbsMenu.AddSection:
             return qsTr("Add Section");
         case AddVerbsMenu.AttachSurveyFile:
-            return qsTr("Attach survey file…");
+            return qsTr("Add Survey File…");
         default:
             return "";
         }
@@ -89,7 +89,7 @@ QC.Menu {
         }
     }
 
-    //The glyph of what \a verb makes; a trip has none.
+    //The glyph of what \a verb makes.
     function verbIcon(verb: int) : url {
         switch(verb) {
         case AddVerbsMenu.AddCave:
@@ -98,6 +98,8 @@ QC.Menu {
             return Theme.kindIconFolder;
         case AddVerbsMenu.AddSection:
             return Theme.kindIconSection;
+        case AddVerbsMenu.AddTrip:
+            return Theme.kindIconTrip;
         default:
             return "";
         }
@@ -144,7 +146,8 @@ QC.Menu {
         return -1;
     }
 
-    //The verbs lead the menu, ahead of whatever the host appends.
+    //The native verbs lead the menu, ahead of the separator, Add Survey File…,
+    //and whatever the host appends.
     QQ.Instantiator {
         model: addVerbsMenuId.verbs
 
@@ -168,5 +171,16 @@ QC.Menu {
                 addVerbsMenuId.takeItem(position);
             }
         }
+    }
+
+    QC.MenuSeparator {
+        objectName: "addSurveyFileSeparator"
+    }
+
+    QC.MenuItem {
+        objectName: addVerbsMenuId.verbObjectName(AddVerbsMenu.AttachSurveyFile)
+        text: addVerbsMenuId.verbText(AddVerbsMenu.AttachSurveyFile)
+
+        onTriggered: addVerbsMenuId.run(AddVerbsMenu.AttachSurveyFile)
     }
 }

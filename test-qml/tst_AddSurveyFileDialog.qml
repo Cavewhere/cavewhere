@@ -173,7 +173,7 @@ MainWindowTest {
             verify(formatLabel !== null, "formatLabel must exist")
             tryCompare(formatLabel, "text", "Format: Survex")
 
-            // The same sentence the Attach survey file dialog shows, naming the
+            // The same sentence the Add survey file dialog shows, naming the
             // scanned tool and counting its files.
             tryCompare(findChild(attachDialogId, "attachExplainerText"), "text",
                        "Keep editing in Survex; Reload picks up the changes. The "
