@@ -147,9 +147,14 @@ bool keepsAFix(const cwSurveyNode* node, const QSet<QString>& nativeKeys,
     QSet<QString> knownKeys = nativeKeys;
     QSet<QString> fileFixedKeys;
     const auto addFile = [&](const QUuid& ownerId, const QString& scope, const QStringList& stations) {
-        knownKeys.unite(cwSurvexExporterUtils::scopedStationKeys(scope, stations));
-        fileFixedKeys.unite(cwSurvexExporterUtils::scopedStationKeys(
-            scope, inputs.externalFixedStations.value(ownerId)));
+        const QHash<QString, QString> keys =
+            cwSurvexExporterUtils::stationKeysBySpelling(scope, stations);
+        for (const QString& key : keys) {
+            knownKeys.insert(key);
+        }
+        for (const QString& fixed : inputs.externalFixedStations.value(ownerId)) {
+            fileFixedKeys.insert(keys.value(fixed, cwStation::canonicalKey(scope + fixed)));
+        }
     };
     for (const cwTrip* trip : node->trips()) {
         if (!trip->externalCenterline().isEmpty()
@@ -162,8 +167,8 @@ bool keepsAFix(const cwSurveyNode* node, const QSet<QString>& nativeKeys,
     QStringList errors;
     const QList<cwFixStation> valid =
         cwSurvexExporterUtils::validateFixStations(fixes, knownKeys, errors);
-    return std::any_of(valid.cbegin(), valid.cend(), [&fileFixedKeys](const cwFixStation& fix) {
-        return !fileFixedKeys.contains(cwStation::canonicalKey(fix.stationName().trimmed()));
+    return std::any_of(valid.cbegin(), valid.cend(), [&](const cwFixStation& fix) {
+        return !fileFixedKeys.contains(cwStation::keyIn(fix.stationName().trimmed(), knownKeys));
     });
 }
 

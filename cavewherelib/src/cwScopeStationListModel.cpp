@@ -9,6 +9,7 @@
 #include "cwScopeStationListModel.h"
 #include "cwCavernNaming.h"
 #include "cwStation.h"
+#include "cwStationPositionLookup.h"
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
 
@@ -238,12 +239,15 @@ void cwScopeStationListModel::appendNodeRows()
     //on the live tree, with knownStations() in place of the snapshot's chunks
     //and harvest; keep the two in step.
     const QHash<QString, QString> fileFixed = m_node->fileFixedStations();
+    const cwStationPositionLookup solved = m_node->scopedPositions();
     QSet<QString> seen;
 
     const auto appendRow = [&](const QString& name, const cwStationHandle& handle,
                                const std::optional<QVector3D>& position) {
         const QString key = cwStation::canonicalKey(name);
-        if (key.isEmpty() || fileFixed.contains(key) || seen.contains(key)) {
+        const QString solvedKey = solved.key(name);
+        const bool fixedByFile = fileFixed.contains(solvedKey.isEmpty() ? key : solvedKey);
+        if (key.isEmpty() || fixedByFile || seen.contains(key)) {
             return;
         }
         seen.insert(key);

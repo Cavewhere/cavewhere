@@ -11,6 +11,7 @@
 #include "CaveWhereLibExport.h"
 #include "Monad/Result.h"
 
+#include <QHash>
 #include <QString>
 #include <QStringList>
 
@@ -73,6 +74,11 @@ struct Stations {
     //! The subset of names the file fixes itself, in .3d order.
     //! The origin cavern invents for a file with no fix is excluded.
     QStringList fixedNames;
+    //! Cavern's label of each name whose label differs from its spelling,
+    //! keyed by the spelling: a survey level cavern kept in capitals, such as
+    //! a Walls #PREFIX XY (xy.P2 is labeled XY.P2). A fix on the station is
+    //! written with the label, under *case preserve.
+    QHash<QString, QString> labels;
 };
 
 /**

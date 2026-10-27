@@ -61,6 +61,10 @@ public:
         //! Each solved key's spelling: survey levels lowercased, the station
         //! name as cavern wrote it.
         QHash<QString, QString> spellings;
+
+        //! Each solved key's label as cavern wrote it, with the separator
+        //! turned to '.': every level in cavern's case.
+        QHash<QString, QString> labels;
     };
 
     // The sorted pair of canonical station names, so a leg reads the same

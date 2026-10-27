@@ -562,7 +562,8 @@ cwLinePlotTask::ExternalCenterlineInputs cwExternalCenterlineManager::solveInput
              m_ownerFixedStations,
              bareFixOutputSystems(),
              m_ownerDefaultedDatums,
-             bareFixOrigins() };
+             bareFixOrigins(),
+             m_ownerStationLabels };
 }
 
 void cwExternalCenterlineManager::setExternalSourceSettings(cwExternalSourceSettings* settings)
@@ -923,6 +924,10 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                             result.ownerFixedStations.insert(owner.ownerId,
                                                              harvest.value().fixedNames);
                         }
+                        if (!harvest.value().labels.isEmpty()) {
+                            result.ownerStationLabels.insert(owner.ownerId,
+                                                             harvest.value().labels);
+                        }
                     }
                 }
 
@@ -1077,6 +1082,7 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
         || result.fileOwnsDeclination != m_fileOwnsDeclination
         || result.ownerFixes != m_ownerFixes
         || result.ownerFixedStations != m_ownerFixedStations
+        || result.ownerStationLabels != m_ownerStationLabels
         || result.ownerDefaultedDatums != m_ownerDefaultedDatums
         || result.ownerOutputSystems != m_ownerOutputSystems
         || result.ownerFixSystems != m_ownerFixSystems
@@ -1089,6 +1095,7 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     m_ownerFixes = std::move(result.ownerFixes);
     indexOwnerFixes();
     m_ownerFixedStations = std::move(result.ownerFixedStations);
+    m_ownerStationLabels = std::move(result.ownerStationLabels);
     m_ownerDefaultedDatums = std::move(result.ownerDefaultedDatums);
     m_ownerOutputSystems = std::move(result.ownerOutputSystems);
     m_ownerFixSystems = std::move(result.ownerFixSystems);

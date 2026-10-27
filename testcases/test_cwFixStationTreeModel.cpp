@@ -66,6 +66,7 @@ const QString kUtm48N = QStringLiteral("UTM48N");
 const QString kBareFixFixture = QStringLiteral("survex_bare_fix/bare_fix.svx");
 const QString kBareFixFileName = QStringLiteral("bare_fix.svx");
 // bare_fix.svx's leg A-B runs 10 m east, so this native fix agrees with A.
+// The driver writes it in the file's spelling, bare.b.
 const QString kNativeFixOnBareFile = QStringLiteral("bare.B");
 constexpr double kNativeFixEasting = 500010.0;
 constexpr double kNativeFixNorthing = 3000000.0;
@@ -645,7 +646,7 @@ TEST_CASE("A native fix on the owner leaves its system out of its file's include
     const bool solvedWithBoth = tryWait(kAttachWaitMs, [&]() {
         const QString driver = linePlot->driverSource();
         return driver.contains(kBareFixFileName)
-               && driver.contains(QStringLiteral("*fix ") + kNativeFixOnBareFile);
+               && driver.contains(QStringLiteral("*fix ") + kNativeFixOnBareFile.toLower());
     });
     drainPipelines(fixture.get());
     REQUIRE(solvedWithBoth);

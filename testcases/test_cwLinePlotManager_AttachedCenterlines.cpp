@@ -972,6 +972,171 @@ TEST_CASE("A native p2 beside a cave-level Compass file's case pair stays a stat
     CHECK(members.contains(nativeP2));
 }
 
+namespace {
+
+// Where the case-pair tests fix P2: anywhere in UTM 16N does, since the
+// project's frame centers on the first fix it sees.
+constexpr double kCasePairFixEasting = 500000.0;
+constexpr double kCasePairFixNorthing = 4000000.0;
+constexpr double kCasePairFixElevation = 100.0;
+
+cwFixStation casePairFix(const QString& station, double northMeters = 0.0)
+{
+    cwFixStation fix;
+    fix.setStationName(station);
+    fix.setInputCS(kCompassProjectCS);
+    fix.setCoordinate(kCasePairFixEasting, kCasePairFixNorthing + northMeters, kCasePairFixElevation);
+    return fix;
+}
+
+//! Checks that \a node's \a key solved where PROJ carries \a fix into the
+//! project's frame.
+void checkAtNodeFix(SavedProjectFixture* project, const cwSurveyNode* node, const QString& key,
+                    const cwFixStation& fix)
+{
+    const QString frame = project->project->cavingRegion()->geoReference()->localCoordinateSystem();
+    const std::optional<cwGeoPoint> solved = cwCoordinateTransform::transformPoint(
+        fix.inputCS(), frame, cwGeoPoint(fix.easting(), fix.northing(), fix.elevation()));
+    REQUIRE(solved.has_value());
+    INFO("stored keys: " << casePairs::storedKeys(node->scopedPositions()));
+    checkPosition(node->scopedPositions(), key, solved->x, solved->y, solved->z,
+                  kLocalFrameMarginMeters);
+}
+
+//! Checks that cavern tied every fix of \a project's solve to a station.
+void checkFixesTied(SavedProjectFixture* project)
+{
+    const QString log = project->rootData->linePlotManager()->cavernLog();
+    INFO("cavern log:\n" << log.toStdString());
+    CHECK_FALSE(casePairs::reportsUnusedFixedPoint(log));
+    CHECK_FALSE(log.contains(QStringLiteral("not all connected")));
+}
+
+using casePairs::fixReferenceWarnings;
+using casePairs::stationErrorOfRow;
+
+} // namespace
+
+TEST_CASE("A fix beside a cave-level Compass file's case pair lands on the station it names",
+          "[LinePlotManager][Attach][SourcedFixtures][CasePairs][FixStation]")
+{
+    auto project = makeSavedProject(QStringLiteral("case-pairs-mixed-fix"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    auto* root = qobject_cast<cwCave*>(attachSourceAndSolve(project.get(), casePairs::kFileName));
+    REQUIRE(root != nullptr);
+    requireSolved(project.get());
+
+    const QList<cwTrip*> trips = root->trips();
+    const auto fileTrip = std::find_if(trips.cbegin(), trips.cend(), [](const cwTrip* trip) {
+        return !trip->sourcePath().isEmpty();
+    });
+    REQUIRE(fileTrip != trips.cend());
+
+    // The native trip ties to the file at Q1, away from the pairs. It is
+    // written under its own trip label, so a fix on its P2 names that label.
+    cwTrip* native = addNativeTripWithShot(root, QStringLiteral("Native"),
+                                           QStringLiteral("P2"), QStringLiteral("N1"));
+    project->project->cavingRegion()->equates()->appendEquate(
+        cwEquate({native->stationHandle(QStringLiteral("N1")),
+                  (*fileTrip)->stationHandle(QStringLiteral("Q1"))}));
+    drainPipelines(project.get());
+    requireSolved(project.get());
+
+    const QString nativeScope = native->scopePrefix();
+    REQUIRE_FALSE(nativeScope.isEmpty());
+    struct Case {
+        QString typed;
+        QString key;
+    };
+    const Case fixCase = GENERATE_COPY(
+        Case{QStringLiteral("P2"), QStringLiteral("P2")},
+        Case{QStringLiteral("p2"), QStringLiteral("p2")},
+        Case{nativeScope + QStringLiteral("P2"), cwStation::canonicalKey(nativeScope) + QStringLiteral("p2")});
+    INFO("the fix names " << fixCase.typed.toStdString() << ", expected on "
+                          << fixCase.key.toStdString());
+
+    const cwFixStation fix = casePairFix(fixCase.typed);
+    root->fixStations()->appendFixStation(fix);
+    REQUIRE(waitForFrameAndSolve(project.get()));
+    requireSolved(project.get());
+    INFO("driver:\n" << project->rootData->linePlotManager()->driverSource().toStdString());
+
+    checkFixesTied(project.get());
+    CHECK(stationErrorOfRow(root, 0).isEmpty());
+    checkAtNodeFix(project.get(), root, fixCase.key, fix);
+
+    // The other two P2 stations stay off the fix.
+    const cwStationPositionLookup lookup = root->scopedPositions();
+    const QVector3D fixed = lookup.position(fixCase.key);
+    for (const QString& other : {QStringLiteral("P2"), QStringLiteral("p2"),
+                                 cwStation::canonicalKey(nativeScope) + QStringLiteral("p2")}) {
+        if (other != fixCase.key) {
+            INFO("other station " << other.toStdString());
+            REQUIRE(lookup.hasPosition(other));
+            CHECK(lookup.position(other).distanceToPoint(fixed) > casePairs::kLegMarginMeters);
+        }
+    }
+}
+
+TEST_CASE("A Compass .mak fix on one member of a case pair blocks that member only",
+          "[LinePlotManager][Attach][SourcedFixtures][CasePairs][FixStation]")
+{
+    // compass_case_pairs_fixed.mak fixes P2; cavern reads the .dat into a
+    // survey named after the file.
+    const QString fileP2 = QStringLiteral("compass_case_pairs.P2");
+    const QString fileLowerP2 = QStringLiteral("compass_case_pairs.p2");
+
+    auto project = makeSavedProject(QStringLiteral("case-pairs-mak-fix"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceAndSolve(project.get(),
+                                              QStringLiteral("compass_case_pairs_fixed.mak"));
+    REQUIRE(root != nullptr);
+    REQUIRE(waitForFrameAndSolve(project.get()));
+    requireSolved(project.get());
+
+    // The Fix Stations page lists the file's fix under the member's own name.
+    QStringList listed;
+    for (const cwSurveyNode* holder : nodeAndDescendants(root)) {
+        for (const cwAttachedFix& attachedFix : holder->listedAttachedFixes()) {
+            listed.append(attachedFix.station);
+        }
+    }
+    CHECK(casePairs::joined(listed) == fileP2.toStdString());
+    const QHash<QString, QString> fileFixed = root->fileFixedStations();
+    CHECK(casePairs::joined(fileFixed.keys()) == fileP2.toStdString());
+
+    SECTION("A node fix on the fixed member is flagged and dropped")
+    {
+        root->fixStations()->appendFixStation(casePairFix(fileP2));
+        drainPipelines(project.get());
+        requireSolved(project.get());
+
+        const QString rowError = stationErrorOfRow(root, 0);
+        INFO("row error: " << rowError.toStdString());
+        CHECK(rowError.contains(QStringLiteral("already fixes %1").arg(fileP2)));
+        const QStringList warnings = fixReferenceWarnings(root);
+        INFO("warnings: " << warnings.join(QLatin1Char('\n')).toStdString());
+        CHECK(std::any_of(warnings.cbegin(), warnings.cend(), [&](const QString& warning) {
+            return warning.contains(QStringLiteral("already fixes %1").arg(fileP2));
+        }));
+    }
+
+    SECTION("A node fix on the other member is kept and lands")
+    {
+        // p2 is 100 ft north of P2, so the two fixes agree with the shots.
+        const cwFixStation fix = casePairFix(fileLowerP2, casePairs::kSeparationMeters);
+        root->fixStations()->appendFixStation(fix);
+        drainPipelines(project.get());
+        requireSolved(project.get());
+        INFO("driver:\n" << project->rootData->linePlotManager()->driverSource().toStdString());
+
+        CHECK(stationErrorOfRow(root, 0).isEmpty());
+        CHECK(fixReferenceWarnings(root).isEmpty());
+        checkFixesTied(project.get());
+        checkAtNodeFix(project.get(), root, fileLowerP2, fix);
+    }
+}
+
 TEST_CASE("survex_mixed_case measures its length and depth as a source root",
           "[LinePlotManager][Attach][SourcedFixtures]")
 {

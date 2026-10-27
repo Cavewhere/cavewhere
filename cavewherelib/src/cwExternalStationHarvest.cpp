@@ -252,6 +252,14 @@ Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
     cwExternalStationHarvest::Stations stations;
     stations.names = read.spellings.values();
     stations.names.sort();
+    //Only where they differ, which is rare: most files keep every survey level
+    //lowercase, so the cache holds nothing extra for them.
+    for(auto it = read.spellings.cbegin(); it != read.spellings.cend(); ++it) {
+        const QString label = read.labels.value(it.key());
+        if(!label.isEmpty() && label != it.value()) {
+            stations.labels.insert(it.value(), label);
+        }
+    }
 
     QStringList fixedSpellings;
     fixedSpellings.reserve(read.fixedStations.size());

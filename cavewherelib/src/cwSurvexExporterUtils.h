@@ -2,6 +2,7 @@
 #define CWSURVEXEXPORTERUTILS_H
 
 //Qt includes
+#include <QHash>
 #include <QList>
 #include <QSet>
 #include <QString>
@@ -280,14 +281,19 @@ QString verticalClinoText(const cwClinoReading& reading);
 QString fixUnusableReason(const cwFixStation& fix);
 
 /**
- * Filter fix stations against the cave's actual stations and dedupe by
- * stationName (case-insensitive). Returns the kept fixes; appends one error
- * line per dropped fix to errors.
+ * Filter fix stations against the cave's actual stations and dedupe by the
+ * station each one names. Returns the kept fixes; appends one error line per
+ * dropped fix to errors.
  *
- * - A fix whose stationName is empty or doesn't match any station name in
- *   stationNamesLower is dropped with "fix references unknown station".
- * - A fix whose (lowercased) stationName collides with an earlier kept fix
- *   is dropped with "duplicate fix on station".
+ * Each stationName resolves to a key of \a stationKeys with
+ * cwStation::keyIn(): the name itself when it is a key (a case-pair member
+ * such as P2), otherwise its canonicalKey().
+ *
+ * - A fix whose stationName is empty or resolves to no key of stationKeys is
+ *   dropped with "fix references unknown station".
+ * - A fix that resolves to the key of an earlier kept fix is dropped with
+ *   "duplicate fix on station". Fixes on P2 and p2 of a case pair are two
+ *   fixes; fixes on A1 and a1 of one station are a duplicate.
  * - A fix whose coordinate can't be read — no CS to read it under, unreadable
  *   text, or no text at all — is dropped with what's wrong with it. Its
  *   components are 0, so writing it would silently relocate the cave.
@@ -296,12 +302,25 @@ QString fixUnusableReason(const cwFixStation& fix);
  *   project frame, which leaves the same fix out.
  */
 QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
-                                        const QSet<QString>& stationNamesLower,
+                                        const QSet<QString>& stationKeys,
                                         QStringList& errors);
 
+//! True when \a name has a capital, so cavern reads it as written only under
+//! *case preserve.
+bool keepsCase(const QString& name);
+
 /**
- * The validateFixStations keys of \a stations, each named under \a scope
- * (an empty scope, or a trip's scopePrefix such as "trip1.").
+ * Each of \a spellings, harvest spellings of one file named under \a scope,
+ * mapped to the solved key it takes: canonicalKey(scope + spelling), or for a
+ * spelling that lowercases like another in the list, canonicalKey(scope) +
+ * spelling.
+ */
+QHash<QString, QString> stationKeysBySpelling(const QString& scope, const QStringList& spellings);
+
+/**
+ * The validateFixStations keys of \a stations, harvest spellings each named
+ * under \a scope (an empty scope, or a trip's scopePrefix such as "trip1."):
+ * the values of stationKeysBySpelling().
  */
 QSet<QString> scopedStationKeys(const QString& scope, const QStringList& stations);
 
@@ -310,6 +329,11 @@ QSet<QString> scopedStationKeys(const QString& scope, const QStringList& station
  *
  * - When fixes is non-empty: group by inputCS, emitting `*cs <inputCS>`
  *   before each group and `*fix` per fix.
+ *
+ *   A station name with a capital (keepsCase()), fix and fallback alike, is
+ *   written inside `*begin` / `*case preserve` / `*end`, so cavern anchors the
+ *   station as written. The `*cs` goes before that block, since cavern drops
+ *   a `*cs` at the block's `*end`.
  *
  *   Pass only fixes that validateFixStations kept. This writes
  *   `fix.easting()/northing()/elevation()`, which are 0 for every state but

@@ -523,11 +523,14 @@ QHash<cwSurveyNode*, cwFixStationValidator::NodeWarning> cwFixStationValidator::
             case cwFixStationDiagnostics::StationReference::Ok:
                 break;
             }
-            switch (cwFixStationDiagnostics::classifyStationConflict(fixes, row, fileFixedStations)) {
+            switch (cwFixStationDiagnostics::classifyStationConflict(fixes, row, fileFixedStations,
+                                                                     network)) {
             case cwFixStationDiagnostics::StationConflict::FixedByFile:
                 markBroken();
                 collisions.append(cwFixStationDiagnostics::fileFixCollisionMessage(
-                                      fileFixedStations.value(cwStation::canonicalKey(station)), station)
+                                      fileFixedStations.value(
+                                          cwFixStationDiagnostics::fixStationKey(station, network)),
+                                      station)
                                   + QLatin1Char('.'));
                 break;
             case cwFixStationDiagnostics::StationConflict::Duplicate:

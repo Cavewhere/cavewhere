@@ -115,10 +115,18 @@ SurveyData classifySurveyData(const cwSurveyNode& node)
     return placedByFile ? SurveyData::FromFile : SurveyData::Nothing;
 }
 
-StationConflict classifyStationConflict(const QList<cwFixStation>& fixes, qsizetype row,
-                                        const QHash<QString, QString>& fileFixedStations)
+QString fixStationKey(const QString& stationName, const cwSurveyNetwork& network)
 {
-    const QString key = cwStation::canonicalKey(fixes.at(row).stationName().trimmed());
+    const QString trimmed = stationName.trimmed();
+    const QString solved = network.key(trimmed);
+    return solved.isEmpty() ? cwStation::canonicalKey(trimmed) : solved;
+}
+
+StationConflict classifyStationConflict(const QList<cwFixStation>& fixes, qsizetype row,
+                                        const QHash<QString, QString>& fileFixedStations,
+                                        const cwSurveyNetwork& network)
+{
+    const QString key = fixStationKey(fixes.at(row).stationName(), network);
     if (key.isEmpty()) {
         return StationConflict::None;
     }
@@ -126,7 +134,7 @@ StationConflict classifyStationConflict(const QList<cwFixStation>& fixes, qsizet
         return StationConflict::FixedByFile;
     }
     for (qsizetype earlier = 0; earlier < row; ++earlier) {
-        if (cwStation::canonicalKey(fixes.at(earlier).stationName().trimmed()) == key) {
+        if (fixStationKey(fixes.at(earlier).stationName(), network) == key) {
             return StationConflict::Duplicate;
         }
     }

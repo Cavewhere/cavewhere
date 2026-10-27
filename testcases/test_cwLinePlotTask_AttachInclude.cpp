@@ -2199,3 +2199,232 @@ TEST_CASE("A trip-attached file with no fix of its own sits at the origin under 
     CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
     CHECK(unconnectedWarnings(host->errorModel()).isEmpty());
 }
+
+namespace {
+
+// The legs of walls_prefix_fix.srv and survex_case_preserve_blocks.svx.
+constexpr double kPrefixFixtureLegMeters = 10.0;
+// compass_excluded_lrud.dat's K1 -> K2, 10 ft.
+constexpr double kExcludedLrudK1ToK2Meters = 10.0 * casePairs::kMetersPerFoot;
+
+//! placingFix() on \a stationName, \a northMeters north of the placing point.
+cwFixStation placingFixNorthOf(const QString& stationName, double northMeters)
+{
+    cwFixStation fix = placingFix(stationName);
+    fix.setCoordinate(kPlacedEasting, kPlacedNorthing + northMeters, kPlacedElevation);
+    return fix;
+}
+
+//! Where \a fix lands in kBoulderFrameCS.
+QVector3D framePositionOf(const cwFixStation& fix)
+{
+    const auto point = cwCoordinateTransform::transformPoint(
+        fix.inputCS(), kBoulderFrameCS, cwGeoPoint(fix.easting(), fix.northing(), fix.elevation()));
+    REQUIRE(point.has_value());
+    return QVector3D(float(point->x), float(point->y), float(point->z));
+}
+
+void checkAt(const cwStationPositionLookup& lookup, const QString& station, const QVector3D& expected)
+{
+    INFO("station " << station.toStdString() << ", stored keys: " << casePairs::storedKeys(lookup));
+    REQUIRE(lookup.hasPosition(station));
+    const QVector3D actual = lookup.position(station);
+    CHECK(actual.x() == Catch::Approx(expected.x()).margin(kPlacedMarginMeters));
+    CHECK(actual.y() == Catch::Approx(expected.y()).margin(kPlacedMarginMeters));
+    CHECK(actual.z() == Catch::Approx(expected.z()).margin(kPlacedMarginMeters));
+}
+
+using casePairs::fixReferenceWarnings;
+using casePairs::reportsUnusedFixedPoint;
+using casePairs::stationErrorOfRow;
+
+//! Attaches \a fileName to a new cave of \a region with \a fixes on it, in a
+//! project frozen in kBoulderFrameCS, and solves.
+cwCave* solveFixedCaveAttachment(const QTemporaryDir& tempRoot, cwCavingRegion& region,
+                                 cwLinePlotManager& manager, const QString& fileName,
+                                 const QList<cwFixStation>& fixes)
+{
+    const QString attachDir =
+        seedAttachment(tempSubdir(tempRoot, QStringLiteral("fixed-attachment")), fixturePath(fileName));
+    region.geoReference()->restore(cwGeoReference::Frozen, kBoulderFrameCS, {}, QString());
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Fixed"));
+    cave->setExternalCenterline(cwExternalCenterline(fileName));
+    for (const cwFixStation& fix : fixes) {
+        cave->fixStations()->appendFixStation(fix);
+    }
+
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{cave->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    return cave;
+}
+
+//! Checks that \a key, a station the file ties to \a fixedKey with a leg of
+//! \a meters, solved that far from it. A fix cavern reads as a new station
+//! gets a position of its own, so the fixed key alone proves nothing.
+void checkTiedTo(const cwStationPositionLookup& lookup, const QString& fixedKey,
+                 const QString& key, double meters)
+{
+    INFO("station " << key.toStdString() << ", stored keys: " << casePairs::storedKeys(lookup));
+    REQUIRE(lookup.hasPosition(key));
+    CHECK(lookup.position(key).distanceToPoint(lookup.position(fixedKey))
+          == Catch::Approx(meters).margin(kPlacedMarginMeters));
+}
+
+//! Checks that \a manager solved \a cave with every fix tied to a station.
+void checkFixesAnchor(const cwLinePlotManager& manager, const cwCave* cave)
+{
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK_FALSE(reportsUnusedFixedPoint(manager.cavernLog()));
+    CHECK_FALSE(manager.cavernLog().contains(QStringLiteral("not all connected")));
+    CHECK(unconnectedWarnings(cave->errorModel()).isEmpty());
+    CHECK(fixReferenceWarnings(cave).isEmpty());
+}
+
+} // namespace
+
+TEST_CASE("A fix typed in lowercase on a Compass station anchors that station",
+          "[Attach][FixStation][CasePairs][Compass]")
+{
+    // Compass names keep their case: the file's station is K1, and a fix on it
+    // has to name K1 to cavern, not a new station k1.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    const QString typed = GENERATE(QStringLiteral("k1"), QStringLiteral("K1"));
+    INFO("the fix names " << typed.toStdString());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    cwCave* cave = solveFixedCaveAttachment(tempRoot, region, manager,
+                                            QStringLiteral("compass_excluded_lrud.dat"),
+                                            {placingFix(typed)});
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    checkFixesAnchor(manager, cave);
+    checkPlaced(cave->scopedPositions(), QStringLiteral("k1"));
+    checkTiedTo(cave->scopedPositions(), QStringLiteral("k1"), QStringLiteral("k2"),
+                kExcludedLrudK1ToK2Meters);
+    CHECK(stationErrorOfRow(cave, 0).isEmpty());
+}
+
+TEST_CASE("A fix on one member of a Compass case pair moves that member only",
+          "[Attach][FixStation][CasePairs][Compass]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    cwCave* cave = solveFixedCaveAttachment(tempRoot, region, manager, casePairs::kFileName,
+                                            {placingFix(QStringLiteral("P2"))});
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    checkFixesAnchor(manager, cave);
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    checkPlaced(lookup, QStringLiteral("P2"));
+    REQUIRE(lookup.hasPosition(QStringLiteral("p2")));
+    // p2 sits where its own shots put it: 100 ft from P2, off the fix.
+    CHECK(lookup.position(QStringLiteral("p2")).distanceToPoint(lookup.position(QStringLiteral("P2")))
+          == Catch::Approx(casePairs::kSeparationMeters).margin(casePairs::kLegMarginMeters));
+    CHECK(lookup.position(QStringLiteral("p2")).distanceToPoint(placedPosition())
+          > casePairs::kSeparationMeters / 2.0);
+}
+
+TEST_CASE("Fixes on both members of a Compass case pair are two fixes",
+          "[Attach][FixStation][CasePairs][Compass]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    // p2 is 100 ft north of P2, so the two fixes agree with the shots.
+    const cwFixStation upperFix = placingFix(QStringLiteral("P2"));
+    const cwFixStation lowerFix = placingFixNorthOf(QStringLiteral("p2"), casePairs::kSeparationMeters);
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    cwCave* cave = solveFixedCaveAttachment(tempRoot, region, manager, casePairs::kFileName,
+                                            {upperFix, lowerFix});
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    // checkFixesAnchor() also finds no "Duplicate fix on station" warning.
+    checkFixesAnchor(manager, cave);
+    CHECK(stationErrorOfRow(cave, 0).isEmpty());
+    CHECK(stationErrorOfRow(cave, 1).isEmpty());
+
+    checkAt(cave->scopedPositions(), QStringLiteral("P2"), framePositionOf(upperFix));
+    checkAt(cave->scopedPositions(), QStringLiteral("p2"), framePositionOf(lowerFix));
+}
+
+TEST_CASE("A fix on a station under a Walls #PREFIX anchors that station",
+          "[Attach][FixStation][CasePairs][Walls]")
+{
+    // walls_prefix_fix.srv labels its stations XY:P1 and so on.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    cwCave* cave = solveFixedCaveAttachment(tempRoot, region, manager,
+                                            QStringLiteral("walls_prefix_fix.srv"),
+                                            {placingFix(QStringLiteral("xy.p2"))});
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    checkFixesAnchor(manager, cave);
+    checkPlaced(cave->scopedPositions(), QStringLiteral("xy.p2"));
+    checkTiedTo(cave->scopedPositions(), QStringLiteral("xy.p2"), QStringLiteral("xy.p1"),
+                kPrefixFixtureLegMeters);
+}
+
+TEST_CASE("A fix on a station in a capitalized *case preserve block anchors that station",
+          "[Attach][FixStation][CasePairs][Survex]")
+{
+    // survex_case_preserve_blocks.svx labels its stations Foo.P1 and so on.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    cwCave* cave = solveFixedCaveAttachment(tempRoot, region, manager,
+                                            QStringLiteral("survex_case_preserve_blocks.svx"),
+                                            {placingFix(QStringLiteral("foo.p2"))});
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    checkFixesAnchor(manager, cave);
+    checkPlaced(cave->scopedPositions(), QStringLiteral("foo.p2"));
+    checkTiedTo(cave->scopedPositions(), QStringLiteral("foo.p2"), QStringLiteral("foo.p1"),
+                kPrefixFixtureLegMeters);
+}
+
+TEST_CASE("An unfixed file whose stations keep a capitalized block sits at the origin",
+          "[Attach][FixStation][CasePairs][Survex]")
+{
+    // The origin fix CaveWhere writes for a file with no fix of its own names
+    // the file's first station, Foo.P1 to cavern.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    const QString fileName = QStringLiteral("survex_case_preserve_blocks.svx");
+    const QString attachDir =
+        seedAttachment(tempSubdir(tempRoot, QStringLiteral("blocks")), fixturePath(fileName));
+
+    cwCavingRegion region;
+    addFixedNativeCave(region);
+    cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    attached->setExternalCenterline(cwExternalCenterline(fileName));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    checkFixesAnchor(manager, attached);
+    checkAtOrigin(attached->scopedPositions(), QStringLiteral("foo.p1"));
+    checkTiedTo(attached->scopedPositions(), QStringLiteral("foo.p1"), QStringLiteral("foo.p2"),
+                kPrefixFixtureLegMeters);
+}

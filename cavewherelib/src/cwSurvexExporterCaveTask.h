@@ -155,13 +155,18 @@ public:
     //! The station the driver fixes at the origin for an attached file that
     //! fixes none of its own (\a fileFixedStations empty): the file's first
     //! harvested station, named as cavern resolves it inside the *include.
-    //! Survex entry files only, whose default *case lower matches the
-    //! harvest's lowercase names; Compass and Walls spell names the harvest
-    //! cannot give back. Empty when no fallback applies, including before the
-    //! harvest has named the file's stations.
+    //! Survex entry files only; Compass and Walls spell names the harvest
+    //! cannot give back. The name is a harvest spelling, which stationLabel()
+    //! turns into cavern's label. Empty when no fallback applies, including
+    //! before the harvest has named the file's stations.
     static QString originStation(const cwExternalCenterline& centerline,
                                  const QStringList& externalStations,
                                  const QStringList& fileFixedStations);
+
+    //! Cavern's label of the harvested station \a spelling of \a ownerId's
+    //! file (cwSurvexExporterRegion::Options::externalStationLabels), or
+    //! \a spelling itself when the two agree.
+    QString stationLabel(const QUuid& ownerId, const QString& spelling) const;
 
 protected:
     QString writeStandaloneHeader(QTextStream& stream) override;

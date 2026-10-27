@@ -17,6 +17,7 @@
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwSurveyNetwork.h"
+#include "CasePairTestHelpers.h"
 #include "SurveyTreeTestHelper.h"
 #include "TestHelper.h"
 
@@ -254,6 +255,84 @@ TEST_CASE("cwFixStationDiagnostics::classifyStationReference measures a name aga
         CHECK(cwFixStationDiagnostics::classifyStationReference(QStringLiteral("Z9"), network,
                                                                 SurveyData::FromFile)
               == StationReference::Unknown);
+    }
+}
+
+namespace {
+
+using StationConflict = cwFixStationDiagnostics::StationConflict;
+
+QList<cwFixStation> fixesOn(const QStringList& stations)
+{
+    QList<cwFixStation> fixes;
+    for (const QString& station : stations) {
+        cwFixStation fix = makeFix(QStringLiteral("EPSG:32613"), kGoodEasting);
+        fix.setStationName(station);
+        fixes.append(fix);
+    }
+    return fixes;
+}
+
+} // namespace
+
+TEST_CASE("cwFixStationDiagnostics::fixStationKey resolves a name to the station it fixes",
+          "[FixStation][cwFixStationDiagnostics][CasePairs]")
+{
+    const cwSurveyNetwork network = casePairs::solvedNetwork();
+
+    SECTION("Each member of a case pair resolves to itself") {
+        CHECK(cwFixStationDiagnostics::fixStationKey(QStringLiteral("P2"), network).toStdString()
+              == "P2");
+        CHECK(cwFixStationDiagnostics::fixStationKey(QStringLiteral(" P2 "), network).toStdString()
+              == "P2");
+        CHECK(cwFixStationDiagnostics::fixStationKey(QStringLiteral("p2"), network).toStdString()
+              == "p2");
+    }
+
+    SECTION("A station with no pair resolves ignoring case") {
+        CHECK(cwFixStationDiagnostics::fixStationKey(QStringLiteral("Q1"), network).toStdString()
+              == "q1");
+    }
+
+    SECTION("Before a solve a name resolves to its canonical key") {
+        CHECK(cwFixStationDiagnostics::fixStationKey(QStringLiteral("K1"), cwSurveyNetwork())
+                  .toStdString()
+              == "k1");
+    }
+}
+
+TEST_CASE("cwFixStationDiagnostics::classifyStationConflict judges fixes by the station each names",
+          "[FixStation][cwFixStationDiagnostics][CasePairs]")
+{
+    const cwSurveyNetwork network = casePairs::solvedNetwork();
+    const QString fileName = casePairs::kFileName;
+
+    SECTION("Fixes on both members of a case pair are two fixes") {
+        const QList<cwFixStation> fixes = fixesOn({QStringLiteral("P2"), QStringLiteral("p2")});
+        CHECK(cwFixStationDiagnostics::classifyStationConflict(fixes, 1, {}, network)
+              == StationConflict::None);
+    }
+
+    SECTION("Two fixes on one station are a duplicate") {
+        const QList<cwFixStation> fixes = fixesOn({QStringLiteral("Q1"), QStringLiteral("q1")});
+        CHECK(cwFixStationDiagnostics::classifyStationConflict(fixes, 1, {}, network)
+              == StationConflict::Duplicate);
+    }
+
+    SECTION("A file's fix on one member of a pair blocks that member only") {
+        const QHash<QString, QString> fileFixed = {{QStringLiteral("P2"), fileName}};
+        const QList<cwFixStation> fixes = fixesOn({QStringLiteral("P2"), QStringLiteral("p2")});
+        CHECK(cwFixStationDiagnostics::classifyStationConflict(fixes, 0, fileFixed, network)
+              == StationConflict::FixedByFile);
+        CHECK(cwFixStationDiagnostics::classifyStationConflict(fixes, 1, fileFixed, network)
+              == StationConflict::None);
+    }
+
+    SECTION("A file's fix on a station with no pair blocks it however it is typed") {
+        const QHash<QString, QString> fileFixed = {{QStringLiteral("q1"), fileName}};
+        const QList<cwFixStation> fixes = fixesOn({QStringLiteral("Q1")});
+        CHECK(cwFixStationDiagnostics::classifyStationConflict(fixes, 0, fileFixed, network)
+              == StationConflict::FixedByFile);
     }
 }
 

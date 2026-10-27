@@ -213,7 +213,7 @@ QString cwFixStationDiagnosticsModel::stationErrorMessage(int row) const
     switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network,
                                                              surveyData)) {
     case StationReference::Ok:
-        return stationConflictMessage(fixes, row);
+        return stationConflictMessage(fixes, row, network);
     case StationReference::Empty:
         return tr("This fix has no station name — enter the survey station it fixes.");
     case StationReference::Unknown:
@@ -224,16 +224,19 @@ QString cwFixStationDiagnosticsModel::stationErrorMessage(int row) const
 }
 
 QString cwFixStationDiagnosticsModel::stationConflictMessage(const QList<cwFixStation>& fixes,
-                                                            int row) const
+                                                            int row,
+                                                            const cwSurveyNetwork& network) const
 {
     const QString station = fixes.at(row).stationName().trimmed();
     const QHash<QString, QString> fileFixedStations = m_node->fileFixedStations();
-    switch (cwFixStationDiagnostics::classifyStationConflict(fixes, row, fileFixedStations)) {
+    switch (cwFixStationDiagnostics::classifyStationConflict(fixes, row, fileFixedStations,
+                                                             network)) {
     case StationConflict::None:
         return QString();
     case StationConflict::FixedByFile:
         return cwFixStationDiagnostics::fileFixCollisionMessage(
-            fileFixedStations.value(cwStation::canonicalKey(station)), station);
+            fileFixedStations.value(cwFixStationDiagnostics::fixStationKey(station, network)),
+            station);
     case StationConflict::Duplicate:
         return tr("A fix above already fixes \"%1\" — this one is ignored.").arg(station);
     }

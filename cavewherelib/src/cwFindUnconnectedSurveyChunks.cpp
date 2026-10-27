@@ -130,7 +130,7 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
         // other, and a node left with none gets the origin fix instead.
         bool fixed = false;
         for (const cwFixStation& fix : node.fixStations) {
-            const QString key = cwStation::canonicalKey(nodePrefix + fix.stationName().trimmed());
+            const QString key = cwStation::keyIn(nodePrefix + fix.stationName().trimmed(), nodeKeys);
             if (nodeKeys.contains(key)) {
                 anchors.insert(key);
                 fixed = true;
@@ -189,7 +189,7 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
                 visitSourcedSubtree(visitSourcedSubtree, rootPrefix, node, nativeKeys);
                 for (const cwFixStation& fix : node.fixStations) {
                     const QString key =
-                        cwStation::canonicalKey(rootPrefix + fix.stationName().trimmed());
+                        cwStation::keyIn(rootPrefix + fix.stationName().trimmed(), nativeKeys);
                     if (nativeKeys.contains(key)) {
                         anchors.insert(key);
                     }

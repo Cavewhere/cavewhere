@@ -281,20 +281,20 @@ QString fixUnusableReason(const cwFixStation& fix)
 }
 
 QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
-                                        const QSet<QString>& stationNamesLower,
+                                        const QSet<QString>& stationKeys,
                                         QStringList& errors)
 {
     QList<cwFixStation> kept;
-    QSet<QString> seenLower;
+    QSet<QString> seenKeys;
     kept.reserve(fixes.size());
     for (const cwFixStation& fix : fixes) {
-        const QString lower = cwStation::canonicalKey(fix.stationName().trimmed());
-        if (lower.isEmpty() || !stationNamesLower.contains(lower)) {
+        const QString key = cwStation::keyIn(fix.stationName().trimmed(), stationKeys);
+        if (key.isEmpty() || !stationKeys.contains(key)) {
             errors.append(QStringLiteral("Fix references unknown station: \"%1\"")
                               .arg(fix.stationName()));
             continue;
         }
-        if (seenLower.contains(lower)) {
+        if (seenKeys.contains(key)) {
             errors.append(QStringLiteral("Duplicate fix on station: \"%1\"")
                               .arg(fix.stationName()));
             continue;
@@ -304,21 +304,59 @@ QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
             errors.append(unusable);
             continue;
         }
-        seenLower.insert(lower);
+        seenKeys.insert(key);
         kept.append(fix);
     }
     return kept;
 }
 
-QSet<QString> scopedStationKeys(const QString& scope, const QStringList& stations)
+bool keepsCase(const QString& name)
 {
-    QSet<QString> keys;
-    keys.reserve(stations.size());
-    for (const QString& station : stations) {
-        keys.insert(cwStation::canonicalKey(scope + station));
+    return name != cwStation::canonicalKey(name);
+}
+
+QHash<QString, QString> stationKeysBySpelling(const QString& scope, const QStringList& spellings)
+{
+    QHash<QString, int> spellingsPerKey;
+    spellingsPerKey.reserve(spellings.size());
+    for (const QString& spelling : spellings) {
+        ++spellingsPerKey[cwStation::canonicalKey(spelling)];
+    }
+
+    const QString scopeKey = cwStation::canonicalKey(scope);
+    QHash<QString, QString> keys;
+    keys.reserve(spellings.size());
+    for (const QString& spelling : spellings) {
+        const QString canonical = cwStation::canonicalKey(spelling);
+        const bool isCasePair = spellingsPerKey.value(canonical) > 1;
+        keys.insert(spelling, scopeKey + (isCasePair ? spelling : canonical));
     }
     return keys;
 }
+
+QSet<QString> scopedStationKeys(const QString& scope, const QStringList& stations)
+{
+    const QHash<QString, QString> keys = stationKeysBySpelling(scope, stations);
+    return QSet<QString>(keys.cbegin(), keys.cend());
+}
+
+namespace {
+
+//! Writes \a line inside its own *case preserve block when \a name has a
+//! capital, so cavern reads the station as written.
+void writeStationLine(QTextStream& stream, const QString& name, const QString& line)
+{
+    if (keepsCase(name)) {
+        stream << "*begin" << Qt::endl
+               << "*case preserve" << Qt::endl
+               << line << Qt::endl
+               << "*end" << Qt::endl;
+    } else {
+        stream << line << Qt::endl;
+    }
+}
+
+} // namespace
 
 void writeFixStations(QTextStream& stream,
                       const QList<cwFixStation>& fixes,
@@ -329,16 +367,21 @@ void writeFixStations(QTextStream& stream,
     if (fixes.isEmpty()) {
         if (!fallbackFirstStation.isEmpty()) {
             scope.ensure(stream, globalCS);
-            stream << "*fix " << fallbackFirstStation << " 0 0 0" << Qt::endl;
+            writeStationLine(stream, fallbackFirstStation,
+                             QStringLiteral("*fix %1 0 0 0").arg(fallbackFirstStation));
         }
         return;
     }
 
     for (const cwFixStation& fix : fixes) {
+        // Before the block: cavern drops a *cs at the block's *end.
         scope.ensure(stream, fix.inputCS());
-        stream << "*fix " << fix.stationName() << ' ';
-        writeCoordTriplet(stream, fix.easting(), fix.northing(), fix.elevation());
-        stream << Qt::endl;
+        QString line;
+        QTextStream lineStream(&line);
+        lineStream << "*fix " << fix.stationName() << ' ';
+        writeCoordTriplet(lineStream, fix.easting(), fix.northing(), fix.elevation());
+        lineStream.flush();
+        writeStationLine(stream, fix.stationName(), line);
     }
 }
 

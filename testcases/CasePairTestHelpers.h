@@ -5,14 +5,20 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwErrorModel.h"
+#include "cwFixStationDiagnosticsModel.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
+#include "cwSurveyNode.h"
 #include "cwTriangulateStation.h"
 
 //Qt includes
 #include <QList>
 #include <QPair>
 #include <QPointF>
+#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
 #include <QTransform>
@@ -319,6 +325,27 @@ inline void checkInterpolatedShots(const QList<cwTriangulateStation>& stations,
         INFO("shot " << shot.first.toStdString() << " - " << shot.second.toStdString());
         CHECK(counts.at(i) == expected);
     }
+}
+
+//! True when \a log reports a fixed station no survey station is tied to.
+inline bool reportsUnusedFixedPoint(const QString& log)
+{
+    static const QRegularExpression kUnusedFixedPoint(QStringLiteral("Unused (fixed|control) point"));
+    return log.contains(kUnusedFixedPoint);
+}
+
+//! The Fix Stations page's station error for row \a row of \a node's fixes.
+inline QString stationErrorOfRow(const cwSurveyNode* node, int row)
+{
+    const cwFixStationDiagnosticsModel* diagnostics = node->fixStationDiagnostics();
+    return diagnostics->data(diagnostics->index(row), cwFixStationDiagnosticsModel::StationErrorRole)
+        .toString();
+}
+
+inline QStringList fixReferenceWarnings(const cwSurveyNode* node)
+{
+    return node->errorModel()->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::FixStationReference)});
 }
 
 } // namespace casePairs

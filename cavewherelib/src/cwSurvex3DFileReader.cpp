@@ -232,6 +232,7 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
         out.lookup.setPositionAtKey(key, named.position);
         out.network.setPositionAtKey(key, named.position);
         out.spellings.insert(key, spellingOf(named));
+        out.labels.insert(key, named.name);
         for (const qsizetype index : indexes) {
             keyOfName.insert(labels.at(index).name, key);
         }

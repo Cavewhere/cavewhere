@@ -291,6 +291,7 @@ private:
         exportOptions.tripInjectedDeclinations = InputData.tripInjectedDeclinations;
         exportOptions.excludedExternalOwners = InputData.excludedExternalOwners;
         exportOptions.externalFixedStations = InputData.externalFixedStations;
+        exportOptions.externalStationLabels = InputData.externalStationLabels;
         exportOptions.externalOutputSystems = InputData.externalOutputSystems;
         exportOptions.externalBareFixOrigins = InputData.externalBareFixOrigins;
         // Cavern's positions come straight back into the scene, so *cs out has
@@ -918,6 +919,7 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
     input.tripAttachmentDirs = external.tripAttachmentDirs;
     input.excludedExternalOwners = external.excludedExternalOwners;
     input.externalFixedStations = external.externalFixedStations;
+    input.externalStationLabels = external.externalStationLabels;
     input.externalOutputSystems = external.externalOutputSystems;
     input.externalBareFixOrigins = external.externalBareFixOrigins;
     const QHash<QUuid, bool>& fileOwnsDeclination = external.fileOwnsDeclination;

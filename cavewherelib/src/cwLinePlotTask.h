@@ -96,6 +96,11 @@ public:
         // cavern would otherwise reject with error 46.
         QHash<QUuid, QStringList> externalFixedStations;
 
+        // Per cave or trip owner, cavern's label of each harvested name whose
+        // label differs from its spelling, keyed by the spelling. A fix on
+        // such a station is written with the label under *case preserve.
+        QHash<QUuid, QHash<QString, QString>> externalStationLabels;
+
         // Per cave or trip owner whose file fixes stations with no input *cs
         // and names its own *cs out, that output system as the file writes
         // it (see cwSurvexExporterRegion::Options::externalOutputSystems).
@@ -319,6 +324,10 @@ public:
         // (see Input::externalBareFixOrigins). Also read on the main thread,
         // to warn about the owners it places at the origin.
         QHash<QUuid, cwGeoPoint> externalBareFixOrigins;
+        // Owners whose harvested names include one cavern labels differently
+        // from its spelling, and those labels by spelling (see
+        // Input::externalStationLabels).
+        QHash<QUuid, QHash<QString, QString>> externalStationLabels;
     };
 
     static Input buildInput(const cwCavingRegion* region,

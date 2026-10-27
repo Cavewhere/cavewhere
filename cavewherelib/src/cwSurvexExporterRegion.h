@@ -91,6 +91,11 @@ public:
      * them is dropped with an error rather than written: cavern rejects a
      * second fix at different coordinates (error 46) and fails the whole run.
      *
+     * \c externalStationLabels maps a cave or trip owner to cavern's label of
+     * each of its file's stations whose label differs from its spelling, keyed
+     * by the spelling (a Walls #PREFIX or a capitalized *begin under *case
+     * preserve). A fix on such a station is written with that label.
+     *
      * \c externalOutputSystems maps a cave or trip owner whose file fixes
      * stations with no input \c *cs, and names a \c *cs \c out of its own, to
      * that output system as the file writes it. In a run whose project names no frame, the file's \c *cs \c out is the
@@ -111,6 +116,7 @@ public:
         QHash<QUuid, double> tripInjectedDeclinations;
         QSet<QUuid> excludedExternalOwners;
         QHash<QUuid, QStringList> externalFixedStations;
+        QHash<QUuid, QHash<QString, QString>> externalStationLabels;
         QHash<QUuid, QString> externalOutputSystems;
         QHash<QUuid, cwGeoPoint> externalBareFixOrigins;
         OutputCSPolicy outputCSPolicy = OutputCSPolicy::Shareable;

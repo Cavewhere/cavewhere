@@ -55,8 +55,9 @@ class cwSurveyNode;
  * then the node's own attachment's stations unscoped, deduplicated by
  * canonical key. A source root lists every native trip of its subtree under
  * the label its block gives it. Stations an attached file fixes itself
- * (cwSurveyNode::fileFixedStations()) are left out. A row from the node's own
- * attachment has an invalid handle and no position. Node mode coalesces its
+ * (cwSurveyNode::fileFixedStations()), each name resolved to its solved key,
+ * are left out. A row from the node's own attachment has an invalid handle
+ * and no position. Node mode coalesces its
  * many pulses into one queued rebuild per event-loop turn.
  */
 class CAVEWHERE_LIB_EXPORT cwScopeStationListModel : public QAbstractListModel
