@@ -38,6 +38,13 @@ public:
 
     void clearStations();
     void setPosition(const QString& stationName, const QVector3D& stationPosition);
+
+    //! Stores \a position under \a key exactly as given, without folding case.
+    void setPositionAtKey(const QString& key, const QVector3D& position);
+
+    //! The stored key \a stationName resolves to, or empty when none does.
+    QString key(const QString& stationName) const;
+
     QVector3D position(const QString& stationName) const;
     bool hasPosition(QString stationName) const;
     bool isEmpty() const { return StationPositions.isEmpty(); }
@@ -52,6 +59,8 @@ public:
 
 private:
     QMap<QString, QVector3D> StationPositions;
+
+    QMap<QString, QVector3D>::const_iterator find(const QString& stationName) const;
 };
 
 /**
@@ -67,21 +76,6 @@ inline void cwStationPositionLookup::clearStations() {
   */
 inline void cwStationPositionLookup::setPosition(const QString& stationName, const QVector3D& stationPosition) {
     StationPositions[cwStation::canonicalKey(stationName)] = stationPosition;
-}
-
-/**
-  Get's the station position with stationName.  If stationName doesn't exist, this
-  will return QVector3D()
-  */
-inline QVector3D cwStationPositionLookup::position(const QString& stationName) const {
-    return StationPositions.value(cwStation::canonicalKey(stationName), QVector3D());
-}
-
-/**
-  Checks if the station position model has the position
-  */
-inline bool cwStationPositionLookup::hasPosition(QString stationName) const {
-    return StationPositions.contains(cwStation::canonicalKey(stationName));
 }
 
 /**

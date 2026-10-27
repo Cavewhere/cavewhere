@@ -12,6 +12,7 @@
 #include <QSharedDataPointer>
 #include <QUuid>
 #include <QSet>
+#include <QStringList>
 
 //Our includes
 #include "cwGlobals.h"
@@ -75,10 +76,23 @@ public:
 
     static bool nameIsValid(QString stationName);
 
-    // Canonical form for station-name equality and hash keys. Case-insensitive
-    // everywhere the pipeline compares stations (cavern, cwSurveyNetwork,
-    // cwStationPositionLookup). Use this instead of ad-hoc toLower/toUpper.
+    // Canonical form for station-name equality and hash keys. By-name inserts
+    // into cwSurveyNetwork and cwStationPositionLookup fold with it; by-key
+    // inserts store keys verbatim. By-name lookups try the name exactly, then
+    // its canonical key. Use this instead of ad-hoc toLower/toUpper.
     static QString canonicalKey(const QString &stationName) { return stationName.toLower(); }
+
+    //! The key of a solved station whose name is one of a case pair: survey
+    //! levels lowercased, the station name as cavern spelled it.
+    static QString caseDistinctKey(const QStringList& surveyLevels, const QString& stationName);
+
+    //! \a name as a key of \a keys: the name itself when \a keys holds it,
+    //! otherwise canonicalKey(name).
+    static QString keyIn(const QString& name, const QSet<QString>& keys);
+
+    //! The spelling in \a spellings that \a name names: an exact match, otherwise
+    //! the one spelling that matches ignoring case; empty when none or several do.
+    static QString spellingIn(const QString& name, const QStringList& spellings);
 
 private:
     class PrivateData : public QSharedData {

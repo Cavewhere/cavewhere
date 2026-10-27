@@ -7,34 +7,36 @@
 void cwSurveyNetwork::clear() { stationDataMap.clear(); }
 
 void cwSurveyNetwork::addShot(const QString& fromStation, const QString& toStation) {
-    QString from = cwStation::canonicalKey(fromStation);
-    QString to = cwStation::canonicalKey(toStation);
+    addShotKeys(cwStation::canonicalKey(fromStation), cwStation::canonicalKey(toStation));
+}
 
-    if (from.isEmpty() || to.isEmpty()) {
+void cwSurveyNetwork::addNeighbor(const QString& station, const QString& neighbor) {
+    addNeighborKey(cwStation::canonicalKey(station), cwStation::canonicalKey(neighbor));
+}
+
+void cwSurveyNetwork::addShotKeys(const QString& fromKey, const QString& toKey) {
+    if (fromKey.isEmpty() || toKey.isEmpty()) {
         return;
     }
 
     {
         //This reference is only valid in this scope, only acces stationDataMap once in this scope (prevents use after free)
-        StationData& fromStationData = stationDataMap[from];
-        if (!fromStationData.neighborList.contains(to)) {
-            fromStationData.neighborList.append(to);
+        StationData& fromStationData = stationDataMap[fromKey];
+        if (!fromStationData.neighborList.contains(toKey)) {
+            fromStationData.neighborList.append(toKey);
         }
     }
 
     {
         //This reference is only valid in this scope, only acces stationDataMap once in this scope (prevents use after free)
-        StationData& toStationData = stationDataMap[to];
-        if (!toStationData.neighborList.contains(from)) {
-            toStationData.neighborList.append(from);
+        StationData& toStationData = stationDataMap[toKey];
+        if (!toStationData.neighborList.contains(fromKey)) {
+            toStationData.neighborList.append(fromKey);
         }
     }
 }
 
-void cwSurveyNetwork::addNeighbor(const QString& station, const QString& neighbor) {
-    const QString stationKey = cwStation::canonicalKey(station);
-    const QString neighborKey = cwStation::canonicalKey(neighbor);
-
+void cwSurveyNetwork::addNeighborKey(const QString& stationKey, const QString& neighborKey) {
     if (stationKey.isEmpty() || neighborKey.isEmpty()) {
         return;
     }
@@ -45,9 +47,20 @@ void cwSurveyNetwork::addNeighbor(const QString& station, const QString& neighbo
     }
 }
 
+QHash<QString, cwSurveyNetwork::StationData>::const_iterator cwSurveyNetwork::find(const QString& stationName) const {
+    const auto exact = stationDataMap.constFind(stationName);
+    if (exact != stationDataMap.constEnd()) {
+        return exact;
+    }
+    const QString canonical = cwStation::canonicalKey(stationName);
+    if (canonical == stationName) {
+        return stationDataMap.constEnd();
+    }
+    return stationDataMap.constFind(canonical);
+}
+
 QStringList cwSurveyNetwork::neighbors(const QString& stationName) const {
-    const QString key = cwStation::canonicalKey(stationName);
-    auto dataIterator = stationDataMap.constFind(key);
+    const auto dataIterator = find(stationName);
     if (dataIterator != stationDataMap.constEnd()) {
         return dataIterator->neighborList;
     }
@@ -59,25 +72,21 @@ QStringList cwSurveyNetwork::stations() const { return stationDataMap.keys(); }
 int cwSurveyNetwork::stationCount() const { return stationDataMap.size(); }
 
 bool cwSurveyNetwork::hasStation(const QString& stationName) const {
-    const QString key = cwStation::canonicalKey(stationName.trimmed());
-    if (key.isEmpty()) {
+    const QString trimmed = stationName.trimmed();
+    if (trimmed.isEmpty()) {
         return false;
     }
-    return stationDataMap.contains(key);
+    return find(trimmed) != stationDataMap.constEnd();
 }
 
 bool cwSurveyNetwork::isEmpty() const { return stationDataMap.isEmpty(); }
 
 void cwSurveyNetwork::setPosition(const QString& stationName, const QVector3D& stationPosition) {
-    const QString key = cwStation::canonicalKey(stationName);
-    StationData& stationData = stationDataMap[key];
-    stationData.stationPosition = stationPosition;
-    stationData.positionIsSet = true;
+    setPositionAtKey(cwStation::canonicalKey(stationName), stationPosition);
 }
 
 QVector3D cwSurveyNetwork::position(const QString& stationName) const {
-    const QString key = cwStation::canonicalKey(stationName);
-    auto dataIterator = stationDataMap.constFind(key);
+    const auto dataIterator = find(stationName);
     if (dataIterator != stationDataMap.constEnd() && dataIterator->positionIsSet) {
         return dataIterator->stationPosition;
     }
@@ -85,9 +94,19 @@ QVector3D cwSurveyNetwork::position(const QString& stationName) const {
 }
 
 bool cwSurveyNetwork::hasPosition(const QString& stationName) const {
-    const QString key = cwStation::canonicalKey(stationName);
-    auto dataIterator = stationDataMap.constFind(key);
+    const auto dataIterator = find(stationName);
     return (dataIterator != stationDataMap.constEnd() && dataIterator->positionIsSet);
+}
+
+void cwSurveyNetwork::setPositionAtKey(const QString& key, const QVector3D& position) {
+    StationData& stationData = stationDataMap[key];
+    stationData.stationPosition = position;
+    stationData.positionIsSet = true;
+}
+
+QString cwSurveyNetwork::key(const QString& stationName) const {
+    const auto dataIterator = find(stationName);
+    return dataIterator != stationDataMap.constEnd() ? dataIterator.key() : QString();
 }
 
 cwSurveyNetwork cwSurveyNetwork::scoped(const QString& prefix) const
@@ -109,13 +128,13 @@ cwSurveyNetwork cwSurveyNetwork::scoped(const QString& prefix) const
         }
         for (const QString& neighbor : it.value().neighborList) {
             if (neighbor.startsWith(key)) {
-                network.addShot(station, neighbor.sliced(key.size()));
+                network.addShotKeys(station, neighbor.sliced(key.size()));
             } else {
-                network.addNeighbor(station, neighbor);
+                network.addNeighborKey(station, neighbor);
             }
         }
         if (it.value().positionIsSet) {
-            network.setPosition(station, it.value().stationPosition);
+            network.setPositionAtKey(station, it.value().stationPosition);
         }
     }
     return network;

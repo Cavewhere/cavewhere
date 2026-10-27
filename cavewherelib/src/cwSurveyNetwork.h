@@ -31,12 +31,17 @@ public:
     //! canonicalized like addShot(); an empty name records nothing.
     void addNeighbor(const QString& station, const QString& neighbor);
 
+    //! addShot() and addNeighbor() on keys stored exactly as given, without
+    //! folding case.
+    void addShotKeys(const QString& fromKey, const QString& toKey);
+    void addNeighborKey(const QString& stationKey, const QString& neighborKey);
+
     QStringList neighbors(const QString& stationName) const;
     QStringList stations() const;
     int stationCount() const;
 
-    //! True when stationName names a station in this network. Trims and matches
-    //! case-insensitively, like every other lookup here (cwStation::canonicalKey).
+    //! True when stationName names a station in this network. Trims, then matches
+    //! like every other lookup here: exactly, then by cwStation::canonicalKey.
     //! Prefer this over scanning stations(), which allocates the whole name list
     //! on every call — this is a single hash probe.
     bool hasStation(const QString& stationName) const;
@@ -46,6 +51,12 @@ public:
     void setPosition(const QString& stationName, const QVector3D& stationPosition);
     QVector3D position(const QString& stationName) const;
     bool hasPosition(const QString& stationName) const;
+
+    //! Stores \a position under \a key exactly as given, without folding case.
+    void setPositionAtKey(const QString& key, const QVector3D& position);
+
+    //! The station key \a stationName resolves to, or empty when none does.
+    QString key(const QString& stationName) const;
 
     //! The stations whose names start with \a prefix (case-insensitively),
     //! named by the rest of the name, with their shots and positions. A shot
@@ -79,6 +90,8 @@ private:
     };
 
     QHash<QString, StationData> stationDataMap;
+
+    QHash<QString, StationData>::const_iterator find(const QString& stationName) const;
 };
 
 #endif // CWSURVEYNETWORK_H
