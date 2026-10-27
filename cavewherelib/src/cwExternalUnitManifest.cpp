@@ -178,9 +178,35 @@ Monad::Result<QList<cwScanRow>> read(const QString& path)
     return fromJson(file.readAll());
 }
 
-SolveView solveView(const QList<cwScanRow>& rows, bool preserveCase)
+SolveView solveView(const QList<cwScanRow>& rows, bool preserveCase,
+                    const QStringList& harvestSpellings)
 {
     SolveView view;
+
+    QHash<QString, QStringList> harvestSpellingsByKey;
+    if (!preserveCase) {
+        harvestSpellingsByKey.reserve(harvestSpellings.size());
+        for (const QString& spelling : harvestSpellings) {
+            harvestSpellingsByKey[cwStation::canonicalKey(spelling)].append(spelling);
+        }
+    }
+
+    // The name as cavern reads it: as the rows spell it when the format keeps
+    // case, otherwise the harvest's one spelling of it, or the rows' when the
+    // harvest holds a case pair (a *case preserve block).
+    const auto storedName = [&](const QString& station, const QString& key) {
+        if (preserveCase) {
+            return station;
+        }
+        const QStringList spellings = harvestSpellingsByKey.value(key);
+        if (spellings.size() == 1) {
+            return spellings.first();
+        }
+        const qsizetype nameStart = station.lastIndexOf(QLatin1Char('.')) + 1;
+        const QString spelled = cwStation::canonicalKey(station.first(nameStart))
+                                + station.sliced(nameStart);
+        return spellings.contains(spelled) ? spelled : key;
+    };
 
     // Pre-order, so one cavern path per depth: a row's is its parent's plus
     // its own label.
@@ -211,7 +237,7 @@ SolveView solveView(const QList<cwScanRow>& rows, bool preserveCase)
         QStringList sorted;
         for (const QString& station : row.stations) {
             const QString key = cwStation::canonicalKey(station);
-            const QString stored = preserveCase ? station : key;
+            const QString stored = storedName(station, key);
             if (!key.startsWith(rowPath) || seen.contains(stored)) {
                 continue;
             }

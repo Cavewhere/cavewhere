@@ -865,6 +865,7 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                 // solve. It also skips the harvest below, which runs cavern
                 // over the entry file — cavern follows the very *include
                 // being rejected.
+                QStringList harvestedNames;
                 const QStringList escaping = scan.hasError()
                     ? QStringList()
                     : escapingDependencies(scan.value().dependencies, owner.dataRootDir);
@@ -919,7 +920,8 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                             row.error = cwCavernRunner::firstErrorLine(harvestError);
                         }
                     } else {
-                        result.ownerStations.insert(owner.ownerId, harvest.value().names);
+                        harvestedNames = harvest.value().names;
+                        result.ownerStations.insert(owner.ownerId, harvestedNames);
                         if (!harvest.value().fixedNames.isEmpty()) {
                             result.ownerFixedStations.insert(owner.ownerId,
                                                              harvest.value().fixedNames);
@@ -949,7 +951,8 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                                                   || format == cwExternalCenterlineScanner::Format::Walls;
                         result.sourceViews.insert(
                             owner.ownerId,
-                            cwExternalUnitManifest::solveView(scan.value().rows, preserveCase));
+                            cwExternalUnitManifest::solveView(scan.value().rows, preserveCase,
+                                                              harvestedNames));
                     } else {
                         result.tripDeclinations.insert(
                             owner.ownerId,

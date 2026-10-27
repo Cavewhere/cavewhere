@@ -157,9 +157,14 @@ QString cwSurvexExporterCaveTask::DriverTree::sourcedTripOperand(const Owner& ow
         if (spelled.isEmpty()) {
             return QString();
         }
-        return cwStation::canonicalKey(rootPrefix + m_labels.cavernPath(owner.node->id)
-                                       + cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id))
-               + spelled;
+        // A capitalized block (*case preserve or toupper) keeps its case in
+        // cavern's label, which the root's harvest records.
+        const QString rootRelative =
+            cwStation::canonicalKey(m_labels.cavernPath(owner.node->id)
+                                    + cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id))
+            + spelled;
+        return cwStation::canonicalKey(rootPrefix)
+               + m_externalStationLabels.value(owner.sourceRoot->id).value(rootRelative, rootRelative);
     }
 
     const QString tripScope = cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id);
@@ -352,8 +357,14 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
 
         // The native trips anywhere in the subtree, each its own block in the
         // root's scope under a label no scope of the file takes (§7.2 step 5).
-        // The reset above took any auto declination out of scope.
-        for (const DriverTree::SourcedTrip& sourced : tree.sourcedNativeTrips(node.id)) {
+        // The reset above took any auto declination out of scope. A *case the
+        // file sets at its top level stays in force past its *include, so the
+        // trips get cavern's default back.
+        const QList<DriverTree::SourcedTrip> sourcedTrips = tree.sourcedNativeTrips(node.id);
+        if (!sourcedTrips.isEmpty()) {
+            stream << "*case tolower" << Qt::endl;
+        }
+        for (const DriverTree::SourcedTrip& sourced : sourcedTrips) {
             const QString tripLabel = labels.tripLabels(sourced.node->id).value(sourced.trip->id);
             stream << "*begin " << tripLabel << " ; " << sourced.trip->name << Qt::endl;
             TripExporter->writeTrip(stream, *sourced.trip, false, inherited.gridConvergence);

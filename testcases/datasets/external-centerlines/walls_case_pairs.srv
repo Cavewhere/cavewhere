@@ -1,0 +1,11 @@
+; Synthetic survey under a #PREFIX level whose names keep their case: cavern
+; labels its stations XY:P1, XY:P2, XY:p1, XY:p2, XY:BB2 and XY:Bb2. P1/p1 and
+; P2/p2 are case pairs 30 m apart, and BB2/Bb2 is a pair with no lowercase
+; member. Nothing fixes it.
+#PREFIX XY
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+P1	P2	10.0	90	0
+P1	p1	30.0	0	0
+p1	p2	10.0	90	0
+P2	BB2	10.0	0	0
+p2	Bb2	10.0	0	0

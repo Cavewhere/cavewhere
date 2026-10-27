@@ -51,8 +51,11 @@ CAVEWHERE_LIB_EXPORT Monad::Result<QList<cwScanRow>> read(const QString& path);
  * names are "alpha.A5"; "st1" for "simmons_hall.st1"), sorted.
  *
  * \a preserveCase keeps each name as the rows spell it, which is how cavern
- * reads a Compass or Walls file; otherwise names are canonical, as cavern
- * reads a Survex file under its default *case lower. Either way they are the
+ * reads a Compass or Walls file. Otherwise each name takes its spelling in
+ * \a harvestSpellings (cwExternalStationHarvest::Stations::names), so a
+ * Survex *case preserve or *case toupper name keeps the case cavern reads;
+ * with no harvest spelling for it, a name is canonical, as cavern reads a
+ * Survex file under its default *case lower. Either way they are the
  * spelling an *equate operand needs to name the station.
  *
  * unitDeclinations holds each unit's cwScanRow::declination under the same
@@ -66,7 +69,8 @@ struct SolveView {
 
     bool operator==(const SolveView& other) const = default;
 };
-CAVEWHERE_LIB_EXPORT SolveView solveView(const QList<cwScanRow>& rows, bool preserveCase);
+CAVEWHERE_LIB_EXPORT SolveView solveView(const QList<cwScanRow>& rows, bool preserveCase,
+                                         const QStringList& harvestSpellings = {});
 
 } // namespace cwExternalUnitManifest
 

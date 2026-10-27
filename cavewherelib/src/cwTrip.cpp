@@ -95,8 +95,11 @@ namespace {
     // first spelling seen for a station's key (stationKeys). \a authored comes
     // first because a chunk name is the only spelling a person typed, and the
     // two derived sources echo it back lowercased. Pairs are found per source,
-    // so the harvest's Q1 and the solve's q1 stay one station. Natural order,
-    // so a station list reads the way a caver counts ("a2" before "a10").
+    // so the harvest's Q1 and the solve's q1 stay one station, except that a
+    // harvest spelling the solve keys exactly is that station: the solve holds
+    // a pair the harvest missed (a survey cavern dropped from the file alone,
+    // #651). Natural order, so a station list reads the way a caver counts
+    // ("a2" before "a10").
     //
     // Takes the three lists rather than one concatenation so that adding a
     // fourth source, or reordering these, is one edit here instead of one per
@@ -111,8 +114,16 @@ namespace {
         QSet<QString> seenNames;
         merged.reserve(authored.size() + harvested.size() + solved.size());
 
-        const auto mergeSource = [&](const QStringList& spellings, bool keepsCase) {
-            const QHash<QString, QString> keys = stationKeys(spellings, keepsCase);
+        const QHash<QString, QString> solvedKeys = stationKeys(solved, fileKeepsCase);
+        const QSet<QString> solvedKeySet(solvedKeys.cbegin(), solvedKeys.cend());
+        QHash<QString, QString> harvestedKeys = stationKeys(harvested, fileKeepsCase);
+        for (auto it = harvestedKeys.begin(); it != harvestedKeys.end(); ++it) {
+            if (solvedKeySet.contains(it.key())) {
+                it.value() = it.key();
+            }
+        }
+
+        const auto mergeSource = [&](const QStringList& spellings, const QHash<QString, QString>& keys) {
             for (const QString& spelling : spellings) {
                 const QString key = keys.value(spelling);
                 // A spelling already listed under another source's key is the
@@ -126,9 +137,9 @@ namespace {
             }
         };
 
-        mergeSource(authored, false);
-        mergeSource(harvested, fileKeepsCase);
-        mergeSource(solved, fileKeepsCase);
+        mergeSource(authored, stationKeys(authored, false));
+        mergeSource(harvested, harvestedKeys);
+        mergeSource(solved, solvedKeys);
 
         //Stable: two spellings can compare equivalent without being equal
         //("a01" and "a1" share a natural order), and the caller's source order
@@ -138,6 +149,28 @@ namespace {
                              return cwNameUtils::naturalLess(a.name, b.name);
                          });
         return merged;
+    }
+
+    // The tails of \a keys under \a prefix: a scoped trip's own stations.
+    QSet<QString> scopedTails(const QStringList& keys, const QString& prefix)
+    {
+        QSet<QString> tails;
+        for (const QString& key : keys) {
+            if (key.startsWith(prefix, Qt::CaseInsensitive)) {
+                tails.insert(key.mid(prefix.size()));
+            }
+        }
+        return tails;
+    }
+
+    // True for a key outside a scoped native trip's scope that differs only by
+    // case from one of the trip's own lowercase \a tails. In the trip's view an
+    // exact lookup of the tail would land on it (a cave-level file's P2 beside
+    // the trip's own p2), so the view leaves it out.
+    bool shadowsTail(const QString& key, const QSet<QString>& tails)
+    {
+        const QString canonical = cwStation::canonicalKey(key);
+        return canonical != key && tails.contains(canonical);
     }
 
     // True when the trip's own stations come from a file that keeps case.
@@ -952,6 +985,15 @@ cwStationPositionLookup cwTrip::solvedStationPositions() const {
     //for each scoped entry so bare names resolve, keeping the full node data so
     //a cross-trip tie-in neighbor still carries a position.
     const QMap<QString, QVector3D> positions = lookup.positions();
+    if(isWrittenInSourcedBlock(m_sourcePath, m_externalCenterline, node)) {
+        const QSet<QString> tails = scopedTails(positions.keys(), prefix);
+        lookup.clearStations();
+        for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
+            if(!shadowsTail(it.key(), tails)) {
+                lookup.setPositionAtKey(it.key(), it.value());
+            }
+        }
+    }
     for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
         if(it.key().startsWith(prefix, Qt::CaseInsensitive)) {
             lookup.setPositionAtKey(it.key().mid(prefix.size()), it.value());
@@ -971,6 +1013,27 @@ cwSurveyNetwork cwTrip::solvedNetwork() const {
     if(prefix.isEmpty()) {
         //Native trip: pass through, cross-trip junction neighbors intact.
         return network;
+    }
+
+    if(isWrittenInSourcedBlock(m_sourcePath, m_externalCenterline, node)) {
+        //Rebuilt edge by edge, so a neighbor in another scope stays an edge.
+        const cwSurveyNetwork full = network;
+        const QStringList fullStations = full.stations();
+        const QSet<QString> tails = scopedTails(fullStations, prefix);
+        network.clear();
+        for(const QString& station : fullStations) {
+            if(shadowsTail(station, tails)) {
+                continue;
+            }
+            for(const QString& neighbor : full.neighbors(station)) {
+                if(!shadowsTail(neighbor, tails)) {
+                    network.addNeighborKey(station, neighbor);
+                }
+            }
+            if(full.hasPosition(station)) {
+                network.setPositionAtKey(station, full.position(station));
+            }
+        }
     }
 
     //Scoped trip: alias each scoped station to its

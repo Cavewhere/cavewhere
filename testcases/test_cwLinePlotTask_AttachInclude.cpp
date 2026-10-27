@@ -681,6 +681,46 @@ TEST_CASE("Cave-attached Compass file solves with X-flagged shots that carry LRU
     CHECK(lookup.positions().size() == kept.size());
 }
 
+TEST_CASE("A file with no case pair keeps today's lowercase keys",
+          "[Attach][Cave][CasePairs]")
+{
+    // Keys keep a name's case only for a case pair, so every format's file
+    // without one solves to the keys it had before case pairs.
+    struct Case {
+        QString fileName;
+        std::string keys;
+    };
+    const Case keyCase = GENERATE(
+        Case{QStringLiteral("compass_excluded_lrud.dat"), "k1, k2, k3"},
+        Case{QStringLiteral("walls_prefix_fix.srv"), "xy.p1, xy.p2, xy.p3"},
+        Case{QStringLiteral("survex_case_preserve_blocks.svx"), "foo.p1, foo.p2, foo.p3"},
+        Case{QStringLiteral("survex_case_upper.svx"), "foo.p1, foo.p2, foo.p3"},
+        Case{QStringLiteral("survex_default_case.svx"), "upper.p1, upper.p2, upper.p3"},
+        Case{QStringLiteral("walls_case_lower.srv"), "p1, p2, p3"},
+        Case{QStringLiteral("walls_case_upper.srv"), "p1, p2, p3"});
+    INFO("fixture " << keyCase.fileName.toStdString());
+
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("no-case-pair")),
+                                             fixturePath(keyCase.fileName));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Plain"));
+    cave->setExternalCenterline(cwExternalCenterline(keyCase.fileName));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{cave->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(casePairs::storedKeys(cave->scopedPositions()) == keyCase.keys);
+    CHECK(casePairs::joined(cave->scopedNetwork().stations()) == keyCase.keys);
+}
+
 TEST_CASE("Cave-attached Compass file keeps each member of a case pair as its own station",
           "[Attach][Cave][Compass][CasePairs]")
 {
@@ -2431,6 +2471,103 @@ TEST_CASE("An unfixed file whose stations keep a capitalized block sits at the o
                 kPrefixFixtureLegMeters);
 }
 
+TEST_CASE("A fix lands on the station it names in every case regime",
+          "[Attach][FixStation][CasePairs]")
+{
+    // One row per row of the case-handling table: how cavern reads the file's
+    // case decides the station's key and the spelling the fix is written in.
+    // \a neighbor is tied to the fixed station by a 10 m leg; \a partner, when
+    // set, is the other member of the fixed station's case pair, 30 m away.
+    struct Case {
+        QString fileName;
+        QString typed;
+        QString key;
+        QString neighbor;
+        QString partner;
+    };
+    const Case fixCase = GENERATE(
+        Case{QStringLiteral("survex_default_case.svx"), QStringLiteral("Upper.P2"),
+             QStringLiteral("upper.p2"), QStringLiteral("upper.p1"), QString()},
+        Case{QStringLiteral("survex_case_upper.svx"), QStringLiteral("foo.p2"),
+             QStringLiteral("foo.p2"), QStringLiteral("foo.p1"), QString()},
+        Case{QStringLiteral("survex_case_upper.svx"), QStringLiteral("FOO.P2"),
+             QStringLiteral("foo.p2"), QStringLiteral("foo.p1"), QString()},
+        Case{QStringLiteral("walls_case_lower.srv"), QStringLiteral("P2"),
+             QStringLiteral("p2"), QStringLiteral("p1"), QString()},
+        Case{QStringLiteral("walls_case_upper.srv"), QStringLiteral("p2"),
+             QStringLiteral("p2"), QStringLiteral("p1"), QString()},
+        Case{QStringLiteral("survex_case_pair_splays.svx"), QStringLiteral("P2"),
+             QStringLiteral("P2"), QStringLiteral("P1"), QStringLiteral("p2")},
+        Case{QStringLiteral("walls_case_pairs.srv"), QStringLiteral("xy.P2"),
+             QStringLiteral("xy.P2"), QStringLiteral("xy.P1"), QStringLiteral("xy.p2")});
+    INFO("fixture " << fixCase.fileName.toStdString() << ", the fix names "
+                    << fixCase.typed.toStdString() << ", expected on " << fixCase.key.toStdString());
+
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    cwCave* cave = solveFixedCaveAttachment(tempRoot, region, manager, fixCase.fileName,
+                                            {placingFix(fixCase.typed)});
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    checkFixesAnchor(manager, cave);
+    CHECK(stationErrorOfRow(cave, 0).isEmpty());
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    checkPlaced(lookup, fixCase.key);
+    checkTiedTo(lookup, fixCase.key, fixCase.neighbor, kPrefixFixtureLegMeters);
+    if (!fixCase.partner.isEmpty()) {
+        checkTiedTo(lookup, fixCase.key, fixCase.partner, casePairs::kPairFixtureSeparationMeters);
+    }
+}
+
+TEST_CASE("A fix that matches a case pair only by case names no station",
+          "[Attach][FixStation][CasePairs][Walls]")
+{
+    // walls_case_pairs.srv holds XY:BB2 and XY:Bb2 and no xy.bb2, so bB2 is
+    // neither member: it gets the warning a fix on a missing station gets.
+    // A fix on xy.P1 anchors the file, and BB2 and Bb2 stay where their shots
+    // put them from it.
+    constexpr double kFarNorthMeters = 100.0;
+    // BB2 is one leg east and one leg north of P1; Bb2 is one leg east and a
+    // pair separation plus one leg north of it.
+    const double kP1ToUpperBB2Meters = std::hypot(kPrefixFixtureLegMeters, kPrefixFixtureLegMeters);
+    const double kP1ToMixedBb2Meters = std::hypot(kPrefixFixtureLegMeters,
+                                                  casePairs::kPairFixtureSeparationMeters + kPrefixFixtureLegMeters);
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    const QString typed = GENERATE(QStringLiteral("xy.bB2"), QStringLiteral("xy.nope"));
+    INFO("the second fix names " << typed.toStdString());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    cwCave* cave = solveFixedCaveAttachment(tempRoot, region, manager, QStringLiteral("walls_case_pairs.srv"),
+                                            {placingFix(QStringLiteral("xy.P1")),
+                                             placingFixNorthOf(typed, kFarNorthMeters)});
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK_FALSE(reportsUnusedFixedPoint(manager.cavernLog()));
+    CHECK_FALSE(manager.driverSource().contains(typed, Qt::CaseInsensitive));
+
+    CHECK(stationErrorOfRow(cave, 0).isEmpty());
+    const QString rowError = stationErrorOfRow(cave, 1);
+    INFO("row error: " << rowError.toStdString());
+    CHECK(rowError.contains(typed));
+    const QStringList warnings = fixReferenceWarnings(cave);
+    INFO("warnings: " << warnings.join(QLatin1Char('\n')).toStdString());
+    CHECK(std::any_of(warnings.cbegin(), warnings.cend(), [&typed](const QString& warning) {
+        return warning.contains(typed);
+    }));
+
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    CHECK(casePairs::storedKeys(lookup) == "xy.BB2, xy.Bb2, xy.P1, xy.P2, xy.p1, xy.p2");
+    checkPlaced(lookup, QStringLiteral("xy.P1"));
+    checkTiedTo(lookup, QStringLiteral("xy.P1"), QStringLiteral("xy.BB2"), kP1ToUpperBB2Meters);
+    checkTiedTo(lookup, QStringLiteral("xy.P1"), QStringLiteral("xy.Bb2"), kP1ToMixedBb2Meters);
+}
+
 namespace {
 constexpr double kNativeLegMeters = 10.0;
 } // namespace
@@ -2483,4 +2620,63 @@ TEST_CASE("A tie to a trip-attached Compass station ties the station the file sp
 
     // The pairs keep their 100 ft and their own legs.
     casePairs::checkStations(lookup, cave->scopedNetwork(), prefix);
+}
+
+TEST_CASE("A trip-attached Compass pair the harvest missed lists each member at its own position",
+          "[Attach][Compass][CasePairs][Equate]")
+{
+    // compass_case_pair_split.dat: survey A runs P1 -> P2 and survey B p2 -> p3,
+    // 30 ft east each, and nothing joins them. Alone, cavern keeps one survey
+    // (issue #651), so the harvest sees no pair; the native trip ties both
+    // into the region solve, where P2 and p2 sit apart as a case pair.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    const QString fileName = QStringLiteral("compass_case_pair_split.dat");
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("split-case-pair")),
+                                             fixturePath(fileName));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Split"));
+    cwTrip* native = addTripWithShot(cave, QStringLiteral("Native"), QStringLiteral("N0"),
+                                     QStringLiteral("N1"), kNativeLegMeters);
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(fileName));
+    region.equates()->appendEquate(
+        cwEquate({native->stationHandle(QStringLiteral("N0")), attached->stationHandle(QStringLiteral("P1"))}));
+    region.equates()->appendEquate(
+        cwEquate({native->stationHandle(QStringLiteral("N1")), attached->stationHandle(QStringLiteral("p3"))}));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+    INFO("harvest: " << casePairs::joined(attached->externalStations()));
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const QString prefix = tripScopeLabel(attached) + QStringLiteral(".");
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    INFO("stored keys: " << casePairs::storedKeys(lookup));
+    REQUIRE(lookup.positions().contains(prefix + QStringLiteral("P2")));
+    REQUIRE(lookup.positions().contains(prefix + QStringLiteral("p2")));
+    REQUIRE(lookup.position(prefix + QStringLiteral("P2")).distanceToPoint(lookup.position(prefix + QStringLiteral("p2")))
+            > casePairs::kLegMarginMeters);
+
+    const QList<cwTrip::KnownStation> stations = attached->knownStations();
+    QStringList known;
+    for (const cwTrip::KnownStation& station : stations) {
+        known.append(station.name);
+    }
+    INFO("known stations: " << casePairs::joined(known));
+    for (const QString& member : {QStringLiteral("P2"), QStringLiteral("p2")}) {
+        INFO("member " << member.toStdString());
+        const auto station = std::find_if(stations.cbegin(), stations.cend(),
+                                          [&member](const cwTrip::KnownStation& candidate) {
+            return candidate.name == member;
+        });
+        REQUIRE(station != stations.cend());
+        REQUIRE(station->position.has_value());
+        CHECK(casePairs::samePoint(*station->position, lookup.position(prefix + member)));
+    }
 }

@@ -1,0 +1,7 @@
+; Synthetic survey under Survex's default *case tolower: cavern labels its
+; stations upper.p1, upper.p2 and upper.p3. Nothing fixes it.
+*begin Upper
+*data normal from to tape compass clino
+P1 P2 10 90 0
+P2 P3 10 0 0
+*end Upper

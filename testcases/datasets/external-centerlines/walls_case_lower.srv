@@ -1,0 +1,5 @@
+; Synthetic survey read under CASE=Lower: cavern labels its stations p1, p2
+; and p3. Nothing fixes it.
+#UNITS D=Meters A=Degrees V=Degrees DECL=0 CASE=Lower
+P1	P2	10.0	90	0
+P2	P3	10.0	0	0

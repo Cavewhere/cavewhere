@@ -43,6 +43,10 @@ inline constexpr double kLegMarginMeters = 0.05;
 inline constexpr float kSamePointMeters = 0.001f;
 inline constexpr int kShotCount = 6;
 
+// walls_case_pairs.srv, survex_case_pair_block.svx and
+// survex_case_pair_splays.svx set each pair's members 30 m apart.
+inline constexpr double kPairFixtureSeparationMeters = 30.0;
+
 inline constexpr double kMetersPerFoot = 0.3048;
 inline constexpr double kLegMeters = 30.0 * kMetersPerFoot;
 // An interpolated station lies on its shot within a millimeter in the world and

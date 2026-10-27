@@ -59,3 +59,37 @@ TEST_CASE("A LiDAR note holding both members of a case pair calculates its north
     CHECK(note.noteTransformation()->northUp()
           == Catch::Approx(casePairs::kTurnedNorthUp).margin(casePairs::kNorthToleranceDegrees));
 }
+
+TEST_CASE("A LiDAR note on a native trip beside a cave-level file's case pair calculates its north",
+          "[cwNoteLiDAR][Attach][CasePairs]") {
+    cwJobSettings::initialize();
+    REQUIRE(cwJobSettings::instance()->automaticUpdate());
+    auto fixture = makeSavedProject(QStringLiteral("lidar-north-mixed-case-pairs"),
+                                    QStringLiteral("LiDARCave"),
+                                    QStringLiteral("LiDARTrip"));
+    const casePairs::MixedCave mixed = casePairs::addMixedCave(fixture.get());
+
+    cwNoteLiDAR note;
+    note.setParentTrip(mixed.native);
+    note.noteTransformation()->setUpMode(cwNoteLiDARTransformation::UpMode::ZisUp);
+    REQUIRE(note.autoCalculateNorth());
+
+    // The native P2 -> N1 runs north, and the scan draws it turned the way
+    // the case-pair page is.
+    QTransform toNote;
+    toNote.translate(casePairs::kP1OnNote.x(), casePairs::kP1OnNote.y());
+    toNote.rotate(casePairs::kNoteTurnDegrees);
+    const QList<QPair<QString, QPointF>> stations = {
+        {QStringLiteral("P2"), toNote.map(QPointF(0.0, 0.0))},
+        {QStringLiteral("N1"), toNote.map(QPointF(0.0, casePairs::kLegOnNote))},
+    };
+    for (const auto& [name, onNote] : stations) {
+        cwNoteLiDARStation station;
+        station.setName(name);
+        station.setPositionOnNote(QVector3D(onNote));
+        note.addStation(station);
+    }
+
+    CHECK(note.noteTransformation()->northUp()
+          == Catch::Approx(casePairs::kTurnedNorthUp).margin(casePairs::kNorthToleranceDegrees));
+}

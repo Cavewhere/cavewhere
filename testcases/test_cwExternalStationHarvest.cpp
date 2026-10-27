@@ -7,6 +7,7 @@
 
 // Catch
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 // Our
 #include "cwCavernRunner.h"
@@ -172,6 +173,37 @@ TEST_CASE("Harvest lists no label for a station cavern labels as it is spelled",
     const cwExternalStationHarvest::Stations stations = harvestStations(QStringLiteral("compass_case_pairs.dat"));
     CHECK(stations.names.join(QStringLiteral(", ")).toStdString() == "P1, P2, P3, Q1, p1, p2, p3");
     CHECK(joinedLabels(stations.labels).empty());
+}
+
+TEST_CASE("Harvest spells each station the way cavern's case regime for its file reads it",
+          "[ExternalStationHarvest][CasePairs]")
+{
+    // Survey levels lowercase, the station name as cavern wrote it, and
+    // cavern's exact label wherever it differs from that spelling.
+    struct Case {
+        QString fileName;
+        std::string names;
+        std::string labels;
+    };
+    const Case harvestCase = GENERATE(
+        Case{QStringLiteral("survex_case_upper.svx"), "foo.P1, foo.P2, foo.P3",
+             "foo.P1=FOO.P1, foo.P2=FOO.P2, foo.P3=FOO.P3"},
+        Case{QStringLiteral("survex_default_case.svx"), "upper.p1, upper.p2, upper.p3", ""},
+        Case{QStringLiteral("walls_case_lower.srv"), "p1, p2, p3", ""},
+        Case{QStringLiteral("walls_case_upper.srv"), "P1, P2, P3", ""},
+        Case{QStringLiteral("walls_case_pairs.srv"), "xy.BB2, xy.Bb2, xy.P1, xy.P2, xy.p1, xy.p2",
+             "xy.BB2=XY.BB2, xy.Bb2=XY.Bb2, xy.P1=XY.P1, xy.P2=XY.P2, xy.p1=XY.p1, xy.p2=XY.p2"},
+        Case{QStringLiteral("survex_case_pair_block.svx"), "pairs.P1, pairs.P2, pairs.p1, pairs.p2", ""},
+        Case{QStringLiteral("compass_case_pairs.mak"),
+             "compass_case_pairs.P1, compass_case_pairs.P2, compass_case_pairs.P3, compass_case_pairs.Q1, "
+             "compass_case_pairs.p1, compass_case_pairs.p2, compass_case_pairs.p3",
+             ""});
+    INFO("fixture " << harvestCase.fileName.toStdString());
+
+    const cwExternalStationHarvest::Stations stations = harvestStations(harvestCase.fileName);
+    CHECK(stations.names.join(QStringLiteral(", ")).toStdString() == harvestCase.names);
+    CHECK(joinedLabels(stations.labels) == harvestCase.labels);
+    CHECK(stations.fixedNames.isEmpty());
 }
 
 TEST_CASE("Harvest names a Walls project", "[ExternalStationHarvest]")

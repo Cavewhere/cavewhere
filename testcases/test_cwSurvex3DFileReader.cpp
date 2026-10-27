@@ -1189,3 +1189,35 @@ TEST_CASE("cwSurvex3DFileReader keys case variants equated at one point as one s
     CHECK(neighborsOf(parsed.network, "cave.p9") == "cave.n1, cave.z1");
     CHECK(parsed.spellings.value(QStringLiteral("cave.p9")).toStdString() == "cave.p9");
 }
+
+TEST_CASE("cwSurvex3DFileReader keeps each member of a Walls case pair under a lowercase level",
+          "[cwSurvex3DFileReader][CasePairs]") {
+    // Cavern labels them cave:XY:P2 and so on. BB2 and Bb2 are a pair with no
+    // lowercase member, so bB2 names neither.
+    const auto parsed = solveSurvexFiles(
+        {{QStringLiteral("walls_pairs.svx"), "*begin cave\n*include walls_case_pairs.srv\n*end cave\n"},
+         {QStringLiteral("walls_case_pairs.srv"),
+          externalCenterlineBytes(QStringLiteral("walls_case_pairs.srv"))}});
+    INFO("network:\n" << describe(parsed.network).toStdString());
+
+    CHECK(sortedKeys(parsed.lookup) == "cave.xy.BB2, cave.xy.Bb2, cave.xy.P1, cave.xy.P2, cave.xy.p1, cave.xy.p2");
+    CHECK(neighborsOf(parsed.network, "cave.xy.P2") == "cave.xy.BB2, cave.xy.P1");
+    CHECK(neighborsOf(parsed.network, "cave.xy.p2") == "cave.xy.Bb2, cave.xy.p1");
+    CHECK(neighborsOf(parsed.network, "cave.xy.P1") == "cave.xy.P2, cave.xy.p1");
+    CHECK(neighborsOf(parsed.network, "cave.xy.p1") == "cave.xy.P1, cave.xy.p2");
+    CHECK(parsed.lookup.key(QStringLiteral("cave.xy.bB2")).isEmpty());
+}
+
+TEST_CASE("cwSurvex3DFileReader keys a Survex *case toupper file in lowercase",
+          "[cwSurvex3DFileReader][CasePairs]") {
+    // Cavern labels them FOO.P1 and so on: no two labels differ only in case.
+    const auto parsed = solveSurvexFiles(
+        {{QStringLiteral("upper.svx"), "*include survex_case_upper.svx\n"},
+         {QStringLiteral("survex_case_upper.svx"),
+          externalCenterlineBytes(QStringLiteral("survex_case_upper.svx"))}});
+    INFO("network:\n" << describe(parsed.network).toStdString());
+
+    CHECK(sortedKeys(parsed.lookup) == "foo.p1, foo.p2, foo.p3");
+    CHECK(neighborsOf(parsed.network, "foo.p2") == "foo.p1, foo.p3");
+    CHECK(parsed.spellings.value(QStringLiteral("foo.p2")).toStdString() == "foo.P2");
+}

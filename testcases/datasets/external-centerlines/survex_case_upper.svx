@@ -1,0 +1,10 @@
+; Synthetic survey read under *case toupper: cavern labels its stations
+; FOO.P1, FOO.P2 and FOO.P3. The setting sits at the file's top level with no
+; block around it, so it reaches whatever follows the *include. Nothing fixes
+; it.
+*case toupper
+*begin foo
+*data normal from to tape compass clino
+p1 p2 10 90 0
+p2 p3 10 0 0
+*end foo
