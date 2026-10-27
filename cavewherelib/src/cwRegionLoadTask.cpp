@@ -264,8 +264,9 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
     for(int i = 0; i < protoCave.legacy_trips_size(); i++) {
         cwTrip* trip = new cwTrip();
         loadTrip(protoCave.legacy_trips(i), trip);
-        cave->addTrip(trip);
+        trips.append(trip);
     }
+    cave->addTrips(trips);
 
     //A legacy file's per-cave lookup and network are left behind: the region
     //keeps one lookup under full cavern names, and the solve that follows a
