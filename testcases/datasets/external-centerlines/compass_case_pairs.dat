@@ -1,0 +1,16 @@
+Case Pairs Cave
+SURVEY NAME: CP
+SURVEY DATE: 1 1 2026
+SURVEY TEAM: 
+Tester
+DECLINATION:    0.00  FORMAT: DDDDLRUDLAaDdCT  CORRECTIONS:  0.00 0.00 0.00  CORRECTIONS2:  0.00 0.00  DISCOVERY: 1 1 2026  PREFIX:
+
+                FROM                   TO   LENGTH  BEARING      INC     LEFT       UP     DOWN    RIGHT     AZM2     INC2   FLAGS  COMMENTS
+
+                  P1                   P2    30.00    90.00     0.00     1.00     1.00     1.00     1.00  -999.00  -999.00
+                  P2                   P3    30.00    90.00     0.00     1.00     1.00     1.00     1.00  -999.00  -999.00
+                  P3                   Q1    30.00   180.00     0.00     1.00     1.00     1.00     1.00  -999.00  -999.00
+                  P1                   p1   100.00     0.00     0.00     1.00     1.00     1.00     1.00  -999.00  -999.00
+                  p1                   p2    30.00    90.00     0.00     1.00     1.00     1.00     1.00  -999.00  -999.00
+                  p2                   p3    30.00    90.00     0.00     1.00     1.00     1.00     1.00  -999.00  -999.00
+

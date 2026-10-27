@@ -27,7 +27,7 @@ struct cwLegError {
     float v = 0.0f;
 };
 
-// Unordered pair of canonical station names -> the error of the traverse the leg sits in
+// Unordered pair of solved station keys -> the error of the traverse the leg sits in
 using cwLegErrorsByShot = QHash<QPair<QString, QString>, cwLegError>;
 
 /**
@@ -40,25 +40,35 @@ using cwLegErrorsByShot = QHash<QPair<QString, QString>, cwLegError>;
 class CAVEWHERE_LIB_EXPORT cwSurvex3DFileReader
 {
 public:
+    // Every station is keyed by cwStation::canonicalKey, except the members of
+    // a case pair (labels that lowercase alike at different coordinates), which
+    // key by cwStation::caseDistinctKey.
     struct NetworkAndLookup {
         cwSurveyNetwork network;
         cwStationPositionLookup lookup;
         cwSplayTipsByStation splayTips;
-        //! Canonical names of the stations the data fixes with *fix (or a
-        //! format's own fix). The origin cavern invents for a survey with no
+        //! Keys of the stations the data fixes with *fix (or a format's own
+        //! fix), in .3d order. The origin cavern invents for a survey with no
         //! fix is excluded.
         QStringList fixedStations;
 
         // The img_ERROR_INFO closure error of every leg that sits in a loop,
-        // keyed by legKey() of its two full station names. Legs outside any
+        // keyed by legKeyOfKeys() of its two station keys. Legs outside any
         // loop (dead ends, articulation legs, hanging traverses), splays, and
         // traverses cavern reports with zero error are absent.
         cwLegErrorsByShot legErrors;
+
+        //! Each solved key's spelling: survey levels lowercased, the station
+        //! name as cavern wrote it.
+        QHash<QString, QString> spellings;
     };
 
     // The sorted pair of canonical station names, so a leg reads the same
     // key in either direction.
     static QPair<QString, QString> legKey(const QString& from, const QString& to);
+
+    //! The leg between two solved keys, ordered, keys kept as given.
+    static QPair<QString, QString> legKeyOfKeys(const QString& fromKey, const QString& toKey);
 
     // Parses a .3d file once, returning the survey network (station names,
     // shot connectivity, positions), a standalone position lookup, and the

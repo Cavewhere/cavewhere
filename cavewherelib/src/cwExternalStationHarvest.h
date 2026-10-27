@@ -34,8 +34,9 @@
 namespace cwExternalStationHarvest {
 
 /**
- * Returns the station names \a entryFile declares, canonicalized with
- * cwStation::canonicalKey and sorted.
+ * Returns the station names \a entryFile declares, sorted. Each is the
+ * station's spelling: survey levels lowercased, the station name as cavern
+ * wrote it, so a Compass or Walls file's K1 reads "K1".
  *
  * \warning Only the stations reachable from the one station netskel fixes.
  * A file holding two surveys with no leg and no "*equate" between them has
@@ -45,11 +46,10 @@ namespace cwExternalStationHarvest {
  * per file, which is a change to the vendored cavern — issue #651.
  *
  * The names are in the attachment's own namespace — the file's own "*begin"
- * blocks are the only naming levels, since the harvest driver adds none. That
- * is the same spelling cwTrip::solvedStations() yields for the trip once the
- * region solve does place it: the main driver wraps the identical "*include"
- * in the cave's and trip's "*begin" blocks, and cwTrip::solvedStations()
- * strips exactly that wrapper back off.
+ * blocks are the only naming levels, since the harvest driver adds none. The
+ * main driver wraps the identical "*include" in the cave's and trip's "*begin"
+ * blocks, so the region solve names the same stations under that wrapper and
+ * resolves wrapper + spelling to a solved key.
  *
  * A successful result always names at least one station, and empty names always
  * come with an error — a caller cannot otherwise tell "this file declares
@@ -70,7 +70,7 @@ CAVEWHERE_LIB_EXPORT Monad::Result<QStringList> harvest(const QString& entryFile
 struct Stations {
     //! The same names harvest() returns.
     QStringList names;
-    //! The subset of names the file fixes itself, canonical and in .3d order.
+    //! The subset of names the file fixes itself, in .3d order.
     //! The origin cavern invents for a file with no fix is excluded.
     QStringList fixedNames;
 };
@@ -93,7 +93,7 @@ CAVEWHERE_LIB_EXPORT Monad::Result<Stations> harvestWithFixes(
 
 /**
  * Returns the station names of every component of \a entryFile that holds one
- * of \a seedStations, canonicalized and sorted like harvest().
+ * of \a seedStations, spelled and sorted like harvest().
  *
  * Each seed is fixed at the origin, so cavern places the seed's component
  * whether or not anything else ties it in. Seeds are named in the file's own

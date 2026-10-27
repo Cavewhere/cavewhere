@@ -1068,3 +1068,124 @@ TEST_CASE("cwSurvex3DFileReader names each leg end under its own survey with a n
     CHECK(neighborsOf(parsed.network, "site.beta.b1") == "site.beta.b2");
     CHECK(neighborsOf(parsed.network, "site.beta.b2") == "site.beta.b1");
 }
+
+TEST_CASE("cwSurvex3DFileReader orders a leg between keys and keeps their case",
+          "[cwSurvex3DFileReader]") {
+    const auto describeLeg = [](const QPair<QString, QString>& leg) {
+        return (leg.first + QStringLiteral(" - ") + leg.second).toStdString();
+    };
+    CHECK(describeLeg(cwSurvex3DFileReader::legKeyOfKeys(QStringLiteral("p2"), QStringLiteral("P2")))
+          == "P2 - p2");
+    CHECK(describeLeg(cwSurvex3DFileReader::legKeyOfKeys(QStringLiteral("P2"), QStringLiteral("p2")))
+          == "P2 - p2");
+}
+
+namespace {
+    QByteArray externalCenterlineBytes(const QString& fileName)
+    {
+        QFile file(testcasesDatasetSourcePath(QStringLiteral("external-centerlines/%1").arg(fileName)));
+        REQUIRE(file.open(QIODevice::ReadOnly));
+        return file.readAll();
+    }
+
+    /// The lookup's keys, sorted and comma-joined, so a failure prints them.
+    std::string sortedKeys(const cwStationPositionLookup& lookup)
+    {
+        QStringList keys = lookup.positions().keys();
+        keys.sort();
+        return keys.join(QStringLiteral(", ")).toStdString();
+    }
+
+    // The 100 ft between each member of compass_case_pairs.dat's pairs.
+    constexpr double kCasePairSeparationMeters = 30.48;
+}
+
+TEST_CASE("cwSurvex3DFileReader keeps each member of a Compass case pair as its own station",
+          "[cwSurvex3DFileReader]") {
+    // Cavern reads a .dat with case folding off, so P2 and p2 are two stations
+    // 100 ft apart.
+    const auto parsed = solveSurvexFiles(
+        {{QStringLiteral("case_pairs.svx"), "*include compass_case_pairs.dat\n"},
+         {QStringLiteral("compass_case_pairs.dat"),
+          externalCenterlineBytes(QStringLiteral("compass_case_pairs.dat"))}});
+    INFO("network:\n" << describe(parsed.network).toStdString());
+
+    CHECK(sortedKeys(parsed.lookup) == "P1, P2, P3, p1, p2, p3, q1");
+
+    const float separation = (parsed.lookup.position(QStringLiteral("P2"))
+                              - parsed.lookup.position(QStringLiteral("p2"))).length();
+    CHECK(separation == Catch::Approx(kCasePairSeparationMeters).margin(0.01));
+
+    CHECK(neighborsOf(parsed.network, "P2") == "P1, P3");
+    CHECK(neighborsOf(parsed.network, "p2") == "p1, p3");
+    CHECK(neighborsOf(parsed.network, "p1") == "P1, p2");
+    CHECK(neighborsOf(parsed.network, "q1") == "P3");
+
+    CHECK(parsed.lookup.key(QStringLiteral("Q1")).toStdString() == "q1");
+    CHECK(parsed.spellings.value(QStringLiteral("q1")).toStdString() == "Q1");
+    CHECK(parsed.spellings.value(QStringLiteral("P2")).toStdString() == "P2");
+    CHECK(parsed.spellings.value(QStringLiteral("p2")).toStdString() == "p2");
+}
+
+TEST_CASE("cwSurvex3DFileReader lowercases the survey levels of a preserved case pair",
+          "[cwSurvex3DFileReader]") {
+    // A misclosed loop through the pair, a splay off each member, and a fix on
+    // one, so every product of the read names its member.
+    const auto parsed = solveSurvexFiles({{QStringLiteral("preserved.svx"),
+                                           "*case preserve\n"
+                                           "*begin Foo\n"
+                                           "*fix P2 0 0 0\n"
+                                           "*data normal from to tape compass clino\n"
+                                           "P1 P2 10 0 0\n"
+                                           "P2 p2 10 90 0\n"
+                                           "p2 P1 15 225 0\n"
+                                           "*flags splay\n"
+                                           "P2 .. 2 270 0\n"
+                                           "p2 .. 3 90 0\n"
+                                           "*end Foo\n"}});
+    INFO("network:\n" << describe(parsed.network).toStdString());
+
+    CHECK(sortedKeys(parsed.lookup) == "foo.P2, foo.p1, foo.p2");
+    CHECK(neighborsOf(parsed.network, "foo.P2") == "foo.p1, foo.p2");
+    CHECK(neighborsOf(parsed.network, "foo.p2") == "foo.P2, foo.p1");
+    CHECK(parsed.fixedStations.join(QStringLiteral(", ")).toStdString() == "foo.P2");
+
+    QStringList errorKeys;
+    for (auto it = parsed.legErrors.constBegin(); it != parsed.legErrors.constEnd(); ++it) {
+        errorKeys.append(it.key().first + QStringLiteral(" - ") + it.key().second);
+    }
+    errorKeys.sort();
+    CHECK(errorKeys.join(QStringLiteral("; ")).toStdString()
+          == "foo.P2 - foo.p1; foo.P2 - foo.p2; foo.p1 - foo.p2");
+
+    QStringList splayAnchors;
+    for (auto it = parsed.splayTips.constBegin(); it != parsed.splayTips.constEnd(); ++it) {
+        splayAnchors.append(it.key() + QStringLiteral(" x") + QString::number(it.value().size()));
+    }
+    splayAnchors.sort();
+    CHECK(splayAnchors.join(QStringLiteral(", ")).toStdString() == "foo.P2 x1, foo.p2 x1");
+
+    CHECK(parsed.spellings.value(QStringLiteral("foo.p1")).toStdString() == "foo.P1");
+}
+
+TEST_CASE("cwSurvex3DFileReader keys case variants equated at one point as one station",
+          "[cwSurvex3DFileReader][Equate]") {
+    // The driver's p9 is lowercased; the preserved block's P9 keeps its case.
+    // The equate puts both labels at one coordinate, so they are one station.
+    const auto parsed = solveSurvexFiles({{QStringLiteral("equated_case.svx"),
+                                           "*begin cave\n"
+                                           "*data normal from to tape compass clino\n"
+                                           "n1 p9 10 0 0\n"
+                                           "*begin\n"
+                                           "*case preserve\n"
+                                           "*data normal from to tape compass clino\n"
+                                           "P9 Z1 5 90 0\n"
+                                           "*equate p9 P9\n"
+                                           "*end\n"
+                                           "*end cave\n"}});
+    INFO("network:\n" << describe(parsed.network).toStdString());
+
+    CHECK(sortedKeys(parsed.lookup) == "cave.n1, cave.p9, cave.z1");
+    CHECK(neighborsOf(parsed.network, "cave.p9") == "cave.n1, cave.z1");
+    CHECK(parsed.spellings.value(QStringLiteral("cave.p9")).toStdString() == "cave.p9");
+}
