@@ -275,6 +275,11 @@ public:
         //! only when ExternalScopesChecked is true.
         QList<HangingStations> Hanging;
 
+        //! The attached-file owners (trip ids and sourced-root node ids) the
+        //! driver fixed at the origin; std::nullopt when the run stopped before
+        //! writing the driver, which leaves the last answer standing.
+        std::optional<QSet<QUuid>> OriginFixedOwners;
+
         //! A result asserting "there is nothing, and I looked" — what the
         //! manager publishes to wipe state on setRegion, and what a region with
         //! nothing solvable in it produces. Distinct from a default-constructed
@@ -366,6 +371,7 @@ inline cwLinePlotTask::LinePlotResultData cwLinePlotTask::LinePlotResultData::cl
 {
     LinePlotResultData result;
     result.ExternalScopesChecked = true;
+    result.OriginFixedOwners = QSet<QUuid>();
     return result;
 }
 

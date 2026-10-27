@@ -980,6 +980,13 @@ TEST_CASE("Two attached files under an unanchored node take one origin fix", "[E
     const cwSurvexExporterCaveTask::AnchorPlan plan(tree, options.externalFixedStations);
     CHECK(plan.originFixedOwners() == QSet<QUuid>{east->id()});
 
+    // The export hands the same answer back to its caller.
+    QSet<QUuid> exportedOwners;
+    const QString reportPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("report.svx"));
+    REQUIRE_FALSE(cwSurvexExporterRegion::exportRegion(regionData, reportPath, options, &exportedOwners)
+                      .hasError());
+    CHECK(exportedOwners == QSet<QUuid>{east->id()});
+
     const cwStationPositionLookup solved = solveDriver(driverPath);
     checkLegLength(solved, QStringLiteral("alpha.east.passage.p1"),
                    QStringLiteral("alpha.east.passage.p2"), kPassageFirstLeg);

@@ -298,8 +298,10 @@ private:
         exportOptions.outputCSPolicy =
             cwSurvexExporterRegion::OutputCSPolicy::WorkingFrame;
 
+        QSet<QUuid> originFixedOwners;
         const Monad::ResultBase r =
-            cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions);
+            cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions,
+                                                 &originFixedOwners);
         if (r.hasError()) {
             cwLinePlotTask::SolveError error;
             error.step = cwLinePlotTask::SolveError::Step::Export;
@@ -314,6 +316,7 @@ private:
         if (driverFile.open(QFile::ReadOnly)) {
             result.DriverSource = QString::fromUtf8(driverFile.readAll());
         }
+        result.OriginFixedOwners = std::move(originFixedOwners);
         return true;
     }
 

@@ -324,11 +324,17 @@ private:
     //! own, with those stations; the driver places such a file with its first
     //! bare fix at the project origin. Every other node has it cleared.
     //!
-    //! Beside it, an AttachedFileUnfixed warning names each attached file the
-    //! driver fixes at the origin because the file fixes no station of its
-    //! own and no node fix places it, and an AttachedFileDefaultDatum warning
-    //! names each Compass .mak whose copy took Compass's default datum.
+    //! Beside it, an AttachedFileDefaultDatum warning names each Compass .mak
+    //! whose copy took Compass's default datum.
     void publishAttachedFixWarnings(const cwLinePlotTask::ExternalCenterlineInputs& inputs);
+
+    //! In a georeferenced project, an AttachedFileUnfixed warning on each node
+    //! names its attached files (its own, or its trips') whose *include the
+    //! solve's driver fixed at the origin
+    //! (cwSurvexExporterCaveTask::AnchorPlan::originFixedOwners). Set from
+    //! each result that wrote a driver; a run that stopped before writing one
+    //! leaves the last warning standing, and a cleared result clears it.
+    void publishUnfixedFileWarnings(const QSet<QUuid>& originFixedOwners);
     void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys,
                                 bool externalScopesChecked);
 
