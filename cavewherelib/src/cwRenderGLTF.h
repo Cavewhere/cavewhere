@@ -43,6 +43,7 @@ public:
 
 
     explicit cwRenderGLTF(QObject *parent = nullptr);
+    ~cwRenderGLTF() override;
 
     QString gltfFilePath() const { return m_gltfFilePath; }
 
@@ -121,7 +122,9 @@ private:
     cwFutureManagerToken m_futureManagerToken;
     AsyncFuture::Restarter<void> m_loadRestarter;
 
-    // QFuture<void> m_loadFuture;
+    //The worker run itself, held so a superseded or destroyed load cancels its
+    //encode directly; the restarter's cancel reaches it only through the event loop
+    QFuture<Monad::Result<Load>> m_loadFuture;
 
     void updateModelMatrix();
 
