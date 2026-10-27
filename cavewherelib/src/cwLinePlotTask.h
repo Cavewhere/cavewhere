@@ -38,6 +38,7 @@ class cwScopeLabels;
 #include <QUuid>
 
 //Std includes
+#include <functional>
 #include <optional>
 #include <utility>
 
@@ -329,6 +330,16 @@ public:
     static Input buildInput(const cwCavingRegion* region,
                             const ExternalCenterlineInputs& external);
     static QFuture<LinePlotResultData> run(Input input);
+
+    /**
+     * @brief Solves \a input synchronously on the calling thread.
+     *
+     * Lets a caller that is already on a pool worker solve inline instead of
+     * starting a second pool task and blocking on it.
+     * \a isCanceled is polled between the solve's phases; a canceled solve
+     * returns a result that asserts nothing, which the caller discards.
+     */
+    static LinePlotResultData runInline(Input input, std::function<bool()> isCanceled);
 
     /**
      * @brief The StationCaveLookup class
