@@ -1,8 +1,10 @@
 //Our includes
 #include "cwCave.h"
+#include "SurveyTreeTestHelper.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
+#include "cwAttachedFixModel.h"
 #include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
@@ -133,9 +135,17 @@ TEST_CASE("cwFixStationDiagnosticsModel merges the source's role names with its 
     CHECK(roles.value(cwFixStationDiagnosticsModel::AvailableDatumsRole) == "availableDatums");
     CHECK(roles.value(cwFixStationDiagnosticsModel::DatumEnabledRole) == "datumEnabled");
 
-    // The two role blocks must not collide, or the merge would silently drop one
-    // side: every name in the merged hash is still reachable by its own value.
-    CHECK(roles.size() == fixture.source->roleNames().size() + 8);
+    // The fix station table concatenates this model with cwAttachedFixModel, so
+    // it answers the attached-fix roles too, as an editable row.
+    CHECK(roles.value(cwAttachedFixModel::SourceFileRole) == "sourceFile");
+    CHECK(roles.value(cwAttachedFixModel::ReadOnlyRole) == "readOnly");
+    CHECK(roles.value(cwAttachedFixModel::ReadInWarningRole) == "readInWarning");
+    CHECK(roles.value(cwAttachedFixModel::ReferenceRole) == "reference");
+    CHECK(roles.value(cwAttachedFixModel::ReadInSystemRole) == "readInSystem");
+
+    // The three role blocks must not collide, or the merge would silently drop
+    // one side: every name in the merged hash is still reachable by its own value.
+    CHECK(roles.size() == fixture.source->roleNames().size() + 13);
 }
 
 TEST_CASE("cwFixStationDiagnosticsModel passes persisted rows through untouched",
@@ -182,7 +192,7 @@ TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole flags empty and unknown
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    fixture.cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(fixture.cave, network);
 
     // A blank row names no survey station — survex silently drops such a fix,
     // so it is flagged rather than treated as a valid anchor.
@@ -199,7 +209,7 @@ TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole flags empty and unknown
     // A station appearing in the survey clears the flag live.
     cwSurveyNetwork grown;
     grown.addShot(QStringLiteral("A1"), QStringLiteral("ZZ9"));
-    fixture.cave->setSurveyNetwork(grown);
+    SurveyTreeTestHelper::setScopedNetwork(fixture.cave, grown);
     CHECK(fixture.stationError().isEmpty());
 }
 
@@ -211,7 +221,7 @@ TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole ignores surrounding whi
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    fixture.cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(fixture.cave, network);
 
     fixture.edit(cwFixStationModel::StationNameRole, QStringLiteral(" A1 "));
     CHECK(fixture.stationError().isEmpty());
@@ -221,18 +231,34 @@ TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole ignores surrounding whi
     CHECK_FALSE(fixture.stationError().isEmpty());
 }
 
-TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole defers a named fix when the network is empty",
+TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole flags a named fix in a cave with nothing to solve",
           "[FixStation][cwFixStationDiagnosticsModel]") {
-    // No survey network computed yet — a named fix can't be judged, so it must
-    // not cry wolf. An empty name is invalid regardless of the network, though.
+    // A cave with no named station in any trip never gets a solve, so its empty
+    // network is final and a named fix names nothing. An empty name is invalid
+    // regardless.
     FixFixture fixture;
-
-    // Empty name is flagged even before a network exists (the empty check runs
-    // before the "nothing to check against" deferral).
     CHECK_FALSE(fixture.stationError().isEmpty());
 
-    // A named fix defers while there's no network to match it against.
     fixture.edit(cwFixStationModel::StationNameRole, QStringLiteral("A1"));
+    CHECK_FALSE(fixture.stationError().isEmpty());
+
+    // The model learns of survey data through the network, so the first solve
+    // naming the station is what clears the row.
+    QSignalSpy proxySpy(fixture.diagnostics, &QAbstractItemModel::dataChanged);
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("a1"), QStringLiteral("a2"));
+    SurveyTreeTestHelper::setScopedNetwork(fixture.cave, network);
+    CHECK(rolesSeen(proxySpy).contains(cwFixStationDiagnosticsModel::StationErrorRole));
+    CHECK(fixture.stationError().isEmpty());
+}
+
+TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole defers a named fix while the trips await a solve",
+          "[FixStation][cwFixStationDiagnosticsModel]") {
+    FixFixture fixture;
+    SurveyTreeTestHelper::addTripWithStations(fixture.cave, {QStringLiteral("a1")});
+    REQUIRE(fixture.cave->scopedNetwork().isEmpty());
+
+    fixture.edit(cwFixStationModel::StationNameRole, QStringLiteral("zzz"));
     CHECK(fixture.stationError().isEmpty());
 }
 
@@ -296,7 +322,7 @@ TEST_CASE("A solve refreshes the diagnostics without touching the source model",
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    fixture.cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(fixture.cave, network);
 
     CHECK(sourceSpy.count() == 0);
     REQUIRE(proxySpy.count() == 1);

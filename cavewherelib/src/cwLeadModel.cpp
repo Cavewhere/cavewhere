@@ -174,19 +174,22 @@ void cwLeadModel::fullModelReset()
    invalidateRows();
 
    //Add all the scraps
-   foreach(cwTrip* trip, cave()->trips()) {
-       foreach(cwNote* note, trip->notes()->notes()) {
-           foreach(cwScrap* scrap, note->scraps()) {
+   const QList<cwTrip*> trips = cave()->allTrips();
+   for(cwTrip* trip : trips) {
+       const QList<cwNote*> notes = trip->notes()->notes();
+       for(cwNote* note : notes) {
+           const QList<cwScrap*> scraps = note->scraps();
+           for(cwScrap* scrap : scraps) {
                attachScrap(scrap);
            }
        }
    }
 
-   if(cave()->tripCount() > 0
-           && !cave()->trip(0)->chunks().isEmpty()
-           && cave()->trip(0)->chunks().first()->stationCount() > 0)
+   if(!trips.isEmpty()
+           && !trips.first()->chunks().isEmpty()
+           && trips.first()->chunks().first()->stationCount() > 0)
    {
-        QString firstStation = cave()->trip(0)->chunks().first()->station(0).name();
+        QString firstStation = trips.first()->chunks().first()->station(0).name();
         setReferanceStation(firstStation);
    }
 
@@ -436,13 +439,13 @@ void cwLeadModel::scrapDeleted(QObject *scrapObj)
  * @param end
  *
  * This is called when the region tree model inserts scraps. This will only add scraps that
- * are in the current cave.
+ * are in the current cave, at any depth below it.
  */
 void cwLeadModel::insertScraps(QModelIndex parent, int begin, int end)
 {
     if(m_regionTreeModel->isNote(parent)) {
         cwNote* note = m_regionTreeModel->note(parent);
-        if(note->parentCave() == cave()) {
+        if(holdsNote(note)) {
             for(int i = begin; i <= end; i++) {
                 cwScrap* scrap = note->scrap(i);
                 addScrap(scrap);
@@ -464,13 +467,22 @@ void cwLeadModel::removeScraps(QModelIndex parent, int begin, int end)
 {
     if(m_regionTreeModel->isNote(parent)) {
         cwNote* note = m_regionTreeModel->note(parent);
-        if(note->parentCave() == cave()) {
+        if(holdsNote(note)) {
             for(int i = begin; i <= end; i++) {
                 cwScrap* scrap = note->scrap(i);
                 removeScrap(scrap);
             }
         }
     }
+}
+
+/**
+ * True when \a note belongs to a trip at or below the current cave.
+ */
+bool cwLeadModel::holdsNote(const cwNote* note) const
+{
+    const cwSurveyNode* node = note->parentTrip() != nullptr ? note->parentTrip()->parentNode() : nullptr;
+    return node != nullptr && cave() != nullptr && cave()->lowestCommonAncestor(node) == cave();
 }
 
 /**
@@ -532,8 +544,14 @@ QPair<cwScrap *, int> cwLeadModel::scrapAndIndex(QModelIndex index) const
  */
 double cwLeadModel::leadDistance(cwScrap *scrap, int leadIndex) const
 {
-    if(cave()->stationPositionLookup().hasPosition(referanceStation())) {
-        QVector3D stationPosition = cave()->stationPositionLookup().position(referanceStation());
+    cwTrip* trip = scrap->parentTrip();
+    if(trip == nullptr) { return 0.0; }
+
+    //Resolve the reference station in the scrap trip's local namespace so an
+    //externally-attached trip's tail-only names resolve.
+    const cwStationPositionLookup lookup = trip->solvedStationPositions();
+    if(lookup.hasPosition(referanceStation())) {
+        QVector3D stationPosition = lookup.position(referanceStation());
         QVector3D leadPosition = scrap->leadData(cwScrap::LeadPosition, leadIndex).value<QVector3D>();
         QVector3D diff = stationPosition - leadPosition;
         return diff.length();

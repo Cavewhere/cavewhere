@@ -901,6 +901,73 @@ cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
     return fix;
 }
 
+void saveEquate(CavewhereProto::Equate* protoEquate, const cwEquate& equate)
+{
+    for (const cwStationHandle& handle : equate.stations()) {
+        auto* protoHandle = protoEquate->add_stations();
+        protoHandle->set_scope(static_cast<int>(handle.scope()));
+        if (!handle.containerId().isNull()) {
+            saveQUuid(protoHandle->mutable_container_uuid(), handle.containerId());
+        }
+        if (!handle.tail().isEmpty()) {
+            saveString(protoHandle->mutable_tail(), handle.tail());
+        }
+    }
+}
+
+cwEquate fromProtoEquate(const CavewhereProto::Equate& protoEquate)
+{
+    QList<cwStationHandle> handles;
+    handles.reserve(protoEquate.stations_size());
+    for (const auto& protoHandle : protoEquate.stations()) {
+        const auto scope = protoHandle.scope() == static_cast<int>(cwStationHandle::Trip)
+                ? cwStationHandle::Trip
+                : cwStationHandle::NativeCave;
+        const QUuid containerId = protoHandle.has_container_uuid()
+                ? toUuid(protoHandle.container_uuid())
+                : QUuid();
+        const QString tail = protoHandle.has_tail()
+                ? QString::fromStdString(protoHandle.tail())
+                : QString();
+        handles.append(cwStationHandle(scope, containerId, tail));
+    }
+    return cwEquate(handles);
+}
+
+void saveExternalCenterline(CavewhereProto::ExternalCenterline* protoCenterline,
+                            const cwExternalCenterline& centerline)
+{
+    protoCenterline->set_entry_file(centerline.entryFile().toStdString());
+    if (!centerline.fixCoordinateSystem().isEmpty()) {
+        protoCenterline->set_fix_coordinate_system(centerline.fixCoordinateSystem().toStdString());
+    }
+}
+
+cwExternalCenterline fromProtoExternalCenterline(const CavewhereProto::ExternalCenterline& protoCenterline)
+{
+    cwExternalCenterline centerline(QString::fromStdString(protoCenterline.entry_file()));
+    centerline.setFixCoordinateSystem(QString::fromStdString(protoCenterline.fix_coordinate_system()));
+    return centerline;
+}
+
+void saveExternalSource(CavewhereProto::ExternalSource* protoSource, const cwExternalSource& source)
+{
+    saveQUuid(protoSource->mutable_id(), source.id());
+    saveQUuid(protoSource->mutable_root_node_id(), source.rootNodeId());
+}
+
+QList<cwExternalSource> fromProtoExternalSources(
+    const google::protobuf::RepeatedPtrField<CavewhereProto::ExternalSource>& protoSources)
+{
+    QList<cwExternalSource> sources;
+    sources.reserve(protoSources.size());
+    for (const auto& protoSource : protoSources) {
+        sources.append(cwExternalSource(toUuid(protoSource.id()),
+                                        toUuid(protoSource.root_node_id())));
+    }
+    return sources;
+}
+
 void saveDoubleVector3d(CavewhereProto::DoubleVector3d* protoVec, const cwGeoPoint& point)
 {
     protoVec->set_x(point.x);

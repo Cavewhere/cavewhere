@@ -14,7 +14,7 @@ MainWindowTest {
         function init() {
             rootId.width = 1600
             TestHelper.loadProjectFromZip(RootData.project, TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -85,6 +85,10 @@ MainWindowTest {
 
             let stationNameInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0->coreTextInput")
             stationNameInput_obj1.openEditor();
+            //A production station field must open the autocompleting editor —
+            //tst_ShadowTextEditor only proves that for a field it builds itself.
+            verify(rootId.shadowEditor.currentEditor.stationScope !== undefined,
+                   "station fields should open the station-name editor")
             keyClick(54, 0) //6
             keyClick(16777220, 0) //Return
 

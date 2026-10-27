@@ -1,0 +1,8 @@
+; Walls SAVE/RESTORE fixture: DECL=5 is in force only between SAVE and
+; RESTORE, so cavern corrects the shots after RESTORE by the saved 3.5.
+#DATE 2020-06-01
+#UNITS D=Meters A=Degrees V=Degrees DECL=3.5
+#UNITS SAVE DECL=5
+#UNITS RESTORE
+S1	S2	10.0	0	0
+S2	S3	10.0	90	0

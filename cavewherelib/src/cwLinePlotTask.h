@@ -12,12 +12,16 @@
 class cwCavingRegion;
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
+#include "cwFindFloatingSurveys.h"
 #include "cwFindUnconnectedSurveyChunks.h"
 #include "cwCavingRegionData.h"
+#include "cwGeoPoint.h"
 #include "cwLinePlotGeometry.h"
+#include "cwExternalCenterlineScanner.h"
 class cwScrap;
 class cwTrip;
-class cwCave;
+class cwSurveyNode;
+class cwScopeLabels;
 
 
 //Qt includes
@@ -31,7 +35,6 @@ class cwCave;
 #include <QList>
 #include <QPair>
 #include <QMultiHash>
-#include <QRegularExpression>
 #include <QUuid>
 
 //Std includes
@@ -63,7 +66,7 @@ public:
         cwCavingRegionData regionData;
 
         // Absolute on-disk attachment directories for caves and trips whose
-        // externalCenterline is set. Keyed by cwCave::id() / cwTrip::id() so
+        // externalCenterline is set. Keyed by cwSurveyNode::id() / cwTrip::id() so
         // the exporter can join them with the project-relative entryFile
         // value to write absolute *include paths. Maps are empty when no
         // attachments exist; entries are required when the matching
@@ -72,15 +75,45 @@ public:
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
 
-        // The previous solve's derived state, keyed by cwCave::id(). The worker
-        // diffs its fresh solve against these to decide which stations actually
-        // moved. This is deliberately not part of cwCaveData: it is input to
-        // change detection, not something a cave is, and it is never saved or
-        // loaded. Empty maps mean "assume everything changed", which is both the
-        // correct answer for a first solve and a safe default for synthetic
-        // callers that build an Input by hand (cwTripLinePlotTask).
-        QHash<QUuid, cwStationPositionLookup> previousStationPositions;
-        QHash<QUuid, cwSurveyNetwork> previousNetworks;
+        // CaveWhere-resolved declination (degrees, east-positive) per
+        // external trip whose file carries no declination of its own.
+        // Resolved on the main thread by buildInput from the live
+        // cwTripCalibration (IGRF auto or manual value) — the worker
+        // snapshot only carries the raw manual/auto fields. Absent key =
+        // file-owned or unknown → the driver emits nothing for that trip.
+        QHash<QUuid, double> tripInjectedDeclinations;
+
+        // Caves and trips whose externalCenterline is set but unreadable
+        // by the solve: dependencies reaching outside the project's data
+        // root, or an in-project copy that is gone from disk. The driver
+        // skips their *include entirely rather than failing the export, so
+        // one broken attachment costs its own survey and leaves the
+        // rest of the region solvable.
+        QSet<QUuid> excludedExternalOwners;
+
+        // Per cave or trip owner, the stations its file fixes itself, in the
+        // file's namespace. The driver drops a node fix on one of them, which
+        // cavern would otherwise reject with error 46.
+        QHash<QUuid, QStringList> externalFixedStations;
+
+        // Per cave or trip owner whose file fixes stations with no input *cs
+        // and names its own *cs out, that output system as the file writes
+        // it (see cwSurvexExporterRegion::Options::externalOutputSystems).
+        QHash<QUuid, QString> externalOutputSystems;
+
+        // Per cave or trip owner whose file fixes stations with no input *cs,
+        // the first such fix (see
+        // cwSurvexExporterRegion::Options::externalBareFixOrigins).
+        QHash<QUuid, cwGeoPoint> externalBareFixOrigins;
+
+        // The previous solve's region lookup and network
+        // (cwCavingRegion::stationPositions / network). The worker diffs its
+        // fresh solve against these to decide which stations actually moved.
+        // Empty means "assume everything changed", which is both the correct
+        // answer for a first solve and a safe default for synthetic callers
+        // that build an Input by hand (cwTripLinePlotTask).
+        cwStationPositionLookup previousStationPositions;
+        cwSurveyNetwork previousNetwork;
     };
 
     class LinePlotCaveData {
@@ -89,56 +122,44 @@ public:
 
         void setDepth(double depth);
         void setLength(double length);
-        void setStationPositions(cwStationPositionLookup positionLookup);
         void setSplayTips(cwSplayTipsByStation splayTips);
         void setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunks::Result> results);
-        void setNetwork(cwSurveyNetwork network);
 
         double depth() const;
         double length() const;
-        cwStationPositionLookup stationPositions() const;
         cwSplayTipsByStation splayTips() const;
         QList<cwFindUnconnectedSurveyChunks::Result> unconnectedChunkError() const;
-        cwSurveyNetwork network() const;
 
         bool hasDepthLengthChanged() const;
-        bool hasStationPositionsChanged() const;
-        bool hasNetworkChanged() const;
 
     private:
         bool DepthLengthChanged;
         double Depth;
         double Length;
         QList<cwFindUnconnectedSurveyChunks::Result> UnconnectedChunksErrors;
-
-        bool StationPostionsChanged;
-        bool NetworkChanged;
-        cwStationPositionLookup Lookup;
         cwSplayTipsByStation SplayTips;
-        cwSurveyNetwork Network;
     };
 
     /**
-     * @brief The CaveStationData class
+     * @brief One solve's answer.
      *
-     * Identifies the caves, trips, and scraps whose station positions changed
-     * by their stable cwCave/cwTrip/cwScrap::id() UUID rather than a raw
+     * Identifies the nodes, trips, and scraps whose station positions changed
+     * by their stable cwSurveyNode/cwTrip/cwScrap::id() UUID rather than a raw
      * pointer. Only value-type identity crosses the worker boundary; the
      * manager resolves each UUID back to the live object on the main thread.
      *
-     * Also holds the new station lookup that the cave should be update with.  We don't update
-     * the original cave's data directly because of thread safety.
+     * Also holds the region's new station lookup and network, which the
+     * manager writes to the live cwCavingRegion on the main thread.
      */
     class LinePlotResultData {
     public:
         LinePlotResultData() { }
 
-        void clear();
-
         void setPositions(QVector<QVector3D> positions);
         void setTripVertexRanges(QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges);
         void setTripSplayVertexRanges(QVector<cwLinePlotGeometry::VertexRange> ranges);
         void setTripUuids(QVector<QUuid> tripUuids);
+        void setTripLengths(QVector<double> tripLengths);
         void setSegmentErrors(QVector<float> segmentErrors);
 
         QVector<QVector3D> stationPositions() const;
@@ -147,11 +168,13 @@ public:
         // its tail) and the running-id -> stable cwTrip::id mapping (all
         // running-id indexed). Only value-type data crosses the worker
         // boundary; the manager resolves each UUID to a live cwTrip* and binds
-        // its visibility proxy to the matching vertex range. See
-        // cwLinePlotGeometry for how the ranges are assigned.
+        // its visibility proxy to the matching vertex range. tripLengths is
+        // the length in meters of the legs each trip draws. See
+        // cwLinePlotGeometry for how the ranges and lengths are assigned.
         QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges() const;
         QVector<cwLinePlotGeometry::VertexRange> tripSplayVertexRanges() const;
         QVector<QUuid> tripUuids() const;
+        QVector<double> tripLengths() const;
 
         // Survex closure error (σ) per segment of stationPositions, or
         // cwLinePlotGeometry::kNoErrorValue; see cwLinePlotGeometry.
@@ -162,6 +185,13 @@ public:
         cwSurveyNetwork regionNetwork() const;
         bool hasRegionNetworkChanged() const;
 
+        //! Every solved station keyed by its full cavern name, set only when
+        //! some station moved, appeared, or vanished since the previous solve.
+        void setRegionStationPositions(cwStationPositionLookup positions);
+        cwStationPositionLookup regionStationPositions() const;
+        bool hasRegionStationPositionsChanged() const;
+
+        // Keyed by cwSurveyNode::id(), one entry per node at any depth.
         QHash<QUuid, LinePlotCaveData> Caves;
         QSet<QUuid> Trips;
         QSet<QUuid> Scraps;
@@ -169,9 +199,19 @@ public:
         QVector<cwLinePlotGeometry::VertexRange> TripVertexRanges;
         QVector<cwLinePlotGeometry::VertexRange> TripSplayVertexRanges;
         QVector<QUuid> TripUuids;
+        QVector<double> TripLengths;
         QVector<float> SegmentErrors;
         cwSurveyNetwork RegionNetwork;
         bool RegionNetworkChanged = false;
+        cwStationPositionLookup RegionStationPositions;
+        bool RegionStationPositionsChanged = false;
+
+        // Filled only when RegionStationPositions is: each node's
+        // cwSurveyNode::scopedPositions() keyed by node id (the root left
+        // out), and each trip's cwTrip::solvedStations() keyed by trip id, so
+        // the manager installs both without walking the tree.
+        QHash<QUuid, cwStationPositionLookup> NodePositions;
+        QHash<QUuid, QList<QPair<QString, QVector3D>>> TripSolvedStations;
 
         void setSolveError(SolveError error) { LastSolveError = std::move(error); }
         bool hasSolveError() const { return LastSolveError.has_value(); }
@@ -187,52 +227,115 @@ public:
         QString CavernLog;
         QString LoopClosureStats;
 
+        // The generated driver .svx text fed to cavern — captured right
+        // after export, so it is present even when cavern itself fails.
+        // CavernOutputPage's driver-source disclosure binds to the
+        // cwLinePlotManager property this populates.
+        QString DriverSource;
+
+        // Wall-clock seconds for the whole pipeline (export → cavern →
+        // parse → geometry); negative when no solve ran (the default
+        // result published on setRegion / no-shots paths). The UI shows
+        // the stats suffix only for non-negative values.
+        double SolveDurationSeconds = -1.0;
+
+        // Cavern's warning tally for this run (0 when cavern failed
+        // before reporting or never ran).
+        int CavernWarningCount = 0;
+
+        // Every survey this run found floating, from both of the passes that
+        // can find one: the pre-solve native check that also populates
+        // LinePlotCaveData::unconnectedChunkError, and the post-solve topology
+        // check the native pass is blind to. Region-wide rather than per-cave
+        // because each record names its own cave, and because a solve that
+        // never ran still has an answer for the caves it validated.
+        QList<cwFindFloatingSurveys::Result> FloatingSurveys;
+
+        // Whether this run reached the post-solve half of that answer. Every
+        // failure path returns before it while the pre-solve half always runs,
+        // so a caller can tell "no external scope is floating" from "nobody
+        // looked". False by default, like every other flag on this struct: a
+        // result no run filled in asserts nothing.
+        bool ExternalScopesChecked = false;
+
+        //! The stations of one trip or attached file that cavern could not tie
+        //! to its cave. \a ownerId is the trip's id, or the node's for a
+        //! file attached to the node itself; \a stations are owner-local and
+        //! may repeat.
+        struct HangingStations {
+            QUuid ownerId;
+            QStringList stations;
+
+            bool operator==(const HangingStations& other) const = default;
+        };
+
+        //! Every owner holding stations cavern dropped because nothing ties
+        //! them to a fixed point, plus the fixed points of attached files that
+        //! no survey uses. Filled by the post-solve pass, so it is meaningful
+        //! only when ExternalScopesChecked is true.
+        QList<HangingStations> Hanging;
+
+        //! A result asserting "there is nothing, and I looked" — what the
+        //! manager publishes to wipe state on setRegion, and what a region with
+        //! nothing solvable in it produces. Distinct from a default-constructed
+        //! result, which asserts nothing and so leaves the last answer standing.
+        static LinePlotResultData cleared();
+
         friend class cwLinePlotTask;
         friend struct LinePlotWorker;
     };
 
     static Input buildInput(const cwCavingRegion* region);
+
+    // The external-centerline subsystem's contribution to a solve, taken
+    // as one value snapshot (cwExternalCenterlineManager::solveInputs())
+    // so a solve can never mix dirs and flags from different scans.
+    struct ExternalCenterlineInputs {
+        QHash<QUuid, QString> caveAttachmentDirs;
+        QHash<QUuid, QString> tripAttachmentDirs;
+        // Per-owner scan flag; trips flagged false get their resolved
+        // declination baked into tripInjectedDeclinations. Owners
+        // missing from the map are treated as file-owned.
+        QHash<QUuid, bool> fileOwnsDeclination;
+        // Owners whose attachment reaches outside the project's data root,
+        // or whose in-project copy is gone from disk. The driver writes no
+        // *include for them (see Input).
+        QSet<QUuid> excludedExternalOwners;
+        // Per owner (cave or trip) whose file fixes stations with no input
+        // coordinate system of their own, those stations as the file writes
+        // them. Read on the main thread when the solve starts, to warn about
+        // them in a georeferenced project.
+        QHash<QUuid, QStringList> bareFixedStations;
+        // Owners whose file fixes stations itself, and those stations (see
+        // Input::externalFixedStations).
+        QHash<QUuid, QStringList> externalFixedStations;
+        // Owners whose file fixes stations bare and names its own *cs out,
+        // and that system (see Input::externalOutputSystems).
+        QHash<QUuid, QString> externalOutputSystems;
+        // Owners whose Compass .mak names a zone and no datum, and those
+        // files. Read on the main thread when the solve starts, to say so.
+        QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> defaultedDatums;
+        // Owners whose file fixes stations bare, and the first of those fixes
+        // (see Input::externalBareFixOrigins). Also read on the main thread,
+        // to warn about the owners it places at the origin.
+        QHash<QUuid, cwGeoPoint> externalBareFixOrigins;
+    };
+
     static Input buildInput(const cwCavingRegion* region,
-                            const QHash<QUuid, QString>& caveAttachmentDirs,
-                            const QHash<QUuid, QString>& tripAttachmentDirs);
+                            const ExternalCenterlineInputs& external);
     static QFuture<LinePlotResultData> run(Input input);
-
-    /**
-     * Cave-name encoding contract used by the line-plot driver.
-     *
-     * cavernCaveNameFor(id) produces the synthetic *begin name written to
-     * the worker's intermediate .svx ("cave_<32 hex of QUuid::Id128>"). The
-     * matching regex (cavernStationRegex) parses cavern's emitted lines of
-     * the form "cave_<32 hex>.<station>" back into a (QUuid, station) pair.
-     *
-     * Exposed as public statics so the [LinePlot][UuidPrefix] tests can pin
-     * the contract: cwSurvexExporterRegion stamps this name into the .svx,
-     * cavern echoes it back as a station prefix, and splitLookupByCave
-     * recovers the cwCave::id() it came from. The names are never visible to
-     * the user - the user-facing exporter (cwSurveyExportManager) operates
-     * on the original snapshot before the rewrite and keeps friendly cave
-     * names intact.
-     *
-     * The regex deliberately rejects the previous "<integer>.<station>"
-     * form: the integer was a position-in-list with no meaning outside the
-     * driver's snapshot, so if cavern ever surfaces such a line in a UUID
-     * build it indicates the encoding bypass we want surfaced as a parse
-     * miss, not silently folded into cave 0.
-     */
-    static QString cavernCaveNameFor(const QUuid& caveId);
-    static QRegularExpression cavernStationRegex();
-
-
 
     /**
      * @brief The StationCaveLookup class
      *
-     * Stores a lookup for all the stations and scraps in a cave.  This will a station to multiple
-     * trips / scraps
+     * Stores a lookup for all the stations and scraps in one node's own trips.
+     * It maps a station to multiple trips / scraps. A source root's lookup
+     * holds every trip of its subtree, named as the root's view names them,
+     * since decode hands every name under the root to the root.
      */
     class StationTripScrapLookup {
     public:
-        StationTripScrapLookup(cwCave* cave);
+        StationTripScrapLookup(cwSurveyNode* node, const cwScopeLabels& labels);
         StationTripScrapLookup() { }
 
         // Trip UUIDs, and (tripId, scrapId) pairs, of every trip/scrap that
@@ -259,6 +362,13 @@ inline QVector<QVector3D> cwLinePlotTask::LinePlotResultData::stationPositions()
     return StationPositions;
 }
 
+inline cwLinePlotTask::LinePlotResultData cwLinePlotTask::LinePlotResultData::cleared()
+{
+    LinePlotResultData result;
+    result.ExternalScopesChecked = true;
+    return result;
+}
+
 inline void cwLinePlotTask::LinePlotResultData::setRegionNetwork(cwSurveyNetwork network)
 {
     RegionNetwork = std::move(network);
@@ -273,6 +383,22 @@ inline cwSurveyNetwork cwLinePlotTask::LinePlotResultData::regionNetwork() const
 inline bool cwLinePlotTask::LinePlotResultData::hasRegionNetworkChanged() const
 {
     return RegionNetworkChanged;
+}
+
+inline void cwLinePlotTask::LinePlotResultData::setRegionStationPositions(cwStationPositionLookup positions)
+{
+    RegionStationPositions = std::move(positions);
+    RegionStationPositionsChanged = true;
+}
+
+inline cwStationPositionLookup cwLinePlotTask::LinePlotResultData::regionStationPositions() const
+{
+    return RegionStationPositions;
+}
+
+inline bool cwLinePlotTask::LinePlotResultData::hasRegionStationPositionsChanged() const
+{
+    return RegionStationPositionsChanged;
 }
 
 /**
@@ -319,6 +445,14 @@ inline QVector<QUuid> cwLinePlotTask::LinePlotResultData::tripUuids() const {
     return TripUuids;
 }
 
+inline void cwLinePlotTask::LinePlotResultData::setTripLengths(QVector<double> tripLengths) {
+    TripLengths = std::move(tripLengths);
+}
+
+inline QVector<double> cwLinePlotTask::LinePlotResultData::tripLengths() const {
+    return TripLengths;
+}
+
 inline QList<QUuid> cwLinePlotTask::StationTripScrapLookup::trips(QString stationName) const
 {
     return MapStationToTrip.values(stationName);
@@ -341,21 +475,9 @@ inline void cwLinePlotTask::LinePlotCaveData::setLength(double length)
     DepthLengthChanged = true;
 }
 
-inline void cwLinePlotTask::LinePlotCaveData::setStationPositions(cwStationPositionLookup positionLookup)
-{
-    Lookup = positionLookup;
-    StationPostionsChanged = true;
-}
-
 inline void cwLinePlotTask::LinePlotCaveData::setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunks::Result> results)
 {
     UnconnectedChunksErrors = results;
-}
-
-inline void cwLinePlotTask::LinePlotCaveData::setNetwork(cwSurveyNetwork network)
-{
-    Network = network;
-    NetworkChanged = true;
 }
 
 inline double cwLinePlotTask::LinePlotCaveData::depth() const
@@ -366,11 +488,6 @@ inline double cwLinePlotTask::LinePlotCaveData::depth() const
 inline double cwLinePlotTask::LinePlotCaveData::length() const
 {
     return Length;
-}
-
-inline cwStationPositionLookup cwLinePlotTask::LinePlotCaveData::stationPositions() const
-{
-    return Lookup;
 }
 
 inline void cwLinePlotTask::LinePlotCaveData::setSplayTips(cwSplayTipsByStation splayTips)
@@ -388,24 +505,9 @@ inline QList<cwFindUnconnectedSurveyChunks::Result> cwLinePlotTask::LinePlotCave
     return UnconnectedChunksErrors;
 }
 
-inline cwSurveyNetwork cwLinePlotTask::LinePlotCaveData::network() const
-{
-    return Network;
-}
-
 inline bool cwLinePlotTask::LinePlotCaveData::hasDepthLengthChanged() const
 {
     return DepthLengthChanged;
-}
-
-inline bool cwLinePlotTask::LinePlotCaveData::hasStationPositionsChanged() const
-{
-    return StationPostionsChanged;
-}
-
-inline bool cwLinePlotTask::LinePlotCaveData::hasNetworkChanged() const
-{
-    return NetworkChanged;
 }
 
 #endif // CWLINEPLOTTASK_H

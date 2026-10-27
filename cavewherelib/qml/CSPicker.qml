@@ -35,6 +35,11 @@ QQ.Item {
     //! — mode, zone and hemisphere stay live.
     property bool datumEnabled: true
 
+    //! Whether the mode combo leads with "unset", which commits an empty
+    //! system: the hosts that choose a system for fixes that name none offer
+    //! it, a fix station's own row never does.
+    property bool offersUnset: false
+
     readonly property int currentMode: CoordinateSystem.modeFor(rootId.value)
 
     // Whether the zone and hemisphere controls apply.
@@ -106,6 +111,10 @@ QQ.Item {
     }
 
     function commitMode(mode) {
+        if (mode === CoordinateSystem.Local) {
+            rootId.committed("")
+            return
+        }
         if (mode === CoordinateSystem.Custom) {
             customDialogLoader.active = true
             customDialogLoader.item.open()
@@ -127,15 +136,16 @@ QQ.Item {
             id: modeComboId
             objectName: "csModePicker"
 
-            readonly property var modes: [
-                CoordinateSystem.LatLon,
-                CoordinateSystem.UTM,
-                CoordinateSystem.Custom
-            ]
+            // Local is what a blank system reads as, so "unset" is its entry.
+            readonly property list<int> modes: (rootId.offersUnset ? [CoordinateSystem.Local] : [])
+                                               .concat([CoordinateSystem.LatLon,
+                                                        CoordinateSystem.UTM,
+                                                        CoordinateSystem.Custom])
 
             // The datum is the combo beside this one, so the mode names only
             // the shape of the coordinate.
-            model: [qsTr("Lat/Lon"), qsTr("UTM"), qsTr("Custom...")]
+            model: (rootId.offersUnset ? [qsTr("unset")] : [])
+                   .concat([qsTr("Lat/Lon"), qsTr("UTM"), qsTr("Custom...")])
 
             function modeAt(index) {
                 return modes[index]

@@ -41,7 +41,7 @@ MainWindowTest {
             let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select carpet
@@ -363,7 +363,7 @@ MainWindowTest {
             // Navigate to the trip page to continue lead interactions. back() is
             // history-based and returns to the rendering view (where gotoNotes was
             // clicked), so address the trip page directly like addScrapOutline does.
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select the carpet button
@@ -403,7 +403,7 @@ MainWindowTest {
             let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select carpet

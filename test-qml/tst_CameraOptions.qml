@@ -83,14 +83,25 @@ MainWindowTest {
 
         // The scene geometry (line plot, scraps) registers into the intersecter
         // asynchronously after load, growing the scene bounding box and thus the
-        // framed view. Reset until the framed zoom and in-plane position both
-        // stop changing, so a captured reference reset is stable. Zoom alone is
-        // too coarse: the framed zoomScale is under 0.1 here, so a late
-        // registration can move it by less than framingEpsilon while shifting
-        // the box center by meters. Leaves the view at a settled framed reset.
+        // framed view. Until the first geometry publishes, a reset has nothing
+        // to frame and snaps to the camera's default zoom, so first reset until
+        // a framed zoom comes back, then until the framed zoom and in-plane
+        // position both stop changing, so a captured reference reset is stable.
+        // Zoom alone is too coarse: the framed zoomScale is under 0.1 here, so a
+        // late registration can move it by less than framingEpsilon while
+        // shifting the box center by meters. Leaves the view at a settled
+        // framed reset.
         function settleFraming(turnTableInteraction, resetViewButton) {
-            let previousZoom = Number.NaN;
-            let previousPosition = Qt.vector3d(Number.NaN, Number.NaN, Number.NaN);
+            const unframedZoom = turnTableInteraction.camera.defaultZoomScale;
+            tryVerify(() => {
+                clickResetAndWait(resetViewButton);
+                return turnTableInteraction.camera.zoomScale !== unframedZoom;
+            });
+
+            let previousZoom = turnTableInteraction.camera.zoomScale;
+            let previousPosition = Qt.vector3d(turnTableInteraction.camera.position.x,
+                                               turnTableInteraction.camera.position.y,
+                                               turnTableInteraction.camera.position.z);
             for (let i = 0; i < 15; i++) {
                 clickResetAndWait(resetViewButton);
                 let currentZoom = turnTableInteraction.camera.zoomScale;

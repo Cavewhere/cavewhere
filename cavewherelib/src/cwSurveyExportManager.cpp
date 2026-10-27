@@ -33,6 +33,17 @@
 
 namespace {
 
+// A fix may live on any node enclosing the trip, so a trip exported on its own
+// reads the fixes of its whole ancestor chain, nearest node first.
+QList<cwFixStation> enclosingFixStations(const cwTrip* trip)
+{
+    QList<cwFixStation> fixes;
+    for (const cwSurveyNode* node = trip->parentNode(); node != nullptr; node = node->parentNode()) {
+        fixes.append(node->fixStations()->fixStations());
+    }
+    return fixes;
+}
+
 // User-facing reason surfaced via exportDisabledReason and qWarning()ed by the
 // programmatic-caller guard inside each export function. Wording locked by
 // the master plan §7.5: it must point the user at the project tree where the
@@ -102,8 +113,13 @@ void cwSurveyExportManager::exportSurvexCave(QString filename) {
         cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(cave->data());
-        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        //The cave's own region, not the manager's: the two are set separately
+        //and only the cave's region holds ties that name its stations.
+        if (const cwCavingRegion* region = cave->parentRegion()) {
+            exportTask->setEquates(region->equates()->equates());
+        }
+        connect(exportTask, &cwTask::finished, this, &cwSurveyExportManager::exporterFinished);
+        connect(exportTask, &cwTask::stopped, this, &cwSurveyExportManager::exporterFinished);
         exportTask->start();
     }
 }
@@ -125,11 +141,9 @@ void cwSurveyExportManager::exportSurvexTrip(QString filename) {
         cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(trip->data());
-        if(cwCave* cave = trip->parentCave()) {
-            exportTask->setCaveFixStations(cave->fixStations()->fixStations());
-        }
-        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        exportTask->setCaveFixStations(enclosingFixStations(trip));
+        connect(exportTask, &cwTask::finished, this, &cwSurveyExportManager::exporterFinished);
+        connect(exportTask, &cwTask::stopped, this, &cwSurveyExportManager::exporterFinished);
         exportTask->start();
     }
 }
@@ -152,8 +166,8 @@ void cwSurveyExportManager::exportCaveToCompass(QString filename) {
         cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(cave->data());
-        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        connect(exportTask, &cwTask::finished, this, &cwSurveyExportManager::exporterFinished);
+        connect(exportTask, &cwTask::stopped, this, &cwSurveyExportManager::exporterFinished);
         exportTask->start();
     }
 }
@@ -176,8 +190,8 @@ void cwSurveyExportManager::exportCaveToChipdata(QString filename) {
         cwChipdataExportCaveTask* exportTask = new cwChipdataExportCaveTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(cave->data());
-        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        connect(exportTask, &cwTask::finished, this, &cwSurveyExportManager::exporterFinished);
+        connect(exportTask, &cwTask::stopped, this, &cwSurveyExportManager::exporterFinished);
         exportTask->start();
     }
 }
@@ -270,8 +284,10 @@ void cwSurveyExportManager::setCave(cwCave* cave) {
     if(Cave != cave) {
         Cave = cave;
         if(!Cave.isNull()) {
-            Q_ASSERT(qobject_cast<cwCavingRegion*>(Cave->parent()) != nullptr);
-            setCavingRegion(qobject_cast<cwCavingRegion*>(Cave->parent()));
+            //parentRegion() walks up the node tree, so it answers for a cave at
+            //any depth; the cave's QObject parent is the node above it.
+            Q_ASSERT(Cave->parentRegion() != nullptr);
+            setCavingRegion(Cave->parentRegion());
         }
         updateActions();
 
@@ -294,6 +310,12 @@ cwCavingRegion* cwSurveyExportManager::cavingRegion() const {
 void cwSurveyExportManager::setCavingRegion(cwCavingRegion* cavingRegion) {
     if(CavingRegion != cavingRegion) {
         CavingRegion = cavingRegion;
+        QObject::disconnect(m_subtreeConnection);
+        if (!CavingRegion.isNull()) {
+            m_subtreeConnection = connect(
+                CavingRegion->rootNode(), &cwSurveyNode::subtreeChanged,
+                this, &cwSurveyExportManager::scheduleRewire);
+        }
         rewireExternalCenterlineTracking();
         updateActions();
         emit cavingRegionChanged();
@@ -302,73 +324,79 @@ void cwSurveyExportManager::setCavingRegion(cwCavingRegion* cavingRegion) {
 
 /**
   \brief Tears down every signal connection that drives the canExport gate
-  and re-wires against the current region, its caves, and each cave's trips.
-  Called whenever the region pointer changes or any structural mutation
-  (cave or trip insert/remove) fires. Always finishes with a recomputeCanExport()
-  so the gate state stays consistent with the freshly-wired set.
+  and re-wires against the current region, every node in its tree, and each
+  node's trips. Called when the region pointer changes and, once per
+  event-loop turn through scheduleRewire(), after a node or trip is inserted or
+  removed at any depth. Always
+  finishes with a recomputeCanExport() so the gate state stays consistent with
+  the freshly-wired set.
   */
 void cwSurveyExportManager::rewireExternalCenterlineTracking() {
+    m_rewirePending = false;
     for (const auto& connection : m_externalCenterlineConnections) {
         QObject::disconnect(connection);
     }
     m_externalCenterlineConnections.clear();
 
     if (!CavingRegion.isNull()) {
-        cwCavingRegion* region = CavingRegion.data();
-        m_externalCenterlineConnections.append(connect(
-            region, &cwCavingRegion::insertedCaves,
-            this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
-        m_externalCenterlineConnections.append(connect(
-            region, &cwCavingRegion::removedCaves,
-            this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
-
-        const QList<cwCave*> caves = region->caves();
-        for (cwCave* cave : caves) {
+        const cwSurveyNode* root = CavingRegion->rootNode();
+        const QList<cwSurveyNode*> nodes = root->allNodes();
+        for (cwSurveyNode* node : nodes) {
             m_externalCenterlineConnections.append(connect(
-                cave, &cwCave::externalCenterlineChanged,
+                node, &cwSurveyNode::externalCenterlineChanged,
                 this, &cwSurveyExportManager::recomputeCanExport));
-            m_externalCenterlineConnections.append(connect(
-                cave, &cwCave::insertedTrips,
-                this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
-            m_externalCenterlineConnections.append(connect(
-                cave, &cwCave::removedTrips,
-                this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
+        }
 
-            const QList<cwTrip*> trips = cave->trips();
-            for (cwTrip* trip : trips) {
-                m_externalCenterlineConnections.append(connect(
-                    trip, &cwTrip::externalCenterlineChanged,
-                    this, &cwSurveyExportManager::recomputeCanExport));
-            }
+        const QList<cwTrip*> trips = root->allTrips();
+        for (cwTrip* trip : trips) {
+            m_externalCenterlineConnections.append(connect(
+                trip, &cwTrip::externalCenterlineChanged,
+                this, &cwSurveyExportManager::recomputeCanExport));
         }
     }
 
     recomputeCanExport();
 }
 
+void cwSurveyExportManager::scheduleRewire() {
+    if (m_rewirePending) {
+        return;
+    }
+    m_rewirePending = true;
+    QMetaObject::invokeMethod(this, &cwSurveyExportManager::runPendingRewire,
+                              Qt::QueuedConnection);
+}
+
+void cwSurveyExportManager::runPendingRewire() {
+    if (m_rewirePending) {
+        rewireExternalCenterlineTracking();
+    }
+}
+
 /**
-  \brief Walks every cave and trip in the current region looking for an
-  attachment. Updates m_canExport / m_exportDisabledReason and emits
-  canExportChanged() only when the gate flips. Scope-state detection
-  (non-empty stationPrefix on cwTrip) lands in Phase 3; until then the
-  externalCenterline check covers every entity that can break round-trip
-  through Survex / Compass exports.
+  \brief Walks every node and trip in the current region, at every depth,
+  looking for an attachment. Updates m_canExport / m_exportDisabledReason and
+  emits canExportChanged() only when the gate flips. The gate closes on a
+  node's external-centerline attachment (every source root carries one) and on
+  any attached trip, since the *include topology an attached entry brings in
+  cannot round-trip through a Compass export.
   */
 void cwSurveyExportManager::recomputeCanExport() {
     const auto anyAttachment = [this]() {
         if (CavingRegion.isNull()) {
             return false;
         }
-        const QList<cwCave*> caves = CavingRegion->caves();
-        for (cwCave* cave : caves) {
-            if (!cave->externalCenterline().isEmpty()) {
+        const cwSurveyNode* root = CavingRegion->rootNode();
+        const QList<cwSurveyNode*> nodes = root->allNodes();
+        for (const cwSurveyNode* node : nodes) {
+            if (!node->externalCenterline().isEmpty()) {
                 return true;
             }
-            const QList<cwTrip*> trips = cave->trips();
-            for (cwTrip* trip : trips) {
-                if (!trip->externalCenterline().isEmpty()) {
-                    return true;
-                }
+        }
+        const QList<cwTrip*> trips = root->allTrips();
+        for (const cwTrip* trip : trips) {
+            if (!trip->externalCenterline().isEmpty()) {
+                return true;
             }
         }
         return false;

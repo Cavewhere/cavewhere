@@ -128,6 +128,26 @@ public:
                               DatumSource datumSource = DatumSource::DataInput);
 
     /**
+     * \a frameCS with its false origin moved by \a origin, so a point read in
+     * the result lands \a origin less in \a frameCS: \a origin itself lands on
+     * \a frameCS's (0, 0). The same projection on the same datum, so relating
+     * the two is a pure translation and z passes through. The solve reads an
+     * attached file whose fixes name no system in it, with \a origin its first
+     * bare fix. \a origin is x-first and in \a frameCS's own axis unit.
+     *
+     * Empty when \a frameCS is no projected CRS PROJ reads, names no false
+     * origin to move, or has an axis unit PROJ cannot read.
+     */
+    static QString translated(const QString& frameCS, const cwGeoPoint& origin);
+
+    /**
+     * The system a project in cwGeoReference::LocalGrid solves in: an LDP at
+     * latitude 0, longitude 0 on WGS84, which carries translated() and has no
+     * geography the user sees.
+     */
+    static QString localGridSystem();
+
+    /**
      * What a frame says about itself: the datum it is on and where it is
      * centered, read out of one PROJ resolution rather than two.
      *

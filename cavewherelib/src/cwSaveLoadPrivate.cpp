@@ -1,6 +1,7 @@
 #include "cwSaveLoadPrivate.h"
 
 //Our includes
+#include "cwCaveData.h"
 #include "cwProtoUtils.h"
 #include "cwSurveyChunk.h"
 
@@ -150,6 +151,10 @@ Monad::ResultBase cwSaveLoadPrivate::copyDirectoryRecursively(const QDir& source
         if (entry.isSymLink()) {
             return Monad::ResultBase(
                 QStringLiteral("Refusing to copy symlink '%1'.").arg(entry.absoluteFilePath()));
+        }
+        if (entry.fileName() == kTrashDirName) {
+            //A copy of a project carries none of what a delete took away.
+            continue;
         }
         if (entry.isDir()) {
             auto result = copyDirectoryRecursively(QDir(entry.absoluteFilePath()), QDir(targetPath));
@@ -381,6 +386,14 @@ Monad::ResultBase cwSaveLoadPrivate::Job::moveOrMergeDirectory(const QString& so
     }
 
     if (!QFileInfo::exists(destinationPath)) {
+        // A move to another parent lands in a sub/ directory that may hold no
+        // other child yet, and a rename needs its destination's parent to exist.
+        const auto ensureParentResult =
+                ensureDirectoryExists(QFileInfo(destinationPath).absolutePath());
+        if (ensureParentResult.hasError()) {
+            return ensureParentResult;
+        }
+
         if (!cwSaveLoadPrivate::fsRenameDir(sourcePath, destinationPath)) {
             return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2").arg(sourcePath, destinationPath));
         }
@@ -806,11 +819,11 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
     };
 
     auto oldPath = [this, toDirOrFilePath](const Job& job) {
-        return toDirOrFilePath(job, m_objectStates[job.objectId].currentPath);
+        return toDirOrFilePath(job, m_objectStates.value(job.objectId).currentPath);
     };
 
     auto path = [this, context, toDirOrFilePath](const Job& job) {
-        return toDirOrFilePath(job, absolutePathFor(context, static_cast<const QObject*>(job.objectId)));
+        return toDirOrFilePath(job, absolutePathFor(context, job.objectId));
     };
 
     job.path = path(job);
@@ -834,7 +847,7 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
     };
 
     if (job.action == Job::Action::WriteFile && job.kind == Job::Kind::File) {
-        auto& state = m_objectStates[job.objectId];
+        auto& state = stateFor(job.objectId, context);
         if (state.currentPath.isEmpty()) {
             state.currentPath = job.path;
         } else {
@@ -844,7 +857,7 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
             state.currentPath = job.path;
         }
     } else if (job.kind == Job::Kind::File && job.action == Job::Action::Move) {
-        auto& state = m_objectStates[job.objectId];
+        auto& state = stateFor(job.objectId, context);
         if (state.currentPath == job.path) {
             return;
         }
@@ -855,12 +868,12 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
                 [this,
                 emitObjectPathHelper,
                 context,
-                objectId = job.objectId,
+                objectGuard = job.objectGuard,
                 originalOnDone]
                 (const Monad::ResultBase& result)
         {
-            emitObjectPathHelper(result, originalOnDone, [objectId, context]() {
-                if (auto* object = static_cast<QObject*>(const_cast<void*>(objectId))) {
+            emitObjectPathHelper(result, originalOnDone, [objectGuard, context]() {
+                if (QObject* object = objectGuard.data()) {
                     emit context->objectPathReady(object);
                 }
             });
@@ -873,28 +886,20 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
             return;
         }
 
-        const QString prefix = oldDir + QStringLiteral("/");
-        for (auto it = m_objectStates.begin(); it != m_objectStates.end(); ++it) {
-            const QString currentPath = it.value().currentPath;
-            if (currentPath == oldDir) {
-                it.value().currentPath = newDir;
-            } else if (currentPath.startsWith(prefix)) {
-                it.value().currentPath = newDir + QStringLiteral("/") + currentPath.mid(prefix.size());
-            }
-        }
+        rebaseObjectStatesUnder(oldDir, newDir);
 
         const auto originalOnDone = job.onDone;
         job.onDone =
                 [this,
                 emitObjectPathHelper,
                 context,
-                objectId = job.objectId,
+                objectGuard = job.objectGuard,
                 originalOnDone]
                 (const Monad::ResultBase& result)
         {
-            emitObjectPathHelper(result, originalOnDone, [objectId, context]() {
+            emitObjectPathHelper(result, originalOnDone, [objectGuard, context]() {
                 // Emit only for the directory object; listeners cascade so we avoid N per-file signals.
-                if (auto* object = static_cast<QObject*>(const_cast<void*>(objectId))) {
+                if (QObject* object = objectGuard.data()) {
                     emit context->objectPathReady(object);
                 }
             });
@@ -934,8 +939,10 @@ void cwSaveLoadPrivate::addExplicitFileSystemJob(Job job, cwSaveLoad* context) {
     // not emit objectPathReady — the destination must be a sibling artifact
     // for which no path-ready signal is meaningful (e.g. cwLazLayer's .laz
     // source file, which is not the canonical metadata file cwSaveLoad
-    // tracks). For metadata-file moves, use addFileSystemJob instead so
-    // path-ready emission is wired correctly.
+    // tracks), or the move into the trash a delete costs, where the object is
+    // leaving the tree and nobody may follow it there. For every other
+    // metadata-file move, use addFileSystemJob instead so path-ready emission
+    // is wired correctly.
     Q_ASSERT(job.action != Job::Action::Move
              || (!job.oldPath.isEmpty() && !job.path.isEmpty()));
 
@@ -996,24 +1003,24 @@ QString cwSaveLoadPrivate::normalizedAbsolutePath(const QString& path)
 cwSaveLoadPrivate::LoadedPathIndex cwSaveLoadPrivate::buildLoadedPathIndex(const cwCavingRegionData& loadedRegion)
 {
     LoadedPathIndex index;
-    for (const cwCaveData& caveData : loadedRegion.caves) {
-        if (caveData.id.isNull()) {
-            continue;
+
+    walkCaveDataTree(loadedRegion.caves, [&index](const cwCaveData& caveData, const QStringList& nodePath) {
+        if (!caveData.id.isNull()) {
+            index.nodePathById.insert(caveData.id, nodePath);
         }
-        index.caveNameById.insert(caveData.id, caveData.name);
 
         for (const cwTripData& tripData : caveData.trips) {
             if (tripData.id.isNull()) {
                 continue;
             }
-            index.tripPartsById.insert(tripData.id, LoadedTripPathParts {caveData.name, tripData.name});
+            index.tripPartsById.insert(tripData.id, LoadedTripPathParts {nodePath, tripData.name});
 
             for (const cwNoteData& noteData : tripData.noteModel.notes) {
                 if (noteData.id.isNull()) {
                     continue;
                 }
                 index.notePartsById.insert(noteData.id,
-                                           LoadedNotePathParts {caveData.name, tripData.name, noteData.name});
+                                           LoadedNotePathParts {nodePath, tripData.name, noteData.name});
             }
 
             for (const cwNoteLiDARData& noteData : tripData.noteLiDARModel.notes) {
@@ -1021,7 +1028,7 @@ cwSaveLoadPrivate::LoadedPathIndex cwSaveLoadPrivate::buildLoadedPathIndex(const
                     continue;
                 }
                 index.lidarPartsById.insert(noteData.id,
-                                            LoadedLiDARPathParts {caveData.name, tripData.name, noteData.name});
+                                            LoadedNotePathParts {nodePath, tripData.name, noteData.name});
             }
 
             for (const cwSketchData& sketchData : tripData.sketchModel.notes) {
@@ -1029,21 +1036,298 @@ cwSaveLoadPrivate::LoadedPathIndex cwSaveLoadPrivate::buildLoadedPathIndex(const
                     continue;
                 }
                 index.sketchPartsById.insert(sketchData.id,
-                                             LoadedSketchPathParts {caveData.name, tripData.name, sketchData.name});
+                                             LoadedNotePathParts {nodePath, tripData.name, sketchData.name});
             }
         }
-    }
+    });
 
     return index;
 }
 
-void cwSaveLoadPrivate::seedStatePathFromLoaded(const void* objectId, const QString& absolutePath)
+void cwSaveLoadPrivate::watchObjectLifetime(const QObject* object, cwSaveLoad* context)
+{
+    if (object == nullptr || m_lifetimeWatched.contains(object)) {
+        return;
+    }
+    m_lifetimeWatched.insert(object);
+
+    // m_objectStates is keyed by pointer, so an entry that outlives its
+    // object could be inherited by a new object allocated at the recycled
+    // address — and its stale currentPath would become the oldPath of that
+    // object's next move. Erase the entry at destruction, before the
+    // allocator can hand the address out again.
+    // A trashed directory becomes unreachable exactly here: the undo command
+    // holding the removed object has left the stack, so nothing can ask for
+    // the delete back and the entry is safe to remove for good.
+    QObject::connect(object, &QObject::destroyed, context, [this, context, object]() {
+        m_lifetimeWatched.remove(object);
+        m_objectStates.remove(object);
+
+        const QString entryDir = m_trashEntries.take(object);
+        if (!entryDir.isEmpty()) {
+            queueTrashRemove(context, entryDir);
+        }
+    });
+}
+
+void cwSaveLoadPrivate::rewatchObjectLifetime(const QObject* object, cwSaveLoad* context)
+{
+    if (object == nullptr) {
+        return;
+    }
+
+    m_lifetimeWatched.remove(object);
+    watchObjectLifetime(object, context);
+}
+
+QString cwSaveLoadPrivate::trashDir(const cwSaveLoad* context)
+{
+    if (context == nullptr) {
+        return QString();
+    }
+    // Normalized the way queued paths are, so a comparison against an object
+    // state holds on a root reached through a symlink (/var on macOS).
+    return normalizeQueuedPath(context->projectRootDir().absoluteFilePath(kTrashDirName));
+}
+
+bool cwSaveLoadPrivate::isInsideTrash(const cwSaveLoad* context, const QString& path)
+{
+    if (path.isEmpty() || !namesTrashDir(path)) {
+        return false;
+    }
+
+    const QString trashPath = trashDir(context);
+    if (trashPath.isEmpty()) {
+        return false;
+    }
+
+    const QString cleanPath = normalizeQueuedPath(path);
+    return cleanPath == trashPath || cleanPath.startsWith(trashPath + QStringLiteral("/"));
+}
+
+bool cwSaveLoadPrivate::namesTrashDir(const QString& path)
+{
+    //Every path inside the trash carries the directory's name as a segment of
+    //its own. The cheap test a miss answers, before trashDir() goes to the
+    //filesystem to canonicalize a root that may be reached through a symlink.
+    return path.contains(QStringLiteral("/") + kTrashDirName + QStringLiteral("/"))
+            || path.endsWith(QStringLiteral("/") + kTrashDirName);
+}
+
+void cwSaveLoadPrivate::rebaseObjectStatesUnder(const QString& oldDir, const QString& newDir)
+{
+    if (oldDir.isEmpty() || newDir.isEmpty() || oldDir == newDir) {
+        return;
+    }
+
+    const QString prefix = oldDir + QStringLiteral("/");
+    for (auto it = m_objectStates.begin(); it != m_objectStates.end(); ++it) {
+        const QString currentPath = it.value().currentPath;
+        if (currentPath == oldDir) {
+            it.value().currentPath = newDir;
+        } else if (currentPath.startsWith(prefix)) {
+            it.value().currentPath = newDir + QStringLiteral("/") + currentPath.mid(prefix.size());
+        }
+    }
+}
+
+void cwSaveLoadPrivate::moveDirectoryToTrash(cwSaveLoad* context, const QObject* object, const QUuid& id)
+{
+    if (context == nullptr || object == nullptr || retiring) {
+        return;
+    }
+
+    const QString currentPath = m_objectStates.value(object).currentPath;
+    if (currentPath.isEmpty()) {
+        return;
+    }
+
+    const QString oldDir = normalizeQueuedPath(QFileInfo(currentPath).absoluteDir().absolutePath());
+    if (oldDir.isEmpty() || isInsideTrash(context, oldDir)) {
+        return;
+    }
+
+    // Every descriptor sits at least one directory below the data root, so a
+    // node's or trip's own directory is never a root. A state that has drifted
+    // anyway carries the whole project away here, so the roots are off limits.
+    const QString projectRootPath = normalizeQueuedPath(context->projectRootDir().absolutePath());
+    const QString dataRootName = context->dataRoot();
+    const QString dataRootPath = dataRootName.isEmpty()
+            ? projectRootPath
+            : normalizeQueuedPath(context->projectRootDir().absoluteFilePath(dataRootName));
+    if (oldDir == projectRootPath || oldDir == dataRootPath) {
+        return;
+    }
+
+    // The id keeps two deletes of same-named objects apart; the basename keeps
+    // the descriptor's name, so the move back is a plain directory move.
+    const QUuid entryId = id.isNull() ? QUuid::createUuid() : id;
+    const QString entryDir = QDir(trashDir(context)).absoluteFilePath(entryId.toString(QUuid::WithoutBraces));
+    const QString trashPath = normalizeQueuedPath(QDir(entryDir).absoluteFilePath(QFileInfo(oldDir).fileName()));
+
+    // The rows of a subtree reach cwSaveLoad one at a time, so the notes' and
+    // LiDAR notes' own file removals can already be queued by the time the
+    // node or trip above them is trashed.
+    const QSet<const QObject*> owned = subtreeObjects(object);
+    const QString prefix = oldDir + QStringLiteral("/");
+    QList<Job> carriedRemoves;
+    m_pendingJobs.removeIf([&](const Job& pendingJob) {
+        if (pendingJob.action != Job::Action::Remove
+                || (pendingJob.oldPath != oldDir && !pendingJob.oldPath.startsWith(prefix))) {
+            return false;
+        }
+
+        // A removal of what the delete itself is taking away — the subtree's
+        // own descriptors, and the image files named by path alone — would
+        // empty the trashed directory of exactly what an undo needs back. The
+        // move carries those files instead.
+        if (pendingJob.objectId == nullptr || owned.contains(pendingJob.objectId)) {
+            return true;
+        }
+
+        // A removal left over from an earlier, unrelated delete still has to
+        // happen, or an undo would bring that object back with the subtree.
+        // It follows the move, aimed at where the file now lives.
+        carriedRemoves.append(pendingJob);
+        return true;
+    });
+
+    // addFileSystemJob resolves a Move's destination from the tree position,
+    // which a removed object no longer has, so the paths are explicit here.
+    // The state rebase a Directory Move owes its subtree still runs, and it is
+    // what makes the restore a normal move.
+    Job job(object, Job::Kind::Directory, Job::Action::Move);
+    job.oldPath = oldDir;
+    job.path = trashPath;
+    addExplicitFileSystemJob(job, context);
+
+    for (const Job& pendingRemove : std::as_const(carriedRemoves)) {
+        Job carriedRemove = pendingRemove;
+        carriedRemove.oldPath = trashPath + carriedRemove.oldPath.mid(oldDir.size());
+        addExplicitFileSystemJob(carriedRemove, context);
+    }
+
+    dropLoadedPathsUnderDir(oldDir);
+    rebaseObjectStatesUnder(oldDir, trashPath);
+    m_trashEntries.insert(object, entryDir);
+}
+
+void cwSaveLoadPrivate::restoreDirectoryFromTrash(cwSaveLoad* context, const QObject* object)
+{
+    if (context == nullptr || object == nullptr) {
+        return;
+    }
+
+    if (!isInsideTrash(context, m_objectStates.value(object).currentPath)) {
+        return;
+    }
+
+    const QString entryDir = m_trashEntries.take(object);
+
+    // The very move a node's change of parent costs: addFileSystemJob reads
+    // the destination off the tree position the undo just restored, and the
+    // object state still names the trash.
+    moveDirectory(context, object);
+
+    if (!entryDir.isEmpty()) {
+        // The move above empties .cw_trash/<id>, and the directory itself goes
+        // with what it held.
+        queueTrashRemove(context, entryDir);
+    }
+}
+
+QSet<const QObject*> cwSaveLoadPrivate::subtreeObjects(const QObject* object)
+{
+    QSet<const QObject*> objects;
+
+    const auto addTrip = [&objects](const cwTrip* trip) {
+        objects.insert(trip);
+
+        for (const cwNote* note : trip->notes()->notes()) {
+            objects.insert(note);
+        }
+        for (const QObject* lidarNote : trip->notesLiDAR()->notes()) {
+            objects.insert(lidarNote);
+        }
+        for (const QObject* sketch : trip->notesSketch()->notes()) {
+            objects.insert(sketch);
+        }
+    };
+
+    if (const auto* node = qobject_cast<const cwSurveyNode*>(object)) {
+        node->walk([&objects, &addTrip](const cwSurveyNode* descendant) {
+            objects.insert(descendant);
+
+            for (const cwTrip* trip : descendant->trips()) {
+                addTrip(trip);
+            }
+        });
+    } else if (const auto* trip = qobject_cast<const cwTrip*>(object)) {
+        addTrip(trip);
+    }
+
+    return objects;
+}
+
+void cwSaveLoadPrivate::queueTrashRemove(cwSaveLoad* context, const QString& absolutePath)
+{
+    Job job;
+    job.kind = Job::Kind::Directory;
+    job.action = Job::Action::Remove;
+    job.oldPath = absolutePath;
+    addExplicitFileSystemJob(job, context);
+}
+
+void cwSaveLoadPrivate::sweepTrash(cwSaveLoad* context)
+{
+    if (context == nullptr) {
+        return;
+    }
+
+    const QString trashPath = trashDir(context);
+    if (trashPath.isEmpty() || !QFileInfo::exists(trashPath)) {
+        return;
+    }
+
+    queueTrashRemove(context, trashPath);
+}
+
+void cwSaveLoadPrivate::discardTrash(cwSaveLoad* context)
+{
+    if (context == nullptr) {
+        return;
+    }
+
+    const QString trashPath = trashDir(context);
+    if (trashPath.isEmpty()) {
+        return;
+    }
+
+    m_trashEntries.clear();
+
+    // The states point at a directory that is about to stop existing. Left
+    // behind, they would name the trash of a project root the caller is
+    // replacing — and a restore would move nothing.
+    for (auto it = m_objectStates.begin(); it != m_objectStates.end();) {
+        if (isInsideTrash(context, it.value().currentPath)) {
+            it = m_objectStates.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    if (QFileInfo::exists(trashPath)) {
+        QDir(trashPath).removeRecursively();
+    }
+}
+
+void cwSaveLoadPrivate::seedStatePathFromLoaded(cwSaveLoad* context, const QObject* objectId, const QString& absolutePath)
 {
     if (objectId == nullptr || absolutePath.isEmpty()) {
         return;
     }
 
-    auto& state = m_objectStates[objectId];
+    auto& state = stateFor(objectId, context);
     const QString normalizedLoadedPath = normalizeQueuedPath(absolutePath);
     state.loadedPath = normalizedLoadedPath;
     if (state.currentPath.isEmpty()) {
@@ -1066,12 +1350,146 @@ void cwSaveLoadPrivate::seedStatePathFromLoaded(const void* objectId, const QStr
     state.currentPath = normalizedCurrentPath;
 }
 
+bool cwSaveLoadPrivate::isInsideMovingNode(const QObject* object) const
+{
+    if (m_movingNodes.isEmpty() || object == nullptr) {
+        return false;
+    }
+
+    const auto nodeOfTrip = [](const cwTrip* trip) -> const cwSurveyNode* {
+        return trip == nullptr ? nullptr : trip->parentNode();
+    };
+
+    const cwSurveyNode* node = qobject_cast<const cwSurveyNode*>(object);
+    if (node == nullptr) {
+        if (const auto* trip = qobject_cast<const cwTrip*>(object)) {
+            node = nodeOfTrip(trip);
+        } else if (const auto* note = qobject_cast<const cwNote*>(object)) {
+            node = nodeOfTrip(note->parentTrip());
+        } else if (const auto* lidarNote = qobject_cast<const cwNoteLiDAR*>(object)) {
+            node = nodeOfTrip(lidarNote->parentTrip());
+        } else if (const auto* sketch = qobject_cast<const cwSketch*>(object)) {
+            node = nodeOfTrip(sketch->parentTrip());
+        }
+    }
+
+    for (; node != nullptr; node = node->parentNode()) {
+        if (m_movingNodes.contains(node)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void cwSaveLoadPrivate::moveDirectory(cwSaveLoad* context, const QObject* object)
+{
+    if (context == nullptr || object == nullptr) {
+        return;
+    }
+
+    // One Directory Move, never a Remove followed by a write: the object's
+    // directory holds its trips, its note images and its external-centerline
+    // copies, and only the move carries all of them across intact.
+    addFileSystemJob(Job {object, Job::Kind::Directory, Job::Action::Move}, context);
+
+    // A move can also rename the node, when its new siblings already hold its
+    // name, and then the descriptor inside the directory the job just carried
+    // still has the old basename. This is the same pair renameDirectoryAndFile
+    // queues, and it costs nothing when the name did not move: the file job
+    // early-outs on a destination equal to the state's current path.
+    addFileSystemJob(Job {object, Job::Kind::File, Job::Action::Move}, context);
+
+    if (const auto* node = qobject_cast<const cwSurveyNode*>(object)) {
+        dropLoadedPathsUnder(node);
+    } else if (const auto* trip = qobject_cast<const cwTrip*>(object)) {
+        dropLoadedPathsUnder(trip);
+    }
+}
+
+void cwSaveLoadPrivate::dropLoadedPathsUnder(const cwSurveyNode* node)
+{
+    if (node == nullptr) {
+        return;
+    }
+
+    node->walk([this](const cwSurveyNode* descendant) {
+        const auto it = m_objectStates.find(descendant);
+        if (it != m_objectStates.end()) {
+            it->loadedPath.clear();
+        }
+
+        for (const cwTrip* trip : descendant->trips()) {
+            dropLoadedPathsUnder(trip);
+        }
+    });
+}
+
+void cwSaveLoadPrivate::dropLoadedPathsUnder(const cwTrip* trip)
+{
+    if (trip == nullptr) {
+        return;
+    }
+
+    const auto dropLoadedPath = [this](const QObject* object) {
+        const auto it = m_objectStates.find(object);
+        if (it != m_objectStates.end()) {
+            it->loadedPath.clear();
+        }
+    };
+
+    dropLoadedPath(trip);
+
+    for (const cwNote* note : trip->notes()->notes()) {
+        dropLoadedPath(note);
+    }
+
+    for (const QObject* lidarNote : trip->notesLiDAR()->notes()) {
+        dropLoadedPath(lidarNote);
+    }
+
+    for (const QObject* sketch : trip->notesSketch()->notes()) {
+        dropLoadedPath(sketch);
+    }
+}
+
+void cwSaveLoadPrivate::dropLoadedPathsUnderDir(const QString& directory)
+{
+    if (directory.isEmpty()) {
+        return;
+    }
+
+    const QString prefix = directory + QStringLiteral("/");
+    for (auto it = m_objectStates.begin(); it != m_objectStates.end(); ++it) {
+        const QString currentPath = it.value().currentPath;
+        if (currentPath == directory || currentPath.startsWith(prefix)) {
+            it.value().loadedPath.clear();
+        }
+    }
+}
+
 void cwSaveLoadPrivate::resetObjectStates(cwSaveLoad* context) {
-    m_objectStates.clear();
+    // A trashed object hangs outside the tree, so the walk below never reaches
+    // it — and dropping its state would leave an undo with nothing to move
+    // back. The trash is a sibling of the data root, which the renames that
+    // bring us here leave where it is. A project root that does change hands
+    // goes through discardTrash() instead.
+    for (auto it = m_objectStates.begin(); it != m_objectStates.end();) {
+        if (isInsideTrash(context, it.value().currentPath)) {
+            ++it;
+        } else {
+            it = m_objectStates.erase(it);
+        }
+    }
+
+    //A new project keeps none of the old one's moves. The set holds bare
+    //addresses, so an entry left behind could be inherited by whatever object
+    //the allocator next places there and make a real deletion look like a move.
+    m_movingNodes.clear();
 
     auto addObjects = [this, context](auto objects) {
         for(const auto object : objects) {
-            auto& state = stateFor(object);
+            auto& state = stateFor(object, context);
             state.currentPath = normalizeQueuedPath(absolutePathFor(context, object));
             state.loadedPath.clear();
         }
@@ -1102,18 +1520,28 @@ void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
             : QDir(context->projectRootDir().absoluteFilePath(dataRootName));
     const LoadedPathIndex loadedPathIndex = buildLoadedPathIndex(loadedRegion);
 
+    //Every saved object sits under its node's directory, with a tail that says
+    //what kind of object it is.
+    const auto pathUnderNode = [&baseDataRootDir](const QStringList& nodePath, const QString& tail) {
+        return baseDataRootDir.filePath(QDir(cwSaveLoad::relativeNodeDir(nodePath)).filePath(tail));
+    };
+
+    const auto pathInTrip = [](const QString& tripName, const QString& tail) {
+        return QDir(QStringLiteral("trips")).filePath(
+                    QDir(cwSaveLoad::sanitizeFileName(tripName)).filePath(tail));
+    };
+
     for (cwCave* cave : m_regionTreeModel->all<cwCave*>(QModelIndex(), &cwRegionTreeModel::cave)) {
         if (cave == nullptr || cave->id().isNull()) {
             continue;
         }
-        const auto caveNameIt = loadedPathIndex.caveNameById.constFind(cave->id());
-        if (caveNameIt == loadedPathIndex.caveNameById.constEnd()) {
+        const auto nodePathIt = loadedPathIndex.nodePathById.constFind(cave->id());
+        if (nodePathIt == loadedPathIndex.nodePathById.constEnd()) {
             continue;
         }
 
-        const QString caveDirName = cwSaveLoad::sanitizeFileName(caveNameIt.value());
-        const QString caveFileName = cwSaveLoad::sanitizeFileName(caveNameIt.value() + QStringLiteral(".cwcave"));
-        seedStatePathFromLoaded(cave, baseDataRootDir.filePath(QDir(caveDirName).filePath(caveFileName)));
+        const QString caveFileName = cwSaveLoad::sanitizeFileName(nodePathIt.value().last() + QStringLiteral(".cwcave"));
+        seedStatePathFromLoaded(context, cave, pathUnderNode(nodePathIt.value(), caveFileName));
     }
 
     for (cwTrip* trip : m_regionTreeModel->all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip)) {
@@ -1125,67 +1553,41 @@ void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
             continue;
         }
 
-        const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
-        const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
         const QString tripFileName = cwSaveLoad::sanitizeFileName(partsIt->tripName + QStringLiteral(".cwtrip"));
-        seedStatePathFromLoaded(trip, baseDataRootDir.filePath(QDir(caveDirName).filePath(
-                                                                   QDir(QStringLiteral("trips")).filePath(
-                                                                       QDir(tripDirName).filePath(tripFileName)))));
+        seedStatePathFromLoaded(context, trip,
+                                pathUnderNode(partsIt->nodePath, pathInTrip(partsIt->tripName, tripFileName)));
     }
 
-    for (cwNote* note : m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note)) {
-        if (note == nullptr || note->id().isNull()) {
-            continue;
-        }
-        const auto partsIt = loadedPathIndex.notePartsById.constFind(note->id());
-        if (partsIt == loadedPathIndex.notePartsById.constEnd()) {
-            continue;
-        }
+    //A 2D note, a LiDAR note and a sketch all live in their trip's notes/
+    //directory and differ only in file suffix.
+    const auto seedNotesDirObjects = [&](const QHash<QUuid, LoadedNotePathParts>& partsById,
+                                         const auto& objects,
+                                         const QString& fileSuffix) {
+        for (auto* object : objects) {
+            if (object == nullptr || object->id().isNull()) {
+                continue;
+            }
+            const auto partsIt = partsById.constFind(object->id());
+            if (partsIt == partsById.constEnd()) {
+                continue;
+            }
 
-        const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
-        const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
-        const QString noteFileName = cwSaveLoad::sanitizeFileName(partsIt->noteName + QStringLiteral(".cwnote"));
-        seedStatePathFromLoaded(note, baseDataRootDir.filePath(QDir(caveDirName).filePath(
-                                                                   QDir(QStringLiteral("trips")).filePath(
-                                                                       QDir(tripDirName).filePath(
-                                                                           QDir(QStringLiteral("notes")).filePath(noteFileName))))));
-    }
-
-    for (cwNoteLiDAR* note : m_regionTreeModel->all<cwNoteLiDAR*>(QModelIndex(), &cwRegionTreeModel::noteLiDAR)) {
-        if (note == nullptr || note->id().isNull()) {
-            continue;
+            const QString fileName = cwSaveLoad::sanitizeFileName(partsIt->noteName + fileSuffix);
+            const QString notePath = QDir(QStringLiteral("notes")).filePath(fileName);
+            seedStatePathFromLoaded(context, object,
+                                    pathUnderNode(partsIt->nodePath, pathInTrip(partsIt->tripName, notePath)));
         }
-        const auto partsIt = loadedPathIndex.lidarPartsById.constFind(note->id());
-        if (partsIt == loadedPathIndex.lidarPartsById.constEnd()) {
-            continue;
-        }
+    };
 
-        const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
-        const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
-        const QString noteFileName = cwSaveLoad::sanitizeFileName(partsIt->noteName + QStringLiteral(".cwnote3d"));
-        seedStatePathFromLoaded(note, baseDataRootDir.filePath(QDir(caveDirName).filePath(
-                                                                   QDir(QStringLiteral("trips")).filePath(
-                                                                       QDir(tripDirName).filePath(
-                                                                           QDir(QStringLiteral("notes")).filePath(noteFileName))))));
-    }
-
-    for (cwSketch* sketch : m_regionTreeModel->all<cwSketch*>(QModelIndex(), &cwRegionTreeModel::sketch)) {
-        if (sketch == nullptr || sketch->id().isNull()) {
-            continue;
-        }
-        const auto partsIt = loadedPathIndex.sketchPartsById.constFind(sketch->id());
-        if (partsIt == loadedPathIndex.sketchPartsById.constEnd()) {
-            continue;
-        }
-
-        const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
-        const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
-        const QString sketchFileName = cwSaveLoad::sanitizeFileName(partsIt->sketchName + QStringLiteral(".cwsketch"));
-        seedStatePathFromLoaded(sketch, baseDataRootDir.filePath(QDir(caveDirName).filePath(
-                                                                     QDir(QStringLiteral("trips")).filePath(
-                                                                         QDir(tripDirName).filePath(
-                                                                             QDir(QStringLiteral("notes")).filePath(sketchFileName))))));
-    }
+    seedNotesDirObjects(loadedPathIndex.notePartsById,
+                        m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note),
+                        QStringLiteral(".cwnote"));
+    seedNotesDirObjects(loadedPathIndex.lidarPartsById,
+                        m_regionTreeModel->all<cwNoteLiDAR*>(QModelIndex(), &cwRegionTreeModel::noteLiDAR),
+                        QStringLiteral(".cwnote3d"));
+    seedNotesDirObjects(loadedPathIndex.sketchPartsById,
+                        m_regionTreeModel->all<cwSketch*>(QModelIndex(), &cwRegionTreeModel::sketch),
+                        QStringLiteral(".cwsketch"));
 }
 
 QString cwSaveLoadPrivate::cleanupPathForDescriptor(const QString& absoluteDescriptorPath)
@@ -1378,19 +1780,62 @@ void cwSaveLoadPrivate::collapseSequentialMoves(const QList<int>& indices, QSet<
 {
     for (Job::Kind kind : {Job::Kind::File, Job::Kind::Directory}) {
         QList<int> moveIndices;
+        QList<int> otherKindMoveIndices;
         for (int idx : indices) {
-            if (m_pendingJobs[idx].action == Job::Action::Move
-                    && m_pendingJobs[idx].kind == kind) {
+            const Job& job = m_pendingJobs.at(idx);
+            if (job.action != Job::Action::Move) {
+                continue;
+            }
+            if (job.kind == kind) {
                 moveIndices.append(idx);
+            } else {
+                otherKindMoveIndices.append(idx);
             }
         }
-        if (moveIndices.size() > 1) {
-            m_pendingJobs[moveIndices.last()].oldPath =
-                    m_pendingJobs[moveIndices.first()].oldPath;
-            for (int i = 0; i < moveIndices.size() - 1; ++i) {
+        if (moveIndices.size() < 2) {
+            continue;
+        }
+
+        // A move of the other kind queued between two of these reads a path
+        // this run wrote: a rename of the descriptor inside a directory the
+        // first move made, or a file move inside a directory the first one
+        // carried. The survivor sits at the run's last index, so collapsing
+        // across one would put that job ahead of the move it depends on.
+        const auto otherKindMoveBetween = [&otherKindMoveIndices](int lower, int upper) {
+            for (int idx : otherKindMoveIndices) {
+                if (idx > lower && idx < upper) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // A run of moves collapses into its last job only while each one starts
+        // where the one before it ended. An ancestor directory move queued
+        // between two of them already carried this object somewhere else, so
+        // the earlier oldPath names nothing and collapsing onto it would leave
+        // the real directory — trips and note images included — behind.
+        const auto collapseRun = [&](int first, int last) {
+            if (last <= first) {
+                return;
+            }
+            m_pendingJobs[moveIndices[last]].oldPath = m_pendingJobs[moveIndices[first]].oldPath;
+            for (int i = first; i < last; ++i) {
                 indicesToDrop.insert(moveIndices[i]);
             }
+        };
+
+        int runStart = 0;
+        for (int i = 1; i < moveIndices.size(); ++i) {
+            const int previous = moveIndices.at(i - 1);
+            const int current = moveIndices.at(i);
+            if (m_pendingJobs.at(previous).path != m_pendingJobs.at(current).oldPath
+                    || otherKindMoveBetween(previous, current)) {
+                collapseRun(runStart, i - 1);
+                runStart = i;
+            }
         }
+        collapseRun(runStart, moveIndices.size() - 1);
     }
 }
 
@@ -1427,6 +1872,15 @@ void cwSaveLoadPrivate::compressPendingJobs()
     m_pendingJobs = std::move(compressed);
 }
 
+void cwSaveLoadPrivate::noteLocalMutation(cwSaveLoad* context)
+{
+    if (suppressLocalMutationTracking) {
+        return;
+    }
+    ++localMutationEpoch;
+    emit context->localMutationOccurred();
+}
+
 void cwSaveLoadPrivate::execFileSystemJobs(cwSaveLoad* context) {
     if (m_pendingJobs.isEmpty()) {
         return;
@@ -1438,6 +1892,7 @@ void cwSaveLoadPrivate::execFileSystemJobs(cwSaveLoad* context) {
     }
 
     if (m_pendingJobs.isEmpty()) {
+        drainedEpoch = localMutationEpoch;
         m_pendingJobsDeferred.complete();
         return;
     }
@@ -1461,6 +1916,7 @@ void cwSaveLoadPrivate::execFileSystemJobs(cwSaveLoad* context) {
             job.onDone(data);
         }
         if (m_pendingJobs.isEmpty()) {
+            drainedEpoch = localMutationEpoch;
             m_pendingJobsDeferred.complete();
         } else {
             //Start another job
@@ -1491,7 +1947,7 @@ QList<cwSurveyChunkData> cwSaveLoadPrivate::fromProtoSurveyChunks(const google::
 void cwSaveLoadPrivate::saveProtoMessage(
         cwSaveLoad* context,
         std::unique_ptr<const google::protobuf::Message> message,
-        const void* objectId)
+        const QObject* objectId)
 {
     Job job(
                 objectId,

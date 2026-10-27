@@ -8,6 +8,7 @@ StandardPage {
     objectName: "cavernOutputPage"
 
     readonly property LinePlotManager linePlotManager: RootData.linePlotManager
+    readonly property ExternalCenterlineManager externalManager: RootData.externalCenterlineManager
     readonly property bool hasError: linePlotManager !== null
                                      && linePlotManager.hasSolveError
     readonly property string cavernLog: linePlotManager !== null
@@ -20,20 +21,41 @@ StandardPage {
         anchors.margins: Theme.pageMargin
         spacing: Theme.sectionSpacing
 
-        // Header row: status on the left, primary action on the right.
-        RowLayout {
+        // Header: status on the left, primary action after it. A Flow so
+        // the Solve button wraps under the status on narrow windows
+        // instead of being cut off.
+        QQ.Flow {
             Layout.fillWidth: true
             spacing: Theme.sectionSpacing
 
             QC.Label {
                 objectName: "statusLabel"
-                Layout.fillWidth: true
+                // Cap at the Flow's width so long status text word-wraps
+                // instead of forcing the row wider than the page.
+                width: Math.min(implicitWidth, parent.width)
                 font.pixelSize: Theme.fontSizeMedium
                 color: root.hasError ? Theme.errorText : Theme.text
                 wrapMode: QC.Label.WordWrap
-                text: root.hasError
-                      ? qsTr("Cavern reported an error during the last solve.")
-                      : qsTr("Last solve completed successfully.")
+                maximumLineCount: 2
+                elide: QC.Label.ElideRight
+                text: {
+                    if (root.hasError) {
+                        if (root.linePlotManager.solveErrorSummary.length > 0) {
+                            return qsTr("%1 failed: %2")
+                                .arg(root.linePlotManager.solveErrorStep)
+                                .arg(root.linePlotManager.solveErrorSummary)
+                        }
+                        return qsTr("Cavern reported an error during the last solve.")
+                    }
+                    if (root.linePlotManager !== null
+                        && root.linePlotManager.lastSolveDuration >= 0) {
+                        return qsTr("Last solve completed successfully in %1 s — %2 stations, %3 warnings.")
+                            .arg(root.linePlotManager.lastSolveDuration.toFixed(1))
+                            .arg(root.linePlotManager.lastSolveStationCount)
+                            .arg(root.linePlotManager.lastSolveWarningCount)
+                    }
+                    return qsTr("Last solve completed successfully.")
+                }
             }
 
             QC.Button {
@@ -48,62 +70,189 @@ StandardPage {
             }
         }
 
-        QC.TabBar {
-            id: outputTabBar
-            objectName: "outputTabBar"
-            Layout.fillWidth: true
+        // Bounded so a long list of rows scrolls on its own and the cavern
+        // log below keeps its room.
+        QQ.Flickable {
+            id: attachedAreaId
 
-            QC.TabButton {
-                objectName: "cavernLogTab"
-                text: qsTr("Cavern log")
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(contentHeight, Theme.floatingListMaxHeight)
+            visible: attachedRepeater.count > 0
+            contentWidth: width
+            contentHeight: attachedSectionId.implicitHeight
+            clip: true
+            boundsBehavior: QQ.Flickable.StopAtBounds
+
+            QC.ScrollBar.vertical: QC.ScrollBar {
+                policy: attachedAreaId.contentHeight > attachedAreaId.height
+                        ? QC.ScrollBar.AlwaysOn
+                        : QC.ScrollBar.AlwaysOff
             }
 
-            QC.TabButton {
-                objectName: "loopClosureTab"
-                text: qsTr("Loop closure")
-                // The .err sidecar is only written when the cave has loops.
-                // Hide the tab when there's nothing to show so users aren't
-                // misled into thinking the tab is broken.
-                enabled: root.loopClosureStats.length > 0
+            ColumnLayout {
+                id: attachedSectionId
+                objectName: "attachedCenterlinesSection"
+
+                width: attachedAreaId.width
+                spacing: Theme.tightSpacing
+
+                // One row per source root, which stands for its whole subtree,
+                // and one per trip with a file of its own.
+                QC.Label {
+                    text: qsTr("Attached external centerlines")
+                    font.bold: true
+                }
+
+                QQ.Repeater {
+                    id: attachedRepeater
+                    model: root.externalManager !== null
+                           ? root.externalManager.attachedCenterlinesModel : null
+
+                    delegate: ColumnLayout {
+                        id: attachedRowId
+                        objectName: "attachedCenterlineRow" + index
+
+                        required property int index
+                        required property string ownerName
+                        required property string kindLabel
+                        required property string entryFile
+                        required property int depCount
+                        required property int warningCount
+                        // Why this owner was left out of the solve. A trip also
+                        // says so in its own banner; for a source root this row
+                        // is the only place it is ever said.
+                        required property string error
+
+                        Layout.fillWidth: true
+                        spacing: Theme.tightSpacing
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.sectionSpacing
+
+                            QC.Label {
+                                objectName: "attachedRowLabel"
+                                Layout.fillWidth: true
+                                elide: QC.Label.ElideMiddle
+                                text: qsTr("%1 %2 — %3")
+                                      .arg(attachedRowId.kindLabel)
+                                      .arg(attachedRowId.ownerName)
+                                      .arg(attachedRowId.entryFile)
+                            }
+
+                            QC.Label {
+                                color: Theme.textSubtle
+                                text: attachedRowId.warningCount > 0
+                                      ? qsTr("%1 files, %2 warnings")
+                                            .arg(attachedRowId.depCount)
+                                            .arg(attachedRowId.warningCount)
+                                      : qsTr("%1 files").arg(attachedRowId.depCount)
+                            }
+                        }
+
+                        QC.Label {
+                            objectName: "attachedRowError"
+
+                            Layout.fillWidth: true
+                            visible: attachedRowId.error.length > 0
+                            wrapMode: QC.Label.WordWrap
+                            color: Theme.danger
+                            font.pixelSize: Theme.fontSizeSmall
+                            text: attachedRowId.error
+                        }
+                    }
+                }
             }
         }
 
-        QC.Frame {
+        // The three switcher buttons act like tabs — one ButtonGroup keeps
+        // them mutually exclusive across the two group boxes.
+        QC.ButtonGroup {
+            buttons: [cavernInputButton, cavernOutputButton, loopClosureButton]
+        }
+
+        // Flow instead of RowLayout so the Output box wraps under the
+        // Input box on narrow windows instead of being cut off.
+        QQ.Flow {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            spacing: Theme.sectionSpacing
 
-            StackLayout {
-                anchors.fill: parent
-                currentIndex: outputTabBar.currentIndex
+            QC.GroupBox {
+                objectName: "cavernInputGroupBox"
+                title: qsTr("Input")
 
-                QC.ScrollView {
-                    clip: true
+                QC.Button {
+                    id: cavernInputButton
+                    objectName: "cavernInputButton"
+                    text: qsTr("Cavern Input")
+                    checkable: true
+                }
+            }
 
-                    QC.TextArea {
-                        objectName: "cavernLogTextArea"
-                        readOnly: true
-                        selectByMouse: true
-                        font.family: Theme.fontFamilyMono
-                        font.pixelSize: Theme.fontSizeSmall
-                        text: root.cavernLog
-                        placeholderText: qsTr("No cavern output to display.")
-                        wrapMode: QC.TextArea.NoWrap
+            QC.GroupBox {
+                objectName: "cavernOutputGroupBox"
+                title: qsTr("Output")
+
+                RowLayout {
+                    spacing: Theme.tightSpacing
+
+                    QC.Button {
+                        id: cavernOutputButton
+                        objectName: "cavernOutputButton"
+                        text: qsTr("Cavern Output")
+                        checkable: true
+                        checked: true
+                    }
+
+                    QC.Button {
+                        id: loopClosureButton
+                        objectName: "loopClosureButton"
+                        text: qsTr("Loop Closure")
+                        checkable: true
+                        // The .err sidecar is only written when the cave
+                        // has loops; disable when there's nothing to show.
+                        enabled: root.loopClosureStats.length > 0
+                        onEnabledChanged: {
+                            if (!enabled && checked) {
+                                cavernOutputButton.checked = true
+                            }
+                        }
                     }
                 }
+            }
+        }
 
-                QC.ScrollView {
-                    clip: true
+        QC.ScrollView {
+            objectName: "cavernOutputScrollView"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
 
-                    QC.TextArea {
-                        objectName: "loopClosureTextArea"
-                        readOnly: true
-                        selectByMouse: true
-                        font.family: Theme.fontFamilyMono
-                        font.pixelSize: Theme.fontSizeSmall
-                        text: root.loopClosureStats
-                        placeholderText: qsTr("No loop closure data — the cave has no loops.")
-                        wrapMode: QC.TextArea.NoWrap
+            QC.TextArea {
+                objectName: "cavernTextArea"
+                readOnly: true
+                selectByMouse: true
+                font.family: Theme.fontFamilyMono
+                font.pixelSize: Theme.fontSizeSmall
+                wrapMode: QC.TextArea.NoWrap
+                text: {
+                    if (cavernInputButton.checked) {
+                        return root.linePlotManager !== null
+                                ? root.linePlotManager.driverSource : ""
                     }
+                    if (loopClosureButton.checked) {
+                        return root.loopClosureStats
+                    }
+                    return root.cavernLog
+                }
+                placeholderText: {
+                    if (cavernInputButton.checked) {
+                        return qsTr("No survex input — run a solve first.")
+                    }
+                    if (loopClosureButton.checked) {
+                        return qsTr("No loop closure data — the cave has no loops.")
+                    }
+                    return qsTr("No cavern output to display.")
                 }
             }
         }

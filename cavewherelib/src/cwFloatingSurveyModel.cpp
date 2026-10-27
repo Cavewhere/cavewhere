@@ -1,0 +1,224 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+//Our includes
+#include "cwFloatingSurveyModel.h"
+#include "cwCave.h"
+#include "cwCavingRegion.h"
+#include "cwStation.h"
+#include "cwTrip.h"
+
+//Std includes
+#include <algorithm>
+#include <utility>
+
+namespace {
+
+cwFloatingSurveyModel::Trigger triggerOf(cwFindFloatingSurveys::Result::Trigger trigger)
+{
+    switch (trigger) {
+    case cwFindFloatingSurveys::Result::Trigger::UnconnectedChunks:
+        return cwFloatingSurveyModel::UnconnectedChunks;
+    case cwFindFloatingSurveys::Result::Trigger::ExternalScope:
+        return cwFloatingSurveyModel::ExternalScope;
+    }
+    return cwFloatingSurveyModel::ExternalScope;
+}
+
+//! The run's stations as identities whose tails are the trip's own namespace,
+//! which is the spelling every trip-level surface shows. An external scope's
+//! records are cave-local ("<tripLabel>.a2") while a native chunk's are already
+//! bare, so stripping the trip's own prefix is what makes the two triggers name
+//! a station alike. A record written before a rename no longer matches the
+//! prefix and keeps the spelling the run recorded — stale, but never wrong
+//! about which run said it, and the handle is exactly as stale as its tail. The
+//! trip decides scope and container, so this never composes a handle itself.
+QList<cwStationHandle> localStations(const cwTrip* trip, const QStringList& stations)
+{
+    const QString prefix = cwStation::canonicalKey(trip->scopePrefix());
+
+    QList<cwStationHandle> handles;
+    handles.reserve(stations.size());
+    for (const QString& station : stations) {
+        handles.append(trip->stationHandle(
+            station.startsWith(prefix) ? station.mid(prefix.size()) : station));
+    }
+    return handles;
+}
+
+QStringList tailsOf(const QList<cwStationHandle>& stations)
+{
+    QStringList tails;
+    tails.reserve(stations.size());
+    for (const cwStationHandle& station : stations) {
+        tails.append(station.tail());
+    }
+    return tails;
+}
+
+} // namespace
+
+cwFloatingSurveyModel::cwFloatingSurveyModel(QObject* parent) :
+    QAbstractListModel(parent)
+{
+}
+
+int cwFloatingSurveyModel::rowCount(const QModelIndex& parent) const
+{
+    if (parent.isValid()) {
+        return 0;
+    }
+    return m_rows.size();
+}
+
+QVariant cwFloatingSurveyModel::data(const QModelIndex& index, int role) const
+{
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size()) {
+        return QVariant();
+    }
+
+    const Row& row = m_rows.at(index.row());
+    switch (role) {
+    case CaveNameRole:
+        return row.caveName;
+    case TripNameRole:
+        return row.tripName;
+    case TriggerRole:
+        return QVariant::fromValue(row.trigger);
+    case StationsRole:
+        return tailsOf(row.stations);
+    case StationHandlesRole:
+        return QVariant::fromValue(row.stations);
+    case CaveIdRole:
+        return row.caveId;
+    case TripIdRole:
+        return row.tripId;
+    }
+    return QVariant();
+}
+
+QHash<int, QByteArray> cwFloatingSurveyModel::roleNames() const
+{
+    return {
+        { CaveNameRole, QByteArrayLiteral("caveName") },
+        { TripNameRole, QByteArrayLiteral("tripName") },
+        { TriggerRole, QByteArrayLiteral("trigger") },
+        { StationsRole, QByteArrayLiteral("stations") },
+        { StationHandlesRole, QByteArrayLiteral("stationHandles") },
+        { CaveIdRole, QByteArrayLiteral("caveId") },
+        { TripIdRole, QByteArrayLiteral("tripId") }
+    };
+}
+
+const cwFloatingSurveyModel::Row* cwFloatingSurveyModel::rowForTrip(const QUuid& tripId) const
+{
+    const auto found = std::find_if(m_rows.cbegin(), m_rows.cend(), [&tripId](const Row& row) {
+        return row.tripId == tripId;
+    });
+    return found == m_rows.cend() ? nullptr : &*found;
+}
+
+bool cwFloatingSurveyModel::isFloating(const QUuid& tripId) const
+{
+    return rowForTrip(tripId) != nullptr;
+}
+
+QStringList cwFloatingSurveyModel::floatingStations(const QUuid& tripId) const
+{
+    const Row* row = rowForTrip(tripId);
+    return row == nullptr ? QStringList() : tailsOf(row->stations);
+}
+
+QList<cwStationHandle> cwFloatingSurveyModel::floatingStationHandles(const QUuid& tripId) const
+{
+    const Row* row = rowForTrip(tripId);
+    return row == nullptr ? QList<cwStationHandle>() : row->stations;
+}
+
+void cwFloatingSurveyModel::setRegion(cwCavingRegion* region)
+{
+    if (m_region == region) {
+        return;
+    }
+
+    //scopeLabelsChanged is the region's aggregate "a cave or trip was named,
+    //added or removed" pulse — exactly the events that move a row's text or
+    //drop it — so one connection replaces a sweep over every cave and trip.
+    //destroyed covers the one way every row's subject leaves at once, which
+    //that pulse cannot announce.
+    if (!m_region.isNull()) {
+        disconnect(m_region, &cwCavingRegion::scopeLabelsChanged,
+                   this, &cwFloatingSurveyModel::rebuildRows);
+        disconnect(m_region, &cwCavingRegion::destroyed,
+                   this, &cwFloatingSurveyModel::rebuildRows);
+    }
+    m_region = region;
+    if (!m_region.isNull()) {
+        connect(m_region, &cwCavingRegion::scopeLabelsChanged,
+                this, &cwFloatingSurveyModel::rebuildRows);
+        connect(m_region, &cwCavingRegion::destroyed,
+                this, &cwFloatingSurveyModel::rebuildRows);
+    }
+
+    rebuildRows();
+}
+
+void cwFloatingSurveyModel::setResults(const QList<cwFindFloatingSurveys::Result>& results)
+{
+    m_results = results;
+    rebuildRows();
+}
+
+void cwFloatingSurveyModel::rebuildRows()
+{
+    QList<Row> rows;
+
+    if (!m_region.isNull() && !m_results.isEmpty()) {
+        //A run checks every node's chunks as their own block, so a record's
+        //caveId names the node holding the trip, at whatever depth.
+        QHash<QUuid, const cwSurveyNode*> nodeById;
+        QHash<QUuid, cwTrip*> tripById;
+        m_region->rootNode()->walk([&nodeById, &tripById](const cwSurveyNode* node) {
+            nodeById.insert(node->id(), node);
+            const QList<cwTrip*> trips = node->trips();
+            for (cwTrip* trip : trips) {
+                tripById.insert(trip->id(), trip);
+            }
+        });
+
+        for (const cwFindFloatingSurveys::Result& result : m_results) {
+            const cwSurveyNode* node = nodeById.value(result.caveId);
+            cwTrip* trip = tripById.value(result.tripId);
+            if (node == nullptr || trip == nullptr) {
+                continue; //named by a run the region has since moved past
+            }
+
+            rows.append(Row{result.caveId,
+                            result.tripId,
+                            node->name(),
+                            trip->name(),
+                            triggerOf(result.trigger),
+                            localStations(trip, result.stations)});
+        }
+    }
+
+    if (rows == m_rows) {
+        return;
+    }
+
+    //A whole-model reset rather than a row diff: a floating survey is something
+    //the user is being asked to fix, so the list is a handful of rows at most
+    //and never the steady state.
+    const bool countChanges = rows.size() != m_rows.size();
+    beginResetModel();
+    m_rows = std::move(rows);
+    endResetModel();
+
+    if (countChanges) {
+        emit countChanged();
+    }
+}

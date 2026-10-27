@@ -1,0 +1,8 @@
+; A block whose one fix names its own coordinate system, so it solves with
+; no system chosen for the attachment.
+*begin scoped
+*cs UTM48N
+*fix S1 500200 3000000 100
+*data normal from to tape compass clino
+S1 S2 10 0 0
+*end scoped

@@ -6,6 +6,9 @@ PointItem {
 
     required property NoteLiDAR note
     required property string name
+    // Re-resolved when note rebinds; the validator below relaxes to
+    // the scope station grammar while the owning trip is scoped.
+    readonly property Trip parentTrip: note !== null ? note.parentTrip() : null
 
     width: 2
     height: 2
@@ -61,12 +64,24 @@ PointItem {
         }
     }
 
+    StationValidator {
+        id: stationValidatorId
+        objectName: "stationValidator"
+        // Same scope-grammar relaxation as NoteStation (master plan §7.2):
+        // an externally backed trip — by its own file or its cave's —
+        // references upstream/prefixed station names.
+        external: noteStationId.parentTrip !== null
+                  && noteStationId.parentTrip.externallyBacked
+    }
+
     StationDoubleClickTextInput {
         id: stationName
 
         anchors.verticalCenter: stationImage.verticalCenter
         anchors.left: stationImage.right
         pointItem: noteStationId
+        validator: stationValidatorId
+        trip: noteStationId.parentTrip
         text: name
 
         onFinishedEditting: (newText) => {

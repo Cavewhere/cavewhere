@@ -291,7 +291,7 @@ TEST_CASE("A cave fixed under a survex keyword system still solves",
 
     INFO(plotManager->solveErrorMessage().toStdString());
     CHECK_FALSE(plotManager->hasSolveError());
-    CHECK(region->cave(0)->stationPositionLookup().hasPosition(QStringLiteral("a2")));
+    CHECK(region->cave(0)->scopedPositions().hasPosition(QStringLiteral("a2")));
 }
 
 TEST_CASE("A *cs stops at the *end of the block that named it",

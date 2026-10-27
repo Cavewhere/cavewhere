@@ -1,0 +1,52 @@
+; Declination fixture for the [Declination] tests: one leaf block per way a
+; Survex file sets the declination cavern applies to a block's shots.
+;   fileset  *calibrate declination 2.5, which cavern applies as -2.5
+;   modern   *declination 3.25 degrees, applied as +3.25
+;   autoset  *declination auto, IGRF at the given point on the block's date
+;   silent   nothing, so cavern applies 0
+;   child    nothing itself, inheriting parent's *calibrate declination 1
+;   mixed    changes the declination between its two shots
+; Every block is dated, and the equates tie them all to fileset.f1's fix.
+*date 2020.06.01
+*cs out EPSG:32616
+*cs EPSG:32616
+*fix fileset.f1 600000 4100000 200
+*equate fileset.f2 modern.m1
+*equate modern.m2 autoset.a1
+*equate autoset.a2 silent.s1
+*equate silent.s2 parent.child.c1
+*equate parent.child.c2 mixed.x1
+*data normal from to tape compass clino
+
+*begin fileset
+*calibrate declination 2.5
+f1 f2 10.0 0 0
+*end fileset
+
+*begin modern
+*declination 3.25 degrees
+m1 m2 10.0 90 0
+*end modern
+
+*begin autoset
+*declination auto 600000 4100000 200
+a1 a2 10.0 180 0
+*end autoset
+
+*begin silent
+s1 s2 10.0 270 0
+*end silent
+
+*begin parent
+*calibrate declination 1
+*begin child
+c1 c2 10.0 45 0
+*end child
+*end parent
+
+*begin mixed
+*declination 1.5 degrees
+x1 x2 10.0 135 0
+*declination 2.5 degrees
+x2 x3 10.0 225 0
+*end mixed

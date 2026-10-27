@@ -8,6 +8,9 @@
 
 #include "cwErrorListModel.h"
 
+//Std includes
+#include <algorithm>
+
 cwErrorListModel::cwErrorListModel(QObject *parent)
     : QAbstractListModel(parent)
 {
@@ -46,6 +49,35 @@ QStringList cwErrorListModel::warningMessagesForTypeIds(const QList<int>& ids) c
         }
     }
     return messages;
+}
+
+void cwErrorListModel::setTypedWarning(cwErrorTypeId errorTypeId,
+                                       const QString& message,
+                                       const QString& detail,
+                                       const QUuid& targetId)
+{
+    const int errorTypeIdValue = static_cast<int>(errorTypeId);
+    const auto found = std::find_if(m_errors.cbegin(), m_errors.cend(),
+                                    [errorTypeIdValue](const cwError& error) {
+                                        return error.errorTypeId() == errorTypeIdValue;
+                                    });
+    const int row = found == m_errors.cend() ? -1 : int(std::distance(m_errors.cbegin(), found));
+
+    if (message.isEmpty()) {
+        if (row >= 0) {
+            remove(row);
+        }
+    } else if (row >= 0) {
+        setData(index(row), message, static_cast<int>(ErrorRoles::MessageRole));
+        setData(index(row), detail, static_cast<int>(ErrorRoles::DetailRole));
+        setData(index(row), targetId, static_cast<int>(ErrorRoles::TargetIdRole));
+    } else {
+        cwError error(message, cwError::Warning);
+        error.setErrorTypeId(errorTypeIdValue);
+        error.setDetail(detail);
+        error.setTargetId(targetId);
+        append(error);
+    }
 }
 
 cwError cwErrorListModel::at(int index) const
@@ -150,6 +182,10 @@ QVariant cwErrorListModel::data(const QModelIndex &index, int role) const
         return error.message();
     case static_cast<int>(ErrorRoles::ErrorTypeRole):
         return error.type();
+    case static_cast<int>(ErrorRoles::DetailRole):
+        return error.detail();
+    case static_cast<int>(ErrorRoles::TargetIdRole):
+        return error.targetId();
     default:
         return QVariant();  // Return an invalid QVariant if the role isn't recognized
     }
@@ -182,6 +218,26 @@ bool cwErrorListModel::setData(const QModelIndex &index, const QVariant &value, 
         error.setMessage(newValue);
         emit dataChanged(index, index, {static_cast<int>(ErrorRoles::MessageRole)});
         emit warningMessagesChanged();
+        return true;
+    }
+    case static_cast<int>(ErrorRoles::DetailRole): {
+        cwError& error = m_errors[index.row()];
+        const QString newValue = value.toString();
+        if (error.detail() == newValue) {
+            return false;
+        }
+        error.setDetail(newValue);
+        emit dataChanged(index, index, {static_cast<int>(ErrorRoles::DetailRole)});
+        return true;
+    }
+    case static_cast<int>(ErrorRoles::TargetIdRole): {
+        cwError& error = m_errors[index.row()];
+        const QUuid newValue = value.toUuid();
+        if (error.targetId() == newValue) {
+            return false;
+        }
+        error.setTargetId(newValue);
+        emit dataChanged(index, index, {static_cast<int>(ErrorRoles::TargetIdRole)});
         return true;
     }
     default:
@@ -240,6 +296,8 @@ QHash<int, QByteArray> cwErrorListModel::roleNames() const
         { static_cast<int>(ErrorRoles::SuppressedRole), "suppressed" },
         { static_cast<int>(ErrorRoles::ErrorTypeIdRole), "errorTypeId" },
         { static_cast<int>(ErrorRoles::MessageRole), "message" },
-        { static_cast<int>(ErrorRoles::ErrorTypeRole), "errorType" }
+        { static_cast<int>(ErrorRoles::ErrorTypeRole), "errorType" },
+        { static_cast<int>(ErrorRoles::DetailRole), "detail" },
+        { static_cast<int>(ErrorRoles::TargetIdRole), "targetId" }
     };
 }

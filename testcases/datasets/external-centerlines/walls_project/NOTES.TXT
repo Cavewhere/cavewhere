@@ -1,0 +1,2 @@
+Field notes for the Kaua fixture. Walls lists this file as an
+attached file of another type, so neither the scan nor cavern reads it.

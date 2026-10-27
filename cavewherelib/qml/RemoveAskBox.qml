@@ -16,6 +16,10 @@ QC.Popup {
     property string removeName
     property int indexToRemove
 
+    // Override for prompts that aren't a plain "Remove <name>?".
+    property string message: ""
+    property string confirmText: "Remove"
+
     padding: Theme.popupPadding
     // The style's insets leave room for StylePopupPanel's shadow margin;
     // ShadowRectangle draws its own shadow and fills the popup.
@@ -44,7 +48,8 @@ QC.Popup {
         QQ.Row {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.popupPadding
-            visible: removeChallenge.removeName.length !== 0
+            visible: removeChallenge.message.length === 0
+                     && removeChallenge.removeName.length !== 0
 
             QC.Label {
                 text: "Remove"
@@ -65,9 +70,21 @@ QC.Popup {
             }
         }
 
+        QC.Label {
+            objectName: "removeMessageLabel"
+            anchors.verticalCenter: parent.verticalCenter
+
+            // A sentence-long prompt wraps instead of stretching the row
+            // wide enough to push the buttons off the edge of the window.
+            width: Math.min(implicitWidth, Theme.helpBoxMaxWidth)
+            wrapMode: QQ.Text.Wrap
+            text: removeChallenge.message
+            visible: removeChallenge.message.length !== 0
+        }
+
         QC.Button {
             objectName: "removeButton"
-            text: "Remove"
+            text: removeChallenge.confirmText
             onClicked: {
                 removeChallenge.remove()
                 removeChallenge.close()

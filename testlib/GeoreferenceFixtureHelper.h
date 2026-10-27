@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
+#include <QCoreApplication>
 #include <QString>
 
 //Our includes
@@ -23,6 +24,7 @@
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwGridConvergence.h"
+#include "../testcases/TestHelper.h"
 
 // Header-only on purpose: Catch2's REQUIRE cannot be used from inside the
 // testlib shared library (see the note in LoadProjectHelper.cpp), so this has
@@ -63,6 +65,10 @@ namespace cwGeoreferenceFixture {
         fix.setNorthing(point.y);
         fix.setElevation(point.z);
         cave->fixStations()->appendFixStation(fix);
+        // The frame and the grid convergence follow the fix in queued passes.
+        REQUIRE(waitUntil([cave] {
+            return cave->gridConvergence()->state() == cwGridConvergence::Valid;
+        }));
     }
 
     /**

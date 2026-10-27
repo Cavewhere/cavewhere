@@ -1,0 +1,10 @@
+; One scope written three ways: a file included twice inside it, and
+; the block opened a second time.
+*begin higharch
+*fix h1 0 0 0
+*include part
+*include part
+*end higharch
+*begin higharch
+h3 h4 10.0 90 0
+*end higharch

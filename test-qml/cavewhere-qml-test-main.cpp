@@ -10,6 +10,9 @@
 #include <QQuickStyle>
 #include <QStyleFactory>
 #include <QStyleHints>
+#include <QSettings>
+#include <QTemporaryDir>
+#include <QDir>
 
 //Our inculdes
 #include "cwQmlImageProviderBinder.h"
@@ -62,6 +65,15 @@ public slots:
 //QUICK_TEST_MAIN_WITH_SETUP(mapWhere-qml-tests, Setup)
 int main(int argc, char **argv) \
 {
+    //Each run keeps its QSettings in a fresh INI directory, so it never leaves a
+    //plist in ~/Library/Preferences. Declared first so it outlives every QSettings user.
+    QTemporaryDir settingsDir(QDir::tempPath() + QStringLiteral("/cavewhere-qml-test-settings-XXXXXX"));
+    if (!settingsDir.isValid()) {
+        qFatal("Could not create the QSettings directory: %s", qPrintable(settingsDir.errorString()));
+    }
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDir.path());
+
     //This allows use to create a QGraphicsScene, without QApplication, this crashes
     QApplication app(argc, argv);
 

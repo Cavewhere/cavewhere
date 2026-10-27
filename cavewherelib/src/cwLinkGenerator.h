@@ -18,6 +18,7 @@
 #include "cwPageSelectionModel.h"
 class cwCave;
 class cwNote;
+class cwSurveyNode;
 class cwScrap;
 class cwTrip;
 
@@ -45,8 +46,9 @@ public:
     Q_INVOKABLE void gotoNote(cwNote* note);
 
     Q_INVOKABLE QString dataPageLink();
+    Q_INVOKABLE QString nodeLink(cwSurveyNode* node);
     Q_INVOKABLE QString caveLink(cwCave* cave);
-    Q_INVOKABLE QString fixStationsLink(cwCave* cave);
+    Q_INVOKABLE QString fixStationsLink(cwSurveyNode* node);
     Q_INVOKABLE QString tripLink(cwTrip* trip);
     Q_INVOKABLE QString scrapLink(cwScrap* scrap);
     Q_INVOKABLE QString noteLink(cwNote* note);

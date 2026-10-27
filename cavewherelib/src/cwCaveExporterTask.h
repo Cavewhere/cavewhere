@@ -12,8 +12,6 @@
 #include "cwExporterTask.h"
 #include "cwGlobals.h"
 #include "cwCaveData.h"
-class cwCave;
-
 
 //Qt includes
 #include <QTextStream>

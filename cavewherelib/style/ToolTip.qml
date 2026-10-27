@@ -23,8 +23,10 @@ T.ToolTip {
 
     closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutsideParent | T.Popup.CloseOnReleaseOutsideParent
 
+    // Tooltips quote user-supplied names (stations, files), so markup in them stays literal.
     contentItem: QQ.Text {
         text: control.text
+        textFormat: QQ.Text.PlainText
         font: control.font
         wrapMode: QQ.Text.Wrap
         color: Theme.toolTipText

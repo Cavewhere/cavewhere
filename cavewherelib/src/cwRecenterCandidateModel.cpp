@@ -7,7 +7,7 @@
 
 //Our includes
 #include "cwRecenterCandidateModel.h"
-#include "cwCave.h"
+#include "cwSurveyNode.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
 #include "cwGeoReference.h"
@@ -90,7 +90,7 @@ void cwRecenterCandidateModel::refresh()
     const cwGeoReference::Anchor anchor = geoReference->anchor();
 
     QList<cwRecenterCandidate> candidates;
-    m_manager->forEachFixStation([&](cwCave* cave, const cwFixStation& fix) {
+    m_manager->forEachFixStation([&](cwSurveyNode* node, const cwFixStation& fix) {
         const auto local = m_manager->localPointOfFix(fix);
         if (local.has_value()) {
             // Centering moves the origin onto the station, so the distance from
@@ -102,7 +102,7 @@ void cwRecenterCandidateModel::refresh()
             candidates.append(cwRecenterCandidate{
                 fix.id(),
                 fix.stationName(),
-                cave->name(),
+                node->name(),
                 toWgs84(fix.inputCS(), fix.position()),
                 cwLocalProjectionManager::isWithinReach(*center, *local),
                 anchor.kind == cwGeoReference::Anchor::FixStation && anchor.id == fix.id()

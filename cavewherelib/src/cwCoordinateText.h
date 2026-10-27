@@ -19,6 +19,9 @@
 #include "cwUnits.h"
 #include "cwValidator.h"
 
+//Std includes
+#include <array>
+
 /**
  * Reads and writes a whole fix-station coordinate as one string, so a coordinate
  * copied from somewhere else can be pasted in one go (#621):
@@ -156,6 +159,18 @@ public:
                                       double elevationInMeters,
                                       cwUnits::UnitSystem units,
                                       AxisOrder order);
+
+    //! Steps per unit componentText() rounds to: a micrometer for meters, and
+    //! a billionth of a degree (about 0.1 mm) for degrees, since a millionth of
+    //! a degree is about 0.1 m.
+    static constexpr double kMeterTextScale = 1e6;
+    static constexpr double kDegreeTextScale = 1e9;
+
+    //! \a values as space-separated numbers in the C locale, each rounded to
+    //! 1 / \a scale and written in its shortest form, so 478000.00920000003
+    //! reads "478000.0092" and a rounded -0 reads "0". This is the text of a
+    //! scanned fix as cavern reads it.
+    static QString componentText(const std::array<double, 3>& values, double scale);
 
     //! \a text with its first two components exchanged and everything else left
     //! exactly as written — the separators, the elevation, its unit, and the

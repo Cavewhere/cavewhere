@@ -116,7 +116,7 @@ namespace {
     // far end and the station it points at - both in normalized note coordinates.
     double worstLeaderError(cwCave* cave) {
         cwScrap* scrap = firstScrap(cave);
-        const cwStationPositionLookup lookup = cave->stationPositionLookup();
+        const cwStationPositionLookup lookup = cave->scopedPositions();
 
         double worst = 0.0;
         forEachDrawnShot(scrap, cave->trip(0),
@@ -138,7 +138,7 @@ namespace {
     // lower-cased name because station names are case-insensitive.
     QHash<QString, QPointF> drawnStationsOnNote(cwCave* cave) {
         cwScrap* scrap = firstScrap(cave);
-        const cwStationPositionLookup lookup = cave->stationPositionLookup();
+        const cwStationPositionLookup lookup = cave->scopedPositions();
 
         const QList<cwNoteStation> stations = scrap->stations();
         REQUIRE_FALSE(stations.isEmpty());

@@ -28,18 +28,20 @@ message GeoReference {
         UNGEOREFERENCED = 0; // no LDP; nothing georeferenced has been entered
         ANCHORED = 1;        // derived from an input that still exists
         FROZEN = 2;          // no anchor left; moves only when asked
+        LOCAL_GRID = 3;      // no LDP; attached bare fixes each placed at the origin
     }
 
     enum AnchorKind {
         NO_ANCHOR = 0;
         FIX_STATION = 1;
         LAZ_LAYER = 2;
+        ATTACHMENT = 3;
     }
 
     optional State state = 1;
     optional string localCoordinateSystem = 2; // PROJ string
     optional AnchorKind anchorKind = 3;
-    optional string anchorId = 4;              // cwFixStation / cwLazLayer UUID
+    optional string anchorId = 4;              // cwFixStation / cwLazLayer / attachment owner UUID
     // The vertical datum the project's elevations are in, as declared by
     // whatever supplied them. Recorded, never applied — see the plan's §5.
     optional string verticalDatum = 5;
@@ -73,6 +75,16 @@ message Project {
     optional string name = 2;
     optional ProjectMetadata metadata = 3;
     optional string id = 4; // UUID, stable across renames
+
+    // Every equate tie in the project, within one node or across nodes. Held
+    // on the region top-level file (the Project message) because the
+    // directory format stores each node in its own file and has no separate
+    // CavingRegion message on disk.
+    repeated Equate equates = 5;
+
+    // Every attached survey source: the root node it builds and the derived
+    // nodes and trips the user hid from it.
+    repeated ExternalSource external_sources = 6;
 }
 
 //This is a legacy message, do not use
@@ -122,32 +134,47 @@ message ExternalCenterline {
     // Project-relative path to the entry centerline file (.svx / .dat /
     // .mak / .wpj / .srv). Empty when the owner has no attachment.
     optional string entry_file = 1;
+    // The coordinate system the solve reads the file's fixes in when the file
+    // names none for them, as a fix station's input CS is stored. Absent when
+    // the user has chosen none.
+    optional string fix_coordinate_system = 2;
 }
 
-// LocalSettings is the umbrella container for *all* per-user,
-// per-machine state stored next to the project. Lives in
-// .cwproj/local_settings.json (gitignored). The v1 payload is just
-// external-centerline source paths, but the file already exists, so
-// future per-machine subsystems (recent-file state, per-machine
-// credentials cache pointers, last-opened sub-page, etc.) should land
-// here as new top-level fields rather than spinning up another sibling
-// file. Keep inner-message names domain-specific (NOT generic words
-// like "Attachment", "Setting", or "Entry") so two unrelated
-// subsystems can't collide and a reader can tell which feature a
-// field belongs to without looking up its parent.
-message LocalSettings {
-    // Per-machine source paths for live-link external-centerline
-    // attachments. Owner UUID identifies the cwCave or cwTrip in the
-    // Attached state.
-    message ExternalCenterlineSource {
-        string owner_id = 1;        // cwCave or cwTrip QUuid (WithoutBraces format)
-        string source_path = 2;     // absolute path on this machine; empty == import mode
-    }
-    repeated ExternalCenterlineSource external_centerline_sources = 1;
+// One endpoint of an equate: a station named by the scope it lives in plus its
+// tail (name relative to that scope), never a flat fully-qualified string, so
+// the tie survives re-parenting and renames.
+message StationHandle {
+    // 0 = NativeCave (container_uuid is the cave's id), 1 = Trip
+    // (container_uuid is the trip's id). Mirrors cwStationHandle::Scope.
+    optional int32 scope = 1;
+    optional string container_uuid = 2;
+    optional string tail = 3;
+}
 
-    // Future per-machine fields go here, each as its own
-    // domain-named message + repeated/optional field.
-    // e.g. repeated RecentProjectEntry recent_projects = 2;
+// A user-editable N-way (>= 2) tie: every listed station names one physical
+// point. Emitted as a bare *equate line at solve time (commits 4/5).
+message Equate {
+    repeated StationHandle stations = 1;
+}
+
+// One attached survey source. Its root node and every derived node carry
+// this id as Cave.source_id; the entry file stays on the root's
+// external_centerline.
+message ExternalSource {
+    optional string id = 1;
+    optional string root_node_id = 2;  // Cave.id of the source's root node
+}
+
+// What a survey node is called and drawn as. Absent on an older file means
+// NODE_CAVE, which is what every node in a flat project is.
+enum SurveyNodeKind {
+    NODE_CAVE = 0;
+    NODE_FOLDER = 1;
+    NODE_COMPASS_PROJECT = 2;
+    NODE_COMPASS_FILE = 3;
+    NODE_WALLS_BOOK = 4;
+    NODE_SURVEX_FILE = 5;
+    NODE_SURVEX_BLOCK = 6;
 }
 
 message Cave {
@@ -173,6 +200,13 @@ message Cave {
     // Attached external centerline (Survex/Compass/Walls). Absent for
     // Native caves; present (and entry_file set) for Attached/Scope.
     optional ExternalCenterline external_centerline = 12;
+
+    // Survey-tree fields. A node's child nodes live in <nodeDir>/sub/, each
+    // with its own .cwcave; these scalars say what the node is.
+    optional SurveyNodeKind kind = 13;  // absent = NODE_CAVE
+    optional bool read_only = 14;       // absent = false
+    optional string source_id = 15;     // ExternalSource that owns this node; absent = native
+    optional string source_path = 16;   // where the node sits inside its source's scan; empty on the source root
 }
 
 message Trip {
@@ -191,6 +225,10 @@ message Trip {
     // Attached external centerline (Survex/Compass/Walls). Absent for
     // Native trips; present (and entry_file set) for Attached.
     optional ExternalCenterline external_centerline = 10;
+
+    // Where a derived trip sits inside its source's scan. Absent on a native
+    // trip, including a native trip under a derived node.
+    optional string source_path = 12;
 }
 
 //This is a legacy message, do not use, use StationShot instead
@@ -632,4 +670,19 @@ message PointOctreeManifest {
     repeated double bbox_max = 7;   // exactly 3 entries
     float mean_spacing_xy = 8;
     repeated PointOctreeNode nodes = 9;
+}
+
+// Where one owner's external source came from on this machine, written to
+// <project root>/.cw_local/external-sources/<owner uuid>.pb. The owner id is
+// the file name.
+message ExternalSourceRecord {
+    message File {
+        string path = 1;            // relative to base_dir
+        int64 size = 2;             // -1 for a file that could not be read
+        int64 last_modified = 3;    // milliseconds since the epoch, UTC
+        string sha256 = 4;          // lowercase hex
+    }
+    string breadcrumb_path = 1;     // absolute path of the entry file
+    string base_dir = 2;            // absolute canonical directory every file sits below
+    repeated File files = 3;
 }

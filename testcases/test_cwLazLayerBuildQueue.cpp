@@ -37,6 +37,7 @@ constexpr int kOneThreadDeadlineMs = 60000;
 constexpr int kStillQueuedMs = 200;
 
 // Spins the event loop for durationMs; returns whether condition held at every check.
+// The window is the point: it proves a queued layer stays queued while a worker holds the slot.
 bool holdsFor(const std::function<bool()>& condition, int durationMs)
 {
     QElapsedTimer timer;

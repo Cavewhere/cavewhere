@@ -15,9 +15,16 @@
 
 namespace {
 
-std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForObject(const cwTrip* trip)
+//! Drops the fields the merge handles on its own, so what is left is the payload a
+//! deterministic merge cannot reconcile.
+void clearMergedTripFields(CavewhereProto::Trip* protoTrip)
 {
-    auto protoTrip = cwSaveLoad::toProtoTrip(trip);
+    // The file-version envelope describes the file, not the trip, and the two sides stamp
+    // it from different contexts: the loaded side is a parentless temp trip, which takes
+    // the flat stamp, while the live trip's chain reaches the region and takes the
+    // project's. Left in, that difference reads as an unmergeable payload difference for
+    // every trip of every tree-format project.
+    protoTrip->clear_fileversion();
     protoTrip->clear_name();
     protoTrip->clear_date();
     protoTrip->clear_tripcalibration();
@@ -25,6 +32,12 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForObject(const cwTrip*
         auto* chunk = protoTrip->mutable_chunks(i);
         chunk->clear_leg();
     }
+}
+
+std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForObject(const cwTrip* trip)
+{
+    auto protoTrip = cwSaveLoad::toProtoTrip(trip);
+    clearMergedTripFields(protoTrip.get());
     return protoTrip;
 }
 
@@ -33,13 +46,7 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForData(const cwTripDat
     cwTrip tempTrip;
     tempTrip.setData(tripData);
     auto protoTrip = cwSaveLoad::toProtoTrip(&tempTrip);
-    protoTrip->clear_name();
-    protoTrip->clear_date();
-    protoTrip->clear_tripcalibration();
-    for (int i = 0; i < protoTrip->chunks_size(); ++i) {
-        auto* chunk = protoTrip->mutable_chunks(i);
-        chunk->clear_leg();
-    }
+    clearMergedTripFields(protoTrip.get());
     return protoTrip;
 }
 

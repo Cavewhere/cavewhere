@@ -3,7 +3,7 @@ import cavewherelib
 
 // Auto / Manual submenu for trip declinations. Lives outside any specific
 // page's right-click menu so it can be dropped into whichever menu actually
-// has trip calibrations to act on — today, CavePage row + flow delegates.
+// has trip calibrations to act on — today, NodePage row + flow delegates.
 QC.Menu {
     id: submenu
     objectName: "declinationSubmenu"

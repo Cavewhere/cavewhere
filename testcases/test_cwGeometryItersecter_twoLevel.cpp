@@ -95,6 +95,7 @@ void seedPointAndSlowCloud(cwGeometryItersecter& intersector,
         deterministicCloud(kSlowCloudCount, kSlowCloudRange, cloudTarget,
                            cloudSeed)));
 
+    // Kept pump: one turn then a timed beat; the test needs the point build done and the slow cloud still running.
     QCoreApplication::processEvents();
     QThread::msleep(kPointCompletesMs);
 
@@ -526,6 +527,7 @@ TEST_CASE("Stale install: a re-dirtied Key never reaches picks via a late instal
     // an event loop iteration runs the deferred startRun. Pump once to
     // dispatch the startRun (which launches worker B on the pool) but
     // not far enough to deliver the install callback.
+    // Kept pump: it must dispatch exactly startRun and leave the install undelivered, which a condition wait would deliver.
     QCoreApplication::processEvents();
 
     // Now drain the thread pool to wait for worker B's COMPUTE phase
@@ -554,6 +556,7 @@ TEST_CASE("Stale install: a re-dirtied Key never reaches picks via a late instal
     // and m_dirtyKeys contains Key 1 from the addObject(C) above.
     // C's worker is still running, so its install hasn't been queued
     // yet — only B's install fires in this pump.
+    // Kept pump: it must deliver exactly B's install; a polling wait would also run C's install and hide the bug.
     QCoreApplication::processEvents();
 
     // The pick must not land on B's stale geometry. Acceptable outcomes:

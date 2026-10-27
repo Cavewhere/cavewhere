@@ -30,8 +30,14 @@
 #include "cwImageUtils.h"
 #include "cwCavingRegion.h"
 #include "cwScrap.h"
+#include "cwNoteStation.h"
+#include "cwNoteTranformation.h"
+#include "cwStationPositionLookup.h"
+#include "cwExternalCenterlineManager.h"
+#include "ExternalCenterlineTestHelpers.h"
 #include "cwLead.h"
 #include "cwFutureManagerModel.h"
+#include "SurveyTreeTestHelper.h"
 
 //Qt includes
 #include <QFile>
@@ -66,6 +72,10 @@ namespace {
     //Render ids are handed out from 1 and every dataset here has a handful of
     //items, so scanning this far covers them all.
     constexpr uint32_t kMaxScannedRenderId = 64;
+
+    //How long a solve and triangulation cascade may take to drain on a loaded
+    //machine.
+    constexpr int kPipelineDrainTimeoutMs = 30000;
 
     //How many render items carry a streamed-texture descriptor. cwScrapManager
     //sets one when it delivers a scrap, so this counts the scraps the renderer
@@ -257,15 +267,12 @@ TEST_CASE("A single Run resolves the line-plot to scraps cascade with automatic 
 
     // Drain the whole cascade: the line-plot solve completes, dirties the
     // scraps, and the still-open forced update runs them too.
-    for(int i = 0; i < 20 && (coordinator->needsUpdate()
-                              || rootData->futureManagerModel()->rowCount() > 0
-                              || linePlotManager->updateState() == cwUpdatable::State::Working
-                              || scrapManager->updateState() == cwUpdatable::State::Working); ++i) {
-        rootData->futureManagerModel()->waitForFinished();
-        linePlotManager->waitToFinish();
-        scrapManager->waitForFinish();
-        QCoreApplication::processEvents();
-    }
+    REQUIRE(waitUntil([&]() {
+        return !coordinator->needsUpdate()
+               && rootData->futureManagerModel()->rowCount() == 0
+               && linePlotManager->updateState() != cwUpdatable::State::Working
+               && scrapManager->updateState() != cwUpdatable::State::Working;
+    }, kPipelineDrainTimeoutMs));
 
     // The cascade actually fired for THIS scrap — assert the scrap itself
     // appears in a stationPositionInScrapsChanged payload, not merely that some
@@ -303,8 +310,8 @@ TEST_CASE("Scrap pipeline reports Working while a triangulation task is in fligh
     // Settle to Clean.
     scrapManager->waitForFinish();
     rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    REQUIRE(scrapManager->updateState() == cwUpdatable::State::Clean);
+    REQUIRE(waitUntil([&]() { return scrapManager->updateState() == cwUpdatable::State::Clean; }));
+    REQUIRE(waitForQueuedEvents());
 
     // Recompute every scrap. Marking makes the pipeline Dirty, so the drive
     // dispatches a task; the restarter's start is queued, so the pipeline is
@@ -313,11 +320,8 @@ TEST_CASE("Scrap pipeline reports Working while a triangulation task is in fligh
     CHECK(scrapManager->updateState() == cwUpdatable::State::Working);
 
     // Drain to completion — back to Clean, never stuck Working.
-    for(int i = 0; i < 20 && scrapManager->updateState() != cwUpdatable::State::Clean; ++i) {
-        rootData->futureManagerModel()->waitForFinished();
-        scrapManager->waitForFinish();
-        QCoreApplication::processEvents();
-    }
+    REQUIRE(waitUntil([&]() { return scrapManager->updateState() == cwUpdatable::State::Clean; },
+                      kPipelineDrainTimeoutMs));
     CHECK(scrapManager->updateState() == cwUpdatable::State::Clean);
 }
 
@@ -339,7 +343,11 @@ TEST_CASE("Each scrap reaches the render items as it finishes", "[cwScrapManager
     fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
     rootData->futureManagerModel()->waitForFinished();
     scrapManager->waitForFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&]() {
+        return scrapManager->updateState() == cwUpdatable::State::Clean
+               && rootData->futureManagerModel()->rowCount() == 0;
+    }));
+    REQUIRE(waitForQueuedEvents());
 
     auto note = project->cavingRegion()->cave(0)->trip(0)->notes()->notes().first();
     REQUIRE(note->scraps().size() == 1);
@@ -437,7 +445,10 @@ TEST_CASE("Each scrap reaches the render items as it finishes", "[cwScrapManager
 
     scrapManager->waitForFinish();
     rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&]() { return deliveredScrapCount(renderItems) == totalScraps; }));
+    // The deliveries can all land inside the run loop above; the fence runs any
+    // queued late delivery before the exactly-once checks.
+    REQUIRE(waitForQueuedEvents());
 
     // Every scrap ended up delivered, exactly one texture descriptor each.
     CHECK(deliveredScrapCount(renderItems) == totalScraps);
@@ -522,8 +533,8 @@ TEST_CASE("Deleting the last dirty scrap announces the pipeline is clean",
     // Settle to Clean so the dirty set is exactly what this test puts in it.
     scrapManager->waitForFinish();
     rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    REQUIRE(scrapManager->updateState() == cwUpdatable::State::Clean);
+    REQUIRE(waitUntil([&]() { return scrapManager->updateState() == cwUpdatable::State::Clean; }));
+    REQUIRE(waitForQueuedEvents());
 
     // Dirty the one scrap without running it: with automatic update off, moving a
     // station marks the scrap and leaves the run to the coordinator. This is the
@@ -544,7 +555,11 @@ TEST_CASE("Deleting the last dirty scrap announces the pipeline is clean",
     // ask for them explicitly — the manager reacts to the scrap's destroyed().
     note->removeScraps(0, 0);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&]() {
+        return scrapManager->updateState() == cwUpdatable::State::Clean
+               && !coordinator->needsUpdate();
+    }));
+    REQUIRE(waitForQueuedEvents());
 
     CHECK(scrapManager->updateState() == cwUpdatable::State::Clean);
     CHECK(pipelineSpy.count() > 0);
@@ -726,7 +741,7 @@ TEST_CASE("Scrap keyword items are cleaned up across a project reload", "[cwScra
         rootData->scrapManager()->waitForFinish();
         // Drain deferred deletions so removed keyword items leave the model.
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        QCoreApplication::processEvents();
+        waitForQuietPipelines(rootData.get());
     };
 
     loadAndSettle();
@@ -849,6 +864,275 @@ TEST_CASE("V6 conversion with correct EXIF coords does not modify", "[cwScrapMan
     const QPointF station0 = scrap->stations().at(0).positionOnNote();
     CHECK(station0.x() == Catch::Approx(0.621).margin(0.005));
     CHECK(station0.y() == Catch::Approx(0.339).margin(0.005));
+}
+
+namespace {
+
+// A page one thousand pixels square at one hundred pixels per meter, so a
+// scrap station's note position turns into paper meters.
+constexpr int kAttachedNotePixels = 1000;
+constexpr int kAttachedNoteDotsPerMeter = 100;
+
+// Where the scrap marks a1, a2, and a3 on the page (note y runs up): a2 due
+// north of a1 and a3 due east of a2, the way the survey below runs.
+const QPointF kA1OnNote(0.2, 0.3);
+const QPointF kA2OnNote(0.2, 0.8);
+const QPointF kA3OnNote(0.7, 0.8);
+
+constexpr double kScaleTolerance = 1e-3;
+constexpr float kPositionToleranceMeters = 0.01f;
+
+//! One survey block, a1 fixed at the origin, a1-a2 due north, a2-a3 due east.
+QByteArray threeStationSurvey(const QByteArray& a1a2Tape, bool withA3)
+{
+    QByteArray survey(
+        "*begin s\n"
+        "*fix a1 0 0 0\n"
+        "*data normal from to tape compass clino\n");
+    survey += "a1 a2 " + a1a2Tape + " 0 0\n";
+    if (withA3) {
+        survey += "a2 a3 10.0 90 0\n";
+    }
+    survey += "*end s\n";
+    return survey;
+}
+
+//! A note sized like a real page (so note positions map to paper meters)
+//! holding one empty scrap, added to \a trip the way the note editor adds one. A saved note
+//! names its image by path, so the project can write it.
+cwScrap* addEmptySizedScrap(cwTrip* trip)
+{
+    cwNote* note = new cwNote();
+    note->setName(QStringLiteral("page.png"));
+    cwImage image;
+    image.setPath(QStringLiteral("page.png"));
+    image.setOriginalSize(QSize(kAttachedNotePixels, kAttachedNotePixels));
+    image.setOriginalDotsPerMeter(kAttachedNoteDotsPerMeter);
+    note->setImage(image);
+    trip->notes()->addNotes({note});
+
+    cwScrap* scrap = new cwScrap();
+    note->addScrap(scrap);
+    return scrap;
+}
+
+struct AttachedScrapSetup {
+    std::unique_ptr<SavedProjectFixture> fixture;
+    QString source;
+    cwScrap* scrap = nullptr;
+};
+
+//! A saved project whose trip is attached to a three-station source kept
+//! outside the project, carrying one note with a scrap anchored at every
+//! station.
+AttachedScrapSetup makeAttachedScrap(const QString& projectFileBase)
+{
+    requireAutomaticUpdatesEnabled();
+    AttachedScrapSetup setup;
+    setup.fixture = makeSavedProject(projectFileBase,
+                                     QStringLiteral("ScrapCave"),
+                                     QStringLiteral("ScrapTrip"));
+    SavedProjectFixture* fixture = setup.fixture.get();
+
+    setup.source = QDir(fixture->tempDir.path()).filePath(QStringLiteral("source/s.svx"));
+    REQUIRE(QDir().mkpath(QFileInfo(setup.source).absolutePath()));
+    overwriteFile(setup.source, threeStationSurvey("10.0", true));
+    attachThroughManager(fixture, fixture->trip, setup.source);
+    drainPipelines(fixture);
+
+    setup.scrap = addEmptySizedScrap(fixture->trip);
+    const QList<QPair<QString, QPointF>> anchors {
+        {QStringLiteral("s.a1"), kA1OnNote},
+        {QStringLiteral("s.a2"), kA2OnNote},
+        {QStringLiteral("s.a3"), kA3OnNote},
+    };
+    for (const auto& anchor : anchors) {
+        cwNoteStation noteStation;
+        noteStation.setName(anchor.first);
+        noteStation.setPositionOnNote(anchor.second);
+        setup.scrap->addStation(noteStation);
+    }
+    drainPipelines(fixture);
+    fixture->rootData->scrapManager()->waitForFinish();
+    return setup;
+}
+
+void reloadAndSettle(SavedProjectFixture* fixture)
+{
+    auto future = managerOf(fixture)->reloadFromSource(fixture->trip);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+    drainPipelines(fixture);
+    fixture->rootData->scrapManager()->waitForFinish();
+}
+
+bool nearPosition(const QVector3D& actual, const QVector3D& expected)
+{
+    return (actual - expected).length() < kPositionToleranceMeters;
+}
+
+} // namespace
+
+TEST_CASE("a scrap on an attached trip re-morphs after Reload moves its stations",
+          "[cwScrapManager][Attach]")
+{
+    auto setup = makeAttachedScrap(QStringLiteral("scrap-reload-moves"));
+    SavedProjectFixture* fixture = setup.fixture.get();
+    cwTrip* trip = fixture->trip;
+
+    REQUIRE(nearPosition(trip->solvedStationPositions().position(QStringLiteral("s.a2")),
+                         QVector3D(0.0f, 10.0f, 0.0f)));
+    const double scaleBefore = setup.scrap->noteTransformation()->scale();
+    REQUIRE(scaleBefore > 0.0);
+
+    // a2 moves ten meters further north and a3 follows it.
+    overwriteFile(setup.source, threeStationSurvey("20.0", true));
+    reloadAndSettle(fixture);
+
+    const cwStationPositionLookup lookup = trip->solvedStationPositions();
+    CHECK(nearPosition(lookup.position(QStringLiteral("s.a2")), QVector3D(0.0f, 20.0f, 0.0f)));
+    CHECK(nearPosition(lookup.position(QStringLiteral("s.a3")), QVector3D(10.0f, 20.0f, 0.0f)));
+
+    // The page did not change, so a survey that grew recomputes a smaller
+    // paper-to-cave scale: the scrap's anchors followed the reload.
+    const double scaleAfter = setup.scrap->noteTransformation()->scale();
+    CHECK(scaleAfter > 0.0);
+    CHECK(scaleAfter < scaleBefore * (1.0 - kScaleTolerance));
+    CHECK(setup.scrap->numberOfStations() == 3);
+}
+
+TEST_CASE("a scrap whose station left the source keeps its other anchors and reports the missing one",
+          "[cwScrapManager][Attach]")
+{
+    auto setup = makeAttachedScrap(QStringLiteral("scrap-station-left"));
+    SavedProjectFixture* fixture = setup.fixture.get();
+    cwTrip* trip = fixture->trip;
+
+    REQUIRE(trip->solvedStationPositions().hasPosition(QStringLiteral("s.a3")));
+    const double scaleBefore = setup.scrap->noteTransformation()->scale();
+    REQUIRE(scaleBefore > 0.0);
+
+    overwriteFile(setup.source, threeStationSurvey("10.0", false));
+    reloadAndSettle(fixture);
+
+    // The scrap still names all three stations; a3 is the one the solve
+    // has no position for, and a1-a2 alone carry the note transform.
+    REQUIRE(setup.scrap->numberOfStations() == 3);
+    CHECK(setup.scrap->station(2).name() == QStringLiteral("s.a3"));
+    const cwStationPositionLookup lookup = trip->solvedStationPositions();
+    CHECK(lookup.hasPosition(QStringLiteral("s.a1")));
+    CHECK(lookup.hasPosition(QStringLiteral("s.a2")));
+    CHECK_FALSE(lookup.hasPosition(QStringLiteral("s.a3")));
+
+    // The page draws a1-a2 and a2-a3 to the same scale, so the transform the
+    // remaining anchors compute matches the one all three computed.
+    CHECK(setup.scrap->noteTransformation()->scale()
+          == Catch::Approx(scaleBefore).epsilon(kScaleTolerance));
+}
+
+namespace {
+
+// The scale a two-station scrap computes when its stations sit half as far
+// apart on the page as they do in the cave.
+constexpr double kHalfScale = 0.5;
+constexpr double kMetersPerFoot = 0.3048;
+
+//! Adds a station the way cwBaseNoteStationInteraction::addPoint does (the
+//! neighbor guess, else the trip's first known station), then types
+//! \a typedName into it the way NoteStation.qml commits an edit.
+void addStationLikeTheEditor(cwScrap* scrap, QPointF notePosition, const QString& typedName)
+{
+    cwNoteStation selected;
+    if (scrap->numberOfStations() > 0) {
+        selected = scrap->station(scrap->numberOfStations() - 1);
+    }
+
+    QString name = scrap->guessNeighborStationName(selected, notePosition);
+    if (name.isEmpty()) {
+        const QList<cwTrip::KnownStation> known = scrap->parentTrip()->knownStations();
+        name = known.isEmpty() ? QStringLiteral("Station Name") : known.first().name;
+    }
+
+    cwNoteStation added;
+    added.setName(name);
+    added.setPositionOnNote(notePosition);
+    scrap->addStation(added);
+    scrap->setStationData(cwScrap::StationName, scrap->numberOfStations() - 1, typedName);
+}
+
+QStringList knownNames(const cwTrip* trip)
+{
+    QStringList names;
+    for (const cwTrip::KnownStation& known : trip->knownStations()) {
+        names.append(known.name);
+    }
+    return names;
+}
+
+void settleScraps(SavedProjectFixture* fixture)
+{
+    drainPipelines(fixture);
+    fixture->rootData->scrapManager()->waitForFinish();
+    drainPipelines(fixture);
+}
+
+} // namespace
+
+// The trip-level attach path, which keeps computing alongside the source
+// attach below.
+TEST_CASE("auto-calculate computes the note transform for a scrap made before the attach's first solve lands",
+          "[cwScrapManager][Attach][NoteTransform]")
+{
+    requireAutomaticUpdatesEnabled();
+    auto fixture = makeSavedProject(QStringLiteral("note-auto-trip-before"),
+                                    QStringLiteral("ScrapCave"),
+                                    QStringLiteral("ScrapTrip"));
+    const QString source = QDir(fixture->tempDir.path()).filePath(QStringLiteral("source/s.svx"));
+    REQUIRE(QDir().mkpath(QFileInfo(source).absolutePath()));
+    overwriteFile(source, threeStationSurvey("10.0", true));
+    attachThroughManager(fixture.get(), fixture->trip, source);
+
+    cwScrap* scrap = addEmptySizedScrap(fixture->trip);
+    addStationLikeTheEditor(scrap, kA1OnNote, QStringLiteral("s.a1"));
+    addStationLikeTheEditor(scrap, kA2OnNote, QStringLiteral("s.a2"));
+    settleScraps(fixture.get());
+
+    REQUIRE(fixture->trip->solvedStationPositions().hasPosition(QStringLiteral("s.a2")));
+    CHECK(scrap->noteTransformation()->scale()
+          == Catch::Approx(kHalfScale).epsilon(kScaleTolerance));
+}
+
+TEST_CASE("auto-calculate computes the note transform on the survey trip of a lone Compass file",
+          "[cwScrapManager][Attach][NoteTransform]")
+{
+    requireAutomaticUpdatesEnabled();
+    auto fixture = makeSavedProject(QStringLiteral("note-auto-compass-file"),
+                                    QStringLiteral("NativeCave"),
+                                    QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        fixture.get(), fixture->project->cavingRegion()->rootNode(),
+        fixturePath(QStringLiteral("compass_solvable.dat")));
+    settleScraps(fixture.get());
+
+    // A lone .dat is a one-node subtree whose one survey is a derived trip.
+    REQUIRE(root->tripCount() == 1);
+    cwTrip* window = root->trip(0);
+    REQUIRE(window->isDerived());
+    INFO("known stations: " << knownNames(window).join(QStringLiteral(", ")).toStdString());
+    REQUIRE(window->solvedStationPositions().hasPosition(QStringLiteral("S1")));
+    REQUIRE(window->solvedStationPositions().hasPosition(QStringLiteral("S2")));
+    CHECK(window->solvedNetwork().neighbors(QStringLiteral("S1")).contains(QStringLiteral("s2"),
+                                                                         Qt::CaseInsensitive));
+
+    // S1-S2 runs ten feet north (Compass lengths are feet); the page draws it
+    // five meters long.
+    cwScrap* scrap = addEmptySizedScrap(window);
+    addStationLikeTheEditor(scrap, kA1OnNote, QStringLiteral("S1"));
+    addStationLikeTheEditor(scrap, kA2OnNote, QStringLiteral("S2"));
+    settleScraps(fixture.get());
+
+    CHECK(scrap->noteTransformation()->scale()
+          == Catch::Approx(kHalfScale / kMetersPerFoot).epsilon(kScaleTolerance));
 }
 
 namespace {
@@ -1067,6 +1351,52 @@ TEST_CASE("A rerun off a warm texture cache still reaches full",
     const ScrapRunObservation warmRun = recorder.richestRun();
     CHECK(warmRun.progress.last() == warmRun.steps.last());
     CHECK_FALSE(warmRun.detailNames.contains(QStringLiteral("Compressing texture")));
+}
+
+TEST_CASE("Renaming a cave re-marks the scraps of trips in its nested nodes",
+          "[cwScrapManager][objectPathReady]")
+{
+    // A cave rename moves its whole directory, sub/ included, so the note images
+    // of every descendant trip move too and their scraps need fresh geometry.
+    requireAutomaticUpdatesEnabled();
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+    rootData->futureManagerModel()->waitForFinished();
+
+    auto* region = rootData->region();
+    auto* scrapManager = rootData->scrapManager();
+    auto* coordinator = rootData->updateCoordinator();
+
+    cwCave* nested = region->cave(0);
+    REQUIRE(nested != nullptr);
+    const QList<cwNote*> notes = nested->trip(0)->notes()->notes();
+    REQUIRE_FALSE(notes.isEmpty());
+    REQUIRE_FALSE(notes.first()->scraps().isEmpty());
+    cwScrap* scrap = notes.first()->scraps().first();
+
+    cwCave* outer = SurveyTreeTestHelper::addNode(region, nullptr, cwSurveyNode::Kind::Cave,
+                                                  QStringLiteral("Outer"));
+    region->moveNode(nested, outer, 0);
+    REQUIRE(nested->parentNode() == outer);
+    REQUIRE(outer->trips().isEmpty());
+
+    SurveyTreeTestHelper::flushSaves(rootData.get());
+    scrapManager->waitForFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    // Holding the coordinator keeps the re-mark observable in dirtyScraps()
+    coordinator->setAutomaticUpdate(false);
+    REQUIRE_FALSE(scrapManager->dirtyScraps().contains(scrap));
+
+    outer->setName(QStringLiteral("Outer renamed"));
+    SurveyTreeTestHelper::flushSaves(rootData.get());
+
+    CHECK(scrapManager->dirtyScraps().contains(scrap));
+
+    coordinator->setAutomaticUpdate(true);
+    rootData->futureManagerModel()->waitForFinished();
+    scrapManager->waitForFinish();
 }
 
 TEST_CASE("A scrap run reaches completion on a one-thread pool", "[cwScrapManager]") {

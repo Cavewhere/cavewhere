@@ -1,0 +1,7 @@
+; Fix-station autocomplete fixture for tst_FixStationAutocomplete: no *begin
+; of its own, so the trip's label is the whole scope of every station, and
+; no *fix, so the scan leaves every station free to take a node fix. One
+; station starts with "ent".
+*data normal from to tape compass clino
+entrance sump 10.0 0 0
+sump attic 6.5 90 10

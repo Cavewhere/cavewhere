@@ -1,0 +1,10 @@
+; Survex entry whose *include target does not exist on disk. The
+; scanner resolves the entry itself and emits a "missing *include
+; target" warning without failing - the attach dialog's
+; yellow-warning-but-[Attach]-enabled path (Phase 2 q18).
+*begin MissingInclude
+*fix A1 0 0 0
+*data normal from to tape compass clino
+A1 A2 5.0 0 0
+*include "not_on_disk.svx"
+*end MissingInclude

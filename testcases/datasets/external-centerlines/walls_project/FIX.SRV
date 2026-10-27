@@ -1,0 +1,3 @@
+; The project's one fixed point; the surveys start from K1.
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+#FIX K1 1000.0 2000.0 100.0

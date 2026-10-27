@@ -16,6 +16,7 @@
 #include "cwGeometryItersecter.h"
 #include "cwFutureManagerModel.h"
 #include "TestGeometryBuilders.h"
+#include "TestHelper.h"
 
 namespace {
 
@@ -101,7 +102,7 @@ TEST_CASE("Building a single huge object reports intermediate progress",
     // waitForFinish() spins a nested event loop, so the QFutureWatcher inside
     // the model delivers its progress signals here while the build runs.
     intersector.waitForFinish();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return intersector.isObjectPickReady(key); }));
 
     // Anchor: the build actually happened and installed a pickable sub-BVH.
     REQUIRE(intersector.isObjectPickReady(key));

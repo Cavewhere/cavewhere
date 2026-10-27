@@ -2,7 +2,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
-#include <QCoreApplication>
 #include <QSignalSpy>
 
 //Our includes
@@ -11,6 +10,7 @@
 #include "cwPenStroke.h"
 #include "cwPenStrokeModel.h"
 #include "cwSketch.h"
+#include "TestHelper.h"
 
 TEST_CASE("cwPenStrokeModel exposes stroke rows with expected roles", "[cwPenStrokeModel]") {
     cwSketch sketch;
@@ -55,8 +55,7 @@ TEST_CASE("cwPenStrokeModel coalesces dataChanged across appendPoint calls",
 
     CHECK(changed.count() == 0); // not yet flushed
 
-    // Drain queued events.
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return changed.count() >= 1; }));
 
     CHECK(changed.count() == 1);
     CHECK(sketch.strokes().at(row).points.size() == 10);
@@ -65,7 +64,9 @@ TEST_CASE("cwPenStrokeModel coalesces dataChanged across appendPoint calls",
     for (int i = 0; i < 5; ++i) {
         sketch.appendPoint(row, cwPenPoint(QPointF(i, -i), 0.5));
     }
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return changed.count() >= 2; }));
+    CHECK(changed.count() == 2);
+    REQUIRE(waitForQueuedEvents());
     CHECK(changed.count() == 2);
     CHECK(sketch.strokes().at(row).points.size() == 15);
 }
@@ -79,7 +80,6 @@ TEST_CASE("cwMovingAveragePenStrokeProxy returns raw for short strokes and "
     const int row = sketch.beginStroke(cwPenStroke::Feature, 1.0);
     sketch.appendPoint(row, cwPenPoint(QPointF(0, 0), 0.5));
     sketch.appendPoint(row, cwPenPoint(QPointF(10, 0), 0.5));
-    QCoreApplication::processEvents();
 
     const QModelIndex idx = proxy.index(0, 0);
     auto pts = proxy.data(idx, cwPenStrokeModel::PointsRole)
@@ -101,7 +101,6 @@ TEST_CASE("cwMovingAveragePenStrokeProxy smooths a 5-point stroke",
     for (int i = 0; i < 5; ++i) {
         sketch.appendPoint(row, cwPenPoint(QPointF(i, 0), 0.5));
     }
-    QCoreApplication::processEvents();
 
     const QModelIndex idx = proxy.index(0, 0);
     auto pts = proxy.data(idx, cwPenStrokeModel::PointsRole)

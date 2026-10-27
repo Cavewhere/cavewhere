@@ -79,7 +79,7 @@
   specifics live in its own file:
   <ul>
     <li><a href="EXTERNAL_FILE_PHASE1.html"><code>EXTERNAL_FILE_PHASE1.html</code></a> &mdash; Data model, scanner, copy, driver, runner, watcher. <strong>Fully planned.</strong></li>
-    <li><a href="EXTERNAL_FILE_PHASE2.html"><code>EXTERNAL_FILE_PHASE2.html</code></a> &mdash; Trip-level attach + CavernOutputPage v1. (Stub; content still in master &sect;9 Phase 2.)</li>
+    <li><a href="EXTERNAL_FILE_PHASE2.html"><code>EXTERNAL_FILE_PHASE2.html</code></a> &mdash; Trip-level attach + CavernOutputPage v1.</li>
     <li><a href="EXTERNAL_FILE_PHASE3.html"><code>EXTERNAL_FILE_PHASE3.html</code></a> &mdash; Cave-level attach + nav badging. (Stub.)</li>
     <li><a href="EXTERNAL_FILE_PHASE4.html"><code>EXTERNAL_FILE_PHASE4.html</code></a> &mdash; Equates editor. (Stub; concept-level.)</li>
     <li><a href="EXTERNAL_FILE_PHASE5.html"><code>EXTERNAL_FILE_PHASE5.html</code></a> &mdash; Orphan detection + Replace/Re-link. (Stub.)</li>
@@ -450,7 +450,7 @@
       <code>cwSaveLoad::externalCenterlineDirHelper</code> (&sect;5.1), so
       the protobuf payload doesn't carry an owner UUID or any
       machine-specific prefix. The original source location lives in
-      <code>local_settings.json</code> per &sect;5.3.
+      the <code>cwExternalSourceSettings</code> store per &sect;5.3.
     </td>
   </tr>
 </table>
@@ -513,8 +513,8 @@
 </code></pre>
 
 <p>
-  Source paths (per-user, per-machine) live in
-  <code>.cwproj/local_settings.json</code>, gitignored. See &sect;5.3.
+  Source paths (per-user, per-machine) live in the QSettings-backed
+  <code>cwExternalSourceSettings</code> store. See &sect;5.3.
 </p>
 
 <h2 id="scanner">4. Scanner &amp; dependency discovery</h2>
@@ -666,6 +666,22 @@ AsyncFuture::observe(future)
 </div>
 
 <h2 id="copy">5. In-project copy workflow</h2>
+
+<div class="note">
+  <strong>The copy is terminal (2026-08-11).</strong> Wherever this
+  section reads as an ongoing relationship between an outside file and
+  its in-project copy &mdash; watching, probing, staleness, an
+  <em>Update</em> that pulls the source forward &mdash; read it as
+  history. Copying happens once, at attach, and again only when the
+  user explicitly picks a new file through <em>Replace&hellip;</em>.
+  After that the in-project copy is the only file: it is what the solve
+  includes, what the harvest reads, what the watcher reacts to, and
+  what git versions. The path the user originally picked is kept solely
+  to pre-fill the Replace picker. See
+  <a class="anchor" href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">the
+  live-link retirement plan</a> for why a two-file model could not tell
+  &ldquo;the source moved&rdquo; from &ldquo;the copy moved.&rdquo;
+</div>
 
 <h3>5.1 Layout</h3>
 
@@ -918,84 +934,137 @@ cwExternalCenterlineSync::reconcile(const ScanResult&amp; scan,
 
 <h3>5.3 Live-link vs. import mode</h3>
 
+<p class="meta">
+  <strong>Superseded (2026-07-16, decided during Phase 2 after
+  commit 4</strong> &mdash; see the "Direction change" section at the
+  top of <a href="EXTERNAL_FILE_PHASE2.html#direction-change">Phase
+  2</a><strong>).</strong> The two-mode dichotomy below is dropped;
+  there is no auto-copy and no mode choice. The single model:
+  the <em>in-project copy is the source of truth</em>; the source
+  path is always remembered (per-machine, QSettings-backed
+  <code>cwExternalSourceSettings</code>, exactly as specified below);
+  the source-side watcher and an open-time probe only set a
+  per-owner <em>stale</em> flag; the trip panel offers a
+  user-triggered [Update] that runs scan + reconcile + re-solve.
+  Rationale: auto-reconcile at arbitrary times forced mid-git-sync
+  fold-in semantics, surprise dirty-bit flips and save prompts, a
+  collaborator ping-pong corollary, and a load-bearing async scan
+  pipeline &mdash; all for the value of saving one click. The
+  storage design, watcher infrastructure, and reconcile primitive
+  below are unchanged; only the <em>action</em> taken on a source
+  change moved from automatic to user-triggered. Mentions of
+  "live link" elsewhere in this master plan read as "remembered
+  source"; "auto-copy on next solve" reads as "stale banner +
+  [Update]".
+</p>
+
 <p>
-  At attach time the user picks one of two modes:
+  <s>At attach time the user picks one of two modes:</s>
 </p>
 
 <ul>
   <li>
-    <strong>Watch for changes</strong> (default, "live link"). CaveWhere
+    <s><strong>Watch for changes</strong> (default, "live link"). CaveWhere
     records the original source path on this machine and watches both
     the source and the in-project copy. Edits to the source auto-copy
-    into the project on next solve.
+    into the project on next solve.</s>
   </li>
   <li>
-    <strong>Copy once</strong> ("import mode"). CaveWhere copies the
+    <s><strong>Copy once</strong> ("import mode"). CaveWhere copies the
     file into the project once and forgets the source path. Only the
     in-project copy is watched from then on. To refresh, the user
-    re-attaches.
+    re-attaches.</s>
   </li>
 </ul>
 
 <p>
   Source path is <strong>per-user, per-machine</strong>: stored in
-  <code>.cwproj/local_settings.json</code> (gitignored), not in the
-  region protobuf. Collaborators who pull the project never see the
-  original attacher's path; they get the in-project copy and watch
+  <strong>QSettings</strong> keyed by owner UUID &mdash; <em>not</em>
+  in the project tree and not in the region protobuf. Owner UUIDs
+  (<code>cwCave::id()</code> / <code>cwTrip::id()</code>) are globally
+  unique, so one store serves every project on the machine with no
+  per-project namespace. Collaborators who pull the project never see
+  the original attacher's path; they get the in-project copy and watch
   that. If they later attach their own files, they choose modes
   independently.
 </p>
 
 <p>
-  <strong>Schema:</strong> defined as a protobuf message in
-  <code>cavewhere.proto</code> and serialised with protobuf's JSON
-  codec (<code>google::protobuf::util::MessageToJsonString</code>) so
-  we get the same versioning / forward-compat story as the rest of the
-  project format. The file isn't checked in, but the schema is.
+  <strong>Copies of a project alias each other &mdash; intended v1
+  behavior.</strong> Every mechanism that copies a project (Git clone,
+  Save As, file copy, restored backup) preserves cave/trip UUIDs, so
+  all copies of a project on one machine <em>share</em> their live-link
+  entries: setting, re-linking, or switching an attachment to import
+  mode in one copy applies to every copy. That's the desired outcome
+  for the common case &mdash; two checkouts of the same survey pointed
+  at the same source file &mdash; and per-copy divergence is
+  deliberately not supported in v1. Widening the key to
+  (project&nbsp;identity, owner) was considered and rejected: a path
+  key orphans entries on every project move/rename, and a stored
+  project UUID is duplicated by the same copy mechanisms it would need
+  to distinguish.
 </p>
 
-<pre><code>// In cavewhere.proto
-//
-// LocalSettings is the umbrella container for *all* per-user,
-// per-machine state stored next to the project. The current v1
-// payload is just external-centerline source paths, but the file
-// already exists, so future per-machine subsystems (recent-file
-// state, per-machine credentials cache pointers, last-opened
-// sub-page, etc.) should land here as new top-level fields rather
-// than spinning up another sibling file. Keep inner-message names
-// domain-specific (NOT generic words like "Attachment", "Setting",
-// or "Entry") so two unrelated subsystems can't collide and a
-// reader can tell which feature a field belongs to without looking
-// up its parent.
-message LocalSettings {
-  // Per-machine source paths for live-link external-centerline
-  // attachments. Owner UUID identifies the cwCave or cwTrip in the
-  // Attached state.
-  message ExternalCenterlineSource {
-    string owner_id = 1;        // cwCave or cwTrip QUuid (no braces, no hyphens)
-    string source_path = 2;     // absolute path on this machine; empty == import mode
-  }
-  repeated ExternalCenterlineSource external_centerline_sources = 1;
+<p>
+  <strong>Why not a file inside the project.</strong>
+  The original design stored this as <code>.cwproj/local_settings.json</code>
+  (gitignored), which is what Phase 1 shipped. That breaks for bundled
+  <code>.cw</code> projects: a <code>.cw</code> is a zipped
+  <code>.cwproj</code> extracted to a fresh <code>QTemporaryDir</code>
+  on every open, and <code>cwSaveLoad::saveBundledArchive</code>
+  applies the project's git-exclude patterns when zipping &mdash; so an
+  in-project <code>local_settings.json</code> either evaporates when
+  the project closes (excluded from the zip) or, if it were shipped,
+  would leak the attacher's machine paths to everyone who receives the
+  file. A machine-global store survives <code>.cw</code> open/close
+  cycles, works identically for <code>.cwproj</code>, survives a
+  project being moved or renamed on disk, and removes the
+  gitignore/zip-exclusion dependency entirely. Phase 2 reworks the
+  Phase 1 storage location; <strong>no migration path is needed</strong>
+  &mdash; this is unreleased dev code. Dead entries for deleted
+  projects are harmless (a UUID lookup that never matches) and are not
+  GC'd in v1.
+</p>
 
-  // Future per-machine fields go here, each as its own
-  // domain-named message + repeated/optional field.
-  // e.g. repeated RecentProjectEntry recent_projects = 2;
-}
+<p>
+  <strong>Why QSettings and not a hand-rolled app-data JSON file.</strong>
+  An earlier revision of this section specified a protobuf-JSON file at
+  <code>&lt;AppDataLocation&gt;/local_settings.json</code>. Dropped for
+  three reasons. (1) <em>Concurrency:</em> a whole-file
+  load&rarr;modify&rarr;save cycle is last-writer-wins across two
+  CaveWhere instances; QSettings serializes writers with a lock file
+  and merges per-key on sync, so instances upserting different owners
+  both persist. (2) <em>Consistency:</em> QSettings is where the rest
+  of CaveWhere's per-machine state already lives (recent projects,
+  job/font/PDF settings) &mdash; a third persistence mechanism needs a
+  reason to exist, and this one didn't have it. (3) <em>Roaming:</em>
+  <code>AppDataLocation</code> is the roaming AppData dir on Windows,
+  which would sync machine-local absolute paths across machines.
+  CaveWhere is not single-instance-enforced, so (1) is real.
+</p>
+
+<p>
+  <strong>Shape:</strong> <code>cwExternalSourceSettings</code> is a QObject
+  store owned by <code>cwRootData</code> (exposed as the
+  <code>externalSourceSettings</code> CONSTANT property). Every read/write goes
+  straight to QSettings &mdash; one key per owner under the
+  <code>externalCenterlineSources</code> group:
+</p>
+
+<pre><code>externalCenterlineSources/&lt;owner-uuid-without-braces&gt; = /Users/alice/topodroid/2025-06-01/trip.svx
+// absent key            == import mode (no entry)
+// key with empty value  == import mode entry (attached without live-link)
 </code></pre>
 
 <p>
-  Serialised to <code>.cwproj/local_settings.json</code> as e.g.:
+  Mutations emit <code>externalCenterlineSourcesChanged</code> on the
+  mutating instance; <code>cwLinePlotManager</code> observes the
+  rootData-owned store and recomputes its watch set on every change, so
+  writers (the attach orchestrator, the MissingSourceBanner's
+  switch-to-import action) just write. Future per-machine state should
+  use QSettings likewise (its own domain-specific group), not a new
+  sibling store.
 </p>
-
-<pre><code>{
-  "externalCenterlineSources": [
-    {
-      "ownerId": "6ba7b8109dad11d180b400c04fd430c8",
-      "sourcePath": "/Users/alice/topodroid/2025-06-01/trip.svx"
-    }
-  ]
-}
-</code></pre>
 
 <p>
   Absent entry for an owner &rArr; import mode for that attachment on
@@ -1003,6 +1072,57 @@ message LocalSettings {
   surface a one-time warning ("Original source moved or deleted;
   switched to import mode"), clear the entry, continue with just the
   in-project copy.
+</p>
+
+<h3>5.4 Bundled <code>.cw</code> projects</h3>
+
+<p>
+  A bundled <code>.cw</code> is a zipped <code>.cwproj</code>
+  (<code>cwProject::BundledGitFileType</code>) extracted to a
+  <code>QTemporaryDir</code> on load and re-zipped on save, with the
+  <code>.git</code> history inside the archive. Because the extraction
+  is a full <code>.cwproj</code> directory tree, everything in this
+  plan works on it unchanged: the <code>external-centerline/</code>
+  layout (&sect;5.1), the reconcile jobs (&sect;5.2), the
+  <code>QFileSystemWatcher</code>, the rename/delete cascades, and the
+  git-history-as-backup rationale for detach (&sect;8.8 q1). Two
+  <code>.cw</code>-specific requirements:
+</p>
+
+<ul>
+  <li>
+    <strong>Live-link storage must live outside the project tree</strong>
+    &mdash; handled by &sect;5.3's QSettings store. The extraction dir
+    is a fresh temp path every session, so nothing per-machine can
+    persist inside it.
+  </li>
+  <li>
+    <strong>Reconcile mutations must dirty the project.</strong> When a
+    live-link reconcile copies an updated source file into the
+    extraction mid-session, <code>cwSaveLoad</code> must emit
+    <code>localMutationOccurred</code> so
+    <code>cwProject::modified()</code> flips and the save affordance
+    appears &mdash; otherwise a <code>.cw</code> user who quits without
+    saving silently loses the refresh (for <code>.cwproj</code> the
+    copy is durable immediately, so this never mattered). Precedent:
+    commit <code>50595738</code> wired exactly this for Git-driven
+    GIS-layer changes. Phase 2 verifies whether the reconcile jobs
+    already flow through the modified-bit plumbing and wires them if
+    not.
+  </li>
+</ul>
+
+<p>
+  The practical consequence for <code>.cw</code> users: the "edit the
+  in-project copy" workflow (&sect;5.2 case 2) is a poor fit &mdash;
+  the copy lives at a hidden temp path that changes every session.
+  Live-link is the primary mode for bundled projects; the attach
+  dialog's default (&sect;8.1) already reflects that.
+  <em>(Stale after the 2026-07-16 direction change, noted at the
+  Phase-2 commit-12 review: there is no mode and no default anymore
+  &mdash; the source path is always remembered and the dialog has no
+  watch-vs-import choice. The .cw-fit point above stands on its
+  own.)</em>
 </p>
 
 <h2 id="driver">6. Driver-file shape</h2>
@@ -1176,6 +1296,18 @@ QRegularExpression caveRegex("cave_([0-9a-f]{32})\\.(.+)");
   panel, so a small shared model is appropriate.
 </p>
 
+<p><em>Superseded as shipped (Phase 2 commit 13, 2026-07-19):</em> the
+  premise was stale &mdash; carpet mode has no
+  <code>cwTrip::stations()</code> autocomplete anywhere in the
+  codebase. Station names in carpet mode come from typed input (now
+  validated per this section's regex split) and from
+  <code>cwScrap::guessNeighborStationName</code>, which already reads
+  the post-solve <code>cwStationPositionLookup</code> / cave network
+  and is therefore qualified-name-aware unchanged. The shipped picker
+  is the <code>ExternalCenterlineTripPanel</code> stations list
+  (backed by <code>cwScopeStationListModel</code>), reachable on the
+  carpet sub-page via the left-pane expand chevron.</p>
+
 <h3>7.3 Internal driver exporter</h3>
 
 <p>
@@ -1227,7 +1359,7 @@ QRegularExpression caveRegex("cave_([0-9a-f]{32})\\.(.+)");
     <code>cwLinePlotManager</code>. Watch set = union of:
     <ul>
       <li>All <code>ScanResult.dependencies</code> across attached centerlines (the in-project copies).</li>
-      <li>All <em>source paths</em> from <code>local_settings.json</code> for attachments in live-link mode, plus their scanner-discovered dependencies on the source side.</li>
+      <li>All <em>source paths</em> from the <code>cwExternalSourceSettings</code> store for attachments in live-link mode, plus their scanner-discovered dependencies on the source side.</li>
     </ul>
   </li>
   <li>
@@ -1294,8 +1426,8 @@ AsyncFuture::observe(scanFuture)
     If a live-link source path disappears (user moved/deleted the
     original file outside CaveWhere), record the change in
     <code>CavernOutputPage</code>, switch that attachment to
-    import-mode silently (clear its entry in
-    <code>local_settings.json</code>), and proceed with the in-project
+    import-mode silently (clear its entry in the
+    <code>cwExternalSourceSettings</code> store), and proceed with the in-project
     copy. No crash.
   </li>
   <li>
@@ -1474,6 +1606,16 @@ QString exportDisabledReason() const;  // empty when canExport() is true
 └─────────────────────────────────────────────────────────────────┘
 </code></pre>
 
+<p class="meta"><em>Mockup partially superseded as shipped (Phase 2
+  commit 12; the drawing above is kept for layout intent):</em> no
+  <strong>Trip name</strong> field (the trip exists before the dialog
+  opens; the Add-Trip flow's naming is a Phase-2 commit-13 decision),
+  no <strong>watch-vs-import radio</strong> (direction change
+  2026-07-16 &mdash; the source is always remembered), the scan
+  summary is a file count only ("&#x2713; Found N file(s)" &mdash;
+  station/shot counts are not in the pre-attach scan), and the "Why
+  we copy" box shipped as one short explainer paragraph.</p>
+
 <p>After the user clicks Attach:</p>
 
 <ol>
@@ -1482,7 +1624,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
   <li>If scanner returns warnings, surface them but proceed.</li>
   <li>Copy the dependency closure into the owner's <code>external-centerline/</code> subdir (resolved via <code>cwSaveLoad::externalCenterlineDir(owner)</code>).</li>
   <li>Persist the <code>cwExternalCenterline</code> with the entry-file path relative to that subdir (usually a basename).</li>
-  <li>If live-link selected: write the source path to <code>local_settings.json</code>.</li>
+  <li>Write the source path to the <code>cwExternalSourceSettings</code> store &mdash; always (direction change 2026-07-16: no live-link selection; the source is unconditionally remembered).</li>
   <li>Trigger a re-solve via the existing pipeline.</li>
   <li>
     For cave-level attach: silently auto-create one cwTrip per
@@ -1587,7 +1729,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
 │ ┌─ ExternalCenterlinePanel ──┬─ NotesGallery ───────────────┐  │
 │ │  📄 trip.svx · Survex       │  (unchanged)                 │  │
 │ │  Source: ~/topodroid/…/    │                              │  │
-│ │     (live-linked)          │  carpet mode: station picker │  │
+│ │     (source remembered)     │  carpet mode: station picker │  │
 │ │  Last solved: 0.2s ago     │  draws from this trip's      │  │
 │ │  14 stations · 13 shots    │  scope in the resolved       │  │
 │ │  0 warnings · 0 errors     │  network (§7.2)              │  │
@@ -1652,20 +1794,25 @@ QString exportDisabledReason() const;  // empty when canExport() is true
     user rebinds it.
   </li>
   <li>
-    <strong>Date and declination are kept and remain editable</strong>
-    for Attached and Scope trips alike. Date drives auto-declination
-    via the IGRF model (<code>cwTripCalibration::autoDeclination</code>)
-    so it is not purely informational; many TopoDroid exports omit
-    declination entirely and rely on CaveWhere to compute it. On scan,
-    the date is seeded from the external file's <code>*date</code>
-    (Survex), <code>SURVEY DATE</code> (Compass), or <code>#DATE</code>
-    (Walls) directive when present. If the file carries an explicit
-    declination (<code>*calibrate declination</code> /
-    <code>CORRECTIONS</code> / <code>#UNITS DECL</code>), import it as
-    <code>declinationManual</code> with <code>autoDeclination = false</code>;
-    otherwise default to <code>autoDeclination = true</code>. The chosen
-    declination is then injected into the driver block before
-    <code>*include</code> so cavern uses it.
+    <strong>Date is kept and remains editable</strong> for Attached and
+    Scope trips alike; on scan it is seeded from the external file's
+    <code>*date</code> (Survex), <code>SURVEY DATE</code> (Compass), or
+    <code>#DATE</code> (Walls) directive when present.
+    <strong>Declination ownership depends on the file</strong>
+    (verified empirically against cavern &mdash; a directive emitted in
+    the driver before <code>*include</code> is overridden by the file's
+    own directive, not the other way around):
+    if the file carries an explicit declination
+    (<code>*calibrate declination</code> / Compass <code>DECLINATION:</code> /
+    <code>#UNITS DECL</code>), the file owns it &mdash; the panel shows
+    it <em>read-only</em> ("Declination 7.2&deg; &mdash; set by your
+    survey file") and the driver emits nothing (any injected value
+    would be dead text). Only when the file has no declination of its
+    own (the common TopoDroid case) is it CaveWhere-owned: editable,
+    <code>autoDeclination = true</code> by default (IGRF from
+    date&nbsp;+&nbsp;fix location), and the resolved value is injected
+    into the driver block before <code>*include</code>, where it
+    demonstrably applies.
   </li>
 </ul>
 
@@ -1690,11 +1837,14 @@ QString exportDisabledReason() const;  // empty when canExport() is true
     file (e.g. <code>sidepassage.B1</code>).
   </li>
   <li>
-    <strong>Trip metadata.</strong> Date and declination are
-    CaveWhere-owned and editable (see &sect;8.5 bullet above); team is
-    CaveWhere-side informational. The scanner seeds these from the
-    external file on first attach (Survex <code>*date</code> /
-    <code>*team</code> / <code>*calibrate declination</code>, equivalents
+    <strong>Trip metadata.</strong> Date is CaveWhere-owned and
+    editable; declination is file-owned (read-only display) when the
+    file carries its own directive and CaveWhere-owned (editable,
+    IGRF auto) otherwise &mdash; see the &sect;8.5 metadata bullet and
+    q7; team is CaveWhere-side informational. The scanner seeds these
+    from the external file on first attach (Survex <code>*date</code> /
+    <code>*team</code> / <code>*calibrate declination</code> /
+    <code>*declination</code>, equivalents
     for Compass/Walls); subsequent edits are user-controlled. Trip name
     remains a CaveWhere display label.
   </li>
@@ -1727,7 +1877,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
   <tr>
     <td><strong>Attached</strong></td>
     <td><code>trip.externalCenterline.entryFile</code> non-empty</td>
-    <td>Filename + format; source mode line ("In-project copy (this machine)" or "Live-linked: &lt;path&gt;")</td>
+    <td>Filename + format; source mode line ("Source forgotten (this machine)" or "Source: &lt;path&gt;" &mdash; direction change: remembered source, no mode)</td>
     <td><code>[Reload now]</code> <code>[Detach&hellip;]</code></td>
     <td>none</td>
   </tr>
@@ -1740,10 +1890,10 @@ QString exportDisabledReason() const;  // empty when canExport() is true
   </tr>
   <tr>
     <td><strong>MissingSource</strong></td>
-    <td>Attached AND <code>localSettings</code> has a <code>sourcePath</code> for the owner that doesn't exist on disk</td>
+    <td>Attached AND <code>externalSourceSettings</code> has a <code>sourcePath</code> for the owner that doesn't exist on disk</td>
     <td>(unchanged from Attached &mdash; the file in the project tree still exists)</td>
     <td>(unchanged)</td>
-    <td>Yellow banner: <em>"Source not found at &lt;path&gt;"</em> + <code>[Re-link&hellip;]</code> <code>[Switch to import mode]</code></td>
+    <td>Yellow banner: <em>"Source not found at &lt;path&gt;"</em> + <code>[Re-link&hellip;]</code> <code>[Forget source]</code> (renamed from "Switch to import mode" by the 2026-07-16 direction change)</td>
   </tr>
 </table>
 
@@ -1760,7 +1910,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
 <ul>
   <li><code>required property cwTrip trip</code> &mdash; owner.</li>
   <li><code>required property cwLinePlotManager linePlotManager</code> &mdash; for <code>hasSolveError</code> / <code>cavernLog</code> / <code>loopClosureStats</code> / <code>solveErrorMessage</code> Q_PROPERTYs already on the manager (post-lineplot-port).</li>
-  <li><code>required property cwLocalSettings localSettings</code> &mdash; <code>Q_INVOKABLE QString sourcePathFor(QUuid ownerId)</code> and <code>Q_INVOKABLE bool isLiveLink(QUuid ownerId)</code>.</li>
+  <li><code>required property cwExternalSourceSettings externalSourceSettings</code> &mdash; <code>Q_INVOKABLE QString sourcePathFor(QUuid ownerId)</code> and <code>Q_INVOKABLE bool hasSource(QUuid ownerId)</code> (direction change 2026-07-16: <code>isLiveLink</code> is retired in favor of <code>hasSource</code>; no mode dichotomy).</li>
   <li><code>required property QAbstractItemModel scopeStationModel</code> &mdash; the per-scope station-list model from &sect;7.2 (new in Phase 2). Same model also backs the carpet station picker.</li>
 </ul>
 
@@ -1782,19 +1932,19 @@ QQ.Item {
 
     required property cwTrip trip
     required property cwLinePlotManager linePlotManager
-    required property cwLocalSettings localSettings
+    required property cwExternalSourceSettings externalSourceSettings
     required property QAbstractItemModel scopeStationModel
 
     readonly property bool isAttached: trip.externalCenterline.entryFile.length &gt; 0
     readonly property bool isScope: trip.stationPrefix.length &gt; 0
     readonly property bool sourceMissing:
-        isAttached &amp;&amp; localSettings.isLiveLink(trip.id) &amp;&amp;
-        !FileSystemHelper.exists(localSettings.sourcePathFor(trip.id))
+        isAttached &amp;&amp; externalSourceSettings.hasSource(trip.id) &amp;&amp;
+        !FileSystemHelper.exists(externalSourceSettings.sourcePathFor(trip.id))
 
     signal reloadRequested()
     signal detachRequested()
     signal relinkRequested()
-    signal switchToImportRequested()
+    signal forgetSourceRequested()
     signal changePrefixRequested()
     signal removeTripRequested()
 
@@ -1806,9 +1956,9 @@ QQ.Item {
         ExternalCenterlineMissingSourceBanner {
             Layout.fillWidth: true
             visible: root.sourceMissing
-            sourcePath: root.localSettings.sourcePathFor(root.trip.id)
+            sourcePath: root.externalSourceSettings.sourcePathFor(root.trip.id)
             onRelinkRequested: root.relinkRequested()
-            onSwitchToImportRequested: root.switchToImportRequested()
+            onForgetSourceRequested: root.forgetSourceRequested()
         }
 
         Loader {
@@ -1863,7 +2013,7 @@ QQ.Item {
         id: attachedHeaderComp
         ExternalCenterlineAttachedHeader {
             trip: root.trip
-            localSettings: root.localSettings
+            externalSourceSettings: root.externalSourceSettings
         }
     }
 
@@ -1888,6 +2038,48 @@ QQ.Item {
   <li><strong>No bindings on <code>Q_OBJECT_BINDABLE_PROPERTY</code></strong> &mdash; the C++ side uses plain member + setter + signal (CLAUDE.md), which QML binding consumes normally.</li>
 </ul>
 
+<p>
+  <em>Phase-2 as-shipped deltas (2026-07-19, Phase-2 commit 10; the
+  skeleton above is otherwise unchanged but these details are
+  superseded &mdash; see EXTERNAL_FILE_PHASE2.html &sect;12 commit-10
+  entry):</em>
+</p>
+<ul>
+  <li><code>ExternalCenterlineSolveStatus</code> takes dumb data
+    properties (<code>hasError</code>/<code>warningCount</code>/<code>stationCount</code>)
+    instead of the skeleton's <code>linePlotManager</code> +
+    <code>trip</code> &mdash; the panel binds them from the manager.
+    Shot count and the last-solved timestamp are deferred.</li>
+  <li>The banner's <code>sourceMissing</code> input comes from the
+    watcher-driven
+    <code>cwExternalCenterlineManager.isSourceMissing(ownerId)</code>
+    (re-evaluated on <code>missingSourceOwnersChanged</code>), not the
+    skeleton's <code>FileSystemHelper.exists</code> +
+    <code>hasSource</code> binding &mdash; QML never polls the
+    filesystem.</li>
+  <li><code>ExternalCenterlineAttachedHeader</code> renders a format
+    text label, not a format icon (extension&rarr;format mapping
+    slated to move onto the <code>cwExternalCenterline</code> gadget;
+    Phase-2 &sect;15).</li>
+  <li><em>Commit 11 (panel assembly):</em> the "signals out" note is
+    superseded &mdash; the panel wires Reload / Detach / Forget source /
+    the cavern deep-link directly
+    (<code>rerunSurvex()</code>,
+    <code>RootData.detachTripCenterline</code>,
+    <code>clearSourcePath</code>,
+    <code>gotoPageByName(null, "Cavern")</code>); completion feedback
+    comes from the manager's <code>attachCompleted</code> /
+    <code>detachCompleted</code> signals carrying the
+    <code>cwExternalCenterlineReport</code> gadget, so TripPage's
+    commit-13 swap is a bare instantiation. Only
+    <code>relinkRequested</code> and <code>stationClicked</code> remain
+    as outbound signals. The panel also owns its
+    <code>ScopeStationListModel</code> (prefix from the manager's
+    <code>scopePrefixForTrip</code>) rather than requiring
+    <code>scopeStationModel</code>, and hosts the detach
+    <code>RemoveAskBox</code> itself.</li>
+</ul>
+
 <h5>Sub-components (new files, all Phase 2 unless noted)</h5>
 
 <table>
@@ -1899,7 +2091,7 @@ QQ.Item {
   </tr>
   <tr>
     <td><code>ExternalCenterlineAttachedHeader.qml</code></td>
-    <td>Filename + format icon + source-mode line (in-project / live-linked path).</td>
+    <td>Filename + format icon + remembered-source line (path, or a forgotten-source note).</td>
     <td>2</td>
   </tr>
   <tr>
@@ -1919,12 +2111,16 @@ QQ.Item {
   </tr>
   <tr>
     <td><code>ExternalCenterlineMissingSourceBanner.qml</code></td>
-    <td>Yellow banner; Re-link / Switch-to-import buttons (&sect;8.8 question 16).</td>
-    <td>2 (banner lights up trivially in Phase 2 even before Phase 5b lands the rebind dialog &mdash; the buttons can be present but only "Switch to import mode" wired in Phase 2; Re-link wires to its dialog in Phase 5b)</td>
+    <td><strong>Deleted 2026-08-11</strong> &mdash; was: yellow banner;
+      Re-link / Switch-to-import buttons (&sect;8.8 question 16, now
+      retired). No missing-source state survives; see
+      <a class="anchor" href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">the
+      live-link retirement plan</a>.</td>
+    <td>was: 2 (banner lights up trivially in Phase 2 even before Phase 5b lands the rebind dialog &mdash; the buttons can be present but only "Forget source" wired in Phase 2; Re-link wires to its dialog in Phase 5b)</td>
   </tr>
   <tr>
     <td><code>ExternalCenterlineTripMetadata.qml</code></td>
-    <td>Date (editable, drives auto-decl), declination (editable, manual override), team (editable, informational). Same field semantics as the existing trip metadata; extract a shared component or duplicate &mdash; decide during implementation.</td>
+    <td>Date (editable, drives auto-decl), declination (editable with IGRF auto when the file has none; read-only "set by your survey file" when the file carries its own directive &mdash; q7), team (editable, informational). Same field semantics as the existing trip metadata; extract a shared component or duplicate &mdash; decide during implementation.</td>
     <td>2</td>
   </tr>
   <tr>
@@ -1937,7 +2133,7 @@ QQ.Item {
 <h5>Lifecycle / threading notes</h5>
 
 <ul>
-  <li>The panel never touches the filesystem directly. Source-path existence (<code>sourceMissing</code>) is computed against a snapshot held by <code>cwLocalSettings</code>; the C++ side refreshes it on file-system change events and emits a signal the QML binding picks up.</li>
+  <li>The panel never touches the filesystem directly. Source-path existence (<code>sourceMissing</code>) is computed against a snapshot held by <code>cwExternalSourceSettings</code>; the C++ side refreshes it on file-system change events and emits a signal the QML binding picks up.</li>
   <li>The stations list model is computed on the main thread from the post-solve <code>cwStationPositionLookup</code> snapshot; reads are O(1) per row, so a <code>ListView</code> bound directly to it is fine.</li>
   <li>The Reload action enqueues into the existing <code>AsyncFuture::Restarter</code> via <code>linePlotManager.rerunSurvex()</code>; the panel's solve-status badge updates from the manager's existing signals when the new result lands. No bespoke async state in QML.</li>
 </ul>
@@ -1995,6 +2191,15 @@ QQ.Item {
   records are kept in storage (so detach restores them) but hidden
   from the UI; a small disclosure <em>"3 hidden native trips
   (detach to restore)"</em> hints at their presence.
+</p>
+
+<p class="meta">
+  <strong>Superseded (2026-08-24, Phase 3 planning pass):</strong> the paragraph
+  above predates the Scope-trip resolution. As planned in
+  <a href="EXTERNAL_FILE_PHASE3.html">EXTERNAL_FILE_PHASE3.html</a>, the trip table
+  stays and shows the auto-created 📎 Scope trips; the cave-level CavePage is a
+  summary card plus the normal trip table, and a cave-level attach only happens on
+  a fresh cave (no native trips exist to hide).
 </p>
 
 <h4>Mixed mode</h4>
@@ -2102,16 +2307,22 @@ QQ.Item {
     attached to the existing Add Trip button (popup on click) with two
     items: <em>Native trip</em> and <em>External centerline&hellip;</em>.
     Don't introduce a new split-button widget; the menu is enough.
+    <em>Shipped as decided (Phase 2 commit 13, 2026-07-19)</em> &mdash;
+    one shared menu popped by both CavePage bars. Cancelling the attach
+    dialog deletes the just-created trip (the flow creates it up
+    front); a successful attach names it from the entry file per
+    &sect;8.7 and navigates to its page.
   </li>
   <li>
     <strong>Trip metadata for external trips</strong> (date, decl, team).
-    Resolved: Date and Decl are CaveWhere-owned and editable; the
-    scanner seeds them from the file's <code>*date</code> /
-    <code>*calibrate declination</code> (Survex equivalents in
-    Compass/Walls) on first attach. Date drives auto-declination via
-    IGRF the same way it does for native trips. The driver block
-    re-emits the chosen date/decl before <code>*include</code> so
-    cavern uses the CaveWhere-managed values. Team stays editable as
+    Resolved: Date is CaveWhere-owned and editable, seeded from the
+    file's <code>*date</code> (Survex equivalents in Compass/Walls) on
+    first attach. Declination is <em>file-owned when the file carries
+    its own directive</em> (shown read-only with a "set by your survey
+    file" hint) and CaveWhere-owned otherwise (editable, IGRF
+    auto-declination, injected into the driver before
+    <code>*include</code>). See the &sect;8.5 metadata bullet and q7
+    for the cavern-verified precedence. Team stays editable as
     informational.
   </li>
   <li>
@@ -2136,16 +2347,29 @@ QQ.Item {
   </li>
   <li>
     <strong>Auto-declination.</strong> Resolved &mdash; applies to
-    external trips too.
-    <code>cwSurvexExporterUtils::makeDeclinationContext</code> uses
-    cave fixes + per-trip date today; the same path runs for external
-    trips. The driver block emits the resolved value as
-    <code>*calibrate declination</code> before <code>*include</code>,
-    overriding any value the external file carries. On first scan, if
-    the file has its own <code>*calibrate declination</code> /
-    <code>CORRECTIONS</code> / <code>#UNITS DECL</code>, it seeds
-    <code>declinationManual</code> with <code>autoDeclination = false</code>;
-    otherwise <code>autoDeclination</code> stays on.
+    external trips <em>only when the file carries no declination of
+    its own</em>. Empirically verified against cavern: a
+    <code>*calibrate declination</code> emitted in the driver before
+    <code>*include</code> takes effect when the included file has no
+    declination directive, but is <em>overridden by the file's own</em>
+    <code>*calibrate declination</code> the moment the file sets one
+    (later directive wins within the scope) &mdash; the original
+    "driver overrides file" claim here was backwards. Contract:
+    scanner detects whether the file carries its own declination
+    (<code>*calibrate declination</code>, the modern
+    <code>*declination</code> command incl. <code>auto</code> /
+    Compass <code>DECLINATION:</code> /
+    <code>#UNITS DECL</code>). If yes &rarr; file-owned; panel shows
+    the value read-only with a "set by your survey file" hint
+    ("automatic (IGRF)" for <code>*declination auto</code>);
+    <code>autoDeclination = false</code>; driver emits no declination
+    for this trip. If no &rarr; CaveWhere-owned;
+    <code>autoDeclination = true</code> by default
+    (<code>cwSurvexExporterUtils::makeDeclinationContext</code>, same
+    path as native trips); the driver emits the resolved value before
+    <code>*include</code>. Note Compass and Walls files essentially
+    always embed their own declination handling, so the editable field
+    is in practice a Survex/TopoDroid affordance.
   </li>
   <li>
     <strong>CavePage stats when cave-level attached.</strong>
@@ -2209,11 +2433,18 @@ QQ.Item {
     are typically &lt;1&nbsp;MB, so the perceived dialog time should
     be sub-second in the common case; the Cancel exists for the
     pathological cases (huge include closures, slow disks).
+    <em>As shipped (Phase 2 commit 12): Cancel is honored only until
+    the attach's internal scan lands (flag-based
+    <code>cancelAttach</code>, consulted once at scan-landing) &mdash;
+    it never aborts the copy step; a late Cancel is a structural
+    no-op and the attach runs to completion. "Persists nothing" holds
+    exactly for honored cancels. The busy indication is an
+    indeterminate row, not a progress strip.</em>
   </li>
   <li>
     <strong>Collaborator opens a Git-shared project for the first
-    time.</strong> Resolved &mdash; on a machine with no entry in
-    <code>local_settings.json</code> for an attachment, the
+    time.</strong> Resolved &mdash; on a machine whose
+    <code>cwExternalSourceSettings</code> store has no entry for an attachment, the
     <code>ExternalCenterlinePanel</code> shows
     <em>"Source: in-project copy (this machine)"</em> with a small
     <code>[Switch to live-link&hellip;]</code> link that opens a
@@ -2225,20 +2456,33 @@ QQ.Item {
   </li>
   <li>
     <strong>Re-link discoverability across app restarts.</strong>
-    Resolved &mdash; the missing-source check is part of the
+    <strong>RETIRED 2026-08-11</strong> &mdash; the question dissolved
+    rather than being answered. CaveWhere no longer keeps a live link
+    to the file the user originally picked: the in-project copy is the
+    only file, the remembered path is a breadcrumb that pre-fills the
+    <em>Replace&hellip;</em> picker, and a breadcrumb pointing at
+    something that has moved is an ordinary state with no banner and no
+    re-link flow to discover. See
+    <a class="anchor" href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">the
+    live-link retirement plan</a>. The answer below is kept as history
+    and describes a surface that has been deleted.
+    <div class="note">
+      <em>Historical answer (superseded).</em>
+      The missing-source check is part of the
     attachment's startup probe, not just the
     <code>QFileSystemWatcher</code> path. When
     <code>cwLinePlotManager</code> loads the project, any attachment
-    whose <code>local_settings.json</code> <code>sourcePath</code> no
+    whose <code>cwExternalSourceSettings</code> <code>sourcePath</code> no
     longer exists on disk gets a persistent
     <em>"Source not found at &lt;path&gt;"</em> banner on its
     <code>ExternalCenterlinePanel</code> with
     <code>[Re-link&hellip;]</code> and
-    <code>[Switch to import mode]</code> buttons. The watcher
+    <code>[Forget source]</code> buttons. The watcher
     <code>fileChanged</code> path (Phase 5b) feeds into the same
     banner state, so the two routes converge on one UI surface.
     Without this, the watcher-only design quietly drops the
     moved-while-app-closed case &mdash; which is the common one.
+    </div>
   </li>
   <li>
     <strong>Scope trip auto-naming.</strong> Resolved &mdash; use the
@@ -2293,6 +2537,18 @@ QQ.Item {
 
 <h2 id="phases">9. Phases</h2>
 
+<div class="note">
+  <strong>Implementation order: 1 &rarr; 2 &rarr; 3 &rarr; 5 &rarr; 4
+  &rarr; 5b &rarr; 6.</strong> Phase 5 (orphan detection) ships
+  <em>before</em> Phase 4 (equates editor): station renames in the
+  user's native tool are the daily workflow this feature exists for,
+  and until orphan detection lands a rename silently breaks scrap
+  references; equates serve the rarer mixed-native-plus-external case.
+  Phase numbers stay as originally assigned so file names and
+  cross-references throughout these documents remain stable &mdash;
+  the numbers name the phases, the list above orders them.
+</div>
+
 <div class="phase" id="p1">
   <h3>Phase 1 &mdash; Data model, scanner, copy, driver, runner, watcher</h3>
   <p class="meta">Goal: end-to-end plumbing works for at least one attach level. Nothing user-visible yet; verified by integration tests.</p>
@@ -2321,61 +2577,37 @@ QQ.Item {
   <h3>Phase 2 &mdash; Trip-level attach + CavernOutputPage v1</h3>
   <p class="meta">Goal: a user can attach an external centerline to a trip, see the resolved stations, attach a note to one, and watch an edit in the project tree trigger a re-solve.</p>
 
-  <h4>UI (per &sect;8.5 wireframe)</h4>
-  <ul>
-    <li>"Attach external centerline&hellip;" button on the trip-detail page.</li>
-    <li>Replace <code>SurveyEditor</code> with the new
-        <code>ExternalCenterlinePanel</code> when the trip has a
-        centerline attached. Panel shows: file path + format, last-solved
-        status, solve stats, stations list (this trip's
-        <code>*begin trip_&lt;uuid&gt;</code> scope), reload/detach
-        buttons, trip metadata.</li>
-    <li>Carpet sub-page station picker reads from the per-scope station
-        list model (see &sect;7.2) instead of <code>cwTrip::stations</code>.</li>
-    <li><strong>Extend existing</strong> <code>CavernOutputPage.qml</code> (shipped in commit <code>29bcd026</code> with cavern log + loop-closure stats + solve-error surfacing) with the attached-centerlines list and driver-source disclosure described in &sect;8.3.</li>
-    <li>New <code>LinkText</code> entry on <code>DataMainPage.qml</code> with summary stats.</li>
-    <li>Notes/scraps on the externally-backed trip use <code>externalStationCharactersRegex</code> for station-reference validation.</li>
-  </ul>
-
-  <h4>Files touched</h4>
-  <ul>
-    <li><code>cavewherelib/qml/CavernOutputPage.qml</code> &mdash; <strong>extend</strong> (already exists from the lineplot port; adds attached-centerlines list + driver-source disclosure sections).</li>
-    <li><code>cavewherelib/qml/ExternalCenterlineTripPanel.qml</code> + sub-components &mdash; new; the SurveyEditor replacement. Full breakdown of the seven sub-component files in &sect;<a class="anchor" href="#ux-trip-panel">8.5.1</a>; Phase 2 ships <code>TripPanel</code>, <code>AttachedHeader</code>, <code>SolveStatus</code>, <code>StationsList</code>, <code>MissingSourceBanner</code> (with the Re-link button stubbed pending Phase 5b), and <code>TripMetadata</code>. The <code>ScopeHeader</code> and <code>CaveSummary</code> files land in Phase 3.</li>
-    <li><code>cavewherelib/qml/DataMainPage.qml</code> &mdash; add link entry.</li>
-    <li><code>cavewherelib/qml/TripPage.qml</code> &mdash; conditional left-pane swap.</li>
-    <li><code>cwPageSelectionModel</code> &mdash; the page is already registered; add the linkable section anchors for attached centerlines / driver source.</li>
-    <li><code>cwLinePlotManager</code> &mdash; extend with attached-centerlines model + driver-source string (the manager already publishes <code>cavernLog</code> / <code>loopClosureStats</code> / <code>solveErrorMessage</code> Q_PROPERTYs from the lineplot port). No new model class for cavern output itself.</li>
-    <li>New per-scope station-list model (C++) backing both the panel's station list and the carpet picker autocomplete.</li>
-  </ul>
-
-  <h4>Acceptance criteria</h4>
-  <ul>
-    <li>QML test: attach a fixture <code>.svx</code>, verify shot editor is disabled, verify CavernOutputPage shows the attached centerline + resolved station count.</li>
-    <li>QML test: edit the in-project copy of the fixture <code>.svx</code>, <code>tryVerify</code> the re-solve completes and station positions change.</li>
-    <li>QML test: write a syntactically broken <code>.svx</code>, verify CavernOutputPage shows the cavern error text.</li>
-    <li>Manual: full round-trip on a real Survex project.</li>
-  </ul>
+  <div class="note">
+    <strong>Phase 2's full plan lives in
+    <a href="EXTERNAL_FILE_PHASE2.html">plans/EXTERNAL_FILE_PHASE2.html</a>.</strong>
+    That file is the source of truth for Phase 2's prerequisite, files
+    touched, acceptance criteria, attach orchestrator design, scanner
+    <code>SeededTripMetadata</code> extension, per-scope station-list
+    model, <code>ExternalCenterlineTripPanel</code> Phase-2 deltas vs.
+    &sect;8.5.1, failure-mode taxonomy, the 13-commit sequence,
+    per-commit test gates, and fixture files. The cross-cutting test
+    rules in &sect;10.1 apply unchanged.
+  </div>
 </div>
 
 <div class="phase" id="p3">
   <h3>Phase 3 &mdash; Cave-level attach + nav badging</h3>
-  <p class="meta">Goal: same as Phase 2 but at the cave level, plus badges in the nav tree to make errors discoverable from anywhere.</p>
+  <p class="meta">Goal: same as Phase 2 but at the cave level, plus solve badges on the cave and trip rows the user navigates by.</p>
 
-  <h4>UI (per &sect;8.6 wireframes)</h4>
-  <ul>
-    <li>Three CavePage states &mdash; native-only (today), cave-level external, mixed &mdash; selected by the presence of cave-level <code>externalCenterline</code> and/or any trip-level attachments. State transitions per &sect;8.7.</li>
-    <li>Single entry point to cave-level attach: DataMainPage &mdash; "Add Cave &#x25BE; &rarr; External cave&hellip;" creates the cave and opens the attach dialog in one step. (No CavePage affordance in v1 to convert an existing Native cave.)</li>
-    <li>"Add Trip" button becomes a split button with "Native trip" / "External centerline&hellip;" options.</li>
-    <li>After cave-level attach, auto-create one cwTrip (Scope state, <code>stationPrefix</code> set) per resolved <code>*begin</code> block with &ge; 1 station. No dialog &mdash; trips just appear, named after their block. User renames/deletes any they don't want.</li>
-    <li>External trips (Attached and Scope alike) get a 📎 prefix in the trip table and em-dash declination. Same badge for both &mdash; from the user's perspective, both are "trips whose data isn't owned by CaveWhere."</li>
-    <li>Badge on cave/trip nodes in the nav tree: red dot on cavern errors, yellow on warnings, none when clean. Click navigates to CavernOutputPage with that section anchored.</li>
-  </ul>
-
-  <h4>Acceptance criteria</h4>
-  <ul>
-    <li>QML test: attach a fixture <code>.svx</code> at cave level, verify the trip list reflects the resolved trips from the file (or a stand-in indicator) and is read-only.</li>
-    <li>QML test: introduce a cavern error, verify the badge appears on the affected cave node and clicking it navigates to the right section of CavernOutputPage.</li>
-  </ul>
+  <div class="note">
+    <strong>Phase 3's full plan lives in
+    <a href="EXTERNAL_FILE_PHASE3.html">plans/EXTERNAL_FILE_PHASE3.html</a></strong>
+    (planning pass 2026-08-24). That file is the source of truth for Phase 3's
+    current-state audit, the common-ancestor rebase of the attachment copy layout,
+    the Scope-trip auto-creation design, the settled UX (see the
+    <a href="EXTERNAL_CENTERLINE_UX_INTERACTIVE.html">interactive prototype</a>,
+    Phase 3 lane), the 11-commit sequence (P3.1&ndash;P3.11), per-commit test gates,
+    and fixture files. Two restatements against this section's original text: the
+    "nav tree" badging became row badging on DataMainPage cave rows and CavePage trip
+    rows (no nav tree exists), and the <code>externallyBacked</code> validator
+    predicate ships as plan commit P3.6. The cross-cutting test rules in
+    &sect;10.1 apply unchanged.
+  </div>
 </div>
 
 <div class="phase" id="p4">
@@ -2435,7 +2667,7 @@ QQ.Item {
 
   <h4>Two flows, one dialog</h4>
   <ul>
-    <li><strong>Re-link</strong> &mdash; source file moved on disk; content unchanged. UI: when the watcher reports the source path missing, the ExternalCenterlinePanel shows a yellow "Source not found" banner with a <em>Re-link&hellip;</em> button. Picker selects the new path; the scanner confirms prefix/station set matches the cached in-project copy; we update <code>local_settings.json</code>'s <code>sourcePath</code> and resume watching. No project-data change.</li>
+    <li><strong>Re-link</strong> &mdash; source file moved on disk; content unchanged. UI: when the watcher reports the source path missing, the ExternalCenterlinePanel shows a yellow "Source not found" banner with a <em>Re-link&hellip;</em> button. Picker selects the new path; the scanner confirms prefix/station set matches the cached in-project copy; we update the <code>cwExternalSourceSettings</code> <code>sourcePath</code> and resume watching. No project-data change.</li>
     <li><strong>Replace</strong> &mdash; user picks a different file for the same scope (e.g. newer TopoDroid export, revised cave survey). UI: <em>Replace centerline&hellip;</em> action on the panel opens a picker, then a diff-and-confirm dialog (see &sect;10 in the UX prototype).</li>
   </ul>
 

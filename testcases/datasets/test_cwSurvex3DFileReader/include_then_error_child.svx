@@ -1,0 +1,7 @@
+; Included by include_then_error_driver.svx. It parses cleanly, so the only
+; thing it leaves behind is the include nesting itself.
+*begin child
+*fix c1 0 0 0
+*data normal from to tape compass clino
+c1 c2 10 0 0
+*end child

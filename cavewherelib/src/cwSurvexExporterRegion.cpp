@@ -7,6 +7,7 @@
 
 #include "cwSurvexExporterRegion.h"
 #include "cwLinePlotErrorCodes.h"
+#include "cwLocalProjection.h"
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterUtils.h"
 #include "cwSurvexCS.h"
@@ -44,33 +45,44 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
             : cwSurvexCS::SidecarPolicy::OfficialSyntax;
     cwSurvexCS::SidecarWriter sidecars(outputPath, sidecarPolicy);
 
+    // A local grid has no frame of its own to name, so its solve runs in the
+    // carrier its attached files are translated onto.
+    const QString frameCS = region.geoReference.state == cwGeoReference::LocalGrid
+        ? cwLocalProjection::localGridSystem()
+        : region.geoReference.localCoordinateSystem;
     const QString outputCS =
-        cwSurvexExporterUtils::resolveOutputCS(region,
-                                               region.geoReference.localCoordinateSystem,
-                                               options.outputCSPolicy);
+        cwSurvexExporterUtils::resolveOutputCS(region, frameCS, options.outputCSPolicy);
     if (!outputCS.isEmpty()) {
         cwSurvexCS::writeCsLine(stream, sidecars, outputCS, true);
     }
 
-    cwSurvexExporterCaveTask caveExporter;
-    caveExporter.setExportOptions(options);
-    caveExporter.setSidecarWriter(&sidecars);
+    // Labels are assigned here and nowhere else: a label is unique only among
+    // its siblings, so the whole tree is needed to assign one, and the "*begin"
+    // lines and the equate operands below both have to name the same ones.
+    const cwSurvexExporterCaveTask::DriverTree tree(region.caves, cwScopeLabels(region),
+                                                    options.excludedExternalOwners);
 
-    for (int i = 0; i < region.caves.size(); i++) {
-        const cwCaveData& cave = region.caves.at(i);
-        const bool good = caveExporter.writeCave(stream, cave, outputCS);
-        stream << Qt::endl;
+    cwSurvexExporterCaveTask nodeExporter;
+    nodeExporter.setExportOptions(options);
+    nodeExporter.setSidecarWriter(&sidecars);
 
-        if (!good) {
+    for (const cwCaveData& node : region.caves) {
+        if (!nodeExporter.writeNode(stream, node, tree, outputCS)) {
             stream.flush();
             outputFile.close();
-            QString message = caveExporter.errors().join(QStringLiteral("; "));
+            QString message = nodeExporter.errors().join(QStringLiteral("; "));
             if (message.isEmpty()) {
-                message = QStringLiteral("Failed to write cave %1").arg(cave.name);
+                message = QStringLiteral("Failed to write cave %1").arg(node.name);
             }
             return Monad::ResultBase(message, static_cast<int>(LinePlotErrorCode::ExportFailed));
         }
     }
+
+    // Region equates emit here, after every block is declared and closed, so
+    // every fully-qualified operand is in scope. Cavern merges the tied
+    // stations to one coordinate; the decode then routes each qualified name
+    // back to its node.
+    cwSurvexExporterCaveTask::writeEquates(stream, region.equates, tree);
 
     stream << "*end" << Qt::endl;
     stream.flush();

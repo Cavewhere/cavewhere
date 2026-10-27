@@ -21,7 +21,7 @@ QQ.Rectangle {
     property bool selected: false
     property bool hovered: false
     property string toolTip: ""
-    property int toolTipDelay: 500
+    property int toolTipDelay: Theme.toolTipDelay
 
     signal clicked()
 

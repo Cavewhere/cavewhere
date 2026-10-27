@@ -1,0 +1,3 @@
+; Regression driver: the fatal fires two includes deep, so the aborted run
+; leaves both enclosing files' handles open unless teardown drains them.
+*include "fd_leak_child.svx"

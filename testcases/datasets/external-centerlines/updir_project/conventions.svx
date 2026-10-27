@@ -1,0 +1,7 @@
+; Shared conventions block: the measured Survex idiom of a single file
+; beside the cave folder holding the *data / *calibrate settings every
+; cave master pulls in with *include "../conventions.svx". It opens no
+; *begin of its own, so the including file's scope stays intact.
+; Used by [Sync][Reconcile] and [Attach] rebase tests.
+*data normal from to tape compass clino
+*calibrate declination 0.0

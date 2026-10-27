@@ -2,12 +2,18 @@
 #include <catch2/catch_test_macros.hpp>
 #include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 using namespace Catch;
 
 //Our includes
 #include "cwProject.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwEquate.h"
+#include "cwEquateModel.h"
+#include "cwFixStationModel.h"
+#include "cwStationHandle.h"
+#include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "TestHelper.h"
 #include "cwImageProvider.h"
@@ -54,12 +60,15 @@ using namespace Catch;
 #include <QTemporaryFile>
 #include <QEventLoop>
 #include <QTimer>
+#include <QTimeZone>
 #include <QSignalSpy>
 #include <QTest>
 #include <QElapsedTimer>
 #include <QCoreApplication>
 #include <QProcess>
 #include <QThread>
+#include <QPointer>
+#include <QUndoStack>
 #include <QtCore/qscopeguard.h>
 
 //libgit2
@@ -253,6 +262,9 @@ QString readGitExclude(const QDir& dir)
     }
     return QString::fromUtf8(file.readAll());
 }
+
+constexpr int kDiscardSettleMaxWaitMs = 15000;
+constexpr int kDiscardSettlePollSleepMs = 10;
 
 QString firstCwprojInDirectory(const QString& rootPath)
 {
@@ -771,6 +783,72 @@ TEST_CASE("discardChanges resets modified git directory project to HEAD", "[cwPr
     CHECK(modifiedPaths.isEmpty());
 }
 
+TEST_CASE("discardChanges settles while save jobs are in flight", "[cwProject][discardChanges]") {
+    // A model edit synchronously activates a SaveFlush operation and
+    // dispatches its WriteFile job, leaving m_pendingJobsDeferred running.
+    // discardChanges must settle — reset the tree and emit discardCompleted
+    // or discardFailed — even when it lands in that window. Replacing the
+    // running deferred cancels its future, and AsyncFuture propagates that
+    // cancellation through both the discard chain and the active flush
+    // operation's future: the reset never runs, no signal fires, the
+    // self-write window stays open, and the operation queue jams for the
+    // rest of the session.
+    QQuickGit::Account account;
+    account.setName(QStringLiteral("Discard Tester"));
+    account.setEmail(QStringLiteral("discard.tester@example.com"));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->setGitAccount(&account);
+
+    project->cavingRegion()->addCave();
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Cave Before Discard"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = saveDir.filePath(QStringLiteral("discard-in-flight.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+
+    REQUIRE(project->fileType() == cwProject::GitFileType);
+    REQUIRE(isProjectModified(project.get()) == false);
+
+    const QString repoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+
+    QSignalSpy completedSpy(project.get(), &cwProject::discardCompleted);
+    QSignalSpy failedSpy(project->saveLoad(), &cwSaveLoad::discardFailed);
+
+    // The rename enqueues its metadata write before returning, so discarding
+    // in the same event-loop turn always hits the in-flight window.
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Cave After Discard"));
+    project->discardChanges();
+
+    // Pump events bounded by wall clock instead of waitForDiscardToFinish():
+    // when the discard chain is cancelled the operation queue never idles and
+    // that wait blocks forever, turning the failure into a suite hang.
+    QElapsedTimer settleTimer;
+    settleTimer.start();
+    while (completedSpy.count() + failedSpy.count() == 0
+           && settleTimer.elapsed() < kDiscardSettleMaxWaitMs) {
+        QCoreApplication::processEvents();
+        QThread::msleep(kDiscardSettlePollSleepMs);
+    }
+    INFO("Waited " << settleTimer.elapsed() << "ms for the discard to settle");
+    REQUIRE(completedSpy.count() + failedSpy.count() == 1);
+    CHECK(failedSpy.count() == 0);
+    CHECK(completedSpy.count() == 1);
+
+    // Safe now that the discard settled; proves the operation queue drains.
+    project->waitForDiscardToFinish();
+
+    const QStringList modifiedPaths = rawStatusPaths(repoPath);
+    INFO("Modified paths after discard: "
+         << modifiedPaths.join(QStringLiteral(", ")).toStdString());
+    CHECK(modifiedPaths.isEmpty());
+}
+
 TEST_CASE("discardChanges is a no-op for bundled projects", "[cwProject][discardChanges]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
@@ -1132,6 +1210,71 @@ TEST_CASE("objectPathReady emits for renamed objects", "[cwProject][cwSaveLoad]"
     CHECK(countFor(cave) >= 1);
     CHECK(countFor(trip) == 0);
     CHECK(countFor(note) == 0);
+}
+
+TEST_CASE("objectPathReady stays silent for an object deleted before its move ran",
+          "[cwProject][cwSaveLoad]") {
+    qRegisterMetaType<QObject*>("QObject*");
+
+    // A rename queues a directory move whose completion emits objectPathReady,
+    // carrying the object it renamed. The job holds that object as a raw
+    // identity, so deleting the object while its move is still queued leaves
+    // the emit handing every listener a freed pointer - and each of them
+    // (cwScrapManager, cwSurveyNoteModel, cwNoteLiDARManager,
+    // cwExternalCenterlineManager) qobject_casts it, reading the metaObject of
+    // deleted memory.
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("DanglingCave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    trip->setName(QStringLiteral("DanglingTrip"));
+
+    // A note gives the trip a directory on disk, so the rename has a real
+    // directory to move - a move that fails never reaches the emit.
+    const QString sourceImage = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+    REQUIRE(QFileInfo::exists(sourceImage));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(sourceImage)});
+
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    const QDir projectDataRoot = QFileInfo(project->absolutePath(project->dataRoot())).absoluteDir();
+    REQUIRE(QFileInfo::exists(
+        projectDataRoot.filePath(QStringLiteral("DanglingCave/trips/DanglingTrip"))));
+
+    // Only ever compared, never dereferenced: this is the address the deleted
+    // trip occupied, which is what the job would hand back.
+    const QObject* deletedTripAddress = trip;
+    QPointer<cwTrip> tripLifetime(trip);
+
+    int emitsForDeletedTrip = 0;
+    QObject::connect(project, &cwProject::objectPathReady,
+                     project, [&emitsForDeletedTrip, deletedTripAddress](QObject* object) {
+        if (object == deletedTripAddress) {
+            ++emitsForDeletedTrip;
+        }
+    });
+
+    trip->setName(QStringLiteral("DanglingTripRenamed"));
+
+    // Deleting the trip now, with the move still queued. The undo stack owns
+    // the removed trip until it is cleared - which is what any later
+    // undo-clearing action (a new project, a stack that outgrows its limit)
+    // does.
+    cave->removeTrip(0);
+    rootData->undoStack()->clear();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    REQUIRE(tripLifetime.isNull());
+
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(emitsForDeletedTrip == 0);
 }
 
 TEST_CASE("Queued copy and rename should preserve note assets", "[cwProject][cwSaveLoad]") {
@@ -8065,6 +8208,7 @@ TEST_CASE("cwProject sync stress under remote churn retries safely and converges
         appendLine(localChurnFilePath, QStringLiteral("local-%1\n").arg(remotePushCount).toUtf8());
         cave->setName(QStringLiteral("Retry Stress Cave %1").arg(remotePushCount));
 
+        //Interleaving mutation with pumping is the point; a condition wait would stop the churn
         QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
         QThread::msleep(5);
     }
@@ -8392,7 +8536,11 @@ TEST_CASE("cwProject sync blocks pulled newer project version", "[cwProject]") {
     CHECK(syncError.type() == cwError::Warning);
     CHECK(syncError.message().contains(QStringLiteral("Project file version")));
     CHECK(syncError.message().contains(QStringLiteral("newer than supported version")));
-    CHECK_FALSE(project->lastSyncReport().has_value());
+    // The sync's commit landed, so the report carries the flush's stamp, and
+    // the rejected pull left its heads unset.
+    const auto syncReport = project->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    CHECK(syncReport->afterHead.isEmpty());
 
     const git_oid finalRemoteHead = remoteHeadOid(remoteRepoPath);
     CHECK(git_oid_cmp(&expectedRemoteHead, &finalRemoteHead) == 0);
@@ -8831,6 +8979,69 @@ TEST_CASE("SaveAs persists dataRoot updates for reload", "[cwProject][saveAs]") 
     CHECK(dataRootDir.dirName().toStdString() == projectName.toStdString());
     CHECK(reloaded->dataRoot().toStdString() == projectName.toStdString());
     CHECK(reloaded->dataRootDir().dirName().toStdString() == projectName.toStdString());
+}
+
+namespace {
+std::unique_ptr<cwProject> reloadProject(const QString& projectFile)
+{
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(projectFile);
+    reloaded->waitLoadToFinish();
+    return reloaded;
+}
+}
+
+TEST_CASE("SaveAs to a cwproj persists the region name for reload", "[cwProject][saveAs]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    REQUIRE(project->isTemporaryProject());
+
+    const bool renamedBeforeSave = GENERATE(false, true);
+    CAPTURE(renamedBeforeSave);
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Region Name Cave"));
+    if (renamedBeforeSave) {
+        region->setName(QStringLiteral("Renamed Before Save"));
+    }
+    project->waitSaveToFinish();
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    const QString expectedName = QStringLiteral("MyProject");
+    REQUIRE(project->saveAs(destinationParent.filePath(expectedName + QStringLiteral(".cwproj"))));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    CHECK(region->name().toStdString() == expectedName.toStdString());
+
+    const auto reloaded = reloadProject(project->filename());
+    CHECK(reloaded->cavingRegion()->caveCount() == 1);
+    CHECK(reloaded->cavingRegion()->name().toStdString() == expectedName.toStdString());
+}
+
+TEST_CASE("Renaming a saved project keeps a display name whose sanitized form matches the dataRoot", "[cwProject][saveAs]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    REQUIRE(project->saveAs(destinationParent.filePath(QStringLiteral("Big Cave.cwproj"))));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE_FALSE(project->isTemporaryProject());
+
+    // sanitizeFileName chops trailing dots, so the dataRoot stays "Big Cave".
+    const QString displayName = QStringLiteral("Big Cave...");
+    project->cavingRegion()->setName(displayName);
+    project->waitSaveToFinish();
+
+    CHECK(project->dataRoot().toStdString() == "Big Cave");
+    CHECK(reloadProject(project->filename())->cavingRegion()->name().toStdString() == displayName.toStdString());
 }
 
 TEST_CASE("Non-temporary project saveAs reports error when destination exists", "[cwProject]") {
@@ -11589,6 +11800,187 @@ TEST_CASE("loadOrConvert sqlite read-only source remains temporary and won't sav
     sourceFile.setPermissions(originalPermissions);
 }
 
+namespace {
+// Makes a copy of the legacy SQLite fixture read-only for the lifetime of the
+// guard, so loadOrConvert converts it into a temporary project.
+class ReadOnlySqliteSource
+{
+public:
+    ReadOnlySqliteSource()
+        : m_path(copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))),
+          m_file(m_path),
+          m_originalPermissions(m_file.permissions())
+    {
+        m_madeReadOnly = m_file.setPermissions(QFileDevice::ReadOwner
+                                               | QFileDevice::ReadUser
+                                               | QFileDevice::ReadGroup
+                                               | QFileDevice::ReadOther);
+    }
+
+    ~ReadOnlySqliteSource()
+    {
+        m_file.setPermissions(m_originalPermissions);
+    }
+
+    QString path() const { return m_path; }
+    bool isReadOnly() const { return m_madeReadOnly && !QFileInfo(m_path).isWritable(); }
+
+private:
+    QString m_path;
+    QFile m_file;
+    QFileDevice::Permissions m_originalPermissions;
+    bool m_madeReadOnly = false;
+};
+
+std::unique_ptr<cwProject> loadReadOnlySqliteConversion(const ReadOnlySqliteSource& source,
+                                                        QQuickGit::Account& account)
+{
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    account.setName(QStringLiteral("Save As Tester"));
+    account.setEmail(QStringLiteral("save.as.tester@example.com"));
+    project->setGitAccount(&account);
+    project->loadOrConvert(source.path());
+    project->waitLoadToFinish();
+    REQUIRE_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+    REQUIRE(project->isTemporaryProject());
+    REQUIRE(project->fileType() == cwProject::SqliteFileType);
+    return project;
+}
+}
+
+TEST_CASE("Save As a bundle from a read-only sqlite conversion makes the project a savable bundle",
+          "[cwProject][conversion][saveAs]") {
+    const ReadOnlySqliteSource source;
+    REQUIRE(source.isReadOnly());
+
+    QQuickGit::Account account;
+    const auto project = loadReadOnlySqliteConversion(source, account);
+
+    const QString bundlePath = QFileInfo(source.path()).dir().absoluteFilePath(
+        QStringLiteral("saveAsFromReadOnlySqlite.cw"));
+
+    REQUIRE(project->saveAs(bundlePath));
+    project->waitSaveToFinish();
+    REQUIRE_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+
+    CHECK(QFileInfo::exists(bundlePath));
+    CHECK_FALSE(project->isTemporaryProject());
+    CHECK(project->fileType() == cwProject::BundledGitFileType);
+    CHECK(project->canSaveDirectly());
+    CHECK(project->filename() == bundlePath);
+
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Renamed after Save As"));
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    CHECK_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+    CHECK(project->filename() == bundlePath);
+}
+
+TEST_CASE("Save As a cwproj from a read-only sqlite conversion makes the project a savable git project",
+          "[cwProject][conversion][saveAs]") {
+    const ReadOnlySqliteSource source;
+    REQUIRE(source.isReadOnly());
+
+    QQuickGit::Account account;
+    const auto project = loadReadOnlySqliteConversion(source, account);
+
+    const QString projectPath = QFileInfo(source.path()).dir().absoluteFilePath(
+        QStringLiteral("saveAsFromReadOnlySqlite.cwproj"));
+
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    REQUIRE_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+
+    CHECK(QFileInfo::exists(project->filename()));
+    CHECK_FALSE(project->isTemporaryProject());
+    CHECK(project->fileType() == cwProject::GitFileType);
+    CHECK(project->canSaveDirectly());
+
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Renamed after Save As"));
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    CHECK_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+}
+
+TEST_CASE("cwProject temporary state matches cwSaveLoad durable home except for a read-only conversion",
+          "[cwProject][temporary]") {
+    const auto requireLayersAgree = [](const cwProject* project) {
+        REQUIRE_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+        CHECK(project->isTemporaryProject() == !project->saveLoad()->hasDurableHome());
+    };
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    const auto makeRootData = []() {
+        auto rootData = std::make_unique<cwRootData>();
+        rootData->account()->setName(QStringLiteral("Layers Agree Tester"));
+        rootData->account()->setEmail(QStringLiteral("layers.agree.tester@example.com"));
+        return rootData;
+    };
+
+    const auto saveFreshProjectAs = [&](const QString& fileName) {
+        auto rootData = makeRootData();
+        auto project = rootData->project();
+        REQUIRE(project->saveAs(destinationParent.filePath(fileName)));
+        project->waitSaveToFinish();
+        rootData->futureManagerModel()->waitForFinished();
+        requireLayersAgree(project);
+        CHECK_FALSE(project->isTemporaryProject());
+        return project->filename();
+    };
+
+    const auto loadIntoFreshProject = [&](const QString& path) {
+        const auto project = reloadProject(path);
+        requireLayersAgree(project.get());
+        CHECK_FALSE(project->isTemporaryProject());
+    };
+
+    SECTION("a fresh project is temporary at both layers") {
+        auto rootData = makeRootData();
+        auto project = rootData->project();
+        requireLayersAgree(project);
+        CHECK(project->isTemporaryProject());
+    }
+
+    SECTION("Save As a cwproj and reload it") {
+        loadIntoFreshProject(saveFreshProjectAs(QStringLiteral("LayersAgree.cwproj")));
+    }
+
+    SECTION("Save As a cw bundle and reload it") {
+        loadIntoFreshProject(saveFreshProjectAs(QStringLiteral("LayersAgree.cw")));
+    }
+
+    SECTION("converting a writable legacy SQLite cw") {
+        const QString sqliteSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+        REQUIRE(QFileInfo(sqliteSource).isWritable());
+
+        auto project = std::make_unique<cwProject>();
+        addTokenManager(project.get());
+        QQuickGit::Account account;
+        account.setName(QStringLiteral("Layers Agree Tester"));
+        account.setEmail(QStringLiteral("layers.agree.tester@example.com"));
+        project->setGitAccount(&account);
+        project->loadOrConvert(sqliteSource);
+        project->waitLoadToFinish();
+        requireLayersAgree(project.get());
+        CHECK_FALSE(project->isTemporaryProject());
+    }
+
+    SECTION("a read-only SQLite conversion is durable on disk but still temporary to the user") {
+        const ReadOnlySqliteSource source;
+        REQUIRE(source.isReadOnly());
+
+        QQuickGit::Account account;
+        const auto project = loadReadOnlySqliteConversion(source, account);
+        CHECK(project->isTemporaryProject());
+        CHECK(project->saveLoad()->hasDurableHome());
+    }
+}
+
 TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
     auto filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto project = std::make_unique<cwProject>();
@@ -11757,6 +12149,43 @@ TEST_CASE("New project region name is a friendly mountain name", "[cwProject][ne
     CHECK(parts.size() == 2);
     CHECK_FALSE(parts.value(0).isEmpty());
     CHECK_FALSE(parts.value(1).isEmpty());
+}
+
+TEST_CASE("A new project starts with no equate ties", "[cwProject][newProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    const QUuid caveId = region->cave(0)->id();
+    region->equates()->appendEquate(cwEquate({
+        cwStationHandle(cwStationHandle::NativeCave, caveId, QStringLiteral("1")),
+        cwStationHandle(cwStationHandle::NativeCave, caveId, QStringLiteral("2"))
+    }));
+    REQUIRE(region->equates()->count() == 1);
+
+    // The ties name stations of the caves the old project held, so they go with
+    // those caves.
+    project->newProject();
+    CHECK(region->caveCount() == 0);
+    CHECK(region->equates()->count() == 0);
+}
+
+TEST_CASE("A new project starts with no root fix stations", "[cwProject][newProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    const QPointer<cwSurveyNode> root(region->rootNode());
+    root->fixStations()->addFixStation(QStringLiteral("r1"));
+    REQUIRE(root->fixStations()->rowCount() == 1);
+
+    // A fix added on the region's Fix Stations page belongs to the old project.
+    project->newProject();
+    CHECK(region->caveCount() == 0);
+    CHECK(region->rootNode() == root.data());
+    CHECK(region->rootNode()->fixStations()->rowCount() == 0);
 }
 
 TEST_CASE("Temp project first save to directory initializes dataRoot from basename", "[cwProject][saveAs]") {
@@ -13397,4 +13826,627 @@ TEST_CASE("cwProject::sync() skips install check when provider reports unsupport
     CHECK(needsInstallSpy.count() == 0);
     CHECK(finishedSpy.count() >= 1);
     CHECK(stub->verifyCalls() == 0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Save receipts: a Save clears the modified bit when its drain covered every
+// local mutation.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+
+// The flush, the commit or the zip, and the queued fileSaved under Debug + ASAN
+// on a loaded machine.
+constexpr int kSaveReceiptWaitMs = 60000;
+
+const QDate kReceiptTripDate(2024, 3, 9);
+const QDate kReceiptLateTripDate(2024, 11, 23);
+
+//! A clean project with one cave and one trip, saved as \a fileName (.cwproj
+//! or a .cw bundle) under its own temporary directory.
+struct SaveReceiptFixture {
+    QTemporaryDir tempDir;
+    std::unique_ptr<cwRootData> rootData;
+    cwProject* project = nullptr;
+    cwCave* cave = nullptr;
+    cwTrip* trip = nullptr;
+
+    explicit SaveReceiptFixture(const QString& fileName)
+    {
+        REQUIRE(tempDir.isValid());
+        rootData = std::make_unique<cwRootData>();
+        project = rootData->project();
+        rootData->account()->setName(QStringLiteral("Receipt Tester"));
+        rootData->account()->setEmail(QStringLiteral("receipt.tester@example.com"));
+
+        project->cavingRegion()->addCave();
+        cave = project->cavingRegion()->cave(0);
+        cave->setName(QStringLiteral("Receipt Cave"));
+        cave->addTrip();
+        trip = cave->trip(0);
+        trip->setName(QStringLiteral("Receipt Trip"));
+
+        REQUIRE(project->saveAs(tempDir.filePath(fileName)));
+        settle();
+        REQUIRE(project->save());
+        settle();
+        REQUIRE(waitUntil([this] { return !project->modified(); }));
+        REQUIRE_FALSE(project->modified());
+    }
+
+    void settle()
+    {
+        project->waitSaveToFinish();
+        rootData->futureManagerModel()->waitForFinished();
+        project->waitSaveToFinish();
+        REQUIRE(waitForQueuedEvents());
+    }
+
+    cwSaveLoad* saveLoad() const { return project->saveLoad(); }
+};
+
+//! Records modified() at each emission of \a signal, in order.
+void recordModifiedAt(void (cwProject::*signal)(), QList<bool>* recorded, cwProject* project,
+                      QObject* context)
+{
+    QObject::connect(project, signal, context, [recorded, project]() {
+        recorded->append(project->modified());
+    });
+}
+
+bool waitForRecordedCount(const QList<bool>& recorded, int count)
+{
+    return QTest::qWaitFor([&recorded, count]() {
+        return recorded.size() >= count;
+    }, kSaveReceiptWaitMs);
+}
+
+QDateTime receiptDateTime(const QDate& date)
+{
+    return QDateTime(date, QTime(), QTimeZone::utc());
+}
+
+//! Opens \a projectPath in its own cwRootData and waits for the load.
+std::unique_ptr<cwRootData> reopenSavedProject(const QString& projectPath)
+{
+    auto rootData = std::make_unique<cwRootData>();
+    rootData->project()->loadFile(projectPath);
+    rootData->project()->waitLoadToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    return rootData;
+}
+
+//! Checks that \a projectPath holds the cave rename and the trip date the
+//! same-turn tests make.
+void checkReopenedHasSameTurnEdits(const QString& projectPath)
+{
+    auto reopened = reopenSavedProject(projectPath);
+    cwCavingRegion* region = reopened->project()->cavingRegion();
+    REQUIRE(region->caveCount() == 1);
+    CHECK(region->cave(0)->name() == QStringLiteral("Renamed Cave"));
+    REQUIRE(region->cave(0)->tripCount() == 1);
+    CHECK(region->cave(0)->trip(0)->date().date() == kReceiptTripDate);
+}
+
+} // namespace
+
+TEST_CASE("A Save covers a mutation made on its own turn while the save jobs drain",
+          "[cwProject][Save]")
+{
+    const QString fileName = GENERATE(QStringLiteral("same-turn.cwproj"),
+                                      QStringLiteral("same-turn.cw"));
+    INFO("project: " << fileName.toStdString());
+    SaveReceiptFixture f(fileName);
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
+
+    // The rename puts its jobs on the save pool; the save and the date edit
+    // on the same turn join that drain.
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    REQUIRE(f.project->save());
+    f.trip->setDate(receiptDateTime(kReceiptTripDate));
+
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
+    CHECK_FALSE(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+
+    checkReopenedHasSameTurnEdits(f.project->filename());
+}
+
+TEST_CASE("A Save As to a bundle covers a mutation made on its own turn while the save jobs drain",
+          "[cwProject][Save]")
+{
+    SaveReceiptFixture f(QStringLiteral("same-turn-source.cwproj"));
+    const QString bundlePath = f.tempDir.filePath(QStringLiteral("same-turn-target.cw"));
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
+
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    REQUIRE(f.project->saveAs(bundlePath));
+    f.trip->setDate(receiptDateTime(kReceiptTripDate));
+
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
+    CHECK_FALSE(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+
+    checkReopenedHasSameTurnEdits(bundlePath);
+}
+
+TEST_CASE("A mutation made after a Save's drain keeps the project modified",
+          "[cwProject][Save]")
+{
+    const QString fileName = GENERATE(QStringLiteral("after-drain.cwproj"),
+                                      QStringLiteral("after-drain.cw"));
+    INFO("project: " << fileName.toStdString());
+    SaveReceiptFixture f(fileName);
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
+
+    // The rename's own automatic flush settles first, so the slot below
+    // fires on the save's flush rather than on one the save's drain follows.
+    QSignalSpy renameFlushSpy(f.saveLoad(), &cwSaveLoad::saveFlushCompleted);
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    REQUIRE(QTest::qWaitFor([&renameFlushSpy]() { return renameFlushSpy.count() >= 1; },
+                            kSaveReceiptWaitMs));
+    f.settle();
+    REQUIRE(f.project->modified());
+
+    bool mutatedAfterDrain = false;
+    QObject::connect(f.saveLoad(), &cwSaveLoad::saveFlushCompleted, &context,
+                     [&f, &mutatedAfterDrain]() {
+        if (mutatedAfterDrain) {
+            return;
+        }
+        mutatedAfterDrain = true;
+        f.trip->setDate(receiptDateTime(kReceiptLateTripDate));
+    });
+
+    REQUIRE(f.project->save());
+
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
+    REQUIRE(mutatedAfterDrain);
+    CHECK(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK(f.project->modified());
+}
+
+TEST_CASE("A Save with no concurrent mutation clears the modified bit",
+          "[cwProject][Save]")
+{
+    const QString fileName = GENERATE(QStringLiteral("quiet.cwproj"),
+                                      QStringLiteral("quiet.cw"));
+    INFO("project: " << fileName.toStdString());
+    SaveReceiptFixture f(fileName);
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
+
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    f.settle();
+    REQUIRE(f.project->modified());
+
+    REQUIRE(f.project->save());
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
+    CHECK_FALSE(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+}
+
+TEST_CASE("A Save after a mutation that queued no save job clears the modified bit",
+          "[cwProject][Save]")
+{
+    const QString fileName = GENERATE(QStringLiteral("jobless.cwproj"),
+                                      QStringLiteral("jobless.cw"));
+    INFO("project: " << fileName.toStdString());
+    SaveReceiptFixture f(fileName);
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
+
+    f.saveLoad()->reportProjectFileChangedOnDisk();
+    REQUIRE(f.project->modified());
+
+    REQUIRE(f.project->save());
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
+    CHECK_FALSE(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+}
+
+TEST_CASE("Two Saves queued back to back each answer for their own drain",
+          "[cwProject][Save]")
+{
+    SaveReceiptFixture f(QStringLiteral("back-to-back.cwproj"));
+
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
+
+    bool secondSaveQueued = false;
+    QObject::connect(f.saveLoad(), &cwSaveLoad::saveFlushCompleted, &context,
+                     [&f, &secondSaveQueued]() {
+        if (secondSaveQueued) {
+            return;
+        }
+        f.trip->setDate(receiptDateTime(kReceiptLateTripDate));
+        secondSaveQueued = f.project->save();
+    });
+
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    REQUIRE(f.project->save());
+
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 2));
+    REQUIRE(secondSaveQueued);
+    // The date edit landed after the first drain ended and inside the second.
+    CHECK(modifiedAtFileSaved.at(0));
+    CHECK_FALSE(modifiedAtFileSaved.at(1));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+}
+
+TEST_CASE("A save entry point's receipt carries the epoch at the end of its drain",
+          "[cwProject][Save]")
+{
+    const QString fileName = GENERATE(QStringLiteral("receipt.cwproj"),
+                                      QStringLiteral("receipt.cw"));
+    INFO("project: " << fileName.toStdString());
+    SaveReceiptFixture f(fileName);
+    cwSaveLoad* saveLoad = f.saveLoad();
+    const bool bundled = fileName.endsWith(QStringLiteral(".cw"));
+    const quint64 epochBefore = saveLoad->localMutationEpoch();
+
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    auto future = bundled ? saveLoad->saveBundledArchive(f.project->filename())
+                          : saveLoad->enqueueFlushAndCommit();
+    f.trip->setDate(receiptDateTime(kReceiptTripDate));
+
+    REQUIRE(AsyncFuture::waitForFinished(future, kSaveReceiptWaitMs));
+    const auto result = future.result();
+    INFO("save: " << result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    CHECK(saveLoad->localMutationEpoch() > epochBefore);
+    CHECK(result.value().mutationEpoch == saveLoad->localMutationEpoch());
+}
+
+TEST_CASE("Back-to-back save entry points return their own drain's epoch",
+          "[cwProject][Save]")
+{
+    SaveReceiptFixture f(QStringLiteral("receipts-back-to-back.cwproj"));
+    cwSaveLoad* saveLoad = f.saveLoad();
+
+    QObject context;
+    QFuture<Monad::Result<cwSaveLoad::SaveReceipt>> second;
+    bool secondQueued = false;
+    QObject::connect(saveLoad, &cwSaveLoad::saveFlushCompleted, &context,
+                     [&f, saveLoad, &second, &secondQueued]() {
+        if (secondQueued) {
+            return;
+        }
+        secondQueued = true;
+        f.trip->setDate(receiptDateTime(kReceiptLateTripDate));
+        second = saveLoad->enqueueFlushAndCommit();
+    });
+
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    auto first = saveLoad->enqueueFlushAndCommit();
+
+    REQUIRE(AsyncFuture::waitForFinished(first, kSaveReceiptWaitMs));
+    REQUIRE(secondQueued);
+    REQUIRE(AsyncFuture::waitForFinished(second, kSaveReceiptWaitMs));
+    REQUIRE_FALSE(first.result().hasError());
+    REQUIRE_FALSE(second.result().hasError());
+
+    const quint64 firstEpoch = first.result().value().mutationEpoch;
+    const quint64 secondEpoch = second.result().value().mutationEpoch;
+    INFO("first receipt " << firstEpoch << ", second receipt " << secondEpoch
+         << ", live " << saveLoad->localMutationEpoch());
+    CHECK(firstEpoch < secondEpoch);
+    CHECK(secondEpoch == saveLoad->localMutationEpoch());
+}
+
+TEST_CASE("Every local mutation notice advances the local mutation epoch",
+          "[cwProject][Save]")
+{
+    SaveReceiptFixture f(QStringLiteral("epoch-count.cwproj"));
+    cwSaveLoad* saveLoad = f.saveLoad();
+    f.cave->addTrip();
+    f.settle();
+
+    QSignalSpy mutationSpy(saveLoad, &cwSaveLoad::localMutationOccurred);
+    const quint64 epochBefore = saveLoad->localMutationEpoch();
+
+    // A row removal reports the mutation from the region tree's handler,
+    // beside the jobs that move the trip to the trash.
+    f.cave->removeTrip(f.cave->tripCount() - 1);
+    f.settle();
+
+    REQUIRE(mutationSpy.count() > 0);
+    CHECK(saveLoad->localMutationEpoch() - epochBefore
+          == static_cast<quint64>(mutationSpy.count()));
+}
+
+TEST_CASE("A .cwproj Save whose commit fails keeps the project modified and emits no fileSaved",
+          "[cwProject][Save]")
+{
+    SaveReceiptFixture f(QStringLiteral("commit-fails.cwproj"));
+    f.cave->addTrip();
+    f.cave->trip(1)->setName(QStringLiteral("Locked Trip"));
+    f.settle();
+    REQUIRE(f.project->modified());
+
+    const QDir projectDir = QFileInfo(f.project->filename()).absoluteDir();
+    const auto headBefore = headOidForRepository(projectDir.absolutePath());
+    REQUIRE(headBefore.has_value());
+
+    // A leftover index.lock makes the commit's index write fail at once. The
+    // sync health worker takes the lock for an instant, so retry until ours
+    // is the one created.
+    const QString lockPath = projectDir.filePath(QStringLiteral(".git/index.lock"));
+    REQUIRE(QTest::qWaitFor([&lockPath]() {
+        QFile lock(lockPath);
+        return lock.open(QIODevice::WriteOnly | QIODevice::NewOnly);
+    }, kSaveReceiptWaitMs));
+    auto lockGuard = qScopeGuard([&lockPath]() { QFile::remove(lockPath); });
+
+    f.project->errorModel()->clear();
+    QSignalSpy fileSavedSpy(f.project, &cwProject::fileSaved);
+
+    REQUIRE(f.project->save());
+    f.settle();
+
+    CHECK(fileSavedSpy.count() == 0);
+    CHECK(f.project->modified());
+    REQUIRE(f.project->errorModel()->count() == 1);
+    CHECK(f.project->errorModel()->at(0).type() == cwError::Fatal);
+    CHECK(tripFileCountUnder(projectDir) == 2);
+    const auto headAfterFailure = headOidForRepository(projectDir.absolutePath());
+    REQUIRE(headAfterFailure.has_value());
+    CHECK(git_oid_cmp(&headBefore.value(), &headAfterFailure.value()) == 0);
+
+    REQUIRE(QFile::remove(lockPath));
+    QObject context;
+    QList<bool> modifiedAtFileSaved;
+    recordModifiedAt(&cwProject::fileSaved, &modifiedAtFileSaved, f.project, &context);
+
+    REQUIRE(f.project->save());
+    REQUIRE(waitForRecordedCount(modifiedAtFileSaved, 1));
+    CHECK_FALSE(modifiedAtFileSaved.at(0));
+    f.settle();
+    CHECK_FALSE(f.project->modified());
+    const auto headAfterRetry = headOidForRepository(projectDir.absolutePath());
+    REQUIRE(headAfterRetry.has_value());
+    CHECK(git_oid_cmp(&headBefore.value(), &headAfterRetry.value()) != 0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sync receipts: a sync clears the modified bit when its flush covered every
+// local mutation.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+
+std::string lastErrorMessage(cwProject* project)
+{
+    return project->errorModel()->count() > 0
+        ? project->errorModel()->last().message().toStdString()
+        : std::string();
+}
+
+//! A SaveReceiptFixture .cwproj with a local bare remote and one finished
+//! sync behind it.
+struct SyncReceiptFixture : SaveReceiptFixture {
+    QTemporaryDir remoteRoot;
+    QString remoteRepoPath;
+
+    explicit SyncReceiptFixture(const QString& fileName)
+        : SaveReceiptFixture(fileName)
+    {
+        REQUIRE(remoteRoot.isValid());
+        remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+        REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
+        REQUIRE(project->repository()->addRemote(QStringLiteral("origin"),
+                                                 QUrl::fromLocalFile(remoteRepoPath)).isEmpty());
+
+        REQUIRE(project->sync());
+        settleSync();
+        INFO("seed sync: " << lastErrorMessage(project));
+        REQUIRE(project->errorModel()->count() == 0);
+        REQUIRE_FALSE(project->modified());
+    }
+
+    void settleSync()
+    {
+        project->waitForSyncToFinish();
+        settle();
+    }
+
+    //! Waits for the automatic flush a mutation schedules, so the next
+    //! saveFlushCompleted belongs to the sync's own flush.
+    void settleMutation(const std::function<void()>& mutate)
+    {
+        QSignalSpy flushSpy(saveLoad(), &cwSaveLoad::saveFlushCompleted);
+        mutate();
+        REQUIRE(QTest::qWaitFor([&flushSpy]() { return flushSpy.count() >= 1; },
+                                kSaveReceiptWaitMs));
+        settle();
+        REQUIRE(project->modified());
+    }
+
+    //! Clones the remote into \a cloneDir and returns the cloned project file.
+    QString cloneRemote(const QTemporaryDir& cloneDir) const
+    {
+        const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone"));
+        QQuickGit::GitRepository cloneRepository;
+        cloneRepository.setDirectory(QDir(clonePath));
+        cloneRepository.setAccount(rootData->account());
+
+        auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+        REQUIRE(AsyncFuture::waitForFinished(cloneFuture, kSaveReceiptWaitMs));
+        INFO("clone: " << cloneFuture.result().errorMessage().toStdString());
+        REQUIRE_FALSE(cloneFuture.result().hasError());
+
+        const QString relativeProjectPath
+            = project->repository()->directory().relativeFilePath(project->filename());
+        return QDir(clonePath).filePath(relativeProjectPath);
+    }
+};
+
+//! Sets the trip's late date from the first saveFlushCompleted after this
+//! call, which lands after that flush's drain ended.
+void mutateAfterNextFlushDrain(SyncReceiptFixture& f, QObject* context, bool* mutated)
+{
+    QObject::connect(f.saveLoad(), &cwSaveLoad::saveFlushCompleted, context, [&f, mutated]() {
+        if (*mutated) {
+            return;
+        }
+        *mutated = true;
+        f.trip->setDate(receiptDateTime(kReceiptLateTripDate));
+    });
+}
+
+//! Adds or removes write permission on \a path and every directory under it.
+void setDirectoryTreeWritable(const QString& path, bool writable)
+{
+    constexpr QFileDevice::Permissions kWriteBits
+        = QFileDevice::WriteOwner | QFileDevice::WriteUser;
+    QStringList directories{path};
+    QDirIterator it(path, QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        directories.append(it.next());
+    }
+    for (const QString& directory : std::as_const(directories)) {
+        const QFileDevice::Permissions permissions = QFile::permissions(directory);
+        QFile::setPermissions(directory, writable ? permissions | kWriteBits
+                                                  : permissions & ~kWriteBits);
+    }
+}
+
+} // namespace
+
+TEST_CASE("A sync covers a mutation made on its own turn while its flush drains",
+          "[Sync][cwProject]")
+{
+    SyncReceiptFixture f(QStringLiteral("sync-same-turn.cwproj"));
+
+    QObject context;
+    QList<bool> modifiedAtSyncFinished;
+    recordModifiedAt(&cwProject::syncFinished, &modifiedAtSyncFinished, f.project, &context);
+
+    // The rename puts its jobs on the save pool; the sync and the date edit
+    // on the same turn join that drain.
+    f.cave->setName(QStringLiteral("Renamed Cave"));
+    REQUIRE(f.project->sync());
+    f.trip->setDate(receiptDateTime(kReceiptTripDate));
+
+    REQUIRE(waitForRecordedCount(modifiedAtSyncFinished, 1));
+    CHECK(f.project->errorModel()->count() == 0);
+    CHECK_FALSE(modifiedAtSyncFinished.at(0));
+    f.settleSync();
+    CHECK_FALSE(f.project->modified());
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    checkReopenedHasSameTurnEdits(f.cloneRemote(cloneDir));
+}
+
+TEST_CASE("A mutation made after a sync's flush drain keeps the project modified",
+          "[Sync][cwProject]")
+{
+    SyncReceiptFixture f(QStringLiteral("sync-after-drain.cwproj"));
+    f.settleMutation([&f]() { f.cave->setName(QStringLiteral("Renamed Cave")); });
+
+    QObject context;
+    QList<bool> modifiedAtSyncFinished;
+    recordModifiedAt(&cwProject::syncFinished, &modifiedAtSyncFinished, f.project, &context);
+    bool mutatedAfterDrain = false;
+    mutateAfterNextFlushDrain(f, &context, &mutatedAfterDrain);
+
+    REQUIRE(f.project->sync());
+
+    REQUIRE(waitForRecordedCount(modifiedAtSyncFinished, 1));
+    REQUIRE(mutatedAfterDrain);
+    INFO("sync: " << lastErrorMessage(f.project));
+    CHECK(f.project->errorModel()->count() == 0);
+    CHECK(modifiedAtSyncFinished.at(0));
+    f.settleSync();
+    CHECK(f.project->modified());
+}
+
+TEST_CASE("A sync that cannot reach its remote keeps the project modified only for a mutation after its flush",
+          "[Sync][cwProject]")
+{
+    const bool mutateAfterDrain = GENERATE(false, true);
+    INFO("mutation after the flush drain: " << mutateAfterDrain);
+    SyncReceiptFixture f(QStringLiteral("sync-offline.cwproj"));
+    f.settleMutation([&f]() { f.cave->setName(QStringLiteral("Renamed Cave")); });
+
+    const QString offlineRemotePath = f.remoteRepoPath + QStringLiteral(".offline");
+    REQUIRE(QDir().rename(f.remoteRepoPath, offlineRemotePath));
+    auto restoreRemote = qScopeGuard([&f, &offlineRemotePath]() {
+        QDir().rename(offlineRemotePath, f.remoteRepoPath);
+    });
+
+    QObject context;
+    QList<bool> modifiedAtSyncFinished;
+    recordModifiedAt(&cwProject::syncFinished, &modifiedAtSyncFinished, f.project, &context);
+    bool mutatedAfterDrain = false;
+    if (mutateAfterDrain) {
+        mutateAfterNextFlushDrain(f, &context, &mutatedAfterDrain);
+    }
+
+    REQUIRE(f.project->sync());
+
+    REQUIRE(waitForRecordedCount(modifiedAtSyncFinished, 1));
+    CHECK(mutatedAfterDrain == mutateAfterDrain);
+    REQUIRE(f.project->errorModel()->count() > 0);
+    CHECK(f.project->errorModel()->last().type() == cwError::Warning);
+    CHECK(modifiedAtSyncFinished.at(0) == mutateAfterDrain);
+    f.settleSync();
+    CHECK(f.project->modified() == mutateAfterDrain);
+}
+
+TEST_CASE("A sync whose push fails keeps the project modified only for a mutation after its flush",
+          "[Sync][cwProject]")
+{
+    const bool mutateAfterDrain = GENERATE(false, true);
+    INFO("mutation after the flush drain: " << mutateAfterDrain);
+    SyncReceiptFixture f(QStringLiteral("sync-push-fails.cwproj"));
+    f.settleMutation([&f]() { f.cave->setName(QStringLiteral("Renamed Cave")); });
+
+    // A read-only remote still serves the pull, then refuses the push's objects.
+    setDirectoryTreeWritable(f.remoteRepoPath, false);
+    auto restoreRemote = qScopeGuard([&f]() {
+        setDirectoryTreeWritable(f.remoteRepoPath, true);
+    });
+
+    QObject context;
+    QList<bool> modifiedAtSyncFinished;
+    recordModifiedAt(&cwProject::syncFinished, &modifiedAtSyncFinished, f.project, &context);
+    bool mutatedAfterDrain = false;
+    if (mutateAfterDrain) {
+        mutateAfterNextFlushDrain(f, &context, &mutatedAfterDrain);
+    }
+
+    REQUIRE(f.project->sync());
+
+    REQUIRE(waitForRecordedCount(modifiedAtSyncFinished, 1));
+    CHECK(mutatedAfterDrain == mutateAfterDrain);
+    REQUIRE(f.project->errorModel()->count() > 0);
+    CHECK(f.project->errorModel()->last().type() == cwError::Warning);
+    // The pull ran, so the failure came after the full report was built.
+    const auto report = f.project->lastSyncReport();
+    REQUIRE(report.has_value());
+    CHECK_FALSE(report->afterHead.isEmpty());
+    CHECK(modifiedAtSyncFinished.at(0) == mutateAfterDrain);
+    f.settleSync();
+    CHECK(f.project->modified() == mutateAfterDrain);
 }

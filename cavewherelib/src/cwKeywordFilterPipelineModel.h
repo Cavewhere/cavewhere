@@ -100,6 +100,9 @@ private:
         }
     }
 
+    bool isDefault() const;
+    void rejectUnaccepted(int first, int last);
+
     void updatePossibleKeys();
     void doUpdatePossibleKeys();
 };

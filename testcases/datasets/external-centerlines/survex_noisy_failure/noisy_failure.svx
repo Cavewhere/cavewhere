@@ -1,0 +1,83 @@
+; Survex entry that cavern reads with many warnings and then fails on.
+; Every leg's compass reading of 400 draws a "Suspicious compass reading"
+; warning (72 legs, 72 warnings), and the trailing *include names a file
+; that does not exist, so cavern exits with an error after the warnings.
+; Drives the Cavern page regression: the failed harvest's error is the
+; whole cavern log, warnings included.
+*begin NoisyFailure
+*fix S0 0 0 0
+*data normal from to tape compass clino
+S0 S1 5.0 400 0
+S1 S2 5.0 400 0
+S2 S3 5.0 400 0
+S3 S4 5.0 400 0
+S4 S5 5.0 400 0
+S5 S6 5.0 400 0
+S6 S7 5.0 400 0
+S7 S8 5.0 400 0
+S8 S9 5.0 400 0
+S9 S10 5.0 400 0
+S10 S11 5.0 400 0
+S11 S12 5.0 400 0
+S12 S13 5.0 400 0
+S13 S14 5.0 400 0
+S14 S15 5.0 400 0
+S15 S16 5.0 400 0
+S16 S17 5.0 400 0
+S17 S18 5.0 400 0
+S18 S19 5.0 400 0
+S19 S20 5.0 400 0
+S20 S21 5.0 400 0
+S21 S22 5.0 400 0
+S22 S23 5.0 400 0
+S23 S24 5.0 400 0
+S24 S25 5.0 400 0
+S25 S26 5.0 400 0
+S26 S27 5.0 400 0
+S27 S28 5.0 400 0
+S28 S29 5.0 400 0
+S29 S30 5.0 400 0
+S30 S31 5.0 400 0
+S31 S32 5.0 400 0
+S32 S33 5.0 400 0
+S33 S34 5.0 400 0
+S34 S35 5.0 400 0
+S35 S36 5.0 400 0
+S36 S37 5.0 400 0
+S37 S38 5.0 400 0
+S38 S39 5.0 400 0
+S39 S40 5.0 400 0
+S40 S41 5.0 400 0
+S41 S42 5.0 400 0
+S42 S43 5.0 400 0
+S43 S44 5.0 400 0
+S44 S45 5.0 400 0
+S45 S46 5.0 400 0
+S46 S47 5.0 400 0
+S47 S48 5.0 400 0
+S48 S49 5.0 400 0
+S49 S50 5.0 400 0
+S50 S51 5.0 400 0
+S51 S52 5.0 400 0
+S52 S53 5.0 400 0
+S53 S54 5.0 400 0
+S54 S55 5.0 400 0
+S55 S56 5.0 400 0
+S56 S57 5.0 400 0
+S57 S58 5.0 400 0
+S58 S59 5.0 400 0
+S59 S60 5.0 400 0
+S60 S61 5.0 400 0
+S61 S62 5.0 400 0
+S62 S63 5.0 400 0
+S63 S64 5.0 400 0
+S64 S65 5.0 400 0
+S65 S66 5.0 400 0
+S66 S67 5.0 400 0
+S67 S68 5.0 400 0
+S68 S69 5.0 400 0
+S69 S70 5.0 400 0
+S70 S71 5.0 400 0
+S71 S72 5.0 400 0
+*include "not_on_disk.svx"
+*end NoisyFailure

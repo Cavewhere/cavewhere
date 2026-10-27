@@ -500,13 +500,13 @@ MainWindowTest {
         }
 
         function openCaveLeadPage(caveName) {
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + caveName
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + caveName
             tryVerifyWithDiagnostics(() => {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "cavePage"
             }, 20000, "open cave page")
 
-            let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsLink")
+            let leadsButton = findChild(RootData.pageView.currentPageItem, "leadsLink")
             verify(leadsButton !== null)
             mouseClick(leadsButton)
 

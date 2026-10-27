@@ -8,6 +8,11 @@ import QmlTestRecorder
 MainWindowTest {
     id: rootId
 
+    SignalSpy {
+        id: splitSpyId
+        signalName: "clicked"
+    }
+
     TestCase {
         name: "StyleGalleryPage"
         when: windowShown
@@ -59,7 +64,7 @@ MainWindowTest {
             tryVerify(() => Qt.colorEqual(page.palette.windowText, Theme.text)
                             && Qt.colorEqual(page.palette.base, Theme.fieldSurface),
                       5000, "the Theme palette should reach the page in " + mode.name)
-            for (const popupName of ["galleryMenu", "galleryDialog"]) {
+            for (const popupName of ["galleryMenu", "gallerySplitMenu", "galleryDialog"]) {
                 adoptWindowPalette(page, popupName)
             }
             return page
@@ -102,6 +107,47 @@ MainWindowTest {
             verify(button.background !== null, "the button should have a background")
             compare(button.background.radius, Theme.controlRadius,
                     "the button background should come from CaveWhereStyle")
+        }
+
+        // The split button sits in the Buttons card, enabled with a menu and
+        // disabled, drawn with the style's button panel.
+        function test_splitButton() {
+            const page = gotoGallery()
+            const card = findChild(page, "cardButtons")
+            verify(card !== null, "cardButtons should exist")
+
+            const mainButton = findChild(card, "gallerySplitButton")
+            verify(mainButton !== null, "the enabled split button should be in cardButtons")
+            const splitButton = mainButton.parent
+            const chevron = findChild(splitButton, "menuButton")
+            verify(chevron !== null, "the enabled split button should have a chevron")
+            tryVerify(() => chevron.visible && chevron.x > 0, 5000, "the chevron should be placed")
+            compare(mainButton.background.radius, Theme.controlRadius,
+                    "the split button should use the style's control radius")
+
+            splitSpyId.target = splitButton
+            splitSpyId.clear()
+            mouseClick(mainButton)
+            compare(splitSpyId.count, 1, "the main segment should fire clicked() once")
+
+            const menu = findChild(page, "gallerySplitMenu")
+            verify(menu !== null, "gallerySplitMenu should exist")
+            mouseClick(chevron)
+            tryVerify(() => menu.visible, 5000, "the chevron should open the menu")
+            compare(splitSpyId.count, 1, "the chevron should leave clicked() alone")
+            page.closePopups()
+            tryVerify(() => !menu.visible, 5000, "the menu should close")
+
+            const disabledButton = findChild(card, "gallerySplitButtonDisabled")
+            verify(disabledButton !== null, "the disabled split button should be in cardButtons")
+            verify(!disabledButton.enabled, "the disabled split button should be disabled")
+            compare(disabledButton.background.opacity, Theme.disabledOpacity,
+                    "the disabled split button should dim like a style Button")
+            splitSpyId.target = disabledButton.parent
+            splitSpyId.clear()
+            mouseClick(disabledButton)
+            compare(splitSpyId.count, 0, "the disabled split button should fire nothing")
+            splitSpyId.target = null
         }
 
         function test_popupsOpen() {
@@ -173,7 +219,7 @@ MainWindowTest {
                     TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))
                 tryVerify(() => RootData.region.caveCount > 0, 10000, "the demo cave should load")
             }
-            const address = "Source/Data/Cave=" + RootData.region.cave(0).name
+            const address = "Source/Data/Node=" + RootData.region.cave(0).name
             RootData.pageSelectionModel.currentPageAddress = address
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName !== "styleGalleryPage",
@@ -244,7 +290,7 @@ MainWindowTest {
             verify(chunk.stationCount > splayStation, "the demo chunk should have enough stations")
 
             RootData.pageSelectionModel.currentPageAddress =
-                    "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name
+                    "Source/Data/Node=" + cave.name + "/Trip=" + trip.name
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "tripPage",
                       5000, "should land on the trip page")

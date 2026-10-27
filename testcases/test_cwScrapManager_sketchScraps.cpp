@@ -9,6 +9,7 @@
 
 //Our includes
 #include "asyncfuture.h"
+#include "SurveyTreeTestHelper.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwClinoReading.h"
@@ -90,7 +91,7 @@ struct Fixture {
             global.setPosition(QString("a%1").arg(i + 1),
                                QVector3D(0.0, i * 10.0, 0.0));
         }
-        cave->setStationPositionLookup(global);
+        SurveyTreeTestHelper::setScopedPositions(cave, global);
 
         tree.setCavingRegion(&region);
         scrapManager.setRegionTreeModel(&tree);
@@ -288,7 +289,6 @@ TEST_CASE("Two-stroke chain around stations produces one anchored scrap",
 
     // Drain deleteLater for the single-stroke scrap retired when stroke 2
     // changed the membership key.
-    QCoreApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     CHECK(f.sketchDerivedScrapCount() == 1);
@@ -316,7 +316,6 @@ TEST_CASE("Chain scrap identity is preserved across unrelated stroke edits",
     f.drawPolyline(cwPenStroke::Wall,
                    {{3.0, 13.0}, {-3.0, 13.0}, {-3.0, -3.0}});
 
-    QCoreApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     REQUIRE(f.sketchDerivedScrapCount() == 1);
@@ -329,7 +328,6 @@ TEST_CASE("Chain scrap identity is preserved across unrelated stroke edits",
     f.drawPolyline(cwPenStroke::Feature,
                    {{100.0, 100.0}, {101.0, 100.0}, {101.0, 101.0}});
 
-    QCoreApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     REQUIRE(f.sketchDerivedScrapCount() == 1);

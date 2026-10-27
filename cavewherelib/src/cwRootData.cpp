@@ -10,6 +10,8 @@
 #include "cwSaveLoad.h"
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
+#include "cwExternalCenterlineManager.h"
+#include "cwFileRevealer.h"
 #include "cwLinePlotManager.h"
 #include "cwScrapManager.h"
 #include "cwProject.h"
@@ -45,8 +47,6 @@
 #include <QStandardPaths>
 #include <QApplication>
 #include <QStyle>
-#include <QProcess>
-#include <QDesktopServices>
 #include <QClipboard>
 #include <QFileInfo>
 
@@ -109,11 +109,25 @@ cwRootData::cwRootData(QObject *parent) :
     RegionTreeModel = new cwRegionTreeModel(Project);
     RegionTreeModel->setCavingRegion(Region);
 
+    //Where each external centerline came from, kept in the project's .cw_local
+    m_externalSourceSettings = new cwExternalSourceSettings(this);
+    m_externalSourceSettings->setSaveLoad(Project->saveLoad());
+
     //Setup the loop closer
     LinePlotManager = new cwLinePlotManager(Project);
-    LinePlotManager->setRegion(Region);
+    // Token before region: setRegion kicks off the initial external
+    // scan + solve, which should register with the future manager.
     LinePlotManager->setFutureManagerToken(FutureManagerModel->token());
+    LinePlotManager->setRegion(Region);
     LinePlotManager->setKeywordItemModel(m_keywordItemModel);
+    LinePlotManager->externalCenterlineManager()->setExternalSourceSettings(m_externalSourceSettings);
+    // The attach/replace/detach operations reconcile through the project's
+    // save/load pipeline; newProject() replaces it, so track it.
+    LinePlotManager->externalCenterlineManager()->setSaveLoad(Project->saveLoad());
+    connect(Project, &cwProject::saveLoadChanged, this, [this]() {
+        m_externalSourceSettings->setSaveLoad(Project->saveLoad());
+        LinePlotManager->externalCenterlineManager()->setSaveLoad(Project->saveLoad());
+    });
 
     //Setup the scrap manager
     ScrapManager = new cwScrapManager(Project);
@@ -391,33 +405,54 @@ int cwRootData::titleBarHeight() const
     return static_cast<QApplication*>(QApplication::instance())->style()->pixelMetric(QStyle::PM_TitleBarHeight);
 }
 
+cwExternalCenterlineManager* cwRootData::externalCenterlineManager() const
+{
+    return LinePlotManager->externalCenterlineManager();
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwRootData::attachTripCenterline(cwTrip* trip, const QString& sourcePath)
+{
+    return externalCenterlineManager()->attachCenterline(trip, sourcePath);
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwRootData::replaceTripCenterline(cwTrip* trip, const QString& sourcePath)
+{
+    return externalCenterlineManager()->replaceCenterline(trip, sourcePath);
+}
+
+QFuture<Monad::ResultBase> cwRootData::detachTripCenterline(cwTrip* trip)
+{
+    return externalCenterlineManager()->detachCenterline(trip);
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwRootData::attachSource(cwSurveyNode* target, const QString& sourcePath)
+{
+    return externalCenterlineManager()->attachSource(target, sourcePath);
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwRootData::replaceSource(cwSurveyNode* root, const QString& sourcePath)
+{
+    return externalCenterlineManager()->replaceSource(root, sourcePath);
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwRootData::reloadSource(cwSurveyNode* root)
+{
+    return externalCenterlineManager()->reloadFromSource(root);
+}
+
+QFuture<Monad::ResultBase> cwRootData::deleteSourceRoot(cwSurveyNode* root)
+{
+    return externalCenterlineManager()->deleteSourceRoot(root);
+}
+
 void cwRootData::showInFolder(const QString &path) const
 {
-    QFileInfo info(path);
-#if defined(Q_OS_WIN)
-    QStringList args;
-    if (!info.isDir())
-        args << "/select,";
-    args << QDir::toNativeSeparators(path);
-    if (QProcess::startDetached("explorer", args))
-        return;
-#elif defined(Q_OS_MAC) && QT_CONFIG(process)
-    QStringList args;
-    args << "-e";
-    args << "tell application \"Finder\"";
-    args << "-e";
-    args << "activate";
-    args << "-e";
-    args << "select POSIX file \"" + path + "\"";
-    args << "-e";
-    args << "end tell";
-    args << "-e";
-    args << "return";
-    if (!QProcess::execute("/usr/bin/osascript", args))
-        return;
-#endif
-    QDesktopServices::openUrl(QUrl::fromLocalFile(info.isDir()? path : info.path()));
-
+    cwFileRevealer::showInFileManager(path);
 }
 
 #ifdef Q_OS_IOS

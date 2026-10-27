@@ -1,0 +1,29 @@
+{
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-682-g3e0c437b"
+ },
+ "name": "Ancient Canyon",
+ "metadata": {
+  "dataRoot": "depth2",
+  "syncEnabled": true,
+  "unitSystem": "Metric"
+ },
+ "id": "abb062b1-b403-45c5-b721-bbf3ec002453",
+ "equates": [
+  {
+   "stations": [
+    {
+     "scope": 0,
+     "containerUuid": "cf5f2e30-2c47-4572-904e-f2a76b3c1acf",
+     "tail": "A2"
+    },
+    {
+     "scope": 0,
+     "containerUuid": "badf1ea8-a7e4-4014-ba57-d2be1b19aa09",
+     "tail": "C1"
+    }
+   ]
+  }
+ ]
+}

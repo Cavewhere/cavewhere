@@ -1,0 +1,9 @@
+; A dated file that sets no declination. Attached to a trip, it leaves the
+; declination to the driver, which injects the trip's own calibration.
+*begin Silent
+*date 2020.06.01
+*fix S1 0 0 0
+*data normal from to tape compass clino
+S1 S2 10.0 0 0
+S2 S3 8.5 90 0
+*end Silent

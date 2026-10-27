@@ -1,0 +1,4 @@
+*begin cave0 ;Cave Zero
+
+*include "compass_mak/SCOPES.MAK"
+*end cave0

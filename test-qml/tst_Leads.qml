@@ -24,11 +24,7 @@ MainWindowTest {
         readonly property int minimumDescriptionWidth: 150
 
         function init() {
-            // Dismiss any leftover text editor from a previous test
-            if (GlobalShadowTextInput.coreClickInput !== null) {
-                GlobalShadowTextInput.coreClickInput.closeEditor()
-            }
-            GlobalShadowTextInput.enabled = false
+            rootId.closeAnyOpenEditor()
 
             RootData.futureManagerModel.waitForFinished()
             RootData.project.newProject()
@@ -46,7 +42,7 @@ MainWindowTest {
 
         function clickToEdit(item) {
             mouseClick(item)
-            tryVerify(() => GlobalShadowTextInput.textInput.activeFocus, 1000,
+            tryVerify(() => rootId.shadowEditor.editorHasFocus(), 1000,
                       "Shadow text input should have focus after clicking " + item.objectName)
         }
 
@@ -127,7 +123,9 @@ MainWindowTest {
             // frame after the page becomes current, so wait for the delegate.
             let caveButton = null
             tryVerify(() => {
-                caveButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDelegate0->caveLink")
+                const page = RootData.pageView.currentPageItem
+                const row = page === null ? null : findChild(page, "caveDelegate0")
+                caveButton = row === null ? null : findChild(row, "caveLink")
                 return caveButton !== null
             }, 5000, "caveLink should exist on dataMainPage")
             // The proxied cave list can be found before it is positioned, so let
@@ -141,7 +139,7 @@ MainWindowTest {
             // clicking; otherwise the click lands on a stale (0,0) position over the
             // trip table and navigates to the trip page instead of the lead page.
             waitForRendering(rootId)
-            let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsLink")
+            let leadsButton = findChild(RootData.pageView.currentPageItem, "leadsLink")
             mouseClick(leadsButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "leadPage" });
@@ -162,12 +160,12 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished();
 
             let cave = RootData.region.cave(0)
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "cavePage",
                       5000, "should land on cavePage");
 
-            let leadsLink = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsLink")
+            let leadsLink = findChild(RootData.pageView.currentPageItem, "leadsLink")
             tryVerify(() => leadsLink !== null && leadsLink.visible,
                       5000, "leadsLink should be present on cavePage");
             waitForRendering(mainWindow)
@@ -190,7 +188,7 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished();
 
             let cave = RootData.region.cave(0)
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Leads"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Leads"
 
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "leadPage",
@@ -219,7 +217,7 @@ MainWindowTest {
             // mouse-click navigation under offscreen rendering.
             RootData.region.addCave()
             let cave = RootData.region.cave(RootData.region.caveCount - 1)
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Leads"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Leads"
 
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "leadPage",
@@ -240,7 +238,7 @@ MainWindowTest {
 
             let cave = RootData.region.cave(0);
             let trip = cave.trip(0);
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name;
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Trip=" + trip.name;
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage");
 
             let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId");
@@ -847,7 +845,7 @@ MainWindowTest {
             // Navigate to the trip page
             let cave = RootData.region.cave(0);
             let trip = cave.trip(0);
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name;
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Trip=" + trip.name;
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage");
 
             // Enter carpet mode

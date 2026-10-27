@@ -18,15 +18,100 @@
 #include "cwData.h"
 #include "cwKeywordModel.h"
 #include "cwNameUtils.h"
+#include "cwCavernNaming.h"
+#include "cwScopeLabels.h"
+#include "cwDeclination.h"
+#include "cwSurvexCS.h"
 
 //Qt includes
 #include <QDebug>
 #include <QMap>
+#include <QSet>
 #include <QUuid>
+
+//Std includes
+#include <algorithm>
+
+namespace {
+    // The single scope-prefix policy, shared by the instance accessor and the
+    // cwTripData snapshot overload so the UI-thread and worker-thread scope
+    // decisions can never diverge: a scoped trip (an attached one, or a native
+    // trip inside a sourced subtree) takes "<label>.", every other trip none.
+    //
+    // The label arrives as a callable because only a scoped trip needs it:
+    // this is a Q_PROPERTY read, and an ordinary native trip should not make its
+    // node build a label map only to be told it has no scope.
+    template <typename LabelProvider>
+    QString computeScopePrefix(bool scoped, LabelProvider&& label)
+    {
+        return scoped ? cwCavernNaming::scopePrefix(label()) : QString();
+    }
+
+    // The single whole-node-window policy, shared by the instance accessor and
+    // the snapshot overload: the source root's own unit, directly under it.
+    bool computeWindowsWholeNode(const QString& sourcePath, bool parentIsSourceRoot)
+    {
+        return parentIsSourceRoot && sourcePath == cwTrip::ownUnitSourcePath();
+    }
+
+    // True for a trip the driver writes inside a sourced subtree's root block:
+    // neither derived from the source nor attached to a file of its own.
+    bool isWrittenInSourcedBlock(const QString& sourcePath,
+                                 const cwExternalCenterline& centerline,
+                                 const cwSurveyNode* node)
+    {
+        return sourcePath.isEmpty() && centerline.isEmpty()
+               && node != nullptr && node->sourceRoot() != nullptr;
+    }
+
+    // The single "what stations does this trip have?" policy, shared by
+    // knownStations() and its cwTripData overload — which sources answer, and
+    // which one's spelling wins when they disagree.
+    //
+    // The union of all three, never a precedence: one entry per station, the
+    // first spelling seen for a canonical key. \a authored comes first because
+    // a chunk name is the only spelling a person typed, and the two derived
+    // sources echo it back lowercased. Natural order, so a station list reads
+    // the way a caver counts ("a2" before "a10").
+    //
+    // Takes the three lists rather than one concatenation so that adding a
+    // fourth source, or reordering these, is one edit here instead of one per
+    // caller.
+    QStringList mergeStationSpellings(const QStringList& authored,
+                                      const QStringList& harvested,
+                                      const QStringList& solved)
+    {
+        QStringList merged;
+        QSet<QString> seen;
+        merged.reserve(authored.size() + harvested.size() + solved.size());
+
+        const auto mergeSource = [&merged, &seen](const QStringList& spellings) {
+            for (const QString& spelling : spellings) {
+                const QString key = cwStation::canonicalKey(spelling);
+                if (key.isEmpty() || seen.contains(key)) {
+                    continue;
+                }
+                seen.insert(key);
+                merged.append(spelling);
+            }
+        };
+
+        mergeSource(authored);
+        mergeSource(harvested);
+        mergeSource(solved);
+
+        //Stable: two spellings can compare equivalent without being equal
+        //("a01" and "a1" share a natural order), and the caller's source order
+        //is the only tie-break that means anything.
+        std::stable_sort(merged.begin(), merged.end(), cwNameUtils::naturalLess);
+        return merged;
+    }
+}
 
 cwTrip::cwTrip(QObject *parent) :
     QObject(parent),
-    ParentCave(nullptr)
+    m_parentNode(nullptr),
+    m_attachedFixes(new cwAttachedFixModel(this))
 {
 //    DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
@@ -51,12 +136,30 @@ cwTrip::cwTrip(QObject *parent) :
     KeywordModel->addExtension(Team->keywordModel());
     updateKeywordMetadata();
 
+    //Two of knownStations()'s three sources; see knownStationsChanged() for why
+    //chunks are not the third wire here.
+    connect(this, &cwTrip::solvedStationsChanged, this, &cwTrip::knownStationsChanged);
+    connect(this, &cwTrip::externalStationsChanged, this, &cwTrip::knownStationsChanged);
+
+    //An auto's IGRF value is read on the trip's date.
+    connect(this, &cwTrip::dateChanged, this, [this]() {
+        if (refreshFileDeclinationDegrees()) {
+            emit fileDeclinationChanged();
+        }
+    });
+
+    connect(Calibration, &cwTripCalibration::declinationChanged, this, &cwTrip::appliedDeclinationChanged);
+    connect(Calibration, &cwTripCalibration::autoDeclinationChanged, this, &cwTrip::appliedDeclinationChanged);
+    connect(Calibration, &cwTripCalibration::autoDeclinationAvailableChanged, this, &cwTrip::appliedDeclinationChanged);
+    connect(this, &cwTrip::fileDeclinationChanged, this, &cwTrip::appliedDeclinationChanged);
+    connect(this, &cwTrip::externallyBackedChanged, this, &cwTrip::appliedDeclinationChanged);
+
 //    qDebug() << "Creating:" << this;
 }
 
 // void cwTrip::Copy(const cwTrip& object)
 // {
-//     ParentCave = nullptr;
+//     m_parentNode = nullptr;
 
 //     //Copy the name of the trip
 //     setName(object.Name);
@@ -133,7 +236,7 @@ void cwTrip::setName(QString name) {
 
 QString cwTrip::validateName(const QString& proposedName) const
 {
-    const auto* nameSet = parentCave() ? &parentCave()->tripNameSet() : nullptr;
+    const auto* nameSet = parentNode() ? &parentNode()->tripNameSet() : nullptr;
     return cwNameUtils::validateEntityName(Name, proposedName, nameSet,
                                            QStringLiteral("trip"));
 }
@@ -145,14 +248,248 @@ void cwTrip::setExternalCenterline(const cwExternalCenterline& value)
     }
     m_externalCenterline = value;
     emit externalCenterlineChanged();
+    emit scopeChanged();
+    emit externallyBackedChanged();
+}
+
+void cwTrip::setSourcePath(const QString& sourcePath)
+{
+    if (m_sourcePath == sourcePath) {
+        return;
+    }
+    m_sourcePath = sourcePath;
+    emit sourcePathChanged();
+    emit scopeChanged();
+    emit externallyBackedChanged();
+}
+
+void cwTrip::setCavernLabel(const QString& label)
+{
+    if (m_cavernLabel == label) {
+        return;
+    }
+    m_cavernLabel = label;
+    emit scopeChanged();
+}
+
+void cwTrip::setFileDeclination(const cwFileDeclination& declination)
+{
+    if (m_fileDeclination == declination) {
+        return;
+    }
+    m_fileDeclination = declination;
+    refreshFileDeclinationDegrees();
+    emit fileDeclinationChanged();
+}
+
+bool cwTrip::refreshFileDeclinationDegrees()
+{
+    const auto resolve = [this]() -> std::optional<double> {
+        using Kind = cwFileDeclination::Kind;
+        switch (m_fileDeclination.kind) {
+        case Kind::Value:
+            return m_fileDeclination.degrees;
+        case Kind::None:
+            return 0.0;
+        case Kind::Auto: {
+            //A *cs argument as a Survex file writes it, or the PROJ string a
+            //Compass base location's datum and zone name.
+            const QString& system = m_fileDeclination.autoCoordinateSystem;
+            const std::optional<cwSurvexCS::Parsed> parsed = cwSurvexCS::fromSurvexCS(system);
+            const QString projCS = parsed.has_value() ? parsed->projCS : system;
+            if (projCS.isEmpty() || !date().isValid()) {
+                return std::nullopt;
+            }
+            cwGeoPoint location = m_fileDeclination.autoLocation;
+            if (parsed.has_value() && parsed->latitudeFirst) {
+                std::swap(location.x, location.y);
+            }
+            const Monad::Result<double> igrf = cwDeclination::compute(location, projCS, date());
+            if (igrf.hasError()) {
+                return std::nullopt;
+            }
+            return igrf.value();
+        }
+        case Kind::Unknown:
+        case Kind::Inherited:
+            break;
+        }
+        return std::nullopt;
+    };
+
+    const std::optional<double> degrees = resolve();
+    if (m_fileDeclinationDegrees == degrees) {
+        return false;
+    }
+    m_fileDeclinationDegrees = degrees;
+    return true;
+}
+
+bool cwTrip::readsCalibrationDeclination() const
+{
+    return !externallyBacked() || m_fileDeclination.kind == cwFileDeclination::Kind::Inherited;
+}
+
+double cwTrip::appliedDeclination() const
+{
+    if (readsCalibrationDeclination()) {
+        return Calibration->declination();
+    }
+    return m_fileDeclinationDegrees.value_or(0.0);
+}
+
+cwTrip::DeclinationOrigin cwTrip::declinationOrigin() const
+{
+    if (readsCalibrationDeclination()) {
+        const bool isAuto = Calibration->autoDeclination() && Calibration->autoDeclinationAvailable();
+        return isAuto ? DeclinationAuto : DeclinationManual;
+    }
+
+    if (!m_fileDeclinationDegrees.has_value()) {
+        return DeclinationUnknown;
+    }
+    using Kind = cwFileDeclination::Kind;
+    switch (m_fileDeclination.kind) {
+    case Kind::Value:
+        return DeclinationFile;
+    case Kind::None:
+        return DeclinationNone;
+    case Kind::Auto:
+        return DeclinationFileAuto;
+    case Kind::Unknown:
+    case Kind::Inherited:
+        break;
+    }
+    return DeclinationUnknown;
+}
+
+void cwTrip::setAttachedFixes(const QList<cwAttachedFix>& fixes)
+{
+    if (m_attachedFixes->attachedFixes() == fixes) {
+        return;
+    }
+    m_attachedFixes->setAttachedFixes(fixes);
+    emit attachedFixesChanged();
+}
+
+QString cwTrip::ownUnitSourcePath()
+{
+    return QStringLiteral("#own");
+}
+
+void cwTrip::setExternalStations(const QStringList& stations)
+{
+    if (m_externalStations == stations) {
+        return;
+    }
+    m_externalStations = stations;
+    emit externalStationsChanged();
+}
+
+void cwTrip::setExternalStationsError(const QString& error)
+{
+    if (m_externalStationsError == error) {
+        return;
+    }
+    m_externalStationsError = error;
+    emit externalStationsErrorChanged();
+}
+
+QString cwTrip::scopePrefix() const
+{
+    //A derived trip's scope is the leaf Survex block it stands for, if any.
+    if (isDerived()) {
+        return cwCavernNaming::scopePrefix(m_cavernLabel);
+    }
+
+    //A trip's label is only unique among its sibling set, so the node owns the
+    //assignment and this is a lookup in the map it keeps.
+    const auto label = [this]() -> QString {
+        const cwSurveyNode* node = parentNode();
+        if (node == nullptr) {
+            //No node means no sibling set, so this trip's own label is unique by
+            //construction — it is what it would take on being added to a node
+            //with no name clash, and the only sensible answer for a trip being
+            //built or imported before it is parented.
+            return cwCavernNaming::sanitizeToCavernIdentifier(name());
+        }
+
+        //Empty for a trip the node still parents but no longer lists —
+        //InsertRemoveTrip leaves the parent set so undo can restore it. Here a
+        //self-derived label would *not* be unique: it is exactly the label a live
+        //sibling may now hold, and the solved-* accessors would strip by it and
+        //hand back that sibling's stations as this trip's. Answering "no scope"
+        //resolves nothing rather than the wrong thing.
+        if (isWrittenInSourcedBlock(m_sourcePath, m_externalCenterline, node)) {
+            return node->sourcedTripScopeLabels().value(id());
+        }
+        return node->tripScopeLabels().value(id());
+    };
+
+    return computeScopePrefix(isScoped(), label);
+}
+
+QString cwTrip::scopePrefix(const cwTripData& data, const cwScopeLabels& labels,
+                            const QUuid& nodeId)
+{
+    if (!data.sourcePath.isEmpty()) {
+        return cwCavernNaming::scopePrefix(data.cavernLabel);
+    }
+    const bool writtenInSourcedBlock = isNativeTrip(data) && !labels.sourceRoot(nodeId).isNull();
+    return computeScopePrefix(!data.externalCenterline.isEmpty() || writtenInSourcedBlock,
+                              [&]() { return labels.tripLabels(nodeId).value(data.id); });
+}
+
+bool cwTrip::isScoped() const
+{
+    //Answered without building the label: whether there is a scope is decided by
+    //the same fields scopePrefix() branches on, and this is read from QML
+    //bindings often enough that walking the node's trips for it would be waste.
+    return !m_externalCenterline.isEmpty()
+           || (isDerived() && !m_cavernLabel.isEmpty())
+           || isWrittenInSourcedBlock(m_sourcePath, m_externalCenterline, parentNode());
+}
+
+void cwTrip::setSolvedLength(double meters)
+{
+    if (m_solvedLength == meters) {
+        return;
+    }
+    m_solvedLength = meters;
+    emit solvedLengthChanged();
+}
+
+bool cwTrip::externallyBacked() const
+{
+    if (!m_externalCenterline.isEmpty()) {
+        return true;
+    }
+    const cwSurveyNode* node = parentNode();
+    return node != nullptr && node->externallyBacked()
+           && !isWrittenInSourcedBlock(m_sourcePath, m_externalCenterline, node);
+}
+
+bool cwTrip::windowsWholeNode() const
+{
+    const cwSurveyNode* node = parentNode();
+    return computeWindowsWholeNode(m_sourcePath, node != nullptr && node->isSourceRoot());
+}
+
+bool cwTrip::windowsWholeNode(const cwTripData& trip, const cwCaveData& node)
+{
+    return computeWindowsWholeNode(trip.sourcePath, isSourceRoot(node));
 }
 
 void cwTrip::setId(const QUuid& id)
 {
+    const QUuid oldId = Id;
     if (!id.isNull()) {
         Id = id;
     } else if (Id.isNull()) {
         Id = QUuid::createUuid();
+    }
+    if (Id != oldId) {
+        emit idChanged();
     }
 }
 
@@ -556,6 +893,202 @@ QSet<cwStation> cwTrip::neighboringStations(QString stationName) const {
     return neighbors;
 }
 
+cwStationPositionLookup cwTrip::solvedStationPositions() const {
+    cwSurveyNode* node = parentNode();
+    if(node == nullptr) {
+        return cwStationPositionLookup();
+    }
+
+    //The node's scoped view is the region lookup under the node's label path,
+    //so its keys speak the node's namespace; the trip's scope comes off next.
+    cwStationPositionLookup lookup = node->scopedPositions();
+    const QString prefix = scopePrefix();
+    if(prefix.isEmpty()) {
+        //Native trip: the cave keys already speak this trip's namespace.
+        return lookup;
+    }
+
+    //Scoped trip: the node keys retain the scope prefix ("<tripLabel>.<tail>")
+    //but note/scrap/lead stations carry only the tail. Add a stripped-tail alias
+    //for each scoped entry so bare names resolve, keeping the full node data so
+    //a cross-trip tie-in neighbor still carries a position.
+    const QMap<QString, QVector3D> positions = lookup.positions();
+    for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
+        if(it.key().startsWith(prefix, Qt::CaseInsensitive)) {
+            lookup.setPosition(it.key().mid(prefix.size()), it.value());
+        }
+    }
+    return lookup;
+}
+
+cwSurveyNetwork cwTrip::solvedNetwork() const {
+    cwSurveyNode* node = parentNode();
+    if(node == nullptr) {
+        return cwSurveyNetwork();
+    }
+
+    cwSurveyNetwork network = node->scopedNetwork();
+    const QString prefix = scopePrefix();
+    if(prefix.isEmpty()) {
+        //Native trip: pass through, cross-trip junction neighbors intact.
+        return network;
+    }
+
+    //Scoped trip: alias each scoped station to its
+    //stripped tail so bare note names resolve. Neighbors that live in another
+    //scope (native tie-ins) keep their names so their positions still resolve in
+    //solvedStationPositions().
+    const QStringList stations = network.stations();
+    for(const QString& station : stations) {
+        if(!station.startsWith(prefix, Qt::CaseInsensitive)) {
+            continue;
+        }
+
+        const QString localStation = station.mid(prefix.size());
+        const QStringList neighbors = network.neighbors(station);
+        for(const QString& neighbor : neighbors) {
+            const QString localNeighbor = neighbor.startsWith(prefix, Qt::CaseInsensitive)
+                    ? neighbor.mid(prefix.size())
+                    : neighbor;
+            network.addShot(localStation, localNeighbor);
+        }
+
+        if(network.hasPosition(station)) {
+            network.setPosition(localStation, network.position(station));
+        }
+    }
+    return network;
+}
+
+QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
+    QList<QPair<QString, QVector3D>> solved;
+    cwSurveyNode* node = parentNode();
+    if(node == nullptr) {
+        return solved;
+    }
+
+    const cwStationPositionLookup lookup = node->scopedPositions();
+
+    if(isDerived()) {
+        //A derived trip's stations are its unit set, which the node's view
+        //names below the trip's own scope. Membership is the whole rule, so a
+        //station two units share belongs to both.
+        const QString prefix = scopePrefix();
+        QSet<QString> listed;
+        for(const QString& station : m_externalStations) {
+            const QString key = cwStation::canonicalKey(prefix + station);
+            listed.insert(key);
+            if(lookup.hasPosition(key)) {
+                solved.append({station, lookup.position(key)});
+            }
+        }
+
+        if(windowsWholeNode()) {
+            //The root's own unit also owns every root station no other unit and
+            //no native trip claims.
+            const cwSurveyNode::SourceMembers members = node->sourceMembers();
+            const QMap<QString, QVector3D> positions = lookup.positions();
+            for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
+                if(!listed.contains(it.key()) && !members.contains(it.key())) {
+                    solved.append({it.key(), it.value()});
+                }
+            }
+        }
+        return solved;
+    }
+
+    const QString prefix = scopePrefix();
+    if(prefix.isEmpty()) {
+        //Native trip: its own stations are its chunk stations that have a
+        //solved position.
+        const QList<cwStation> unique = uniqueStations();
+        solved.reserve(unique.size());
+        for(const cwStation& station : unique) {
+            if(lookup.hasPosition(station.name())) {
+                solved.append({station.name(), lookup.position(station.name())});
+            }
+        }
+        return solved;
+    }
+
+    //Scoped trip: its stations live in the node lookup under the scope prefix
+    //("<tripLabel>.<tail>"); yield each as the scope-relative tail, the same
+    //local name the note/scrap/lead sites and cwScopeStationListModel speak.
+    const QString prefixKey = cwStation::canonicalKey(prefix);
+    const QMap<QString, QVector3D> positions = lookup.positions();
+    for(auto it = positions.lowerBound(prefixKey);
+        it != positions.constEnd() && it.key().startsWith(prefixKey);
+        ++it) {
+        solved.append({it.key().sliced(prefixKey.size()), it.value()});
+    }
+    return solved;
+}
+
+QList<cwTrip::KnownStation> cwTrip::knownStations() const
+{
+    const QList<QPair<QString, QVector3D>> solved = solvedStations();
+
+    QHash<QString, QVector3D> placed;
+    placed.reserve(solved.size());
+    for(const QPair<QString, QVector3D>& station : solved) {
+        placed.insert(cwStation::canonicalKey(station.first), station.second);
+    }
+
+    const QList<cwStation> chunkStations = uniqueStations();
+    QStringList authored;
+    authored.reserve(chunkStations.size());
+    for(const cwStation& station : chunkStations) {
+        authored.append(station.name());
+    }
+
+    QStringList solvedNames;
+    solvedNames.reserve(solved.size());
+    for(const QPair<QString, QVector3D>& station : solved) {
+        solvedNames.append(station.first);
+    }
+
+    const QStringList names = mergeStationSpellings(authored, m_externalStations, solvedNames);
+
+    QList<KnownStation> stations;
+    stations.reserve(names.size());
+    for(const QString& name : names) {
+        const auto position = placed.constFind(cwStation::canonicalKey(name));
+        stations.append(KnownStation{name,
+                                     position == placed.constEnd()
+                                         ? std::optional<QVector3D>()
+                                         : std::optional<QVector3D>(*position)});
+    }
+    return stations;
+}
+
+QStringList cwTrip::knownStationNames(const cwTripData& trip,
+                                      const QStringList& scopeLocalSolved)
+{
+    QStringList authored;
+    for(const cwSurveyChunkData& chunk : trip.chunks) {
+        for(const cwStation& station : chunk.stations) {
+            authored.append(station.name());
+        }
+    }
+
+    return mergeStationSpellings(authored, trip.externalStations, scopeLocalSolved);
+}
+
+cwStationHandle cwTrip::stationHandle(const QString& tail) const
+{
+    //Deliberately scopePrefix() and not isScoped(): the two disagree for a trip
+    //its cave no longer lists, and solvedStations() above splits on the prefix.
+    //A derived trip's stations are its unit's, prefix or not, which only a Trip
+    //handle can name (cwSurvexExporterCaveTask::DriverTree::operand).
+    if(scopePrefix().isEmpty() && !isDerived()) {
+        cwSurveyNode* node = parentNode();
+        return cwStationHandle(cwStationHandle::NativeCave,
+                               node != nullptr ? node->id() : QUuid(),
+                               tail);
+    }
+    return cwStationHandle(cwStationHandle::Trip, id(), tail);
+}
+
 /**
  * @brief cwTrip::stationPositionModelUpdated
  *
@@ -581,7 +1114,10 @@ cwTripData cwTrip::data() const
         NotesLidar->data(),
         NotesSketch->data(),
         Id,
-        m_externalCenterline
+        m_externalCenterline,
+        m_sourcePath,
+        m_externalStations,
+        m_cavernLabel
     };
 }
 
@@ -591,6 +1127,12 @@ void cwTrip::setData(const cwTripData &data)
     setId(data.id);
     setDate(data.date);
     setExternalCenterline(data.externalCenterline);
+    setSourcePath(data.sourcePath);
+    //externalStations is deliberately not restored. It is scan output, and every
+    //cwTripData that reaches this setter either came off disk — where the field
+    //is never serialized, so it is empty — or was just taken from this same
+    //trip. Assigning it could therefore only ever wipe the live harvest (on a
+    //load or a sync-driven reload) and never carry anything in.
     Team->setData(data.team);
     Calibration->setData(data.calibrations);
     Notes->setData(data.noteModel);
@@ -635,30 +1177,45 @@ void cwTrip::setUndoStackForChildren() {
 }
 
 /**
-  \brief Set's the parent's cave
+  \brief Set's the node that holds this trip
   */
-void cwTrip::setParentCave(cwCave* parentCave) {
-    if(ParentCave != parentCave) {
-        if(ParentCave) {
-            KeywordModel->removeExtension(ParentCave->keywordModel());
+void cwTrip::setParentNode(cwSurveyNode* parentNode) {
+    if(m_parentNode != parentNode) {
+        if(m_parentNode) {
+            KeywordModel->removeExtension(m_parentNode->keywordModel());
         }
 
-        ParentCave = parentCave;
-        setParent(parentCave);
+        m_parentNode = parentNode;
+        setParent(parentNode);
 
-        if(ParentCave) {
-            KeywordModel->addExtension(ParentCave->keywordModel());
+        if(m_parentNode) {
+            KeywordModel->addExtension(m_parentNode->keywordModel());
         }
 
-        // Notes->setParentCave(ParentCave);
+        emit parentNodeChanged();
         emit parentCaveChanged();
+
+        //A node-level attachment is a fact only the node holds, so reparenting
+        //can flip this trip's answer without any of its own fields moving.
+        emit externallyBackedChanged();
     }
+}
+
+void cwTrip::setParentCave(cwCave* parentCave) {
+    setParentNode(parentCave);
+}
+
+/**
+  \brief Parent's cave
+  */
+cwCave* cwTrip::parentCave() const {
+    return qobject_cast<cwCave*>(m_parentNode.data());
 }
 
 cwUnits::UnitSystem cwTrip::unitSystem() const
 {
-    const cwCave* cave = parentCave();
-    return cave ? cave->unitSystem() : cwUnits::Metric;
+    const cwSurveyNode* node = parentNode();
+    return node ? node->unitSystem() : cwUnits::Metric;
 }
 
 void cwTrip::updateKeywordMetadata()
@@ -729,25 +1286,29 @@ cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {
 }
 
 void cwTrip::NameCommand::redo() {
-    if (auto* cave = Trip->parentCave()) {
-        if (cave->trips().contains(Trip)) {
-            cave->tripNameSet().rename(OldName, NewName);
+    if (auto* node = Trip->parentNode()) {
+        if (node->trips().contains(Trip)) {
+            node->tripNameSet().rename(OldName, NewName);
         }
     }
     Trip->Name = NewName;
     Trip->updateKeywordMetadata();
     emit Trip->nameChanged();
+    //An external trip's scope is its own survey label, which is derived from
+    //the name, so a rename moves the scope every consumer resolves against.
+    emit Trip->scopeChanged();
 }
 
 void cwTrip::NameCommand::undo() {
-    if (auto* cave = Trip->parentCave()) {
-        if (cave->trips().contains(Trip)) {
-            cave->tripNameSet().rename(NewName, OldName);
+    if (auto* node = Trip->parentNode()) {
+        if (node->trips().contains(Trip)) {
+            node->tripNameSet().rename(NewName, OldName);
         }
     }
     Trip->Name = OldName;
     Trip->updateKeywordMetadata();
     emit Trip->nameChanged();
+    emit Trip->scopeChanged();
 }
 
 cwTrip::DateCommand::DateCommand(cwTrip* trip, QDateTime date) {

@@ -7,6 +7,7 @@
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
@@ -14,6 +15,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
+#include "cwExternalCenterline.h"
 #include "cwFixStation.h"
 #include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
@@ -23,8 +25,10 @@
 #include "cwRecenterCandidateModel.h"
 #include "FixStationFixtureHelper.h"
 #include "GeoreferenceFixtureHelper.h"
+#include "TestHelper.h"
 
 //Qt includes
+#include <QCoreApplication>
 #include <QSignalSpy>
 #include <QUuid>
 
@@ -185,6 +189,7 @@ TEST_CASE("Refining the anchor leaves the frame where it is",
     cwFixStation refined = fix;
     refined.setCoordinate(kAnchorEasting + 3.0, kAnchorNorthing + 2.0, kElevation);
     cave->fixStations()->setFixStations({refined});
+    REQUIRE(waitForQueuedEvents());
 
     CHECK(region.geoReference()->localCoordinateSystem() == before);
     CHECK(region.geoReference()->state() == cwGeoReference::Anchored);
@@ -204,6 +209,7 @@ TEST_CASE("An anchor corrected by more than the threshold re-derives the frame",
     cwFixStation corrected = fix;
     corrected.setCoordinate(kAnchorEasting, kDistantNorthing, kElevation);  // 200 km north
     cave->fixStations()->setFixStations({corrected});
+    REQUIRE(waitUntil([&] { return region.geoReference()->localCoordinateSystem() != before; }));
 
     auto* geoReference = region.geoReference();
     CHECK(geoReference->localCoordinateSystem() != before);
@@ -224,6 +230,7 @@ TEST_CASE("A fix that isn't the anchor never moves the origin",
 
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B1"), kUtm12N, kAnchorEasting, kDistantNorthing, kElevation));
+    REQUIRE(waitForQueuedEvents());
 
     CHECK(region.geoReference()->localCoordinateSystem() == before);
     CHECK(region.geoReference()->anchor().id == anchor.id());
@@ -242,7 +249,9 @@ TEST_CASE("Deleting the anchor with data still nearby freezes the frame",
 
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B1"), kUtm12N, kNearbyEasting, kNearbyNorthing, kElevation));
+    REQUIRE(waitForQueuedEvents());
     cave->fixStations()->removeAt(0);
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Frozen; }));
 
     auto* geoReference = region.geoReference();
     CHECK(geoReference->state() == cwGeoReference::Frozen);
@@ -265,6 +274,7 @@ TEST_CASE("Deleting the anchor with only distant data left re-derives from what 
     REQUIRE(region.geoReference()->anchor().id == wrong.id());
 
     cave->fixStations()->removeAt(0);
+    REQUIRE(waitUntil([&] { return region.geoReference()->anchor().id == right.id(); }));
 
     auto* geoReference = region.geoReference();
     CHECK(geoReference->state() == cwGeoReference::Anchored);
@@ -281,6 +291,7 @@ TEST_CASE("Deleting the last georeferenced input un-georeferences the project",
     REQUIRE(region.geoReference()->state() == cwGeoReference::Anchored);
 
     cave->fixStations()->removeAt(0);
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Ungeoreferenced; }));
 
     CHECK(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
     CHECK(region.geoReference()->localCoordinateSystem().isEmpty());
@@ -297,11 +308,14 @@ TEST_CASE("A frozen frame stays put when new data arrives",
 
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B1"), kUtm12N, kNearbyEasting, kNearbyNorthing, kElevation));
+    REQUIRE(waitForQueuedEvents());
     cave->fixStations()->removeAt(0);
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Frozen; }));
     REQUIRE(region.geoReference()->state() == cwGeoReference::Frozen);
 
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("C1"), kUtm12N, kAnchorEasting, kDistantNorthing, kElevation));
+    REQUIRE(waitForQueuedEvents());
 
     CHECK(region.geoReference()->state() == cwGeoReference::Frozen);
     CHECK(region.geoReference()->localCoordinateSystem() == before);
@@ -321,6 +335,7 @@ TEST_CASE("An anchor that hasn't loaded yet is not an anchor that was deleted",
     data.geoReference.anchor = cwGeoReference::Anchor{cwGeoReference::Anchor::LazLayer,
                                                       QUuid::createUuid()};
     region.setData(data);
+    REQUIRE(waitForQueuedEvents());
     REQUIRE(region.geoReference()->state() == cwGeoReference::Anchored);
 
     // A fix station on the other side of the world — far enough that a frame
@@ -359,6 +374,7 @@ TEST_CASE("Loading a project keeps the frame the file carries",
     REQUIRE(loaded.geoReference()->state() == cwGeoReference::Anchored);
 
     loaded.setData(data);
+    REQUIRE(waitForQueuedEvents());
 
     CHECK(loaded.geoReference()->state() == cwGeoReference::Frozen);
     CHECK(loaded.geoReference()->localCoordinateSystem() == stored);
@@ -413,8 +429,10 @@ TEST_CASE("A frame that has been recentered stays put afterward",
 
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B1"), kUtm12N, kNearbyEasting, kNearbyNorthing, kElevation));
+    REQUIRE(waitForQueuedEvents());
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("C1"), kUtm12N, kAnchorEasting, kDistantNorthing, kElevation));
+    REQUIRE(waitForQueuedEvents());
 
     CHECK(frameSpy.count() == 2);
     CHECK(region.geoReference()->localCoordinateSystem() == recentered);
@@ -555,9 +573,11 @@ TEST_CASE("The lifecycle follows a station the user picked",
     cwFixStation refined = entrance;
     refined.setCoordinate(kAnchorEasting + 3.0, kAnchorNorthing + 2.0, kElevation);
     cave->fixStations()->setFixStations({refined, surveyed});
+    REQUIRE(waitForQueuedEvents());
     CHECK(geoReference->localCoordinateSystem() == picked);
 
     cave->fixStations()->removeAt(1);
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Frozen; }));
 
     // The hand-off every deleted anchor gets: the frame is still a good frame,
     // so it keeps it and gives up the anchor.
@@ -622,6 +642,7 @@ TEST_CASE("A frame already frozen on the data's middle says so",
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("A3"), kUtm12N,
                 kAnchorEasting + 4000.0, kAnchorNorthing + 4000.0, kElevation));
+    REQUIRE(waitForQueuedEvents());
 
     CHECK_FALSE(region.localProjection()->isCenteredOnDataCenter());
     CHECK_FALSE(openedCandidates(&region)->dataCenterIsCurrent());
@@ -755,6 +776,7 @@ TEST_CASE("The candidate rows are the project as of the last refresh",
 
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("B1"), kUtm12N, kNearbyEasting, kNearbyNorthing, kElevation));
+    REQUIRE(waitForQueuedEvents());
     CHECK(candidates->count() == 1);
 
     candidates->refresh();
@@ -914,7 +936,10 @@ TEST_CASE("The manager names what the frame is centered on",
         cwFixStation renamed = fix;
         renamed.setStationName(QStringLiteral("A43"));
         cave->fixStations()->setFixStations({renamed});
+        REQUIRE(waitUntil([&] { return spy.count() >= 1; }));
 
+        CHECK(spy.count() == 1);
+        REQUIRE(waitForQueuedEvents());
         CHECK(spy.count() == 1);
         CHECK(localProjection->anchorDescription() == QStringLiteral("A43 — Roppel Cave"));
     }
@@ -925,6 +950,7 @@ TEST_CASE("The manager names what the frame is centered on",
         // The anchor was the only georeferenced input, so deleting it takes the
         // frame with it — and there is nothing left the description could name.
         cave->fixStations()->setFixStations({});
+        REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Ungeoreferenced; }));
 
         REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
         CHECK(spy.count() >= 1);
@@ -1094,6 +1120,7 @@ TEST_CASE("A stored anchor the domain gate refuses can still be deleted (#660)",
 
     cwCavingRegion region;
     region.setData(data);
+    REQUIRE(waitForQueuedEvents());
     auto* geoReference = region.geoReference();
     REQUIRE(geoReference->state() == cwGeoReference::Anchored);
     REQUIRE(geoReference->anchor().id == typo.id());
@@ -1101,6 +1128,7 @@ TEST_CASE("A stored anchor the domain gate refuses can still be deleted (#660)",
 
     REQUIRE(region.caveCount() == 1);
     region.cave(0)->fixStations()->removeAt(0);
+    REQUIRE(waitUntil([&] { return region.geoReference()->anchor() == cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation, good.id()}; }));
 
     CHECK(geoReference->state() == cwGeoReference::Anchored);
     CHECK(geoReference->anchor()
@@ -1126,11 +1154,13 @@ TEST_CASE("An anchor edited into a typo stops holding the frame (#660)",
 
     SECTION("the only fix gives the project back its ungeoreferenced state") {
         cave->fixStations()->setFixStations({typo});
+        REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Ungeoreferenced; }));
 
         CHECK(geoReference->state() == cwGeoReference::Ungeoreferenced);
 
         // Correcting the typo anchors the project again.
         cave->fixStations()->setFixStations({anchor});
+        REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Anchored; }));
         CHECK(geoReference->state() == cwGeoReference::Anchored);
         checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
                         kAnchorEasting, kAnchorNorthing);
@@ -1140,9 +1170,467 @@ TEST_CASE("An anchor edited into a typo stops holding the frame (#660)",
         const cwFixStation neighbor = makeFix(QStringLiteral("B1"), kUtm12N,
                                               kNearbyEasting, kNearbyNorthing, kElevation);
         cave->fixStations()->appendFixStation(neighbor);
+        REQUIRE(waitForQueuedEvents());
         cave->fixStations()->setFixStations({typo, neighbor});
+        REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Frozen; }));
 
         CHECK(geoReference->state() == cwGeoReference::Frozen);
         CHECK(geoReference->localCoordinateSystem() == before);
     }
 }
+
+namespace {
+
+//! An attached file's fix on \a ownerId at (\a easting, \a northing,
+//! kElevation), its coordinate written in meters as the scan stores it.
+cwAttachedFix makeAttachedFix(const QString& station, const QUuid& ownerId,
+                              double easting, double northing)
+{
+    cwAttachedFix fix;
+    fix.station = station;
+    fix.coordinate = QStringLiteral("%1 %2 %3").arg(easting, 0, 'f', 3)
+                         .arg(northing, 0, 'f', 3).arg(kElevation, 0, 'f', 3);
+    fix.ownerId = ownerId;
+    fix.fileName = QStringLiteral("attached.svx");
+    return fix;
+}
+
+//! The fix as a file that names its own system for it lists it.
+cwAttachedFix withOwnSystem(cwAttachedFix fix, const QString& coordinateSystem,
+                            const QString& placementSystem = QString())
+{
+    fix.coordinateSystem = coordinateSystem;
+    fix.placementSystem = placementSystem;
+    return fix;
+}
+
+//! A new cave in \a region named \a name, attached to a file, with \a system
+//! chosen for the file's bare fixes (none when empty).
+cwCave* addAttachedCave(cwCavingRegion* region, const QString& name,
+                        const QString& system = QString())
+{
+    cwCave* cave = addCaveWithFixes(region, {});
+    cave->setName(name);
+    cwExternalCenterline centerline(QStringLiteral("attached.svx"));
+    centerline.setFixCoordinateSystem(system);
+    cave->setExternalCenterline(centerline);
+    REQUIRE(waitForQueuedEvents());
+    return cave;
+}
+
+//! The frame anchoring on \a fix derives: the one deriveFrom() builds at the
+//! fix's placement in its own system.
+QString frameAt(const cwAttachedFix& fix)
+{
+    const std::optional<cwAttachedFix::Placement> placement = fix.placementIn(fix.solveSystem());
+    REQUIRE(placement.has_value());
+    const QString frame = cwLocalProjection::deriveFrom(placement->cs, placement->point);
+    REQUIRE_FALSE(frame.isEmpty());
+    return frame;
+}
+
+constexpr double kOwnSystemEasting = 500200.0;
+constexpr double kOwnSystemNorthing = 3000000.0;
+constexpr double kCompassEasting = 500000.0;
+constexpr double kCompassNorthing = 4000000.0;
+constexpr double kWallsEasting = 520000.0;
+constexpr double kWallsNorthing = 4040000.0;
+constexpr double kNorthBareEasting = 500100.0;
+constexpr double kNorthBareNorthing = 3000100.0;
+constexpr double kNorthOwnEasting = 500000.0;
+constexpr double kNorthOwnNorthing = 3000000.0;
+
+//! A second attached fix near enough to the anchor to vote on the data's
+//! middle without leaving the 50 km threshold.
+constexpr double kSpreadEasting = kAnchorEasting + 2000.0;
+
+} // namespace
+
+TEST_CASE("An attached fix whose file names its own system gives a project with no frame one",
+          "[cwLocalProjectionManager][AttachedFrame]")
+{
+    struct Format
+    {
+        const char* label;
+        QString station;
+        QString coordinateSystem;
+        QString placementSystem;
+        double easting;
+        double northing;
+    };
+    const Format format = GENERATE(
+        Format{"Survex *cs", QStringLiteral("scoped.S1"), QStringLiteral("UTM48N"), QString(),
+               kOwnSystemEasting, kOwnSystemNorthing},
+        Format{"Walls .REF", QStringLiteral("M1"), QStringLiteral("NAD27 CONUS, UTM zone 16N"),
+               QStringLiteral("EPSG:26716"), kWallsEasting, kWallsNorthing},
+        Format{"Compass .mak", QStringLiteral("alpha.A1"), QStringLiteral("WGS 1984, UTM zone 16N"),
+               QStringLiteral("EPSG:32616"), kCompassEasting, kCompassNorthing});
+    INFO("format: " << format.label);
+
+    cwCavingRegion region;
+    cwCave* cave = addAttachedCave(&region, QStringLiteral("Owner Cave"));
+    REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
+
+    const cwAttachedFix fix = withOwnSystem(
+        makeAttachedFix(format.station, cave->id(), format.easting, format.northing),
+        format.coordinateSystem, format.placementSystem);
+    cave->setAttachedFixes({fix});
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Anchored; }));
+
+    cwGeoReference* geoReference = region.geoReference();
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == cave->id());
+    CHECK(geoReference->localCoordinateSystem() == frameAt(fix));
+    CHECK(region.localProjection()->anchorDescription()
+          == QStringLiteral("%1 — Owner Cave").arg(format.station));
+}
+
+TEST_CASE("An attachment anchor whose first listed fix is bare is named by its own-system fix",
+          "[cwLocalProjectionManager][AttachedFrame][cwAnchorDescription]")
+{
+    // north_cs_out.svx's shape: sanqiao's e1 names no system and nothing is
+    // chosen for it, while houping's h1 names UTM48N.
+    cwCavingRegion region;
+    cwCave* cave = addAttachedCave(&region, QStringLiteral("North"));
+    const cwAttachedFix bare =
+        makeAttachedFix(QStringLiteral("sanqiao.e1"), cave->id(), kNorthBareEasting,
+                        kNorthBareNorthing);
+    const cwAttachedFix own = withOwnSystem(
+        makeAttachedFix(QStringLiteral("houping.h1"), cave->id(), kNorthOwnEasting,
+                        kNorthOwnNorthing),
+        QStringLiteral("UTM48N"));
+    cave->setAttachedFixes({bare, own});
+    REQUIRE(waitUntil([&] { return region.geoReference()->localCoordinateSystem() == frameAt(own); }));
+
+    CHECK(region.geoReference()->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(region.geoReference()->localCoordinateSystem() == frameAt(own));
+    CHECK(region.localProjection()->anchorDescription() == QStringLiteral("houping.h1 — North"));
+}
+
+TEST_CASE("An attached fix with its own system leaves a native fix's frame alone",
+          "[cwLocalProjectionManager][AttachedFrame]")
+{
+    cwCavingRegion region;
+    cwCave* native = addCaveWithFixes(&region, {
+        makeFix(QStringLiteral("A1"), kUtm12N, kAnchorEasting, kAnchorNorthing, kElevation)});
+    native->setName(QStringLiteral("Native Cave"));
+    cwGeoReference* geoReference = region.geoReference();
+    REQUIRE(geoReference->anchor().kind == cwGeoReference::Anchor::FixStation);
+    const QString before = geoReference->localCoordinateSystem();
+
+    cwCave* attached = addAttachedCave(&region, QStringLiteral("Owner Cave"));
+    attached->setAttachedFixes({withOwnSystem(
+        makeAttachedFix(QStringLiteral("S1"), attached->id(), kAnchorEasting, kDistantNorthing),
+        kUtm12N)});
+    REQUIRE(waitForQueuedEvents());
+
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::FixStation);
+    CHECK(geoReference->localCoordinateSystem() == before);
+    CHECK(region.localProjection()->anchorDescription() == QStringLiteral("A1 — Native Cave"));
+}
+
+TEST_CASE("A bare attached fix with a chosen system anchors ahead of an own-system one",
+          "[cwLocalProjectionManager][AttachedFrame]")
+{
+    cwCavingRegion region;
+    // The own-system owner comes first in the region, so only the order of
+    // the two kinds can put the bare fix ahead of it.
+    cwCave* ownSystem = addAttachedCave(&region, QStringLiteral("Own System"));
+    cwCave* chosen = addAttachedCave(&region, QStringLiteral("Chosen"), kUtm12N);
+    const cwAttachedFix own = withOwnSystem(
+        makeAttachedFix(QStringLiteral("o1"), ownSystem->id(), kAnchorEasting, kAnchorNorthing),
+        kUtm12N);
+    const cwAttachedFix bare =
+        makeAttachedFix(QStringLiteral("b1"), chosen->id(), kNearbyEasting, kNearbyNorthing);
+    // Both fixes arrive in one evaluation, as from one load: order decides
+    // only between inputs that appear together.
+    region.localProjection()->setLoading(true);
+    ownSystem->setAttachedFixes({own});
+    chosen->setAttachedFixes({bare});
+    region.localProjection()->setLoading(false);
+
+    cwGeoReference* geoReference = region.geoReference();
+    REQUIRE(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == chosen->id());
+    checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                    kNearbyEasting, kNearbyNorthing);
+
+    SECTION("unsetting the choice hands the anchor to the nearby own-system fix")
+    {
+        cwExternalCenterline centerline = chosen->externalCenterline();
+        centerline.setFixCoordinateSystem(QString());
+        chosen->setExternalCenterline(centerline);
+        REQUIRE(waitUntil([&] { return region.geoReference()->anchor().id == ownSystem->id(); }));
+
+        CHECK(geoReference->state() == cwGeoReference::Anchored);
+        CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+        CHECK(geoReference->anchor().id == ownSystem->id());
+        checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                        kAnchorEasting, kAnchorNorthing);
+        CHECK(region.localProjection()->anchorDescription() == QStringLiteral("o1 — Own System"));
+    }
+}
+
+TEST_CASE("An own-system attached fix outside its system's domain never anchors",
+          "[cwLocalProjectionManager][AttachedFrame]")
+{
+    cwCavingRegion region;
+    cwCave* typo = addAttachedCave(&region, QStringLiteral("Typo"));
+    cwCave* good = addAttachedCave(&region, QStringLiteral("Good"));
+    typo->setAttachedFixes({withOwnSystem(
+        makeAttachedFix(QStringLiteral("t1"), typo->id(), kOutOfZoneEasting, kAnchorNorthing),
+        kUtm12N)});
+    REQUIRE(waitForQueuedEvents());
+    good->setAttachedFixes({withOwnSystem(
+        makeAttachedFix(QStringLiteral("g1"), good->id(), kAnchorEasting, kAnchorNorthing),
+        kUtm12N)});
+    REQUIRE(waitUntil([&] { return region.geoReference()->anchor().id == good->id(); }));
+
+    cwGeoReference* geoReference = region.geoReference();
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == good->id());
+    checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                    kAnchorEasting, kAnchorNorthing);
+}
+
+TEST_CASE("The data's middle counts an attached fix whose file names its own system",
+          "[cwLocalProjectionManager][AttachedFrame][cwRecenter]")
+{
+    cwCavingRegion region;
+    addCaveWithFixes(&region, {
+        makeFix(QStringLiteral("A1"), kUtm12N, kAnchorEasting, kAnchorNorthing, kElevation)});
+    cwLocalProjectionManager* projection = region.localProjection();
+    const auto before = projection->dataCenter();
+    REQUIRE(before.has_value());
+
+    cwCave* attached = addAttachedCave(&region, QStringLiteral("Owner Cave"));
+    attached->setAttachedFixes({withOwnSystem(
+        makeAttachedFix(QStringLiteral("S1"), attached->id(), kSpreadEasting, kAnchorNorthing),
+        kUtm12N)});
+
+    const auto after = projection->dataCenter();
+    REQUIRE(after.has_value());
+    constexpr double kMarginMeters = 1.0;
+    CHECK_THAT(after->x - before->x,
+               WithinAbs((kSpreadEasting - kAnchorEasting) / 2.0, kMarginMeters));
+    CHECK_THAT(after->y - before->y, WithinAbs(0.0, kMarginMeters));
+}
+
+TEST_CASE("Recentering an attachment-only project on the data's middle stays recentered",
+          "[cwLocalProjectionManager][AttachedFrame][cwRecenter]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addAttachedCave(&region, QStringLiteral("Owner Cave"), kUtm12N);
+    const cwAttachedFix first =
+        makeAttachedFix(QStringLiteral("b1"), cave->id(), kAnchorEasting, kAnchorNorthing);
+    const cwAttachedFix second =
+        makeAttachedFix(QStringLiteral("b2"), cave->id(), kSpreadEasting, kAnchorNorthing);
+    cave->setAttachedFixes({first, second});
+    REQUIRE(waitUntil([&] { return region.geoReference()->anchor().kind == cwGeoReference::Anchor::Attachment; }));
+
+    cwGeoReference* geoReference = region.geoReference();
+    REQUIRE(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    REQUIRE(region.localProjection()->recenterOnDataCenter());
+    REQUIRE(geoReference->state() == cwGeoReference::Frozen);
+    const QString recentered = geoReference->localCoordinateSystem();
+
+    // The next scan lists the same fixes again, one of them from a moved line,
+    // which re-evaluates the frame.
+    cwAttachedFix rescanned = second;
+    rescanned.line = second.line + 1;
+    cave->setAttachedFixes({first, rescanned});
+    REQUIRE(waitForQueuedEvents());
+
+    CHECK(geoReference->state() == cwGeoReference::Frozen);
+    CHECK(geoReference->localCoordinateSystem() == recentered);
+
+    SECTION("a native fix turns the attached fixes out of the frozen frame again")
+    {
+        // Far past the threshold: with the attached fixes still counted, the
+        // ones at the origin would keep the frame where it is.
+        addCaveWithFixes(&region, {
+            makeFix(QStringLiteral("N1"), kUtm12N, kAnchorEasting, kDistantNorthing, kElevation)});
+
+        CHECK(geoReference->state() == cwGeoReference::Frozen);
+        checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                        kAnchorEasting, kDistantNorthing);
+    }
+}
+
+TEST_CASE("A bare attached fix with no system chosen puts a project with no frame on the local grid",
+          "[cwLocalProjectionManager][AttachedFrame][LocalGrid]")
+{
+    cwCavingRegion region;
+    cwCave* attached = addAttachedCave(&region, QStringLiteral("Grid Cave"));
+    attached->setAttachedFixes({makeAttachedFix(QStringLiteral("g1"), attached->id(),
+                                                kAnchorEasting, kAnchorNorthing)});
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::LocalGrid; }));
+
+    cwGeoReference* geoReference = region.geoReference();
+    CHECK(geoReference->state() == cwGeoReference::LocalGrid);
+    CHECK_FALSE(geoReference->hasCoordinateSystem());
+    CHECK(geoReference->localCoordinateSystem().isEmpty());
+    CHECK_FALSE(geoReference->anchor().isValid());
+    CHECK(region.localProjection()->anchorDescription().isEmpty());
+
+    SECTION("a native fix takes the project over, and losing it returns the local grid")
+    {
+        cwCave* native = addCaveWithFixes(&region, {
+            makeFix(QStringLiteral("A1"), kUtm12N, kAnchorEasting, kAnchorNorthing, kElevation)});
+        CHECK(geoReference->state() == cwGeoReference::Anchored);
+        CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::FixStation);
+        checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                        kAnchorEasting, kAnchorNorthing);
+
+        native->fixStations()->removeAt(0);
+        REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::LocalGrid; }));
+        CHECK(geoReference->state() == cwGeoReference::LocalGrid);
+        CHECK(geoReference->localCoordinateSystem().isEmpty());
+    }
+
+    SECTION("choosing a system anchors the project on the fix, and unsetting it returns the local grid")
+    {
+        cwExternalCenterline centerline = attached->externalCenterline();
+        centerline.setFixCoordinateSystem(kUtm12N);
+        attached->setExternalCenterline(centerline);
+        REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Anchored; }));
+        CHECK(geoReference->state() == cwGeoReference::Anchored);
+        CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+
+        centerline.setFixCoordinateSystem(QString());
+        attached->setExternalCenterline(centerline);
+        REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::LocalGrid; }));
+        CHECK(geoReference->state() == cwGeoReference::LocalGrid);
+        CHECK(geoReference->localCoordinateSystem().isEmpty());
+    }
+
+    SECTION("losing the last bare fix returns the project to ungeoreferenced")
+    {
+        attached->setAttachedFixes({});
+        REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Ungeoreferenced; }));
+        CHECK(geoReference->state() == cwGeoReference::Ungeoreferenced);
+    }
+}
+
+TEST_CASE("A restored local grid is kept while the scan has listed nothing yet",
+          "[cwLocalProjectionManager][AttachedFrame][LocalGrid]")
+{
+    cwCavingRegion region;
+    cwLocalProjectionManager* projection = region.localProjection();
+    projection->setLoading(true);
+    region.geoReference()->restore(cwGeoReference::LocalGrid, QString(),
+                                   cwGeoReference::Anchor{}, QString());
+    addAttachedCave(&region, QStringLiteral("Grid Cave"));
+    projection->setLoading(false);
+
+    CHECK(region.geoReference()->state() == cwGeoReference::LocalGrid);
+    CHECK(region.geoReference()->localCoordinateSystem().isEmpty());
+}
+
+TEST_CASE("A restored frozen frame is kept when a bare attached fix lists before its inputs",
+          "[cwLocalProjectionManager][AttachedFrame][LocalGrid]")
+{
+    cwCavingRegion region;
+    cwLocalProjectionManager* projection = region.localProjection();
+    cwCave* cave = addAttachedCave(&region, QStringLiteral("Grid Cave"));
+    const cwAttachedFix bare =
+        makeAttachedFix(QStringLiteral("g1"), cave->id(), kAnchorEasting, kAnchorNorthing);
+    cwAttachedFix located = bare;
+    located.readInSystem = kUtm12N;
+    const QString stored = frameAt(located);
+
+    projection->setLoading(true);
+    region.geoReference()->restore(cwGeoReference::Frozen, stored,
+                                   cwGeoReference::Anchor{}, QString());
+    projection->setLoading(false);
+    cave->setAttachedFixes({bare});
+    REQUIRE(waitForQueuedEvents());
+
+    CHECK(region.geoReference()->state() == cwGeoReference::Frozen);
+    CHECK(region.geoReference()->localCoordinateSystem() == stored);
+}
+
+TEST_CASE("A bare attached fix read in its file's own *cs out gives a project with no frame one",
+          "[cwLocalProjectionManager][AttachedFrame][LocalGrid]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addAttachedCave(&region, QStringLiteral("Read In Cave"));
+    cwAttachedFix readIn = makeAttachedFix(QStringLiteral("sanqiao.e1"), cave->id(),
+                                           kAnchorEasting, kAnchorNorthing);
+    readIn.readInSystem = kUtm12N;
+    readIn.readInFileOutput = true;
+    cave->setAttachedFixes({readIn});
+    REQUIRE(waitUntil([&] { return region.geoReference()->state() == cwGeoReference::Anchored; }));
+
+    cwGeoReference* geoReference = region.geoReference();
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == cave->id());
+    CHECK(geoReference->localCoordinateSystem() == frameAt(readIn));
+    CHECK(region.localProjection()->anchorDescription()
+          == QStringLiteral("sanqiao.e1 — Read In Cave"));
+}
+
+TEST_CASE("Attached fixes listed on two caves in one turn settle the frame once",
+          "[cwLocalProjectionManager][AttachedFrame][CoalescedPass]")
+{
+    // A scan apply hands each derived record its fixes one after another in
+    // one turn: a bare fix that alone would put the project on the local
+    // grid, then an own-system fix that anchors it.
+    cwCavingRegion region;
+    cwCave* bareCave = addAttachedCave(&region, QStringLiteral("Bare Cave"));
+    cwCave* ownCave = addAttachedCave(&region, QStringLiteral("Own Cave"));
+    REQUIRE(waitForQueuedEvents());
+    cwGeoReference* geoReference = region.geoReference();
+    REQUIRE(geoReference->state() == cwGeoReference::Ungeoreferenced);
+
+    const cwAttachedFix own = withOwnSystem(
+        makeAttachedFix(QStringLiteral("o1"), ownCave->id(), kAnchorEasting, kAnchorNorthing),
+        kUtm12N);
+    QSignalSpy frameSpy(geoReference, &cwGeoReference::localProjectionChanged);
+    bareCave->setAttachedFixes({makeAttachedFix(QStringLiteral("b1"), bareCave->id(),
+                                                kNearbyEasting, kNearbyNorthing)});
+    ownCave->setAttachedFixes({own});
+    REQUIRE(waitUntil([&] { return frameSpy.count() >= 1; }));
+
+    CHECK(frameSpy.count() == 1);
+    REQUIRE(waitForQueuedEvents());
+    CHECK(frameSpy.count() == 1);
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == ownCave->id());
+    CHECK(geoReference->localCoordinateSystem() == frameAt(own));
+    CHECK(region.localProjection()->anchorDescription() == QStringLiteral("o1 — Own Cave"));
+}
+
+TEST_CASE("A fix typed and corrected in one turn settles the frame once",
+          "[cwLocalProjectionManager][CoalescedPass]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addCaveWithFixes(&region, {});
+    REQUIRE(waitForQueuedEvents());
+    cwGeoReference* geoReference = region.geoReference();
+    REQUIRE(geoReference->state() == cwGeoReference::Ungeoreferenced);
+
+    const cwFixStation wrong = makeFix(QStringLiteral("A1"), kUtm12N,
+                                       kAnchorEasting, kAnchorNorthing, kElevation);
+    cwFixStation corrected = wrong;
+    corrected.setCoordinate(kAnchorEasting, kDistantNorthing, kElevation);
+
+    QSignalSpy frameSpy(geoReference, &cwGeoReference::localProjectionChanged);
+    cave->fixStations()->setFixStations({wrong});
+    cave->fixStations()->setFixStations({corrected});
+    REQUIRE(waitUntil([&] { return frameSpy.count() >= 1; }));
+
+    CHECK(frameSpy.count() == 1);
+    REQUIRE(waitForQueuedEvents());
+    CHECK(frameSpy.count() == 1);
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().id == wrong.id());
+    checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                    kAnchorEasting, kDistantNorthing);
+}
+

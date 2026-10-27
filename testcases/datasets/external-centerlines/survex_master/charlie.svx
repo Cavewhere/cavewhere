@@ -1,0 +1,8 @@
+; Charlie cave - 4 stations.
+*begin charlie
+*fix c1 200 0 0
+*data normal from to tape compass clino
+c1 c2 7.0 180 0
+c2 c3 5.0 180 0
+c3 c4 4.0 180 0
+*end charlie

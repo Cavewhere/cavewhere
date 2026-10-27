@@ -5,6 +5,7 @@
 #include "cwFutureManagerToken.h"
 #include "cwFutureManagerModel.h"
 #include "asyncfuture.h"
+#include "TestHelper.h"
 
 //AsyncFuture
 #include "asyncfuture.h"
@@ -29,7 +30,7 @@ TEST_CASE("cwFutureManagerToken should be thread safe", "[cwFutureManagerToken]"
 
         def.complete(1);
 
-        QCoreApplication::processEvents();
+        REQUIRE(waitUntil([&model] { return model->rowCount() == 0; }));
 
         CHECK(model->rowCount() == 0);
     }
@@ -45,7 +46,7 @@ TEST_CASE("cwFutureManagerToken should be thread safe", "[cwFutureManagerToken]"
 
         def.complete(1);
 
-        QCoreApplication::processEvents();
+        REQUIRE(waitUntil([&model] { return model->rowCount() == 0; }));
 
         CHECK(model->rowCount() == 0);
     }
@@ -66,7 +67,7 @@ TEST_CASE("cwFutureManagerToken should be thread safe", "[cwFutureManagerToken]"
 
         def.complete(1);
 
-        QCoreApplication::processEvents();
+        REQUIRE(waitUntil([&model] { return model->rowCount() == 0; }));
 
         CHECK(model->rowCount() == 0);
     }

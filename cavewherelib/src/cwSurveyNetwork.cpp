@@ -31,6 +31,20 @@ void cwSurveyNetwork::addShot(const QString& fromStation, const QString& toStati
     }
 }
 
+void cwSurveyNetwork::addNeighbor(const QString& station, const QString& neighbor) {
+    const QString stationKey = cwStation::canonicalKey(station);
+    const QString neighborKey = cwStation::canonicalKey(neighbor);
+
+    if (stationKey.isEmpty() || neighborKey.isEmpty()) {
+        return;
+    }
+
+    StationData& stationData = stationDataMap[stationKey];
+    if (!stationData.neighborList.contains(neighborKey)) {
+        stationData.neighborList.append(neighborKey);
+    }
+}
+
 QStringList cwSurveyNetwork::neighbors(const QString& stationName) const {
     const QString key = cwStation::canonicalKey(stationName);
     auto dataIterator = stationDataMap.constFind(key);
@@ -41,6 +55,8 @@ QStringList cwSurveyNetwork::neighbors(const QString& stationName) const {
 }
 
 QStringList cwSurveyNetwork::stations() const { return stationDataMap.keys(); }
+
+int cwSurveyNetwork::stationCount() const { return stationDataMap.size(); }
 
 bool cwSurveyNetwork::hasStation(const QString& stationName) const {
     const QString key = cwStation::canonicalKey(stationName.trimmed());
@@ -72,6 +88,37 @@ bool cwSurveyNetwork::hasPosition(const QString& stationName) const {
     const QString key = cwStation::canonicalKey(stationName);
     auto dataIterator = stationDataMap.constFind(key);
     return (dataIterator != stationDataMap.constEnd() && dataIterator->positionIsSet);
+}
+
+cwSurveyNetwork cwSurveyNetwork::scoped(const QString& prefix) const
+{
+    if (prefix.isEmpty()) {
+        return *this;
+    }
+
+    const QString key = cwStation::canonicalKey(prefix);
+
+    cwSurveyNetwork network;
+    for (auto it = stationDataMap.constBegin(); it != stationDataMap.constEnd(); ++it) {
+        if (!it.key().startsWith(key)) {
+            continue;
+        }
+        const QString station = it.key().sliced(key.size());
+        if (station.isEmpty()) {
+            continue;
+        }
+        for (const QString& neighbor : it.value().neighborList) {
+            if (neighbor.startsWith(key)) {
+                network.addShot(station, neighbor.sliced(key.size()));
+            } else {
+                network.addNeighbor(station, neighbor);
+            }
+        }
+        if (it.value().positionIsSet) {
+            network.setPosition(station, it.value().stationPosition);
+        }
+    }
+    return network;
 }
 
 QStringList cwSurveyNetwork::changedStations(const cwSurveyNetwork& firstNetwork, const cwSurveyNetwork& secondNetwork) {

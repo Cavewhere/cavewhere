@@ -2,6 +2,7 @@
 #define CWTRIPDATA_H
 
 #include <QString>
+#include <QStringList>
 #include <QDateTime>
 #include <QUuid>
 
@@ -25,7 +26,30 @@ struct cwTripData {
     cwSurveyNoteSketchModelData sketchModel;
     QUuid id;
     cwExternalCenterline externalCenterline;
+
+    //! Where a derived trip sits inside its source's scan, empty on a native
+    //! trip.
+    QString sourcePath;
+
+    //! Snapshot of cwTrip::externalStations() so a worker pass (the line-plot
+    //! solve, the floating-survey search) sees an attachment's station names
+    //! without touching the live trip. Derived scan output, so it is filled by
+    //! cwTrip::data() and never persisted — see cwTrip::setData for why nothing
+    //! reads it back.
+    QStringList externalStations;
+
+    //! Snapshot of cwTrip::cavernLabel(), for the worker passes' scopePrefix().
+    //! Derived like externalStations, so never persisted.
+    QString cavernLabel;
 };
+
+//! True for a trip whose shots are the user's own: neither derived from a
+//! source nor attached to a file. Inside a sourced subtree, the driver writes
+//! each one as its own block in the root's.
+inline bool isNativeTrip(const cwTripData& trip)
+{
+    return trip.sourcePath.isEmpty() && trip.externalCenterline.isEmpty();
+}
 
 
 #endif // CWTRIPDATA_H

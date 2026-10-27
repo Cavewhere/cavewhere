@@ -1,0 +1,18 @@
+; Root shots plus one *begin block, for the P3.15 root-station count and
+; the P3.16 whole-cave window: r1..r3 sit outside every *begin, so the
+; root owns them, while side owns s1 and s2. The tie shot names side.s1
+; explicitly, which is why the root counts 3 stations rather than 4 -
+; a qualified token names a station inside the block it points at.
+;   root          3 stations (r1, r2, r3)
+;   side          2 stations (s1, s2)
+; length 25 m, depth 2 m.
+*fix r1 0 0 0
+*data normal from to tape compass clino
+r1 r2 10.0 0 0
+r2 r3 5.0 90 0
+r3 side.s1 4.0 0 -30
+
+*begin side
+*export s1
+s1 s2 6.0 180 0
+*end side

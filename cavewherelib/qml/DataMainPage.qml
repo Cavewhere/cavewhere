@@ -23,8 +23,22 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
+    // Drives the banner proxies; never read the banner's own visible, which
+    // the hosting proxy controls (see NodePage.hasWarnings).
+    readonly property bool hasWarnings: warningsBannerId.count > 0
+
+    //Must match cwLinkGenerator::nodeLink, which builds the same address.
     function cavePageName(cave) {
-        return "Cave=" + cave.name;
+        return "Node=" + cave.name;
+    }
+
+    // Opens the page's Attach survey file dialog with \a node as the place
+    // the file's subtree goes.
+    function attachSurveyFile(node: SurveyNode) {
+        attachDialogLoaderId.active = true;
+        const dialog = attachDialogLoaderId.item as AttachSurveyFileDialog;
+        dialog.target = node;
+        dialog.open();
     }
 
     function registerGeospatialPage() {
@@ -35,7 +49,21 @@ StandardPage {
                                                  geospatialLayerPageComponent);
     }
 
-    PageView.onPageChanged: registerGeospatialPage()
+    // The region's root node's page is this one, so its Fix Stations page,
+    // the one listing every fix in the project, hangs here.
+    function registerFixStationsPage() {
+        if (PageView.page === null) return
+        if (PageView.page.childPage("Fix Stations") !== null) return
+        RootData.pageSelectionModel.registerPage(PageView.page,
+                                                 "Fix Stations",
+                                                 fixStationsPageComponent,
+                                                 {"cave": RootData.region.rootNode});
+    }
+
+    PageView.onPageChanged: {
+        registerGeospatialPage()
+        registerFixStationsPage()
+    }
 
     // cwPageSelectionModel::clearHistory() (invoked by newProject/loadProject)
     // wipes "Data"'s child pages but keeps DataMainPage cached, so
@@ -45,16 +73,30 @@ StandardPage {
         target: RootData.pageSelectionModel
         function onCurrentPageChanged() {
             pageId.registerGeospatialPage()
+            pageId.registerFixStationsPage()
             // Leaving (or re-entering) the page drops the settings back to
             // read-only so the rarely-changed unit/CS editors are never left
             // exposed after navigating away.
             settingsEditButton.editMode = false
+
+            // A move is picked on this page's tree, so leaving the page
+            // cancels it.
+            if (RootData.pageSelectionModel.currentPage !== pageId.PageView.page) {
+                moveBannerId.cancel()
+            }
         }
     }
 
     QQ.Component {
         id: geospatialLayerPageComponent
         GeospatialLayerPage {
+            anchors.fill: parent
+        }
+    }
+
+    QQ.Component {
+        id: fixStationsPageComponent
+        FixStationPage {
             anchors.fill: parent
         }
     }
@@ -156,6 +198,31 @@ StandardPage {
                           "supported, <b>.laz</b> or <b>.las</b>.</p>" +
                           "<p>Click the number to add or remove files.</p>"
                 }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.delegatePadding
+
+                QC.Label {
+                    text: qsTr("Fix stations:")
+                }
+
+                LinkText {
+                    objectName: "projectFixStationsLink"
+                    text: RootData.region.rootNode.subtreeFixStationCount
+                    onClicked: {
+                        RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                                   "Fix Stations");
+                    }
+                }
+
+                FixStationErrorBadge {
+                    objectName: "projectFixStationsBadge"
+                    messages: RootData.region.fixStationValidator.fixStationWarningMessages
+                }
+
+                QQ.Item { Layout.fillWidth: true }
             }
 
             // Everything the project's coordinates are expressed in, read as one
@@ -264,7 +331,7 @@ StandardPage {
                             helpArea: projectionHelpArea
                         }
 
-                        QC.Label {
+                        SelectableText {
                             objectName: "projectionOriginValue"
                             // The coordinate takes the whole rest of the row and
                             // wraps inside it. Sharing the row with the Recenter…
@@ -312,14 +379,10 @@ StandardPage {
                             text: qsTr("Centered on:")
                         }
 
-                        QC.Label {
+                        SelectableText {
                             objectName: "projectionAnchorValue"
                             Layout.fillWidth: true
                             Layout.maximumWidth: Math.ceil(implicitWidth)
-                            // Wrap, not WordWrap: a station name is one token
-                            // with nowhere to break, and WordWrap paints it
-                            // past the frame instead of folding it.
-                            wrapMode: QQ.Text.Wrap
                             text: RootData.region.localProjection.anchorDescription
                         }
 
@@ -339,7 +402,7 @@ StandardPage {
                             text: qsTr("Datum:")
                         }
 
-                        QC.Label {
+                        SelectableText {
                             id: datumValueId
                             objectName: "projectionDatumValue"
 
@@ -347,7 +410,6 @@ StandardPage {
 
                             Layout.fillWidth: true
                             Layout.maximumWidth: Math.ceil(implicitWidth)
-                            wrapMode: QQ.Text.Wrap
 
                             text: datumValueId.unnamed
                                   ? qsTr("Unknown")
@@ -393,9 +455,18 @@ StandardPage {
         Layout.fillWidth: true
         spacing: Theme.actionBarSpacing
 
-        AddAndSearchBar {
-            addButtonText: "Add Cave"
-            onAdd: {
+        // The button adds a cave; its menu holds the other ways to add here.
+        SplitButton {
+            id: addCaveBarId
+            objectName: "addCave"
+
+            buttonObjectName: "addButton"
+            text: qsTr("Add Cave")
+            iconSource: "qrc:/twbs-icons/icons/plus.svg"
+            menu: addCaveMenuId
+            menuToolTip: qsTr("More ways to add")
+
+            onClicked: {
                 RootData.region.addCave();
 
                 var lastIndex = RootData.region.rowCount() - 1;
@@ -413,102 +484,88 @@ StandardPage {
             currentRegion: RootData.region
             importVisible: true
             page: pageId.PageView.page
-            currentCave: {
-                let currentItem = caveListId.currentItem as CaveDelegate
-                if(currentItem) {
-                    return currentItem.caveObjectRole
-                } else {
-                    return null;
-                }
-            }
+            //A trip row is current as often as a cave row, and the export
+            //verbs take a cave, so a trip leaves the buttons with none.
+            currentCave: caveTreeId.currentObject as Cave
         }
     }
 
-    QQ.ListView {
-        id: caveListId
-        model: RootData.region
+    SurveyMoveBanner {
+        id: moveBannerId
+
+        Layout.fillWidth: true
+    }
+
+    // The region root owns no warning, so this lists only the problems of the
+    // nodes below it, each opening the page that owns it.
+    NodeWarningsBanner {
+        id: warningsBannerId
+
+        node: RootData.region.rootNode
+    }
+
+    // A window-context Shortcut instead of Keys.onEscapePressed: Esc has to
+    // reach the move wherever the focus sits. Live only while this page shows
+    // an armed move, so it stays out of the way of every other Escape.
+    QQ.Shortcut {
+        sequences: ["Escape"]
+        enabled: pageId.visible && RegionSurveyTree.moveActive
+        context: Qt.WindowShortcut
+        onActivated: moveBannerId.cancel()
+    }
+
+    SurveyTreeView {
+        id: caveTreeId
+
+        removeAskBox: removeChallengeId
+        moveBanner: moveBannerId
 
         Layout.fillWidth: true
         Layout.fillHeight: true
-        clip: true
 
-        component CaveDelegate: QQ.Item {
-            id: delegateId
-            objectName: "caveDelegate" + index
+        onAttachSurveyFileRequested: (node) => pageId.attachSurveyFile(node)
+    }
 
-            required property Cave caveObjectRole;
-            required property int index
+    // Sits outside both layouts and positions itself, so one hint serves
+    // wide and narrow. The arrow on Add Cave is what the text's "here" means.
+    HelpQuoteBox {
+        id: noCavesHintId
+        objectName: "noCavesHint"
 
-            implicitHeight: flowId.implicitHeight + Theme.delegatePadding
-            width: QQ.ListView.view ? QQ.ListView.view.width : 0
+        z: 10
+        triangleOffset: 0.0
+        text: qsTr("No cave yet — add one here, or use the menu beside this button to add one from a survey file.")
+        visible: RootData.region.caveCount === 0
+        pointAtObject: addCaveBarId
+        pointAtObjectPosition: Qt.point(addCaveBarId.width / 2.0, addCaveBarId.height)
+    }
 
-            TableRowBackground {
-                isSelected: caveListId.currentIndex == delegateId.index
-                rowIndex: delegateId.index
-                anchors.fill: parent
-            }
+    // The Add button's menu: Add Cave is the button itself, so the menu
+    // holds Add Folder and Attach survey file….
+    AddVerbsMenu {
+        id: addCaveMenuId
+        objectName: "addCaveMenu"
 
-            QQ.MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
+        hiddenVerbs: [AddVerbsMenu.AddCave]
 
-                onClicked: {
-                    caveListId.currentIndex = delegateId.index
-                }
-            }
+        //A new folder stays on this page with its name ready to type.
+        onAdded: (object) => caveTreeId.revealAdded(object)
+        onAttachSurveyFileRequested: (node) => pageId.attachSurveyFile(node)
+    }
 
-            QQ.Flow {
-                id: flowId
-                width: parent.width
-                spacing: 4
-                anchors.verticalCenter: parent.verticalCenter
+    // Built on the first Attach survey file…: the dialog carries a file
+    // dialog and a scan preview that most visits to a page never open.
+    QQ.Loader {
+        id: attachDialogLoaderId
 
-                ErrorIconBar {
-                    errorModel: delegateId.caveObjectRole.errorModel
-                }
+        active: false
 
-                LinkText {
-                    objectName: "caveLink"
-                    text: delegateId.caveObjectRole.name
-                    onClicked: {
-                        RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                   pageId.cavePageName(delegateId.caveObjectRole));
-                    }
-                }
-
-                QC.Label {
-                    text: "is"
-                }
-
-                SelectableCaveStat {
-                    objectName: "length"
-                    unitValue: delegateId.caveObjectRole.length
-                }
-
-                QC.Label {
-                    text: "long and"
-                }
-
-                SelectableCaveStat {
-                    objectName: "depth"
-                    unitValue: delegateId.caveObjectRole.depth
-                    depth: true
-                }
-
-                QC.Label {
-                    text: "deep"
-                }
-            }
-
-            DataRightClickMouseMenu {
-                anchors.fill: parent
-                removeChallenge: removeChallengeId
-                name: delegateId.caveObjectRole.name
-                row: delegateId.index
+        sourceComponent: QQ.Component {
+            AttachSurveyFileDialog {
+                onAttached: (sourceRoot) => caveTreeId.revealAttached(sourceRoot)
+                onImported: (cave) => caveTreeId.openObject(cave)
             }
         }
-
-        delegate: CaveDelegate {}
     }
 
     QQ.Component {
@@ -544,7 +601,11 @@ StandardPage {
         RowLayout {
             spacing: Theme.columnGap
 
+            // Asked for at its widest: the tree beside it reports a wide
+            // implicit width of its own, and left to share the row by
+            // implicit widths it would squeeze this column down to the title.
             ColumnLayout {
+                Layout.preferredWidth: Theme.infoColumnMaxWidth
                 Layout.maximumWidth: Theme.infoColumnMaxWidth
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.sectionSpacing
@@ -559,7 +620,19 @@ StandardPage {
                 spacing: Theme.sectionSpacing
 
                 LayoutItemProxy { target: actionBar }
-                LayoutItemProxy { target: caveListId }
+                // An invisible layout item is excluded; a visible proxy of an
+                // invisible target would still reserve the banner's height.
+                LayoutItemProxy {
+                    target: moveBannerId
+                    visible: RegionSurveyTree.moveActive
+                    Layout.fillWidth: true
+                }
+                LayoutItemProxy {
+                    target: warningsBannerId
+                    visible: pageId.hasWarnings
+                    Layout.fillWidth: true
+                }
+                LayoutItemProxy { target: caveTreeId }
             }
         }
     }
@@ -583,7 +656,17 @@ StandardPage {
             LayoutItemProxy { target: titleRow }
             LayoutItemProxy { target: regionInfoBox }
             LayoutItemProxy { target: actionBar }
-            LayoutItemProxy { target: caveListId }
+            LayoutItemProxy {
+                target: moveBannerId
+                visible: RegionSurveyTree.moveActive
+                Layout.fillWidth: true
+            }
+            LayoutItemProxy {
+                target: warningsBannerId
+                visible: pageId.hasWarnings
+                Layout.fillWidth: true
+            }
+            LayoutItemProxy { target: caveTreeId }
         }
     }
 
@@ -591,11 +674,10 @@ StandardPage {
         id: projectionCenterDialogId
     }
 
+    //The tree's rows are what this prompt asks about, and the tree knows how a
+    //node and a trip are each removed, so it answers the prompt itself.
     RemoveAskBox {
         id: removeChallengeId
-        onRemove: {
-            RootData.region.removeCave(indexToRemove);
-        }
     }
 
     Instantiator {
@@ -617,7 +699,7 @@ StandardPage {
             var linkId = RootData.pageSelectionModel.registerPage(pageId.PageView.page, //From
                                                                   pageId.cavePageName(delegate.caveObjectRole), //Name
                                                                   caveOverviewPageComponent,
-                                                                  {currentCave:delegate.caveObjectRole}
+                                                                  {currentNode:delegate.caveObjectRole}
                                                                   )
 
             delegate.page = linkId
@@ -637,7 +719,7 @@ StandardPage {
     //Child page
     QQ.Component {
         id: caveOverviewPageComponent
-        CavePage {
+        NodePage {
             anchors.fill: parent
         }
     }

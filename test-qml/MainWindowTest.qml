@@ -13,7 +13,41 @@ Rectangle {
     // an objectName search can't reach it. Expose it for tests that drive it.
     property alias saveAsDialog: testSaveAsDialogId
 
+    //This window's overlay, for tests that assert on what floats above the
+    //content — the shared editor, popups, or a registered banner
+    readonly property AppOverlay windowOverlay: rootId.WindowOverlay.overlay as AppOverlay
+
+    //This window's shared text editor, for tests that drive or assert on it
+    readonly property ShadowEditorHost shadowEditor: rootId.windowOverlay?.shadowEditor ?? null
+
     color: Theme.background
+
+    //Every test in a file shares this window, so an editor one test left open
+    //is still open in the next. Closing through the field is what happens when
+    //a user leaves the cell, so this leaves both sides consistent.
+    function closeAnyOpenEditor() {
+        if(rootId.shadowEditor === null) {
+            return
+        }
+
+        if(rootId.shadowEditor.coreClickInput !== null) {
+            rootId.shadowEditor.coreClickInput.closeEditor()
+        }
+        rootId.shadowEditor.enabled = false
+    }
+
+    //Every item under `item` named `objectName`. A table's pooled delegates
+    //drop their names, so a name on a delegate counts only the drawn cells.
+    function collectByName(item, objectName) {
+        let found = item.objectName === objectName ? [item] : []
+        const kids = item.children
+        if (kids !== undefined) {
+            for (let i = 0; i < kids.length; i++) {
+                found = found.concat(rootId.collectByName(kids[i], objectName))
+            }
+        }
+        return found
+    }
 
     width: 1200
     height: 700

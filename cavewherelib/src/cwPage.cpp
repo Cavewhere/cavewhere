@@ -48,8 +48,16 @@ cwPage::~cwPage()
         }
     }
 
-    foreach(cwPage* childPage, ChildPages) {
-        childPage->ParentPage = nullptr;
+    // Detach by object tree rather than by ChildPages: a page can be a
+    // QObject child while missing from the map, since setName() keys the
+    // map by name and a second sibling taking the same name evicts the
+    // first entry. ~QObject still deletes such a page, and it must not
+    // read this dying page's ChildPages when it does.
+    const auto childObjects = children();
+    for(QObject* child : childObjects) {
+        if(cwPage* childPage = qobject_cast<cwPage*>(child)) {
+            childPage->ParentPage = nullptr;
+        }
     }
 }
 
@@ -192,7 +200,8 @@ void cwPage::setNamingFunction(QObject *object,
     int renamePageSlot = metaObject()->indexOfMethod("renamePage()");
     Q_ASSERT(renamePageSlot != -1);
 
-    QMetaObject::connect(object, signalIndex, this, renamePageSlot);
+    //A kept page is handed its naming function again on every re-registration.
+    QMetaObject::connect(object, signalIndex, this, renamePageSlot, Qt::UniqueConnection);
 
     RenamingObject = functionObject;
     RenamingFunction = function;

@@ -15,7 +15,7 @@ MainWindowTest {
         name: "NarrowToolbar"
         when: windowShown
 
-        readonly property string tripAddress: "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
+        readonly property string tripAddress: "Source/Data/Node=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
         function init() {
             rootId.width = 400

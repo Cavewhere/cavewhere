@@ -8,6 +8,17 @@
 #include "cwKeywordFilterGroupProxyModel.h"
 #include "cwKeywordFilterOrGroupProxyModel.h"
 #include "SignalSpyChecker.h"
+#include "cwRootData.h"
+#include "cwProject.h"
+#include "cwCavingRegion.h"
+#include "cwSurveyNode.h"
+#include "ExternalCenterlineTestHelpers.h"
+
+//Qt includes
+#include <QCoreApplication>
+#include <QPointer>
+#include <QSet>
+#include <QSignalSpy>
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -133,8 +144,9 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
 
     pipelineSpy[keywordModelSpy]++;
     pipelineSpy[possibleKeysChanged]++;
-    acceptedSpy[acceptedRowsInsertedSpy] = 4;
-    acceptedSpy[acceptedRowsAboutToBeInsertedSpy] = 4;
+    // The four items land as one range through every stage of the chain.
+    acceptedSpy[acceptedRowsInsertedSpy] = 1;
+    acceptedSpy[acceptedRowsAboutToBeInsertedSpy] = 1;
 
     model.flushPossibleKeys(); // flush deferred possibleKeysChanged timer
     pipelineSpy.checkSpies();
@@ -384,8 +396,9 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                 CHECK(model.index(1).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>() != nullptr);
                 CHECK(model.index(1).data(cwKeywordFilterPipelineModel::OperatorRole).toInt() == cwKeywordFilterPipelineModel::And);
 
-                acceptedSpy[acceptedRowsInsertedSpy] += 2;
-                acceptedSpy[acceptedRowsAboutToBeInsertedSpy] += 2;
+                // The new row's accepted entities arrive as one range.
+                acceptedSpy[acceptedRowsInsertedSpy] += 1;
+                acceptedSpy[acceptedRowsAboutToBeInsertedSpy] += 1;
                 acceptedSpy[acceptedRowsAboutToBeRemovedSpy] += 2;
                 acceptedSpy[acceptedRowsRemovedSpy] += 2;
                 //                acceptedSpy[accetpedColumnAboutToBeInsertedSpy]++;
@@ -722,4 +735,127 @@ TEST_CASE("cwKeywordFilterPipelineModel removing first row of middle group keeps
     CHECK(group0.rowCount() >= 1);
     CHECK(group1.rowCount() >= 1);
     CHECK(group2.rowCount() >= 1);
+}
+
+namespace {
+
+constexpr int kDefaultPipelineItems = 3;
+constexpr int kSaveAsBlocks = 20;
+constexpr int kSaveAsShotsPerBlock = 3;
+
+QSet<QObject*> objectsIn(const QAbstractItemModel* model)
+{
+    QSet<QObject*> objects;
+    for (int i = 0; i < model->rowCount(); ++i) {
+        objects.insert(model->index(i, 0).data(cwKeywordItemModel::ObjectRole).value<QObject*>());
+    }
+    return objects;
+}
+
+QAbstractItemModel* filterAt(const cwKeywordFilterPipelineModel& model, int row)
+{
+    return model.index(row).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>();
+}
+
+} // namespace
+
+TEST_CASE("cwKeywordFilterPipelineModel clear on a default pipeline leaves its rows in place",
+          "[cwKeywordFilterPipelineModel][MainThreadBudget]")
+{
+    cwKeywordFilterPipelineModel model;
+    auto keywordModel = std::make_unique<cwKeywordItemModel>();
+    for (int i = 0; i < kDefaultPipelineItems; ++i) {
+        auto item = new cwKeywordItem();
+        item->keywordModel()->add({"type", "scrap"});
+        item->setObject(new QObject(&model));
+        keywordModel->addItem(item);
+    }
+    model.setKeywordModel(keywordModel.get());
+
+    const QSet<QObject*> acceptedBefore = objectsIn(model.acceptedModel());
+    const QSet<QObject*> rejectedBefore = objectsIn(model.rejectedModel());
+    REQUIRE(acceptedBefore.size() == kDefaultPipelineItems);
+    QAbstractItemModel* firstFilter = filterAt(model, 0);
+
+    QSignalSpy acceptedInserted(model.acceptedModel(), &QAbstractItemModel::rowsInserted);
+    QSignalSpy acceptedRemoved(model.acceptedModel(), &QAbstractItemModel::rowsRemoved);
+
+    model.clear();
+
+    CHECK(model.rowCount() == 1);
+    CHECK(filterAt(model, 0) == firstFilter);
+    CHECK(objectsIn(model.acceptedModel()) == acceptedBefore);
+    CHECK(objectsIn(model.rejectedModel()) == rejectedBefore);
+    CHECK(acceptedInserted.count() == 0);
+    CHECK(acceptedRemoved.count() == 0);
+}
+
+TEST_CASE("cwKeywordFilterPipelineModel clear deletes the rows it drops",
+          "[cwKeywordFilterPipelineModel][MainThreadBudget]")
+{
+    cwKeywordFilterPipelineModel model;
+    auto keywordModel = std::make_unique<cwKeywordItemModel>();
+
+    auto item = new cwKeywordItem();
+    item->keywordModel()->add({"type", "scrap"});
+    item->setObject(new QObject(&model));
+    keywordModel->addItem(item);
+
+    model.setKeywordModel(keywordModel.get());
+    model.addRow();
+    REQUIRE(model.rowCount() == 2);
+
+    QAbstractItemModel* firstFilter = filterAt(model, 0);
+    QPointer<QAbstractItemModel> droppedFilter = filterAt(model, 1);
+    REQUIRE(firstFilter != nullptr);
+    REQUIRE(droppedFilter != nullptr);
+
+    model.clear();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    CHECK(droppedFilter.isNull());
+    CHECK(filterAt(model, 0) == firstFilter);
+    CHECK(model.rowCount() == 1);
+    CHECK(model.acceptedModel()->rowCount() == 1);
+}
+
+TEST_CASE("A Save As keeps the keyword filter pipeline's rows without replaying them",
+          "[cwKeywordFilterPipelineModel][MainThreadBudget]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("keyword-save-as"),
+                                    QStringLiteral("NativeCave"),
+                                    QStringLiteral("NativeTrip"));
+    cwCavingRegion* region = fixture->project->cavingRegion();
+    const QString source = writeFlatSurvex(tempSubdir(fixture->tempDir, QStringLiteral("flat")),
+                                           kSaveAsBlocks, kSaveAsShotsPerBlock);
+    attachSourceThroughManager(fixture.get(), region->rootNode(), source);
+    drainPipelines(fixture.get());
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+
+    cwKeywordFilterPipelineModel* pipeline = fixture->rootData->keywordFilterPipelineModel();
+    REQUIRE(pipeline->rowCount() == 1);
+    const QSet<QObject*> acceptedBefore = objectsIn(pipeline->acceptedModel());
+    const QSet<QObject*> rejectedBefore = objectsIn(pipeline->rejectedModel());
+    REQUIRE(acceptedBefore.size() >= kSaveAsBlocks);
+
+    QSignalSpy filenameChanged(fixture->project, &cwProject::filenameChanged);
+    QSignalSpy itemsInserted(fixture->rootData->keywordItemModel(), &QAbstractItemModel::rowsInserted);
+    QSignalSpy itemsRemoved(fixture->rootData->keywordItemModel(), &QAbstractItemModel::rowsRemoved);
+    QSignalSpy acceptedInserted(pipeline->acceptedModel(), &QAbstractItemModel::rowsInserted);
+    QSignalSpy acceptedRemoved(pipeline->acceptedModel(), &QAbstractItemModel::rowsRemoved);
+
+    const QString copyPath = QDir(fixture->tempDir.path()).filePath(QStringLiteral("keyword-save-as-copy.cwproj"));
+    REQUIRE(fixture->project->saveAs(copyPath));
+    drainPipelines(fixture.get());
+    REQUIRE(filenameChanged.count() >= 1);
+
+    // The keyword items themselves stay registered across the Save As.
+    REQUIRE(itemsInserted.count() == 0);
+    REQUIRE(itemsRemoved.count() == 0);
+
+    CHECK(pipeline->rowCount() == 1);
+    CHECK(objectsIn(pipeline->acceptedModel()) == acceptedBefore);
+    CHECK(objectsIn(pipeline->rejectedModel()) == rejectedBefore);
+    CHECK(acceptedInserted.count() == 0);
+    CHECK(acceptedRemoved.count() == 0);
 }

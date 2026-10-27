@@ -10,6 +10,7 @@
 #include "cwSurveyChunk.h"
 #include "cwStationRenamer.h"
 #include "cwSplayBuffer.h"
+#include "cwWallsReferenceCS.h"
 #include "wallsunits.h"
 #include "wallsprojectparser.h"
 #include "fixstation.h"
@@ -35,20 +36,6 @@ using namespace dewalls;
 typedef QSharedPointer<cwTrip> cwTripPtr;
 
 class cwWallsImporter;
-
-/**
- * The coordinate systems a Walls project's `.REF` names, as PROJ reads them:
- * \a rect for `#FIX` lines given as grid coordinates (which need the datum and
- * the zone), \a geo for the ones given as latitude and longitude (which need
- * only the datum). Both are empty when the `.REF` said nothing usable — a bare
- * .srv imported without its project file has none — and \a unmappedDatum then
- * carries the datum name the file did give, so the warning can name it.
- */
-struct WallsReferenceCS {
-    QString rect;
-    QString geo;
-    QString unmappedDatum;
-};
 
 class WallsImporterVisitor : public QObject
 {

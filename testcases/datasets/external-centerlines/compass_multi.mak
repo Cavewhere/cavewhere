@@ -3,4 +3,4 @@
 / compass_other.dat).
 &UTM;
 #compass_simple.dat,A1,A2;
-#compass_other.dat,B1,B2;
+#compass_other.dat,A2,B1,B2;

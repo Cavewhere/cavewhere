@@ -8,7 +8,9 @@ class cwKeywordModel;
 class cwKeywordFilterModel;
 
 //Qt includes
+#include <QHash>
 #include <QList>
+#include <QSet>
 #include <QAbstractListModel>
 #include <QFuture>
 #include <QQmlEngine>
@@ -78,14 +80,14 @@ private:
     class Row {
     public:
         Row() {}
-        Row(const QString& value, const QVector<QPersistentModelIndex>& indexes, bool accepted) :
+        Row(const QString& value, const QSet<QPersistentModelIndex>& indexes, bool accepted) :
             value(value),
             indexes(indexes),
             accepted(accepted)
         {}
 
         QString value;
-        QVector<QPersistentModelIndex> indexes;
+        QSet<QPersistentModelIndex> indexes;
         bool accepted = false;
 
         bool operator<(const Row& other) {
@@ -177,7 +179,23 @@ private:
 
     Filter mFilter;
 
+    // While a batch is open, accepted-model edits and row dataChanged
+    // notifications are collected and applied once when the batch ends, so a
+    // source range lands as one insert into the accepted model.
+    struct Batch {
+        int depth = 0;
+        QList<QPersistentModelIndex> order;
+        QHash<QPersistentModelIndex, bool> accepted;
+        QSet<QString> changedValues;
+        bool otherChanged = false;
+    };
+    Batch mBatch;
+
     Filter createDefaultFilter();
+
+    void beginBatch();
+    void endBatch();
+    void filterSourceRows(int first, int last);
 
     template<typename DataChangeFunc>
     void setAccepted(const QModelIndex& rowIndex, bool accepted, DataChangeFunc func)

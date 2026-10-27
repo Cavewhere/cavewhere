@@ -9,11 +9,14 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Cavewhere
+#include "cwAttachedCenterlinesModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
+#include "cwFutureManagerModel.h"
+#include "cwExternalCenterlineManager.h"
 #include "cwLinePlotManager.h"
-#include "cwLocalSettings.h"
+#include "cwExternalSourceSettings.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
@@ -24,6 +27,7 @@
 #include "cwTrip.h"
 
 // Tests
+#include "ExternalCenterlineTestHelpers.h"
 #include "LoadProjectHelper.h"
 #include "cwSignalSpy.h"
 
@@ -31,11 +35,6 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDir>
-#include <QElapsedTimer>
-
-// Std
-#include <functional>
-#include <memory>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
@@ -44,101 +43,15 @@
 #include <QTemporaryDir>
 #include <QUuid>
 
+// Std
+#include <memory>
+#include <tuple>
+
 namespace {
 
-// Watcher events flow through OS notifications and are delivered on the
-// next event-loop spin. Tests poll the predicate, processing events each
-// iteration, until either the predicate is satisfied or the budget runs
-// out. Picked well above the actual settle time so a busy CI under
-// valgrind still has headroom; the watcher itself fires within ~10ms.
-constexpr int kWatcherWaitMs = 5000;
-
-// Per-iteration event-loop budget inside tryWait. Long enough for one
-// AsyncFuture continuation to run; short enough that the predicate
-// re-evaluates promptly on flaky-CI scheduling jitter.
-constexpr int kPollEventsBudgetMs = 50;
-
-// Inside a tryWait predicate we also pump the loop once more so a freshly
-// queued continuation that the outer pump just missed can land before we
-// re-evaluate. Smaller than kPollEventsBudgetMs because we only need to
-// drain whatever is already queued, not wait for new work.
-constexpr int kInnerPollEventsMs = 10;
-
-bool tryWait(int timeoutMs, std::function<bool()> predicate)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (!predicate()) {
-        if (timer.elapsed() >= timeoutMs) {
-            return predicate(); // one last evaluation under the deadline
-        }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, kPollEventsBudgetMs);
-    }
-    return true;
-}
-
-QString fixturePath(const QString& name)
-{
-    return testcasesDatasetSourcePath(QStringLiteral("external-centerlines/%1").arg(name));
-}
-
-QString tempSubdir(const QTemporaryDir& root, const QString& name)
-{
-    const QDir baseDir(root.path());
-    REQUIRE(baseDir.mkpath(name));
-    return baseDir.absoluteFilePath(name);
-}
-
-// Copies `source` to <attachDir>/<basename(source)> with the watcher
-// pattern from the existing [Attach][...] tests. Returns the destination
-// path so the test can later edit it directly.
-QString seedAttachment(const QString& attachDir, const QString& source)
-{
-    const QString basename = QFileInfo(source).fileName();
-    const QString dest = QDir(attachDir).absoluteFilePath(basename);
-    REQUIRE_FALSE(source.isEmpty());
-    REQUIRE(QFile::exists(source));
-    if (QFile::exists(dest)) {
-        QFile::remove(dest);
-    }
-    REQUIRE(QFile::copy(source, dest));
-    return dest;
-}
-
-// Atomically overwrite a watched file. QFileSystemWatcher on macOS treats
-// some editors' rename-over patterns differently from in-place writes, so
-// we do an in-place open-truncate-write (the same shape as a user editing
-// the file in a regular editor that saves in place).
-void overwriteFile(const QString& path, const QByteArray& content)
-{
-    QFile f(path);
-    REQUIRE(f.open(QFile::WriteOnly | QFile::Truncate));
-    REQUIRE(f.write(content) == content.size());
-    f.close();
-}
-
-cwCave* addEmptyCave(cwCavingRegion& region, const QString& name)
-{
-    cwCave* cave = new cwCave();
-    cave->setName(name);
-    region.addCave(cave);
-    return cave;
-}
-
-cwTrip* addEmptyTrip(cwCave* cave, const QString& name)
-{
-    cwTrip* trip = new cwTrip();
-    trip->setName(name);
-    cave->addTrip(trip);
-    return trip;
-}
-
-// survex_simple.svx + an appended extra shot pulling the chain out to a4.
-// The new station name is asserted against the cave's position lookup
-// after the watcher fires.
 // Mirrors the survex_simple.svx layout (self-fixing at A1 inside *begin
-// Simple) and extends it with one more shot to A4. The watcher test
-// verifies A4 appears in the lookup after the edit lands.
+// Simple) and extends it with one more shot to A4. The watcher tests
+// assert A4 appears in the cave's position lookup once the edit lands.
 QByteArray simpleSvxWithExtraShot()
 {
     return QByteArrayLiteral(
@@ -172,7 +85,7 @@ TEST_CASE("Watcher set contains the in-project copy paths after attach",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
@@ -181,10 +94,7 @@ TEST_CASE("Watcher set contains the in-project copy paths after attach",
     const QString expected = QFileInfo(copyPath).canonicalFilePath();
     INFO("expected watch path: " << expected.toStdString());
     REQUIRE_FALSE(expected.isEmpty());
-    CHECK(manager.watchedFiles().contains(expected));
-    // Watch set on a project-side-only attach has no source-side entries
-    // until live-link is configured.
-    CHECK(manager.missingSourceOwners().isEmpty());
+    CHECK(manager.externalCenterlineManager()->watchedFiles().contains(expected));
 }
 
 TEST_CASE("Editing the in-project copy triggers a re-run that picks up the new station",
@@ -205,15 +115,15 @@ TEST_CASE("Editing the in-project copy triggers a re-run that picks up the new s
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString tripPrefix = tripScopeLabel(attached);
     const QString a3Key = tripPrefix + QStringLiteral(".simple.a3");
     const QString a4Key = tripPrefix + QStringLiteral(".simple.a4");
-    REQUIRE(cave->stationPositionLookup().hasPosition(a3Key));
-    REQUIRE_FALSE(cave->stationPositionLookup().hasPosition(a4Key));
+    REQUIRE(cave->scopedPositions().hasPosition(a3Key));
+    REQUIRE_FALSE(cave->scopedPositions().hasPosition(a4Key));
 
     // Now overwrite the in-project copy with content that adds an a4
     // station. The watcher should fire (project-side path), recompute the
@@ -223,9 +133,9 @@ TEST_CASE("Editing the in-project copy triggers a re-run that picks up the new s
 
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
         QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
-        return cave->stationPositionLookup().hasPosition(a4Key);
+        return cave->scopedPositions().hasPosition(a4Key);
     }));
-    CHECK(cave->stationPositionLookup().hasPosition(a4Key));
+    CHECK(cave->scopedPositions().hasPosition(a4Key));
 }
 
 TEST_CASE("Detach mid-solve does not crash and empties the watch set",
@@ -245,23 +155,29 @@ TEST_CASE("Detach mid-solve does not crash and empties the watch set",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
 
-    cwSignalSpy watcherSpy(&manager, &cwLinePlotManager::watchedFilesChanged);
+    // Wait for the initial async scan to install the watch set — its
+    // apply chains the solve, so the solve is now in (or about to be in)
+    // flight. Coalescing means detaching before this point would fold
+    // into the initial scan and never populate the set at all.
+    REQUIRE(tryWait(kWatcherWaitMs, [&] { return !manager.externalCenterlineManager()->watchedFiles().isEmpty(); }));
+
+    cwSignalSpy watcherSpy(manager.externalCenterlineManager(), &cwExternalCenterlineManager::watchedFilesChanged);
 
     // Do NOT wait for the solve - this models the "detach mid-solve"
     // condition. Detach by clearing the trip's externalCenterline and
-    // dropping the trip-attachment dir entry, then recompute via the
-    // public setters so the watcher rebuild path runs immediately.
+    // dropping the trip-attachment dir entry; the setter kicks off the
+    // async recompute that rebuilds the watcher.
     attached->setExternalCenterline(cwExternalCenterline());
-    manager.setTripAttachmentDirs(QHash<QUuid, QString>());
+    manager.externalCenterlineManager()->setTripAttachmentDirs(QHash<QUuid, QString>());
 
-    // The recompute synchronously empties the watch set. Verify the
-    // signal fired and the public accessor is empty - no need to wait
-    // for the in-flight solve to finish or fail.
-    REQUIRE(tryWait(kWatcherWaitMs, [&] { return manager.watchedFiles().isEmpty(); }));
-    CHECK(manager.watchedFiles().isEmpty());
+    // The recompute empties the watch set once its apply lands. Verify
+    // the signal fired and the public accessor is empty - no need to
+    // wait for the in-flight solve to finish or fail.
+    REQUIRE(tryWait(kWatcherWaitMs, [&] { return manager.externalCenterlineManager()->watchedFiles().isEmpty(); }));
+    CHECK(manager.externalCenterlineManager()->watchedFiles().isEmpty());
     CHECK(watcherSpy.count() >= 1);
 
     // Draining the in-flight solve must not crash or leave the manager
@@ -270,54 +186,80 @@ TEST_CASE("Detach mid-solve does not crash and empties the watch set",
     CHECK(cave != nullptr); // sentinel: just make sure we got here
 }
 
-TEST_CASE("Startup probe detects a missing live-link source path",
-          "[Attach][Watcher][LiveLink]")
+TEST_CASE("What the manager reports is the same for every remembered-source state",
+          "[Attach][Watcher]")
 {
+    // The commit-3 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §6),
+    // from the manager's side: an owner whose remembered source has since
+    // vanished, one whose source is sitting right there, and one that never
+    // recorded a source are all indistinguishable. The scan reads the
+    // in-project copies alone, so the breadcrumb reaches none of the state
+    // the manager publishes — a source back in the watch set, or any state
+    // derived from statting it, breaks this.
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
 
-    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("probe-attach"));
-    seedAttachment(attachDir, fixturePath(QStringLiteral("survex_simple.svx")));
-
-    // Plant a sourcePath in local_settings that *does not* exist on disk -
-    // simulates the user moving the original outside CaveWhere while the
-    // project was closed. Per §8.8 question 16 the missing-source state
-    // must surface at startup, not just on a watcher event.
     const QString missingSource =
         QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("not-there.svx"));
     REQUIRE_FALSE(QFile::exists(missingSource));
 
-    cwCavingRegion region;
-    cwCave* cave = addEmptyCave(region, QStringLiteral("Probe"));
-    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
-    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+    const QString presentSource = fixturePath(QStringLiteral("survex_simple.svx"));
+    REQUIRE(QFile::exists(presentSource));
 
-    cwLocalSettings settings;
-    settings.setSourcePath(attached->id(), missingSource);
+    // Every arm is built the same way; only the breadcrumb differs. The arm
+    // name doubles as the trip name so each arm lands in its own subdir.
+    const auto reportedState = [&](const QString& name, const QString& sourcePath) {
+        cwCavingRegion region;
+        cwCave* cave = addEmptyCave(region, QStringLiteral("Probe"));
+        cwTrip* attached = addAttachedTrip(cave, name);
 
-    cwLinePlotManager manager;
-    QHash<QUuid, QString> tripDirs;
-    tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
-    manager.setLocalSettings(settings);
+        QHash<QUuid, QString> tripDirs;
+        attachFixture(tempRoot, attached, QStringLiteral("survex_simple.svx"), tripDirs);
+        const QString attachDir = tripDirs.value(attached->id());
 
-    cwSignalSpy missingSpy(&manager, &cwLinePlotManager::missingSourceOwnersChanged);
+        cwExternalSourceSettings settings;
+        if (!sourcePath.isEmpty()) {
+            settings.setBreadcrumbPath(attached->id(), sourcePath);
+        }
 
-    // Now bind the region. setRegion's recompute walks the region against
-    // the already-configured local settings and surfaces the missing
-    // source without needing a QFileSystemWatcher event.
-    manager.setRegion(&region);
-    manager.waitToFinish();
+        cwLinePlotManager manager;
+        manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
+        solveRegion(manager, region, tripDirs);
 
-    const QList<QUuid> missing = manager.missingSourceOwners();
-    CHECK(missing.size() == 1);
-    CHECK(missing.contains(attached->id()));
-    CHECK(missingSpy.count() >= 1);
+        auto* external = manager.externalCenterlineManager();
+        // Relative to the owner's own attachment dir, so the arms are
+        // comparable despite living in different temp subdirectories. The
+        // watch set is canonical, and on macOS the temp root reaches it
+        // through a /var -> /private/var symlink, so the base has to be
+        // canonical too or every path relativizes back through the root.
+        const QDir attachRoot(QFileInfo(attachDir).canonicalFilePath());
+        QStringList watched;
+        for (const QString& path : external->watchedFiles()) {
+            watched.append(attachRoot.relativeFilePath(path));
+        }
+        return std::make_tuple(watched,
+                               external->attachedCenterlinesModel()->rowCount(),
+                               external->fileOwnsDeclination(attached->id()));
+    };
+
+    const auto withNoSource = reportedState(QStringLiteral("probe-none"), QString());
+    const auto withMissingSource = reportedState(QStringLiteral("probe-missing"), missingSource);
+    const auto withPresentSource = reportedState(QStringLiteral("probe-present"), presentSource);
+
+    // The in-project copy, and only it — an arm that also watched its source
+    // would carry a second entry.
+    REQUIRE(std::get<0>(withNoSource) == QStringList { QStringLiteral("survex_simple.svx") });
+    CHECK(std::get<0>(withMissingSource) == std::get<0>(withNoSource));
+    CHECK(std::get<0>(withPresentSource) == std::get<0>(withNoSource));
+    CHECK(std::get<1>(withMissingSource) == std::get<1>(withNoSource));
+    CHECK(std::get<1>(withPresentSource) == std::get<1>(withNoSource));
+    CHECK(std::get<2>(withMissingSource) == std::get<2>(withNoSource));
+    CHECK(std::get<2>(withPresentSource) == std::get<2>(withNoSource));
 }
 
 namespace {
 
-struct LiveLinkFixture {
+struct RememberedSourceFixture {
     QTemporaryDir tempDir;
     std::unique_ptr<cwRootData> rootData;
     cwProject* project = nullptr;
@@ -327,111 +269,122 @@ struct LiveLinkFixture {
     QString attachmentDir;
 };
 
-std::unique_ptr<LiveLinkFixture> makeLiveLinkFixture()
+std::unique_ptr<RememberedSourceFixture> makeRememberedSourceFixture()
 {
-    auto fixture = std::make_unique<LiveLinkFixture>();
+    auto fixture = std::make_unique<RememberedSourceFixture>();
     REQUIRE(fixture->tempDir.isValid());
 
     fixture->rootData = std::make_unique<cwRootData>();
     fixture->project = fixture->rootData->project();
+    // The .cwproj Save commits, and a commit needs a git identity.
+    fixture->rootData->account()->setName(QStringLiteral("Watcher Tester"));
+    fixture->rootData->account()->setEmail(QStringLiteral("watcher.tester@example.com"));
 
-    auto region = fixture->project->cavingRegion();
-    region->addCave();
-    fixture->cave = region->cave(0);
-    fixture->cave->setName(QStringLiteral("LiveLink"));
-    fixture->cave->addTrip();
-    fixture->trip = fixture->cave->trip(0);
-    fixture->trip->setName(QStringLiteral("LiveTrip"));
+    // The centerline is set before saveAs so the fixture settles with
+    // modified() == false, which the gate test baselines against.
+    fixture->cave = addEmptyCave(*fixture->project->cavingRegion(),
+                                 QStringLiteral("Remembered"));
+    fixture->trip = addAttachedTrip(fixture->cave,
+                                    QStringLiteral("SourceTrip"),
+                                    QStringLiteral("source.svx"));
 
     const QString projectPath = QDir(fixture->tempDir.path())
-                                    .filePath(QStringLiteral("livelink.cwproj"));
+                                    .filePath(QStringLiteral("remembered.cwproj"));
     REQUIRE(fixture->project->saveAs(projectPath));
     fixture->project->waitSaveToFinish();
 
     // Pick the source path next to the project temp dir, then write the
-    // simple fixture contents to it. Live-link source lives outside the
-    // attachment dir.
+    // simple fixture contents to it. The remembered source lives outside
+    // the attachment dir.
     fixture->sourcePath = QDir(fixture->tempDir.path())
                               .filePath(QStringLiteral("source.svx"));
-    {
-        QFile src(fixturePath(QStringLiteral("survex_simple.svx")));
-        REQUIRE(src.open(QFile::ReadOnly));
-        const QByteArray content = src.readAll();
-        QFile dest(fixture->sourcePath);
-        REQUIRE(dest.open(QFile::WriteOnly | QFile::Truncate));
-        REQUIRE(dest.write(content) == content.size());
-    }
+    overwriteFile(fixture->sourcePath,
+                  fileContents(fixturePath(QStringLiteral("survex_simple.svx"))));
 
     // Pre-reconcile: copy source into the attachment dir so the project
     // side has a coherent starting state (mirrors the
     // "[Attach picker → reconcile]" flow that would run for real).
+    // Direct QFile ops, so the copy doesn't touch the modified bit.
     fixture->attachmentDir =
         fixture->project->saveLoad()->externalCenterlineDir(fixture->trip).absolutePath();
     REQUIRE(QDir().mkpath(fixture->attachmentDir));
-    const QString destFile =
-        QDir(fixture->attachmentDir).filePath(QStringLiteral("source.svx"));
-    REQUIRE(QFile::copy(fixture->sourcePath, destFile));
+    seedAttachment(fixture->attachmentDir, fixture->sourcePath);
 
-    fixture->trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("source.svx")));
+    // seedAttachment writes under the data root, which the root's manager
+    // reports as a project modification once it watches the copy, so the
+    // modified() baseline is taken after the save in the gate test instead.
+    waitForQuietPipelines(fixture->rootData.get());
     return fixture;
 }
 
 } // namespace
 
-TEST_CASE("Live-link source edit fires reconcile then re-runs the solve",
-          "[Attach][Watcher][LiveLink]")
+TEST_CASE("Editing a remembered source file changes nothing observable",
+          "[Attach][Watcher]")
 {
-    auto fixture = makeLiveLinkFixture();
+    // The retirement gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
+    // §6, commit 2): the in-project copy is the only file the project
+    // reads, so the file it was picked from is the user's own business.
+    // Editing it must not be watched, must not re-solve, must not touch
+    // the copy, and must not dirty the project.
+    auto fixture = makeRememberedSourceFixture();
 
-    cwLocalSettings settings;
-    settings.setSourcePath(fixture->trip->id(), fixture->sourcePath);
+    cwExternalSourceSettings settings;
+    settings.setBreadcrumbPath(fixture->trip->id(), fixture->sourcePath);
 
     cwLinePlotManager manager;
-    manager.setSaveLoad(fixture->project->saveLoad());
+    manager.externalCenterlineManager()->setSaveLoad(fixture->project->saveLoad());
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(fixture->trip->id(), fixture->attachmentDir);
-    manager.setTripAttachmentDirs(tripDirs);
-    manager.setLocalSettings(settings);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
     manager.setRegion(fixture->project->cavingRegion());
     manager.waitToFinish();
     fixture->project->waitSaveToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
+    REQUIRE_FALSE(fixture->project->modified());
 
-    const QString tripPrefix =
-        QStringLiteral("trip_%1").arg(fixture->trip->id().toString(QUuid::Id128));
+    const QString tripPrefix = tripScopeLabel(fixture->trip);
     const QString a3Key = tripPrefix + QStringLiteral(".simple.a3");
     const QString a4Key = tripPrefix + QStringLiteral(".simple.a4");
-    REQUIRE(fixture->cave->stationPositionLookup().hasPosition(a3Key));
-    REQUIRE_FALSE(fixture->cave->stationPositionLookup().hasPosition(a4Key));
+    REQUIRE(fixture->cave->scopedPositions().hasPosition(a3Key));
+    REQUIRE_FALSE(fixture->cave->scopedPositions().hasPosition(a4Key));
 
-    // Watch set should include both the in-project copy and the
-    // source-side path - tryWait because recompute runs synchronously on
-    // setRegion but the test guards against any race with the initial
-    // solve's continuations.
+    const QString destPath =
+        QDir(fixture->attachmentDir).filePath(QStringLiteral("source.svx"));
+    const QString sourceCanonical = QFileInfo(fixture->sourcePath).canonicalFilePath();
+
+    // The in-project copy is watched; the file it came from is not.
+    // tryWait because the recompute is async and the initial solve's
+    // continuations may still be draining.
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        const QStringList watched = manager.watchedFiles();
-        const QString srcCanonical = QFileInfo(fixture->sourcePath).canonicalFilePath();
-        const QString destCanonical = QFileInfo(QDir(fixture->attachmentDir)
-                                                    .filePath(QStringLiteral("source.svx")))
-                                          .canonicalFilePath();
-        return watched.contains(srcCanonical) && watched.contains(destCanonical);
+        return manager.externalCenterlineManager()->watchedFiles()
+            .contains(QFileInfo(destPath).canonicalFilePath());
     }));
+    const QStringList watchedBefore =
+        manager.externalCenterlineManager()->watchedFiles();
+    CHECK_FALSE(watchedBefore.contains(sourceCanonical));
 
-    // Edit the source side (not the project copy). Reconcile should
-    // bring the edit across into the attachment dir; then runSurvex
-    // adds the new station.
+    cwSignalSpy watchedSpy(manager.externalCenterlineManager(),
+                           &cwExternalCenterlineManager::watchedFilesChanged);
+
     overwriteFile(fixture->sourcePath, simpleSvxWithExtraShot());
 
-    REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
-        return fixture->cave->stationPositionLookup().hasPosition(a4Key);
-    }));
-    CHECK(fixture->cave->stationPositionLookup().hasPosition(a4Key));
+    // The source sits outside the watch set, so the edit has no event to
+    // wait on. The fence drains any queued reconcile or solve before the
+    // save and solve waits below.
+    REQUIRE(waitForQueuedEvents());
+    fixture->project->waitSaveToFinish();
+    manager.waitToFinish();
 
-    // The reconcile copied source-side content into the attachment dir;
-    // verify by content comparison so we know the file mutation made it
-    // through cwSaveLoad's job queue rather than just hitting an in-memory
-    // cache.
-    QFile destFile(QDir(fixture->attachmentDir).filePath(QStringLiteral("source.svx")));
-    REQUIRE(destFile.open(QFile::ReadOnly));
-    CHECK(destFile.readAll() == simpleSvxWithExtraShot());
+    CHECK(watchedSpy.count() == 0);
+    CHECK(manager.externalCenterlineManager()->watchedFiles() == watchedBefore);
+
+    // Enqueueing a reconcile copy emits localMutationOccurred synchronously,
+    // so a wrongly-triggered reconcile shows up as modified() regardless of
+    // save-thread timing.
+    CHECK_FALSE(fixture->project->modified());
+    CHECK(fileContents(destPath) == fileContents(fixturePath(QStringLiteral("survex_simple.svx"))));
+    CHECK_FALSE(fixture->cave->scopedPositions().hasPosition(a4Key));
 }

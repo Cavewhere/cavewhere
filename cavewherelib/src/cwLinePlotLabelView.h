@@ -12,13 +12,16 @@
 #include <QHash>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QUuid>
+#include <QPair>
+#include <QVector3D>
 
 //Our includes
 #include "cwLabel3dView.h"
 #include "cwGlobals.h"
 #include "cwKeywordItemRegistry.h"
 class cwCavingRegion;
-class cwCave;
+class cwSurveyNode;
 class cwTrip;
 class cwLabel3dGroup;
 class cwKeywordItemModel;
@@ -50,30 +53,40 @@ private:
     cwCavingRegion* Region; //!<
 
     // One label group per trip. The group is the trip's keyword item's
-    // setVisible() target (see updateKeywordItem), so filtering a trip's line plot
+    // setVisible() target (see updateKeywordItems), so filtering a trip's line plot
     // hides its station labels. The keyword item itself is owned by the registry,
     // registered only while the trip has labels (0<->1).
     QHash<cwTrip*, cwLabel3dGroup*> m_groups;
+
+    // The trips in m_groups by cwTrip::id(), which is how a solve names them.
+    QHash<QUuid, cwTrip*> m_tripsById;
     cwKeywordItemRegistry<cwTrip*> m_keywordRegistry;
 
-    void connectCave(cwCave* cave);
-    void disconnectCave(cwCave* cave);
+    void connectNode(const cwSurveyNode* node);
+    void disconnectNode(const cwSurveyNode* node);
 
-    void addTrip(cwCave* cave, cwTrip* trip);
+    void addNodes(const QList<const cwSurveyNode*>& nodes);
+    void removeNode(const cwSurveyNode* node);
+
+    void addTrips(const QList<cwTrip*>& trips);
     void removeTrip(cwTrip* trip);
 
-    QList<cwLabel3dItem> labels(cwCave* cave, cwTrip* trip) const;
+    QList<cwLabel3dItem> labels(cwTrip* trip) const;
+    static QList<cwLabel3dItem> labels(const QList<QPair<QString, QVector3D>>& stations);
 
-    void updateKeywordItem(cwTrip* trip);
+    void updateKeywordItems(const QList<cwTrip*>& trips);
 
     void clear();
 
 private slots:
-    void addCaves(int begin, int end);
-    void removeCaves(int begin, int end);
-    void caveTripsInserted(int begin, int end);
-    void caveTripsRemoved(int begin, int end);
+    void nodesInserted(int begin, int end);
+    void nodesRemoved(int begin, int end);
+    void tripsInserted(int begin, int end);
+    void tripsRemoved(int begin, int end);
     void updateStations();
+    // The batch is a cwCavingRegion::TripSolvedStations.
+    void installSolvedStations(const QHash<QUuid, QList<QPair<QString, QVector3D>>>& batch,
+                               bool isLastBatch);
 
 };
 

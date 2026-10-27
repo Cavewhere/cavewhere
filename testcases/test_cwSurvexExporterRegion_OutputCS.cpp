@@ -20,6 +20,7 @@
 #include "cwSurvexExporterRegion.h"
 #include "cwSurvexCS.h"
 #include "cwTrip.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -79,6 +80,14 @@ void appendFix(cwCavingRegion* region,
     fix.setInputCS(inputCS);
     fix.setCoordinate(easting, northing, elevation);
     region->cave(0)->fixStations()->appendFixStation(fix);
+}
+
+// The fixes anchor the project's frame on a later event-loop turn.
+void waitForAnchoredFrame(const cwCavingRegion* region)
+{
+    REQUIRE(waitUntil([region]() {
+        return region->geoReference()->hasCoordinateSystem();
+    }));
 }
 
 //! Append a fix that carries a coordinate system but no coordinate — the shape
@@ -164,6 +173,7 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
         auto region = makeRegion();
         appendFix(region.get(), QStringLiteral("a1"), kUtmZone13N,
                   kBoulderEasting, kBoulderNorthing, kBoulderElevation);
+        waitForAnchoredFrame(region.get());
 
         CHECK(exportedOutputCS(region.get(), Policy::Shareable) == kUtmZone13N);
         // The working frame is the project's local projection, which the fix
@@ -181,6 +191,7 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
         auto region = makeRegion();
         appendFix(region.get(), QStringLiteral("a1"), kWgs84,
                   kBoulderLongitude, kBoulderLatitude, kBoulderElevation);
+        waitForAnchoredFrame(region.get());
 
         CHECK(exportedOutputCS(region.get(), Policy::Shareable) == kUtmZone13N);
         const QString frame = region->geoReference()->localCoordinateSystem();
@@ -197,6 +208,7 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
         appendFix(region.get(), QStringLiteral("a2"), kWgs84, 0.0, 0.0, 0.0);
         appendFix(region.get(), QStringLiteral("a3"), kWgs84,
                   kBoulderLongitude, kBoulderLatitude, kBoulderElevation);
+        waitForAnchoredFrame(region.get());
 
         CHECK(exportedOutputCS(region.get(), Policy::Shareable) == kUtmZone13N);
     }
@@ -215,6 +227,7 @@ TEST_CASE("cwSurvexExporterRegion resolves *cs out per policy",
         auto region = makeRegion();
         appendFix(region.get(), QStringLiteral("a1"), kWgs84,
                   kBoulderLongitude, kBoulderLatitude, kBoulderElevation);
+        waitForAnchoredFrame(region.get());
 
         CHECK(exportedOutputCS(region.get(), cwSurvexExporterRegion::Options())
               == kUtmZone13N);
@@ -232,6 +245,7 @@ TEST_CASE("The solve runs in the project's own local projection",
     auto region = makeRegion();
     appendFix(region.get(), QStringLiteral("a1"), kWgs84,
               kBoulderLongitude, kBoulderLatitude, kBoulderElevation);
+    waitForAnchoredFrame(region.get());
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
     plotManager->setRegion(region.get());
@@ -239,5 +253,5 @@ TEST_CASE("The solve runs in the project's own local projection",
 
     INFO(plotManager->solveErrorMessage().toStdString());
     CHECK_FALSE(plotManager->hasSolveError());
-    CHECK(region->cave(0)->stationPositionLookup().hasPosition(QStringLiteral("a2")));
+    CHECK(region->cave(0)->scopedPositions().hasPosition(QStringLiteral("a2")));
 }

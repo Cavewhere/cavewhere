@@ -14,6 +14,7 @@ MainWindowTest {
     SurveyTableTestHelper {
         id: surveyTableId
         mainWindow: rootId.mainWindow
+        testWindow: rootId
     }
 
     TestCase {

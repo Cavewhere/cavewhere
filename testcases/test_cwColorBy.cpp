@@ -11,6 +11,7 @@
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwGeometry.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -123,7 +124,7 @@ struct ColorByScene
     {
         linePlot.setGeometry(geometry);
         scene.geometryItersecter()->waitForFinish();
-        QCoreApplication::processEvents();
+        REQUIRE(waitForQueuedEvents());
     }
 
     cwScene scene;
@@ -633,19 +634,19 @@ TEST_CASE("cwColorBy depth range follows the visible bounds", "[ColorBy]")
     CHECK(colorBy.rangeMax() == Approx(kAllSnappedHigh));
 
     linePlot.setRangeVisible(kDeepShotFirstVertex, kVerticesPerShot, false);
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&colorBy] { return colorBy.rangeMax() == Approx(kNoDeepSnappedHigh); }));
     CHECK(colorBy.rangeMin() == Approx(kShotLowZ));
     CHECK(colorBy.rangeMax() == Approx(kNoDeepSnappedHigh));
 
     items.setItemVisible(scrapId, false);
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&colorBy] { return colorBy.rangeMax() == Approx(kShotsOnlySnappedHigh); }));
     CHECK(colorBy.rangeMin() == Approx(kShotLowZ));
     CHECK(colorBy.rangeMax() == Approx(kShotsOnlySnappedHigh));
 
     // Nothing visible keeps the last range
     const int vertexCount = static_cast<int>(threeShotGeometry().size());
     linePlot.setRangeVisible(0, vertexCount, false);
-    QCoreApplication::processEvents();
+    REQUIRE(waitForQueuedEvents());
     REQUIRE(fixture.scene.visibleFramingBounds().isNull());
     CHECK(colorBy.rangeMin() == Approx(kShotLowZ));
     CHECK(colorBy.rangeMax() == Approx(kShotsOnlySnappedHigh));

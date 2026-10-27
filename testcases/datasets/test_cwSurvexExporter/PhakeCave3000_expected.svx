@@ -1,5 +1,5 @@
 *begin  ;All the caves
-*begin PhakeCave3000 ;Phake Cave 3000
+*begin phake_cave_3000 ;Phake Cave 3000
 
 *fix a1 0 0 0
 *begin ; Release 0.08
@@ -50,6 +50,6 @@ a14         0           2           2           1.9
 
 *end
 
-*end PhakeCave3000 ; End of Phake Cave 3000
+*end phake_cave_3000 ; End of Phake Cave 3000
 
 *end

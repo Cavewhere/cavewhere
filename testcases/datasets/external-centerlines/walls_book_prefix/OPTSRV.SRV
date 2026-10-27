@@ -1,0 +1,4 @@
+; Walls survey taking its prefix from the .wpj .OPTIONS line
+#DATE 2025-01-03
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+O1	O2	10.0	0	0

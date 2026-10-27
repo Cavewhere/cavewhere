@@ -25,7 +25,7 @@ the same correction.
 ## Add a cave
 
 Click **Data** in the sidebar for the cave list, then **Add Cave**. CaveWhere
-names it from the count already in the project (`Cave 1`, `Cave 2`) and opens
+names it `New Cave` (then `New Cave 2`, unique among its siblings) and opens
 its page so you can rename it.
 
 ![The Data page, with the Add Cave button highlighted above a list holding one cave and a warning triangle.](../images/survey-add-cave.png)

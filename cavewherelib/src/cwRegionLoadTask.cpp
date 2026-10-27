@@ -267,30 +267,9 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
         cave->addTrip(trip);
     }
 
-    cwStationPositionLookup stationLookup = loadStationPositionLookup(protoCave.legacy_stationpositionlookup());
-    cave->setStationPositionLookup(stationLookup);
-
-    if(protoCave.has_legacy_stationpositionlookup()) {
-        cave->setStationPositionLookupStale(protoCave.legacy_stationpositionlookupstale());
-    }
-
-    if(protoCave.has_legacy_network()) {
-        auto protoNetwork = protoCave.legacy_network();
-        cwSurveyNetwork network;
-        for(int i = 0; i < protoNetwork.stations_size(); i++) {
-            auto stationItem = protoNetwork.stations(i);
-
-            auto stationName = loadLegacyString(stationItem.legacy_stationname());
-            auto neighbors = loadLegacyStringList(stationItem.legacy_neighbors());
-
-            for(auto neighbor : neighbors) {
-                network.addShot(stationName, neighbor);
-            }
-        }
-        cave->setSurveyNetwork(network);
-    } else {
-        cave->setStationPositionLookupStale(false);
-    }
+    //A legacy file's per-cave lookup and network are left behind: the region
+    //keeps one lookup under full cavern names, and the solve that follows a
+    //load rebuilds it.
 }
 
 /**
@@ -741,23 +720,6 @@ cwShot cwRegionLoadTask::loadShot(const CavewhereProto::Shot& protoShot)
     // shot.setBackClinoState((cwClinoStates::State)protoShot.backclinostate());
 
     return shot;
-}
-
-/**
- * @brief cwRegionLoadTask::loadStationPositionLookup
- * @param protoStationLookup
- * @return Return's the station lookup for the cave
- */
-cwStationPositionLookup cwRegionLoadTask::loadStationPositionLookup(const CavewhereProto::StationPositionLookup &protoStationLookup)
-{
-    cwStationPositionLookup stationLookup;
-    for(int i = 0; i < protoStationLookup.stationpositions_size(); i++) {
-        const CavewhereProto::StationPositionLookup_NamePosition& namePosition = protoStationLookup.stationpositions(i);
-        QString name = LOAD_STRING(namePosition, stationname);
-        QVector3D position = loadVector3D(namePosition.position());
-        stationLookup.setPosition(name, position);
-    }
-    return stationLookup;
 }
 
 /**

@@ -8,7 +8,8 @@
 #include "cwFixStationDiagnosticsModel.h"
 
 //Our includes
-#include "cwCave.h"
+#include "cwSurveyNode.h"
+#include "cwAttachedFixModel.h"
 #include "cwCoordinateText.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
@@ -16,10 +17,12 @@
 #include "cwFixStationModel.h"
 #include "cwGeoPoint.h"
 #include "cwLocalProjection.h"
+#include "cwStation.h"
 
 //Std includes
 #include <optional>
 
+using cwFixStationDiagnostics::StationConflict;
 using cwFixStationDiagnostics::StationReference;
 
 namespace {
@@ -113,10 +116,10 @@ QStringList availableDatums(const cwFixStation& fix)
 
 }
 
-cwFixStationDiagnosticsModel::cwFixStationDiagnosticsModel(cwCave* cave) :
-    QIdentityProxyModel(cave),
-    m_fixStations(cave->fixStations()),
-    m_cave(cave)
+cwFixStationDiagnosticsModel::cwFixStationDiagnosticsModel(cwSurveyNode* node) :
+    QIdentityProxyModel(node),
+    m_fixStations(node->fixStations()),
+    m_node(node)
 {
     QIdentityProxyModel::setSourceModel(m_fixStations);
 
@@ -125,7 +128,18 @@ cwFixStationDiagnosticsModel::cwFixStationDiagnosticsModel(cwCave* cave) :
 
     // A station appearing or disappearing in the survey flips StationErrorRole
     // for any row that named it, so refresh every row when the network changes.
-    connect(m_cave, &cwCave::surveyNetworkChanged, this, [this] {
+    connect(m_node, &cwSurveyNode::scopedNetworkChanged, this, [this] {
+        refreshRoles({StationErrorRole});
+    });
+    // So does an attached file starting or stopping to fix a station, and a
+    // row arriving or leaving above a duplicate.
+    connect(m_node, &cwSurveyNode::attachedFixesChanged, this, [this] {
+        refreshRoles({StationErrorRole});
+    });
+    connect(m_fixStations, &QAbstractItemModel::rowsInserted, this, [this] {
+        refreshRoles({StationErrorRole});
+    });
+    connect(m_fixStations, &QAbstractItemModel::rowsRemoved, this, [this] {
         refreshRoles({StationErrorRole});
     });
 }
@@ -170,13 +184,13 @@ void cwFixStationDiagnosticsModel::augmentSourceChange(const QModelIndex& topLef
         // Same two inputs as the coordinate verdict, and it reads that verdict.
         derived.append(DatumEnabledRole);
     }
+    if (!derived.isEmpty()) {
+        emit dataChanged(mapFromSource(topLeft), mapFromSource(bottomRight), derived);
+    }
+    // A renamed row can start or stop duplicating any other row.
     if (roles.contains(cwFixStationModel::StationNameRole)) {
-        derived.append(StationErrorRole);
+        refreshRoles({StationErrorRole});
     }
-    if (derived.isEmpty()) {
-        return;
-    }
-    emit dataChanged(mapFromSource(topLeft), mapFromSource(bottomRight), derived);
 }
 
 void cwFixStationDiagnosticsModel::refreshRoles(const QList<int>& roles)
@@ -188,20 +202,40 @@ void cwFixStationDiagnosticsModel::refreshRoles(const QList<int>& roles)
     emit dataChanged(index(0, 0), index(rows - 1, 0), roles);
 }
 
-QString cwFixStationDiagnosticsModel::stationErrorMessage(const cwFixStation& fix) const
+QString cwFixStationDiagnosticsModel::stationErrorMessage(int row) const
 {
-    if (m_cave == nullptr) {
-        return QString();
-    }
-    switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(),
-                                                             m_cave->network())) {
+    const QList<cwFixStation>& fixes = m_fixStations->fixStations();
+    const cwFixStation& fix = fixes.at(row);
+    const cwSurveyNetwork network = m_node->scopedNetwork();
+    const auto surveyData = network.isEmpty()
+        ? cwFixStationDiagnostics::classifySurveyData(*m_node)
+        : cwFixStationDiagnostics::SurveyData::Stations;
+    switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network,
+                                                             surveyData)) {
     case StationReference::Ok:
-        return QString();
+        return stationConflictMessage(fixes, row);
     case StationReference::Empty:
         return tr("This fix has no station name — enter the survey station it fixes.");
     case StationReference::Unknown:
         return tr("No survey station named \"%1\" in this cave — check the name.")
             .arg(fix.stationName().trimmed());
+    }
+    return QString();
+}
+
+QString cwFixStationDiagnosticsModel::stationConflictMessage(const QList<cwFixStation>& fixes,
+                                                            int row) const
+{
+    const QString station = fixes.at(row).stationName().trimmed();
+    const QHash<QString, QString> fileFixedStations = m_node->fileFixedStations();
+    switch (cwFixStationDiagnostics::classifyStationConflict(fixes, row, fileFixedStations)) {
+    case StationConflict::None:
+        return QString();
+    case StationConflict::FixedByFile:
+        return cwFixStationDiagnostics::fileFixCollisionMessage(
+            fileFixedStations.value(cwStation::canonicalKey(station)), station);
+    case StationConflict::Duplicate:
+        return tr("A fix above already fixes \"%1\" — this one is ignored.").arg(station);
     }
     return QString();
 }
@@ -227,6 +261,11 @@ QModelIndex cwFixStationDiagnosticsModel::index(int row, int column, const QMode
 QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) const
 {
     switch (role) {
+    case cwAttachedFixModel::ReadOnlyRole:
+    case cwAttachedFixModel::SourceFileRole:
+    case cwAttachedFixModel::ReadInWarningRole:
+    case cwAttachedFixModel::ReferenceRole:
+    case cwAttachedFixModel::ReadInSystemRole:
     case DomainErrorRole:
     case EastingDomainErrorRole:
     case NorthingDomainErrorRole:
@@ -246,10 +285,17 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     }
 
     switch (role) {
+    // The node's own rows: editable and carried by no file, beside
+    // cwAttachedFixModel's rows in cwSurveyNode::fixStationTable.
+    case cwAttachedFixModel::ReadOnlyRole:
+    case cwAttachedFixModel::ReferenceRole:  return false;
+    case cwAttachedFixModel::SourceFileRole:
+    case cwAttachedFixModel::ReadInWarningRole:
+    case cwAttachedFixModel::ReadInSystemRole: return QString();
     case DomainErrorRole:            return domainErrorMessage(*fix);
     case CoordinateErrorRole:        return coordinateErrorMessage(*fix);
     case CoordinateOrderUnknownRole: return fix->state() == cwFixStation::NoSystem;
-    case StationErrorRole:           return stationErrorMessage(*fix);
+    case StationErrorRole:           return stationErrorMessage(index.row());
     case AvailableDatumsRole:        return availableDatums(*fix);
     case DatumEnabledRole:           return datumEnabled(*fix);
     default:                         break;
@@ -275,5 +321,10 @@ QHash<int, QByteArray> cwFixStationDiagnosticsModel::roleNames() const
     names.insert(StationErrorRole, "stationError");
     names.insert(AvailableDatumsRole, "availableDatums");
     names.insert(DatumEnabledRole, "datumEnabled");
+    names.insert(cwAttachedFixModel::SourceFileRole, "sourceFile");
+    names.insert(cwAttachedFixModel::ReadOnlyRole, "readOnly");
+    names.insert(cwAttachedFixModel::ReadInWarningRole, "readInWarning");
+    names.insert(cwAttachedFixModel::ReferenceRole, "reference");
+    names.insert(cwAttachedFixModel::ReadInSystemRole, "readInSystem");
     return names;
 }

@@ -21,6 +21,7 @@ AbstractIconButton {
 
     activeFocusOnTab: true
     hovered: mouseArea.containsMouse
+    toolTipDelay: Theme.toolTipDelay
 
     QQ.Accessible.role: QQ.Accessible.Button
     QQ.Accessible.name: container.toolTip !== "" ? container.toolTip : container.text

@@ -16,6 +16,8 @@
 #include <QMetaObject>
 #include <QThreadPool>
 #include <QSettings>
+#include <QTemporaryDir>
+#include <QDir>
 
 //Our includes
 #include "cwRootData.h"
@@ -66,6 +68,15 @@ namespace {
 
 int main( int argc, char* argv[] )
 {
+  //Each run keeps its QSettings in a fresh INI directory, so it never leaves a
+  //plist in ~/Library/Preferences. Declared first so it outlives every QSettings user.
+  QTemporaryDir settingsDir(QDir::tempPath() + QStringLiteral("/cavewhere-test-settings-XXXXXX"));
+  if (!settingsDir.isValid()) {
+      qFatal("Could not create the QSettings directory: %s", qPrintable(settingsDir.errorString()));
+  }
+  QSettings::setDefaultFormat(QSettings::IniFormat);
+  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDir.path());
+
   QApplication app(argc, argv);
 
 #ifdef Q_OS_MACOS
@@ -85,11 +96,6 @@ int main( int argc, char* argv[] )
   //initilize gitlib2
   cwRootData::initCavewherelib();
   // QQuickGit::GitRepository::initGitEngine();
-
-  {
-      QSettings settings;
-      settings.clear();
-  }
 
   cwSettings::initialize();
 

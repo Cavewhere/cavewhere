@@ -11,18 +11,24 @@
 // Our
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwEquate.h"
+#include "cwEquateModel.h"
+#include "cwFutureManagerModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwTrip.h"
+#include "ExternalCenterlineTestHelpers.h"
 #include "ProjectFilenameTestHelper.h"
 
 // Qt
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
+#include <QThread>
 
 namespace {
 
@@ -42,39 +48,22 @@ constexpr qint64 kOneHourSeconds = 3600;
 constexpr qint64 kStaleOffsetSeconds = -600;
 constexpr qint64 kFreshOffsetSeconds = 120;
 
-struct SavedProjectFixture {
-    QTemporaryDir tempDir;
-    std::unique_ptr<cwRootData> rootData;
-    cwProject* project = nullptr;
-    cwCave* cave = nullptr;
-    cwTrip* trip = nullptr;
-};
+// Pause between an mtime baseline and the change under test, so a rewrite of
+// the file is unambiguous rather than lost to timestamp resolution.
+constexpr unsigned long kMtimeGapMs = 50;
+// A trip date, which is a save trigger, for the control half of a no-save test.
+constexpr int kControlYear = 2001;
+constexpr int kControlMonth = 2;
+constexpr int kControlDay = 3;
 
-// Builds a saved-to-disk project with one cave + one trip already on disk.
-// All paths under tempDir.path(); safe to run in parallel processes because
-// QTemporaryDir generates a unique suffix per process.
-std::unique_ptr<SavedProjectFixture> makeSavedProject(const QString& projectFileBase)
+std::unique_ptr<SavedProjectFixture> makeSavedProject(
+    const QString& projectFileBase,
+    const QString& extension = QStringLiteral(".cwproj"))
 {
-    auto fixture = std::make_unique<SavedProjectFixture>();
-    REQUIRE(fixture->tempDir.isValid());
-
-    fixture->rootData = std::make_unique<cwRootData>();
-    fixture->project = fixture->rootData->project();
-
-    auto region = fixture->project->cavingRegion();
-    region->addCave();
-    fixture->cave = region->cave(0);
-    fixture->cave->setName(QString::fromLatin1(kOriginalCaveName));
-    fixture->cave->addTrip();
-    fixture->trip = fixture->cave->trip(0);
-    fixture->trip->setName(QString::fromLatin1(kOriginalTripName));
-
-    const QString projectPath =
-        QDir(fixture->tempDir.path()).filePath(projectFileBase + QStringLiteral(".cwproj"));
-    REQUIRE(fixture->project->saveAs(projectPath));
-    fixture->project->waitSaveToFinish();
-
-    return fixture;
+    return makeSavedProject(projectFileBase,
+                            QString::fromLatin1(kOriginalCaveName),
+                            QString::fromLatin1(kOriginalTripName),
+                            extension);
 }
 
 // Creates `<ownerDir>/external-centerline/planted.svx` with kPlantedContent.
@@ -94,25 +83,166 @@ QString plantExternalCenterlineFile(const QDir& ownerDir)
     return plantedPath;
 }
 
-// Writes `content` to `path`, then forces lastModified to `mtime` via QFile::setFileTime
-// (Qt 6 API). Returns the absolute path so callers can pipe it into copyIfNewer.
-QString writeFileWithMtime(const QString& path, const QByteArray& content, const QDateTime& mtime)
+} // namespace
+
+TEST_CASE("harvested station names never trigger a save",
+          "[SaveLoad][External][StationHarvest]")
 {
-    REQUIRE(QDir().mkpath(QFileInfo(path).absolutePath()));
-    {
-        QFile f(path);
-        REQUIRE(f.open(QFile::WriteOnly));
-        f.write(content);
-        f.close();
-    }
-    QFile f(path);
-    REQUIRE(f.open(QFile::ReadWrite));
-    REQUIRE(f.setFileTime(mtime, QFileDevice::FileModificationTime));
-    f.close();
-    return path;
+    // externalStations/externalStationsError are scan output — rebuilt from
+    // files the project already owns on every recompute. Wiring either to a
+    // save would rewrite the trip on disk after every attach, every watched-file
+    // edit and every project load, for a value that is never serialized.
+    auto fixture = makeSavedProject(QStringLiteral("harvest-no-save"));
+    REQUIRE_FALSE(fixture->project->modified());
+
+    const QString tripFile = ProjectFilenameTestHelper::absolutePath(fixture->trip);
+    REQUIRE(QFileInfo::exists(tripFile));
+    const QDateTime mtimeBefore = QFileInfo(tripFile).lastModified();
+
+    // APFS keeps sub-millisecond mtimes, but a gap this wide makes a rewrite
+    // unmistakable rather than a timestamp-resolution argument.
+    QThread::msleep(kMtimeGapMs);
+
+    fixture->trip->setExternalStations({QStringLiteral("hanging.h1"),
+                                        QStringLiteral("hanging.h2")});
+    fixture->trip->setExternalStationsError(QStringLiteral("cavern: error: pretend failure"));
+
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(waitForQueuedEvents());
+    fixture->project->waitSaveToFinish();
+
+    CHECK_FALSE(fixture->project->modified());
+    CHECK(QFileInfo(tripFile).lastModified() == mtimeBefore);
+
+    // Control: a field that IS a save trigger moves the same file, so the
+    // assertion above can't pass just because nothing ever writes here.
+    fixture->trip->setDate(QDateTime(QDate(kControlYear, kControlMonth, kControlDay), QTime()));
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(waitUntil([&] { return QFileInfo(tripFile).lastModified() != mtimeBefore; }));
+
+    CHECK(QFileInfo(tripFile).lastModified() != mtimeBefore);
 }
 
-} // namespace
+TEST_CASE("within-cave and cross-cave equates round-trip through the region list",
+          "[SaveLoad][scope][equate]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("equate-roundtrip"));
+
+    // A second cave so the region (cross-cave) tie has two homes to connect.
+    auto region = fixture->project->cavingRegion();
+    region->addCave();
+    cwCave* secondCave = region->cave(1);
+    secondCave->setName(QStringLiteral("SecondCave"));
+    secondCave->addTrip();
+    cwTrip* secondTrip = secondCave->trip(0);
+
+    const QUuid cave0Id = fixture->cave->id();
+    const QUuid trip0Id = fixture->trip->id();
+    const QUuid cave1Id = secondCave->id();
+
+    // Within-cave tie on cave0: a bare native station equated to a trip-scoped
+    // station in the same cave.
+    const cwEquate caveEquate({
+        cwStationHandle(cwStationHandle::NativeCave, cave0Id, QStringLiteral("1")),
+        cwStationHandle(cwStationHandle::Trip, trip0Id, QStringLiteral("1"))
+    });
+    REQUIRE(fixture->cave->validate(caveEquate));
+    region->equates()->appendEquate(caveEquate);
+
+    // Cross-cave tie on the region: a station in cave0 equated to one in cave1.
+    const cwEquate regionEquate({
+        cwStationHandle(cwStationHandle::NativeCave, cave0Id, QStringLiteral("2")),
+        cwStationHandle(cwStationHandle::NativeCave, cave1Id, QStringLiteral("7"))
+    });
+    region->equates()->appendEquate(regionEquate);
+
+    REQUIRE(fixture->project->save());
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
+
+    const QString projectPath = fixture->project->filename();
+
+    auto freshRoot = std::make_unique<cwRootData>();
+    freshRoot->project()->loadFile(projectPath);
+    freshRoot->project()->waitLoadToFinish();
+
+    auto loadedRegion = freshRoot->project()->cavingRegion();
+    REQUIRE(loadedRegion->caveCount() == 2);
+
+    // Both ties come back in the region's list, in the order they were made.
+    REQUIRE(loadedRegion->equates()->count() == 2);
+    CHECK(loadedRegion->equates()->equateAt(0) == caveEquate);
+    CHECK(loadedRegion->equates()->equateAt(1) == regionEquate);
+
+    Q_UNUSED(secondTrip);
+}
+
+TEST_CASE("Loading a project does not re-save the project file",
+          "[SaveLoad][scope][equate]")
+{
+    // Regression guard for the C3 save-trigger landmine. The region equate
+    // save-trigger is wired in cwSaveLoad::connectTreeModel, which runs BEFORE
+    // the region is populated. setEquates() (the bulk load path) emits
+    // modelReset; if that reset were wired to saveMetadata, load would rewrite
+    // the top-level Project file (project->filename()) mid-load with a
+    // half-built region — the exact bug that truncated legacy .cw conversions.
+    // The trigger must therefore watch only rowsInserted/rowsRemoved, never
+    // modelReset. Assert the project file's mtime is unchanged after a clean
+    // load of a project whose region list holds a within-cave and a cross-cave tie.
+    auto fixture = makeSavedProject(QStringLiteral("equate-load-stable"));
+
+    auto region = fixture->project->cavingRegion();
+    region->addCave();
+    cwCave* secondCave = region->cave(1);
+    secondCave->setName(QStringLiteral("SecondCave"));
+
+    const QUuid cave0Id = fixture->cave->id();
+    const QUuid trip0Id = fixture->trip->id();
+    const QUuid cave1Id = secondCave->id();
+
+    region->equates()->appendEquate(cwEquate({
+        cwStationHandle(cwStationHandle::NativeCave, cave0Id, QStringLiteral("1")),
+        cwStationHandle(cwStationHandle::Trip, trip0Id, QStringLiteral("1"))
+    }));
+    region->equates()->appendEquate(cwEquate({
+        cwStationHandle(cwStationHandle::NativeCave, cave0Id, QStringLiteral("2")),
+        cwStationHandle(cwStationHandle::NativeCave, cave1Id, QStringLiteral("7"))
+    }));
+
+    REQUIRE(fixture->project->save());
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(waitUntil([&] { return !fixture->project->modified(); }));
+
+    const QString projectFile = fixture->project->filename();
+    REQUIRE(QFileInfo::exists(projectFile));
+    const QDateTime mtimeBeforeLoad = QFileInfo(projectFile).lastModified();
+
+    // QTemporaryDir lands on APFS (/var/folders), whose mtime resolution is
+    // sub-millisecond, so this gap reliably distinguishes a mid-load re-save
+    // from the baseline.
+    QThread::msleep(kMtimeGapMs);
+
+    auto loaderRoot = std::make_unique<cwRootData>();
+    loaderRoot->project()->loadFile(projectFile);
+    loaderRoot->project()->waitLoadToFinish();
+    loaderRoot->project()->waitSaveToFinish();
+    loaderRoot->futureManagerModel()->waitForFinished();
+    REQUIRE(waitForQueuedEvents());
+    loaderRoot->project()->waitSaveToFinish();
+
+    // The loaded equates must still be intact...
+    auto loadedRegion = loaderRoot->project()->cavingRegion();
+    REQUIRE(loadedRegion->caveCount() == 2);
+    CHECK(loadedRegion->equates()->count() == 2);
+
+    // ...and the load must not have touched the project file on disk.
+    const QDateTime mtimeAfterLoad = QFileInfo(projectFile).lastModified();
+    CHECK(mtimeAfterLoad == mtimeBeforeLoad);
+}
 
 TEST_CASE("externalCenterlineDir computes <ownerDir>/external-centerline",
           "[SaveLoad][External]")
@@ -201,19 +331,32 @@ TEST_CASE("cave delete removes external-centerline/ subdir",
     CHECK_FALSE(originalCaveDir.exists());
 }
 
+// Removing the trip is the only way out of an attachment now that the panel's
+// Detach action is gone (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §4.1),
+// so it has to take the copied closure with it in both project formats — a
+// bundled .cw keeps its tree extracted in a temporary directory, which is a
+// different place than the .cwproj's on-disk tree.
 TEST_CASE("trip delete removes external-centerline/ subdir",
           "[SaveLoad][External]")
 {
-    auto fixture = makeSavedProject(QStringLiteral("trip-delete-cascade"));
+    QString extension;
+    SECTION("git-backed .cwproj") { extension = QStringLiteral(".cwproj"); }
+    SECTION("bundled .cw") { extension = QStringLiteral(".cw"); }
+
+    auto fixture = makeSavedProject(QStringLiteral("trip-delete-cascade"), extension);
 
     const QDir originalTripDir = ProjectFilenameTestHelper::dir(fixture->trip);
+    const QDir attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->trip);
     const QString plantedPath = plantExternalCenterlineFile(originalTripDir);
     REQUIRE(QFileInfo::exists(plantedPath));
+    REQUIRE(attachmentDir.exists());
 
     fixture->cave->removeTrip(0);
     fixture->project->waitSaveToFinish();
 
     CHECK_FALSE(QFileInfo::exists(plantedPath));
+    CHECK_FALSE(attachmentDir.exists());
     CHECK_FALSE(originalTripDir.exists());
 }
 
@@ -329,6 +472,7 @@ TEST_CASE("enqueueExternalCenterlineRemoveTree recursively deletes a subtree",
     }
     REQUIRE(QFileInfo::exists(shallowFile));
     REQUIRE(QFileInfo::exists(deepFile));
+    REQUIRE_FALSE(fixture->project->modified());
 
     fixture->project->saveLoad()->enqueueExternalCenterlineRemoveTree(externalDir.absolutePath());
     fixture->project->waitSaveToFinish();
@@ -336,4 +480,7 @@ TEST_CASE("enqueueExternalCenterlineRemoveTree recursively deletes a subtree",
     CHECK_FALSE(externalDir.exists());
     CHECK_FALSE(QFileInfo::exists(shallowFile));
     CHECK_FALSE(QFileInfo::exists(deepFile));
+    // Removing an attachment tree (the future detach flow) is a project
+    // mutation and must dirty the project.
+    CHECK(fixture->project->modified());
 }

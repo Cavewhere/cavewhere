@@ -82,7 +82,7 @@ function tryVerifyWithDiagnostics(testCase, predicate, timeoutMs, label, onPendi
 }
 
 function openTripPage(testCase, rootData, caveName, tripName) {
-    rootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + caveName + "/Trip=" + tripName
+    rootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + caveName + "/Trip=" + tripName
     tryVerifyWithDiagnostics(testCase, () => {
         return rootData.pageView.currentPageItem !== null
                && rootData.pageView.currentPageItem.objectName === "tripPage"
@@ -90,7 +90,7 @@ function openTripPage(testCase, rootData, caveName, tripName) {
 }
 
 function openCavePage(testCase, rootData, caveName) {
-    rootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + caveName
+    rootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + caveName
     tryVerifyWithDiagnostics(testCase, () => {
         return rootData.pageView.currentPageItem !== null
                && rootData.pageView.currentPageItem.objectName === "cavePage"
@@ -145,7 +145,7 @@ function loadFixtureAndOpenFirstTrip(testCase, rootData, testHelper) {
     return {
         caveName: caveName,
         tripName: tripName,
-        tripPageAddress: "Source/Data/Cave=" + caveName + "/Trip=" + tripName
+        tripPageAddress: "Source/Data/Node=" + caveName + "/Trip=" + tripName
     }
 }
 

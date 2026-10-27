@@ -1,0 +1,19 @@
+; Mixed-case block names, the shape a real survey file takes when the
+; surveyor names blocks after a cave code (48H-Feng). A Scope trip stores
+; its stationPrefix with this authored spelling while cavern lowercases
+; every label it writes to the .3d, so this fixture is the case-matching
+; regression that survex_blocks.svx (all lowercase) cannot catch.
+;   48H-Feng          F1, F2 (+ the tie into the child block)
+;   48H-Feng.Lower    L1, L2
+; *fix F1 plus the cross-block tie keep the file one connected component,
+; so cavern solves it. Hand-computable: length 19 m, depth 4 m.
+*begin 48H-Feng
+*fix F1 0 0 0
+*data normal from to tape compass clino
+F1 F2 10.0 0 0
+F2 Lower.L1 5.0 90 0
+
+*begin Lower
+L1 L2 4.0 0 -90
+*end Lower
+*end 48H-Feng

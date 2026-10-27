@@ -199,6 +199,12 @@ QtObject {
     // reads as a thinner mark than the row's own bar.
     readonly property int taskDetailBarHeight: 4
 
+    // Error popover: the messages a survey tree row's error badges stand for.
+    // Wide enough for a fix-station message to wrap onto two lines, not five.
+    readonly property int errorPopoverWidth: Math.round(320 * fontScale)
+    // Long enough for the pointer to cross from the badge onto the card.
+    readonly property int errorPopoverHoverCloseDelay: 300
+
     // Icon sizes
     readonly property int iconSizeButton: 16
     readonly property int iconSizeSmall: 24
@@ -212,8 +218,6 @@ QtObject {
     // Wide enough for the longest datum the table names ("Mexico ITRF2008") at
     // the picker's smaller datum font.
     readonly property int csDatumFieldWidth: 130
-    // How long a pointer rests before a tooltip appears.
-    readonly property int toolTipDelay: 500
     // Cap the inline Custom resolved-name label so a long CRS name elides
     // instead of stretching the picker past its host cell / wrapping the Flow.
     readonly property int csResolvedLabelMaxWidth: 180
@@ -245,6 +249,76 @@ QtObject {
     readonly property int scrollBarAllowance: 16
     // Fixed "Last opened" column on the Sources page; fits a yyyy-MM-dd HH:mm stamp.
     readonly property int recentProjectDateColumnWidth: 150
+
+    // Tallest a floating list (a review list, a popup's rows) grows before it
+    // scrolls, so it leaves the window behind it usable. Font-scaled so a
+    // larger base size still shows about as many rows.
+    readonly property int floatingListMaxHeight: Math.round(220 * fontScale)
+
+    // Wrap width for help callouts. Font-scaled so a larger base size keeps
+    // roughly the same words per line instead of wrapping sooner.
+    readonly property int helpBoxMaxWidth: Math.round(350 * fontScale)
+
+    // Survey tree (the Data page's tree table). The column widths are the
+    // fixed cells; the Name column takes whatever width is left over.
+    readonly property int treeIndent: Math.round(16 * fontScale)
+    readonly property int treeCaretWidth: Math.round(16 * fontScale)
+    readonly property int treeRowHeight: Math.round(26 * fontScale)
+    // The least height the wide node page gives its tree: the toolbar, the
+    // header and a handful of rows. Below it the page scrolls instead.
+    readonly property int treeMinimumHeight: Math.round(240 * fontScale)
+    readonly property int treeNameColumnMinimumWidth: Math.round(180 * fontScale)
+    readonly property int treeKindColumnWidth: Math.round(80 * fontScale)
+    readonly property int treeCountColumnWidth: Math.round(55 * fontScale)
+    //Wide enough for a station range ("A 1-24"), which is what a trip row's
+    //Stations cell names.
+    readonly property int treeStationsColumnWidth: Math.round(100 * fontScale)
+    readonly property int treeStatColumnWidth: Math.round(120 * fontScale)
+    readonly property int treeDateColumnWidth: Math.round(110 * fontScale)
+    //Fits "Declination" plus the sort indicator.
+    readonly property int treeDeclColumnWidth: Math.round(115 * fontScale)
+    readonly property int treeFilterWidth: Math.round(220 * fontScale)
+    //The arrow the header cell of the sorted column carries, sized to sit
+    //beside a fontSizeSmall title rather than to stand on its own.
+    readonly property int treeSortIndicatorSize: Math.round(10 * fontScale)
+    //The icon ahead of a native node row's name.
+    readonly property int treeKindIconSize: Math.round(14 * fontScale)
+
+    // Resizable table columns: the narrowest a dragged column gets, and the
+    // strip at a header cell's right edge that drags it.
+    readonly property int tableColumnMinimumWidth: Math.round(60 * fontScale)
+    readonly property int columnResizeGripWidth: Math.round(8 * fontScale)
+
+    // Fix Stations page default column widths. The station column adds tree
+    // indentation on top; the coordinate column adds the pick-from-view button.
+    readonly property int fixStationColumnWidth: Math.round(130 * fontScale)
+    readonly property int fixInputCSColumnWidth: Math.round(400 * fontScale)
+    //Fits a UTM triple with its elevation unit, e.g. "610016.792, 5615117.075, 2545.34m".
+    readonly property int fixCoordinateColumnWidth: Math.round(300 * fontScale)
+
+    // Kind glyphs: a Cave, a Folder where caves go, and a Section (a Folder
+    // inside a cave). KindIcon picks one from where the node sits.
+    readonly property url kindIconCave: "qrc:/icons/svg/caveKind.svg"
+    readonly property url kindIconFolder: "qrc:/twbs-icons/icons/folder.svg"
+    readonly property url kindIconSection: "qrc:/twbs-icons/icons/signpost-split.svg"
+
+    // Chips (the Kind chip on a tree row)
+    readonly property int chipRadius: Math.round(3 * fontScale)
+    readonly property int chipPadding: Math.round(6 * fontScale)
+    readonly property color chipBackground: surfaceRaised
+    readonly property color chipHoverBackground: hover
+    readonly property color chipText: textSubtle
+    readonly property color chipSourcedBackground: info
+    readonly property color chipSourcedText: textSecondary
+
+    // Timing
+    // Hover time, in milliseconds, before a tooltip appears.
+    readonly property int toolTipDelay: 500
+    // One fade in or out, in milliseconds, of the attention pulse: the frame
+    // that marks the part of a page a tap asked for.
+    readonly property int attentionPulseDuration: 250
+    // How many times the attention pulse fades in and out.
+    readonly property int attentionPulseCount: 2
 
     // Utility
     readonly property color transparent: "#00000000"
@@ -444,6 +518,12 @@ QtObject {
         ? Qt.lighter(floatingWidgetColor, 1.3)
         : Qt.darker(floatingWidgetColor, 1.12)
     readonly property real floatingWidgetRadius: controlRadius
+    // Corner radius of an in-page banner, such as a node's warnings.
+    readonly property int bannerRadius: controlRadius
+    // Border of the attention pulse's frame.
+    readonly property int attentionBorderWidth: 2
+    // Border of a banner in the window's banner strip.
+    readonly property int bannerBorderWidth: 1
     readonly property color errorBackground: danger
 
     // View (3D scene) radial background gradient + grid lines

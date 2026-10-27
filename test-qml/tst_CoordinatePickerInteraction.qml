@@ -208,9 +208,10 @@ MainWindowTest {
             let header = findChild(popup, "LatLonHeader")
             verify(header !== null, "the lat/lon section should carry a header")
 
-            compare(popup.picker.datum, CoordinateSystem.wgs84(),
-                    "a project with no context falls back to WGS84")
-            compare(header.text, "WGS84 (lat, lon, elevation)")
+            // The new project's frame settles on the next event-loop turn.
+            tryCompare(popup.picker, "datum", CoordinateSystem.wgs84(), 5000,
+                       "a project with no context falls back to WGS84")
+            tryCompare(header, "text", "WGS84 (lat, lon, elevation)", 5000)
 
             anchorProjectInTheUs()
 

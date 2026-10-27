@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External Sources — Phase 6 Interactive UX Prototype</title>
+<style>
+  :root {
+    --background: #f2f2f2;
+    --surface: #ffffff;
+    --text: #1a1a1a;
+    --text-secondary: #33363a;
+    --text-subtle: #616469;
+    --text-link: #1d4d77;
+    --accent: #2f6fb0;
+    --success: #4caf50;
+    --warning: #FF9C14;
+    --danger: #FF6736;
+    --info: #85c1f4;
+    --border: #d3d3d3;
+    --chrome: #e8e8e8;
+    --shadow: rgba(0,0,0,.25);
+    --chip: #e3ecf7;
+    --chip-text: #1d4d77;
+  }
+  [data-theme="dark"] {
+    --background: #14171c;
+    --surface: #1f232a;
+    --text: #e8ebf0;
+    --text-secondary: #cdd2db;
+    --text-subtle: #9fa6b1;
+    --text-link: #85c1f4;
+    --accent: #6aa5dd;
+    --success: #76e596;
+    --warning: #6b643e;
+    --danger: #6f312e;
+    --info: #1f3f61;
+    --border: #4a4f58;
+    --chrome: #262b33;
+    --shadow: rgba(0,0,0,.6);
+    --chip: #2a3b50;
+    --chip-text: #9cc7f2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 14px;
+    background: var(--background); color: var(--text); padding: 24px; line-height: 1.45; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .doc-sub { color: var(--text-subtle); margin-bottom: 16px; max-width: 900px; }
+  code { font-family: "Courier Prime", "Courier New", monospace; font-size: 12px; }
+
+  .tabs { display: flex; gap: 4px; margin: 18px 0 0; }
+  .tabs button { font-size: 14px; padding: 8px 18px; border: 1px solid var(--border);
+    border-bottom: none; border-radius: 6px 6px 0 0; background: var(--chrome);
+    color: var(--text); cursor: pointer; }
+  .tabs button.active { background: var(--surface); font-weight: 700; }
+  .tab-body { border: 1px solid var(--border); background: var(--surface);
+    border-radius: 0 6px 6px 6px; padding: 18px; }
+  .lane { display: none; } .lane.active { display: block; }
+  .theme-toggle { float: right; font-size: 12px; padding: 4px 10px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--chrome); color: var(--text); cursor: pointer; }
+  .badge-shipped, .badge-proposed { display: inline-block; font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 10px; vertical-align: middle; margin-left: 8px; }
+  .badge-shipped { background: var(--success); color: #fff; }
+  .badge-proposed { background: var(--warning); color: #fff; }
+  [data-theme="dark"] .badge-shipped { color: #10321a; }
+
+  .appwin { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; max-width: 1000px;
+    background: var(--background); box-shadow: 0 4px 18px var(--shadow); margin-top: 14px; position: relative; }
+  .titlebar { background: var(--chrome); padding: 6px 12px; font-size: 12px; color: var(--text-subtle);
+    border-bottom: 1px solid var(--border); display: flex; gap: 6px; align-items: center; }
+  .dots span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+  .dots .r { background: #ff5f57; } .dots .y { background: #febc2e; } .dots .g { background: #28c840; }
+  .winbody { padding: 0; min-height: 520px; position: relative; }
+  .banner-strip { position: absolute; top: 0; left: 0; right: 0; z-index: 40; padding: 8px;
+    display: flex; flex-direction: column; gap: 2px; pointer-events: none; }
+  .banner-strip > * { pointer-events: auto; }
+  .page { padding: 12px; }
+  .page-nav { display:flex; gap: 8px; margin-bottom: 10px; font-size: 12px; }
+  .page-nav a { color: var(--text-link); cursor: pointer; text-decoration: none; }
+  .page-nav a:hover { text-decoration: underline; }
+  .page-nav .here { color: var(--text-subtle); }
+
+  .btn { font-size: 13px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); color: var(--text); cursor: pointer; }
+  .btn:hover:enabled { background: var(--chrome); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.small { font-size: 12px; padding: 3px 9px; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .split { display: inline-flex; }
+  .split .btn.main { border-radius: 4px 0 0 4px; }
+  .split .btn.chev { border-radius: 0 4px 4px 0; border-left: none; padding: 5px 7px; }
+  .menu { position: absolute; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; box-shadow: 0 3px 10px var(--shadow); z-index: 60; min-width: 220px;
+    padding: 4px 0; font-size: 13px; }
+  .menu div { padding: 6px 14px; cursor: pointer; }
+  .menu div:hover { background: var(--chrome); }
+  .field { font-size: 13px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); color: var(--text); width: 100%; }
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.35); z-index: 50;
+    display: flex; align-items: center; justify-content: center; }
+  .dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 30px var(--shadow); width: 680px; max-width: 94%; padding: 16px;
+    max-height: 94%; overflow: auto; }
+  .dialog h3 { font-size: 16px; margin-bottom: 12px; }
+  .hint { color: var(--text-subtle); font-size: 12px; }
+  .secondary { color: var(--text-secondary); font-size: 13px; }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; align-items: center; }
+  .dlg-actions .spacer { flex: 1; }
+  .busyrow { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; }
+  .spinner { width: 18px; height: 18px; border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .infobanner { background: var(--info); border: 1px solid var(--border); border-radius: 3px;
+    padding: 8px; display: flex; gap: 6px; align-items: center; font-size: 14px; }
+  [data-theme="light"] .infobanner { color: #102b45; }
+  .infobanner .msg { flex: 1; }
+  .notice { border-radius: 5px; padding: 8px; margin-bottom: 8px; color: var(--text); }
+  .notice .title { font-weight: 700; margin-bottom: 2px; }
+  .notice.warn { background: var(--warning); }
+  [data-theme="light"] .notice.warn { color: #241206; }
+  .notice .body { font-size: 12px; }
+
+  .cavecard { border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin: 10px 0;
+    background: var(--surface); font-size: 13px; }
+  .cavecard .t { font-weight: 700; margin-bottom: 4px; }
+  .triptable { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  .triptable th, .triptable td { border-bottom: 1px solid var(--border); text-align: left; padding: 4px 8px; }
+  .triptable th { background: var(--chrome); }
+  .triptable th.sortable { cursor: pointer; }
+  .triptable th.sortable:hover { text-decoration: underline; }
+  .triptable td.num, .triptable th.num { text-align: right; }
+  .triptable .prefix { color: var(--text-subtle); font-family: "Courier Prime", monospace; font-size: 12px; }
+  .triptable tr.grouphead td { background: var(--background); color: var(--text-subtle);
+    font-size: 12px; font-weight: 700; }
+  .chip { display: inline-block; background: var(--chip); color: var(--chip-text); border-radius: 10px;
+    padding: 1px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+  .chip.native { background: var(--chrome); color: var(--text-subtle); font-weight: 400; cursor: default; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
+  .dot.ok { background: var(--success); } .dot.warn { background: var(--warning); } .dot.err { background: var(--danger); }
+  a.link { color: var(--text-link); cursor: pointer; text-decoration: none; }
+  a.link:hover { text-decoration: underline; }
+
+  .header-filerow { display: flex; align-items: baseline; gap: 6px; }
+  .header-filerow .fname { font-weight: 700; }
+  .header-filerow .fmt { color: var(--text-secondary); font-size: 13px; }
+  .header-filerow .spacer { flex: 1; }
+  .provenance { font-size: 12px; color: var(--text-subtle); white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
+  .solve-status { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; }
+  .solve-status .spacer { flex: 1; }
+  .pill { color: var(--text-secondary); font-size: 13px; }
+
+  .blocktree { font-family: "Courier Prime", monospace; font-size: 12px; border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px; margin-top: 6px; background: var(--background);
+    max-height: 220px; overflow: auto; white-space: pre; }
+  .blocktree .cnt { color: var(--text-subtle); }
+  .blocktree .cave { font-weight: 700; }
+  .askbox { border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+    box-shadow: 0 3px 10px var(--shadow); padding: 10px 12px; font-size: 13px; max-width: 520px; }
+  .askbox .t { font-weight: 700; margin-bottom: 4px; }
+  .askbox ul { margin: 4px 0 0 18px; }
+  .askbox .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+
+  .trip-layout { display: flex; min-height: 420px; }
+  .trip-panel { width: 480px; max-width: 60%; border-right: 1px solid var(--border); padding: 8px;
+    overflow-y: auto; background: var(--surface); }
+  .trip-right { flex: 1; display: flex; align-items: center; justify-content: center;
+    color: var(--text-subtle); font-size: 13px; background: var(--background); }
+  .floatbanner { background: var(--warning); border-radius: 5px; padding: 8px; margin-bottom: 8px; font-size: 13px; }
+  [data-theme="light"] .floatbanner { color: #241206; }
+  .chunk { border: 1px solid var(--border); border-radius: 4px; margin-top: 8px; font-size: 13px; }
+  .chunk .row { display: grid; grid-template-columns: 90px 90px 70px 70px 70px; gap: 4px; padding: 3px 8px;
+    border-bottom: 1px solid var(--border); }
+  .chunk .row:last-child { border-bottom: none; }
+  .chunk .row.h { background: var(--chrome); font-weight: 700; font-size: 12px; }
+  .chunk .st { font-family: "Courier Prime", monospace; }
+  .suggest { position: absolute; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; box-shadow: 0 3px 10px var(--shadow); z-index: 60; min-width: 300px;
+    padding: 4px 0; font-size: 13px; }
+  .suggest div { padding: 5px 12px; cursor: pointer; display: flex; gap: 8px; }
+  .suggest div:hover { background: var(--chrome); }
+  .suggest .from { color: var(--text-subtle); font-size: 12px; flex: 1; text-align: right; }
+
+  .attached-section { margin: 12px 0; }
+  .attached-section .hdr { font-weight: 700; margin-bottom: 4px; }
+  .attrow { display: flex; gap: 8px; font-size: 13px; padding: 3px 0; align-items: center; }
+  .attrow .main { flex: 1; }
+  .attrow .count { color: var(--text-subtle); }
+  .attrow.child { padding-left: 22px; }
+  .cavern-status { font-size: 18px; }
+  .mono-pane { border: 1px solid var(--border); border-radius: 4px; background: var(--surface);
+    font-family: "Courier Prime", monospace; font-size: 12px; padding: 8px; height: 170px;
+    overflow: auto; white-space: pre; }
+
+  .simbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; border: 1px dashed var(--border);
+    border-radius: 6px; padding: 8px 12px; margin-top: 12px; font-size: 12px; color: var(--text-subtle);
+    max-width: 1000px; }
+  .simbar label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+  .simbar b { color: var(--text); }
+  .notes { max-width: 900px; font-size: 13px; }
+  .notes h3 { font-size: 15px; margin: 14px 0 4px; }
+  .notes li { margin: 3px 0 3px 18px; }
+  .notes .q { font-weight: 700; }
+  .notes table { border-collapse: collapse; margin: 8px 0; }
+  .notes th, .notes td { border: 1px solid var(--border); padding: 4px 10px; text-align: left; vertical-align: top; }
+  .notes th { background: var(--chrome); }
+</style>
+</head>
+<body data-theme="light">
+
+<button class="theme-toggle" onclick="toggleTheme()">Toggle dark mode</button>
+<h1>External Sources — Phase 6 Interactive UX Prototype</h1>
+<p class="doc-sub">
+  Companion to <code>plans/EXTERNAL_FILE_PHASE6.html</code>. Successor to the Phase 3 lane of
+  <code>EXTERNAL_CENTERLINE_UX_INTERACTIVE.html</code>. The demo data is the real OMEGA2
+  Compass project (18 <code>.dat</code> files, 6,985 stations). Everything with a button is
+  clickable. Pieces marked <span class="badge-proposed">PROPOSED</span> are new in Phase 6;
+  everything else is Phase 2 and Phase 3 as shipped.
+</p>
+
+<div class="tabs">
+  <button id="tabbtn-app" class="active" onclick="showLane('app')">Phase 6 — Region sources + mixed caves <span class="badge-proposed">PROPOSED</span></button>
+  <button id="tabbtn-notes" onclick="showLane('notes')">Design notes</button>
+</div>
+
+<div class="tab-body">
+<div class="lane active" id="lane-app">
+
+  <div class="appwin">
+    <div class="titlebar"><span class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></span>
+      CaveWhere — Omega.cwproj — <span id="pagename">Data</span></div>
+    <div class="winbody" id="winbody">
+      <div class="banner-strip" id="bannerstrip"></div>
+
+      <!-- ======== DATA MAIN PAGE ======== -->
+      <div class="page" id="datapage">
+        <div class="page-nav"><span class="here">All Caves</span></div>
+        <span class="split" style="position:relative">
+          <button class="btn main" onclick="addNativeCave()">＋ Add Cave</button>
+          <button class="btn chev" title="More ways to add a cave" onclick="toggleMenu('addmenu', event)">▾</button>
+          <div class="menu" id="addmenu" style="display:none; top:30px; left:0; min-width:260px">
+            <div onclick="openDialog()">Add cave from survey file…</div>
+          </div>
+        </span>
+        <span style="position:relative; margin-left:6px">
+          <button class="btn" title="Survey sources" onclick="toggleMenu('hamburger', event)">≡</button>
+          <div class="menu" id="hamburger" style="display:none; top:30px; left:0; min-width:300px"></div>
+        </span>
+        <span class="hint" style="margin-left:10px">Same Add menu as Phase 3. ≡ holds the region
+          sources and their verbs <span class="badge-proposed">PROPOSED</span></span>
+        <div style="position:relative" id="datapage-askhost"></div>
+
+        <div class="cavecard">
+          <div class="t">Caves</div>
+          <table class="triptable" id="cavetable">
+            <tr>
+              <th>Name</th>
+              <th class="sortable" title="Click to group by source" onclick="toggleGroup()">Source <span class="badge-proposed">PROPOSED</span></th>
+              <th class="num">Trips</th><th class="num">Length</th><th></th>
+            </tr>
+          </table>
+          <p class="hint" style="margin-top:6px">Source column: a chip names the file the cave was
+            derived from. Click a chip to show only that source's caves; click the header to
+            group by source. Native caves show a plain "native" chip.</p>
+        </div>
+      </div>
+
+      <!-- ======== CAVE PAGE (derived, mixed) ======== -->
+      <div class="page" id="cavepage" style="display:none">
+        <div class="page-nav"><a onclick="gotoData()">◂ All Caves</a> <span class="here">· <span id="cavepage-name">Blowing</span> 📎</span></div>
+
+        <div class="cavecard">
+          <div class="t">Survey source <span class="badge-proposed">PROPOSED</span></div>
+          <div class="header-filerow">
+            <span class="fname" id="cavepage-src">OMEGA2.MAK</span><span class="fmt">Compass project</span>
+            <span class="secondary" id="cavepage-shared">· shared with 17 other caves</span>
+            <span class="spacer"></span>
+            <a class="link" onclick="gotoData()">Manage sources on All Caves ≡</a>
+          </div>
+          <div class="hint">Read-only here: Reload, Replace, and Detach act on all 18 caves this file backs,
+            so they live in the ≡ menu on All Caves, never on one cave's page.</div>
+          <div class="provenance">Copied from: /Users/friend/compass/OMEGA2/OMEGA2.MAK</div>
+          <div class="secondary" style="margin-top:4px">This cave is <code>BLOWING3.DAT</code> in the project
+            (stations <code>omega2.blowing3.*</code>).</div>
+          <div class="solve-status">
+            <span class="dot ok"></span><span>6,985 stations in source · 2,913 in this cave</span>
+            <span class="pill">5 warnings</span><span class="spacer"></span>
+            <a class="link" onclick="gotoCavern()">View cavern output</a>
+          </div>
+        </div>
+
+        <div class="cavecard">
+          <div class="t">Trips</div>
+          <table class="triptable" id="triptable"></table>
+          <div style="margin-top:8px; position:relative">
+            <span class="split" style="position:relative">
+              <button class="btn main small" onclick="addNativeTrip()">＋ Add Trip</button>
+              <button class="btn chev small" onclick="toggleMenu('addtripmenu', event)">▾</button>
+              <div class="menu" id="addtripmenu" style="display:none; top:26px; left:0; min-width:260px">
+                <div onclick="hide('addtripmenu'); alert('Phase 2 trip-level attach dialog, unchanged. A mixed cave takes trip-level attachments beside its source.')">Add trip from survey file…</div>
+              </div>
+            </span>
+            <span class="hint" style="margin-left:8px">Both verbs stay enabled on a derived cave (mixed cave)
+              <span class="badge-proposed">PROPOSED</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== TRIP PAGE (native trip inside a mixed cave) ======== -->
+      <div class="page" id="trippage" style="display:none">
+        <div class="page-nav"><a onclick="gotoData()">◂ All Caves</a> <a onclick="gotoCave()">· Blowing 📎</a>
+          <span class="here">· Digital survey 2026-09-14</span></div>
+        <div class="trip-layout">
+          <div class="trip-panel">
+            <div class="floatbanner" id="floatbanner">
+              <b>This trip is floating.</b> None of its stations connect to the rest of Blowing.
+              <div style="margin-top:6px; position:relative">
+                <button class="btn small" onclick="toggleSuggest(event)">Tie in…</button>
+                <div class="suggest" id="suggest" style="display:none; top:26px; left:0">
+                  <div onclick="tie('OF87')"><span class="st">OF87</span><span class="from">📎 OF50-87 · BLOWING3.DAT</span></div>
+                  <div onclick="tie('LF423')"><span class="st">LF423</span><span class="from">📎 LF350-423 · BLOWING3.DAT</span></div>
+                  <div onclick="tie('SWa1')"><span class="st">SWa1</span><span class="from">📎 link station · OMEGA2.MAK</span></div>
+                  <div onclick="tie('MHa1')"><span class="st">MHa1</span><span class="from">📎 Molly · MOLLY.DAT (other cave)</span></div>
+                </div>
+              </div>
+              <div class="hint" style="margin-top:4px">Shipped C6 tie-in UX. The suggester lists source
+                stations because the cave's known stations include the solve. The last row is a
+                cross-cave tie and becomes a region equate.</div>
+            </div>
+            <div id="tiedline" class="secondary" style="display:none; margin-bottom:8px">
+              ✓ Tied: <code>1</code> = <code id="tiedto"></code> (cave equate; for a derived cave it is emitted at region scope, fully qualified)
+            </div>
+            <div style="font-weight:700">Digital survey 2026-09-14</div>
+            <div class="hint">Native trip. Calibration, team, and declination editors are the normal ones.</div>
+            <div class="chunk">
+              <div class="row h"><span>From</span><span>To</span><span>Dist</span><span>Az</span><span>Inc</span></div>
+              <div class="row"><span class="st">1</span><span class="st">2</span><span>12.4</span><span>231</span><span>-3</span></div>
+              <div class="row"><span class="st">2</span><span class="st">3</span><span>8.1</span><span>219</span><span>-11</span></div>
+              <div class="row"><span class="st">3</span><span class="st">4</span><span>15.0</span><span>240</span><span>0</span></div>
+            </div>
+            <div class="hint" style="margin-top:8px">Driver shape: the source is its own region block; this cave's
+              block holds the native trip; the tie is a region-scope equate. See the Cavern page.</div>
+          </div>
+          <div class="trip-right">notes / carpet area (unchanged)</div>
+        </div>
+      </div>
+
+      <!-- ======== CAVERN OUTPUT PAGE ======== -->
+      <div class="page" id="cavernpage" style="display:none">
+        <div class="page-nav"><a onclick="gotoData()">◂ All Caves</a> <span class="here">· Cavern output</span></div>
+        <div class="cavern-status">Solved · 5 warnings</div>
+        <div class="attached-section">
+          <div class="hdr">Attached survey files</div>
+          <div class="attrow"><span class="dot ok"></span><span class="main"><b>OMEGA2.MAK</b> — region source, 18 caves <span class="badge-proposed">PROPOSED</span></span><span class="count">6,985 stations</span></div>
+          <div class="attrow child"><span class="main">Blowing, Hairy, Molly, Parsons, Ridge, Spiderweb, Overland, Cracknsp, Rocky, Solomon, Franklin, Rockysrf, Horsesho, Bucket, 5_shot, Powriv, Bloomer, Pmrathol</span></div>
+          <div class="attrow"><span class="dot warn"></span><span class="main"><b>wulong_north.svx</b> — region source, 3 caves <span class="badge-proposed">PROPOSED</span></span><span class="count">3,912 stations</span></div>
+          <div class="attrow child"><span class="main">Sanwangdong, Erwangdong, Dongba</span></div>
+          <div class="attrow"><span class="dot ok"></span><span class="main"><b>side-cave.svx</b> — cave-level, Side Cave</span><span class="count">247 stations</span></div>
+          <div class="attrow"><span class="dot ok"></span><span class="main"><b>lead-2024.srv</b> — trip-level, Blowing / Lead survey 2024</span><span class="count">31 stations</span></div>
+        </div>
+        <div class="hint">One row per source at every ownership level. This list already exists; region
+          sources are one more owner kind.</div>
+        <div class="mono-pane" id="driverpane">; driver (region export)
+*begin omega2 ; OMEGA2.MAK
+*include OMEGA2/OMEGA2.MAK
+*end omega2
+
+*begin blowing ; Blowing (derived from omega2.blowing3)
+  *begin digital_survey_2026_09_14
+    *data normal from to tape compass clino
+    1 2 12.4 231 -3
+    ...
+  *end digital_survey_2026_09_14
+*end blowing
+
+*begin molly ; Molly (derived from omega2.molly)
+*end molly
+
+; region equates (fully qualified; a derived cave's ties live here)
+*equate blowing.digital_survey_2026_09_14.1 omega2.blowing3.OF87
+*equate blowing.digital_survey_2026_09_14.4 omega2.molly.MHa1</div>
+      </div>
+
+      <!-- ======== ADD CAVE DIALOG ======== -->
+      <div class="scrim" id="dialog" style="display:none">
+        <div class="dialog">
+          <h3>Add cave from survey file</h3>
+          <div>Pick the entry file:</div>
+          <div style="display:flex; gap:6px; margin:4px 0">
+            <input class="field" id="path" placeholder="/path/to/cave.svx" oninput="resetDialog()">
+            <span style="position:relative">
+              <button class="btn" onclick="toggleMenu('browsemenu', event)">Browse…</button>
+              <div class="menu" id="browsemenu" style="display:none; top:30px; right:0; min-width:420px">
+                <div onclick="pick('mak')">📄 …/compass/OMEGA2/OMEGA2.MAK — Compass project, 18 files</div>
+                <div onclick="pick('dat')">📄 …/compass/OMEGA2/BLOWING3.DAT — one Compass file, 116 surveys</div>
+                <div onclick="pick('wpj')">📄 …/walls/Kaua North Maze.wpj — Walls project, one cave, 3 child books</div>
+                <div onclick="pick('wpj2')">📄 …/walls/TWO.WPJ — Walls project, 2 cave books</div>
+                <div onclick="pick('master')">📄 …/survex/wulong_north.svx — Survex master, 3 top-level blocks</div>
+                <div onclick="pick('svx')">📄 …/survex/big-cave.svx — one Survex cave, 8 blocks</div>
+              </div>
+            </span>
+          </div>
+          <div class="hint" id="fmthint">You can open Survex (.svx), Compass (.dat, .mak), or Walls (.wpj, .srv) files.</div>
+          <div class="secondary" id="fmtlabel" style="display:none"></div>
+          <div id="summary" class="secondary" style="display:none"></div>
+
+          <div id="splitrow" style="display:none; margin-top:10px">
+            <span style="font-weight:700">Attach as <span class="badge-proposed">PROPOSED</span></span>
+            <label style="margin-left:10px"><input type="radio" name="split" value="one" onchange="setSplit('one')"> One cave</label>
+            <label style="margin-left:10px"><input type="radio" name="split" value="many" onchange="setSplit('many')"> One cave per <span id="splitnoun"></span></label>
+            <div class="hint" id="splithint"></div>
+          </div>
+
+          <div id="preview" style="display:none">
+            <div style="font-weight:700; margin-top:10px" id="preview-title"></div>
+            <div class="hint" id="preview-hint"></div>
+            <div class="blocktree" id="tree"></div>
+          </div>
+
+          <div class="busyrow" id="busy" style="display:none"><span class="spinner"></span>Attaching…</div>
+          <div class="dlg-actions">
+            <span class="hint" id="attach-note"></span>
+            <span class="spacer"></span>
+            <button class="btn" onclick="closeDialog()">Cancel</button>
+            <button class="btn primary" id="attachbtn" disabled onclick="doAttach()">Attach</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="simbar">
+    <b>Try:</b> Add Cave ▾ → Add cave from survey file… → Browse… → OMEGA2.MAK. Then open Blowing,
+    add a native trip, tie it in. Back on All Caves, ≡ → OMEGA2.MAK → Detach… shows the cascade.
+    Browse the Kaua .wpj to see the Attach-as choice.
+    <label><input type="checkbox" onchange="simSourceChanged(this.checked)"> Simulate source changed on disk</label>
+    <label><input type="checkbox" onchange="simMissingDat(this.checked)"> Simulate a missing .dat</label>
+    <button class="btn small" onclick="resetDemo()">Reset demo</button>
+  </div>
+</div>
+
+<!-- ================= NOTES LANE ================= -->
+<div class="lane notes" id="lane-notes">
+  <h3>What is new in Phase 6 (everything marked PROPOSED)</h3>
+  <li><span class="q">Region sources.</span> A survey project file (Compass .mak, Walls .wpj, Survex master) is attached once, at the region, and derives one cave per top-level unit: a .dat file, a Walls book, a Survex top-level block. The region holds a list of sources; each source is one include block in the driver.</li>
+  <li><span class="q">Same entry point.</span> "Add cave from survey file…" stays the only menu item. The scan decides whether the file is one cave or a project; a project shows the caves it will create and the button reads "Attach N caves". The Phase 3 "this looks like a whole project" warning is gone because the case now has a real action.</li>
+  <li><span class="q">Source column.</span> The cave list gets a Source column with a chip per cave. Click a chip to filter to that source, click the header to group. There is no region-level page or panel.</li>
+  <li><span class="q">Mixed caves.</span> Any externally backed cave (derived or cave-level) accepts native trips and trip-level attachments. The driver emits the source include first, then native trips as their own blocks. A derived cave's equates are emitted at region scope, fully qualified. Native trips tie in through the shipped floating banner and tie-in suggester.</li>
+  <li><span class="q">Trips per survey unit.</span> Scope trips are windows over a station set the scanner records per unit (Compass survey, Walls .srv, Survex block) instead of a name prefix, so Compass surveys become trips even though cavern discards survey names. A station in two surveys belongs to both trips, as native trips already allow.</li>
+  <li><span class="q">Source verbs live in the ≡ menu on All Caves.</span> One submenu per region source with Reload, Replace…, Detach…. A derived cave's page shows a read-only source card, because any of those verbs acts on every cave the file backs. Detach removes every derived cave's Scope trips and the copied files; derived caves that gained native trips survive as native caves, the rest are removed.</li>
+  <li><span class="q">Attach-as choice for Walls and Survex.</span> A .wpj always has one root book, and its child books are as often sections or fixed-point folders as caves (Kaua North Maze: "SVG Sources", "Fixed Points", "North Maze Surveys"). A Survex master may be one cave in area files or a region. So the dialog asks: one cave (cave-level attach) or one cave per top-level book/block (region source). Walls defaults to one cave; Survex defaults from the shipped heuristic. Compass has no choice: a .dat is a cave.</li>
+  <li><span class="q">Fix stations.</span> Externally backed caves hide the fix-station editor. The source carries its coordinate system; native trips get their position through the equate.</li>
+
+  <h3>Unit to cave and unit to trip, per format</h3>
+  <table>
+    <tr><th>Format</th><th>Region source</th><th>Cave</th><th>Trip (Scope window)</th><th>Station naming in the .3d</th></tr>
+    <tr><td>Compass</td><td>.mak</td><td>each #FILE .dat</td><td>each SURVEY NAME in the .dat (station set)</td><td><code>&lt;src&gt;.&lt;datstem&gt;.&lt;name&gt;</code></td></tr>
+    <tr><td>Walls</td><td>.wpj, only when the user picks "one cave per top-level book"</td><td>each child book of the root with shots</td><td>each .srv with shots, any depth (station set)</td><td><code>&lt;src&gt;.&lt;prefix…&gt;.&lt;name&gt;</code>, only #PREFIX makes levels, so cave windows are station sets too</td></tr>
+    <tr><td>Survex</td><td>.svx, only when the user picks "one cave per top-level block" (default when ≥ 2 top-level blocks and no own shots)</td><td>each top-level block</td><td>each nested block with own stations (station set)</td><td><code>&lt;src&gt;.&lt;block…&gt;.&lt;name&gt;</code></td></tr>
+  </table>
+
+  <h3>Open questions this prototype should help settle</h3>
+  <li><b>Settled 2026-09-13:</b> the Source chip is enough on the cave row; source verbs live in the ≡ menu and never on a cave page; derived cave names are the .dat stem title-cased; a lone .dat stays a cave-level attach.</li>
+  <li>Is the ≡ button beside Add Cave the right home, or should the source list be a section at the top of All Caves when at least one source exists?</li>
+  <li>Walls per-book mode on a project whose caves are second-level books (root → "Caves" → one book per cave): out of scope for v1, the user attaches as one cave. Worth a depth picker later?</li>
+</div>
+
+</div><!-- /tab-body -->
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const show = id => el(id).style.display = '';
+const hide = id => el(id).style.display = 'none';
+
+function toggleTheme() {
+  const b = document.body;
+  b.dataset.theme = b.dataset.theme === 'dark' ? 'light' : 'dark';
+}
+function showLane(name) {
+  for (const l of ['app','notes']) {
+    el('lane-' + l).classList.toggle('active', l === name);
+    el('tabbtn-' + l).classList.toggle('active', l === name);
+  }
+}
+function toggleMenu(id, e) {
+  const m = el(id);
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  e.stopPropagation();
+}
+document.addEventListener('click', () => {
+  for (const id of ['addmenu','browsemenu','addtripmenu','suggest','hamburger']) hide(id);
+});
+
+/* ---------- demo state ---------- */
+const OMEGA_DATS = [
+  ['Blowing',  'BLOWING3.DAT', 116, 2913, '18,204 m'],
+  ['Hairy',    'HAIRY.DAT',     13,  611,  '4,120 m'],
+  ['Molly',    'MOLLY.DAT',      3,  118,    '702 m'],
+  ['Parsons',  'PARSONS.DAT',    2,   41,    '318 m'],
+  ['Ridge',    'RIDGECAV.DAT',   1,   40,    '256 m'],
+  ['Spiderweb','SPIDERWE.DAT',   6,  204,  '1,440 m'],
+  ['Overland', 'OVERLAND.DAT',   1,   22,    '910 m'],
+  ['Cracknsp', 'CRACKNSP.DAT',   2,   31,    '190 m'],
+  ['Rocky',    'ROCKY.DAT',      6,  480,  '3,010 m'],
+  ['Solomon',  'Solomon.DAT',    0,    0,      '—'],
+  ['Franklin', 'FRANKLIN.DAT',   2,   64,    '402 m'],
+  ['Rockysrf', 'ROCKYSRF.DAT',   3,   90,    '640 m'],
+  ['Horsesho', 'HORSESHO.DAT',   1,   38,    '210 m'],
+  ['Bucket',   'Bucket.DAT',     2,   55,    '330 m'],
+  ['5_shot',   '5_SHOT.DAT',     1,    6,     '40 m'],
+  ['Powriv',   'PowRiv.DAT',     1,   26,    '180 m'],
+  ['Bloomer',  'Bloomer.DAT',    2,   61,    '390 m'],
+  ['Pmrathol', 'PMRATHOL.DAT',   1,   15,    '110 m'],
+];
+const BLOWING_SURVEYS = [
+  ['OF50-87', 'Old Fart survey', '2007-09-13', 38],
+  ['LF350-423', 'Upstream Gale Force', '2007-09-11', 74],
+  ['trip1', '', '1994-11-26', 21],
+  ['trip2', '', '1995-04-15', 33],
+];
+
+const state = { caves: [], sources: [], grouped: false, filter: null, nativeTrips: [], tied: null, missingDat: false };
+
+function resetDemo() {
+  state.caves = [ { name: 'Wulong North Native', src: null, trips: 4, len: '1,220 m', status: 'ok' } ];
+  state.sources = []; state.grouped = false; state.filter = null; state.nativeTrips = []; state.tied = null;
+  state.missingDat = false;
+  el('bannerstrip').innerHTML = '';
+  renderCaves(); gotoData();
+}
+
+function addNativeCave() {
+  state.caves.push({ name: 'New Cave', src: null, trips: 0, len: '—', status: 'ok' });
+  renderCaves();
+}
+
+function renderCaves() {
+  const t = el('cavetable');
+  while (t.rows.length > 1) t.deleteRow(1);
+  let rows = state.caves.slice();
+  if (state.filter) rows = rows.filter(c => c.src === state.filter);
+  if (state.grouped) rows.sort((a, b) => (a.src || '').localeCompare(b.src || '') || a.name.localeCompare(b.name));
+  let lastGroup;
+  for (const c of rows) {
+    if (state.grouped && c.src !== lastGroup) {
+      lastGroup = c.src;
+      const r = t.insertRow();
+      r.className = 'grouphead';
+      const td = r.insertCell(); td.colSpan = 5;
+      td.textContent = c.src ? `Source: ${c.src}` : 'Native caves';
+    }
+    const r = t.insertRow();
+    const name = r.insertCell();
+    name.innerHTML = (c.src ? '📎 ' : '') + `<a class="link">${c.name}</a>`;
+    name.querySelector('a').onclick = () => gotoCave(c);
+    const src = r.insertCell();
+    if (c.src) {
+      src.innerHTML = `<span class="chip" title="Show only caves from ${c.src}">${c.src}</span>`;
+      src.querySelector('.chip').onclick = () => { state.filter = state.filter === c.src ? null : c.src; renderCaves(); };
+    } else {
+      src.innerHTML = '<span class="chip native">native</span>';
+    }
+    r.insertCell().className = 'num'; r.cells[2].textContent = c.trips;
+    r.insertCell().className = 'num'; r.cells[3].textContent = c.len;
+    const badge = r.insertCell();
+    badge.innerHTML = c.status === 'ok' ? '' : `<span class="dot ${c.status}" title="Solve status — click for cavern output"></span>`;
+    if (c.status !== 'ok') badge.querySelector('.dot').onclick = gotoCavern;
+  }
+  if (state.filter) {
+    const r = t.insertRow();
+    const td = r.insertCell(); td.colSpan = 5;
+    td.innerHTML = `<span class="hint">Showing only ${state.filter} — <a class="link">show all</a></span>`;
+    td.querySelector('a').onclick = () => { state.filter = null; renderCaves(); };
+  }
+  renderHamburger();
+}
+function toggleGroup() { state.grouped = !state.grouped; renderCaves(); }
+
+/* ---------- pages ---------- */
+function showPage(id, title) {
+  for (const p of ['datapage','cavepage','trippage','cavernpage']) hide(p);
+  show(id); el('pagename').textContent = title;
+}
+function gotoData() { showPage('datapage', 'Data'); }
+function gotoCave(c) {
+  if (c && !c.src) { alert('A native cave page is unchanged; the demo cave page is the derived one.'); return; }
+  showPage('cavepage', 'Cave: Blowing');
+  renderTrips();
+}
+function gotoTrip() { showPage('trippage', 'Trip: Digital survey 2026-09-14'); }
+function gotoCavern() { showPage('cavernpage', 'Cavern output'); }
+
+function renderTrips() {
+  const t = el('triptable');
+  t.innerHTML = '<tr><th>Name</th><th>Date</th><th class="num">Stations</th><th>Unit in source</th><th>Decl</th></tr>';
+  const head = (label) => {
+    const r = t.insertRow(); r.className = 'grouphead';
+    const td = r.insertCell(); td.colSpan = 5; td.textContent = label;
+  };
+  head('From BLOWING3.DAT — one trip per survey (116)');
+  for (const [name, comment, date, n] of BLOWING_SURVEYS) {
+    const r = t.insertRow();
+    r.insertCell().textContent = '📎 ' + name + (comment ? ' — ' + comment : '');
+    r.insertCell().textContent = date;
+    const c = r.insertCell(); c.className = 'num'; c.textContent = n;
+    const u = r.insertCell(); u.className = 'prefix'; u.textContent = 'survey ' + name;
+    r.insertCell().textContent = '—';
+  }
+  const more = t.insertRow(); const mc = more.insertCell(); mc.colSpan = 5;
+  mc.innerHTML = '<span class="hint">… 112 more surveys</span>';
+  head('Native trips and trip-level attachments in this cave');
+  const lead = t.insertRow();
+  lead.insertCell().textContent = '📎 Lead survey 2024';
+  lead.insertCell().textContent = '2024-06-02';
+  const lc = lead.insertCell(); lc.className = 'num'; lc.textContent = 31;
+  const lu = lead.insertCell(); lu.className = 'prefix'; lu.textContent = 'lead-2024.srv (trip-level attach)';
+  lead.insertCell().textContent = '—';
+  for (const trip of state.nativeTrips) {
+    const r = t.insertRow();
+    const n = r.insertCell(); n.innerHTML = `<a class="link">${trip}</a>`;
+    n.querySelector('a').onclick = gotoTrip;
+    r.insertCell().textContent = '2026-09-14';
+    const c = r.insertCell(); c.className = 'num'; c.textContent = 4;
+    const u = r.insertCell(); u.className = 'prefix'; u.textContent = 'native';
+    r.insertCell().textContent = '2.1°';
+  }
+  if (state.nativeTrips.length === 0) {
+    const r = t.insertRow(); const c = r.insertCell(); c.colSpan = 5;
+    c.innerHTML = '<span class="hint">No native trips yet — use ＋ Add Trip.</span>';
+  }
+}
+function addNativeTrip() {
+  if (state.nativeTrips.length === 0) state.nativeTrips.push('Digital survey 2026-09-14');
+  const blowing = state.caves.find(c => c.name === 'Blowing');
+  if (blowing) blowing.trips = 116 + 1 + state.nativeTrips.length;
+  renderTrips(); renderCaves();
+  gotoTrip();
+}
+
+/* ---------- tie-in ---------- */
+function toggleSuggest(e) { toggleMenu('suggest', e); }
+function tie(station) {
+  hide('suggest'); hide('floatbanner');
+  state.tied = station;
+  el('tiedto').textContent = 'omega2.blowing3.' + station;
+  show('tiedline');
+}
+
+/* ---------- detach cascade ---------- */
+function askDetach(src) {
+  const host = el('datapage-askhost');
+  if (host.firstChild) { host.innerHTML = ''; return; }
+  const isOmega = src.label === 'OMEGA2.MAK';
+  const nativeCount = state.nativeTrips.length;
+  const box = document.createElement('div');
+  box.className = 'askbox';
+  box.innerHTML = `<div class="t">Detach ${src.label} from this project?</div>` +
+    `<div>This source backs ${src.caves} cave${src.caves === 1 ? '' : 's'}. Detaching:</div><ul>` +
+    `<li>removes the ${src.trips} auto-created trips and their notes and scraps</li>` +
+    (isOmega
+      ? '<li>removes the 17 caves that hold nothing else</li>' +
+        (nativeCount ? `<li>keeps <b>Blowing</b> as a native cave with its ${nativeCount} native trip and 1 trip-level attachment</li>`
+                     : '<li>keeps <b>Blowing</b> as a native cave with its 1 trip-level attachment</li>')
+      : `<li>removes ${src.caves === 1 ? 'the cave, which holds' : 'the caves, which hold'} nothing else</li>`) +
+    '<li>deletes the copied files in the project\'s source folder</li></ul>' +
+    '<div class="hint" style="margin-top:4px">Git history is the way back.</div>';
+  const actions = document.createElement('div'); actions.className = 'actions';
+  const cancel = document.createElement('button'); cancel.className = 'btn small'; cancel.textContent = 'Cancel';
+  cancel.onclick = () => host.innerHTML = '';
+  const detach = document.createElement('button'); detach.className = 'btn small'; detach.textContent = 'Detach source';
+  detach.onclick = () => {
+    host.innerHTML = '';
+    state.caves = state.caves.filter(c => c.src !== src.label || (isOmega && c.name === 'Blowing'));
+    if (isOmega) {
+      const blowing = state.caves.find(c => c.name === 'Blowing');
+      if (blowing) { blowing.src = null; blowing.trips = 1 + nativeCount; blowing.len = '—'; blowing.status = 'ok'; }
+    }
+    state.sources = state.sources.filter(x => x !== src);
+    renderCaves(); gotoData();
+  };
+  actions.append(cancel, detach); box.appendChild(actions); host.appendChild(box);
+}
+
+/* ---------- add cave dialog ---------- */
+const dlg = { pick: null };
+function openDialog() { hide('addmenu'); el('path').value = ''; resetDialog(); show('dialog'); }
+function closeDialog() { hide('dialog'); hide('busy'); }
+function resetDialog() {
+  ['fmtlabel','summary','preview','splitrow'].forEach(hide);
+  show('fmthint'); el('attachbtn').disabled = true; el('attachbtn').textContent = 'Attach';
+  el('attach-note').textContent = ''; dlg.pick = null; dlg.split = null;
+}
+const KAUA_TRIPS = '📎 Jan 09 D-Survey   <span class="cnt">DSURV09.SRV · Surveys / Dec30-Jan11 2003</span>\n📎 Jan 08 D-Survey   <span class="cnt">DSURV08.SRV</span>\n📎 Jan 07 D-Survey   <span class="cnt">DSURV07.SRV</span>\n📎 Dec 30 D-Survey   <span class="cnt">D-SURVEY.SRV</span>\n📎 N1 Survey         <span class="cnt">N1.SRV · Surveys / Dec 2001 / N Surveys · #PREFIX N</span>\n<span class="cnt">… 31 more · skipped: SVGINFO.TXT, KAUA-NM_w2d_mrg.svg (not surveys), ENT-ZERO.SRV, WARPTEST.SRV (fixed points, no shots)</span>';
+const PICKS = {
+  mak: {
+    path: '/Users/friend/compass/OMEGA2/OMEGA2.MAK', fmt: 'Compass project (.mak) — auto-detected',
+    summary: '✓ Found 18 files — 18 caves, 246 surveys, 6,985 stations · 1 file listed in the project is missing (Solomon.DAT)',
+    split: { noun: '.dat file', locked: true, suggested: 'many', hint: 'A Compass project has no choice: each .dat is a cave.' },
+    many: {
+      title: 'Caves CaveWhere will create — one per .dat file', btn: 'Attach 18 caves',
+      hint: 'Each cave gets one trip per survey. They are windows into the file, not copies; rename or delete any of them afterward.',
+      note: 'Attaches at the region. The 18 caves share this one source.',
+      tree: OMEGA_DATS.map(([name, dat, n, st]) =>
+        `<span class="cave">📎 ${name.padEnd(10)}</span> <span class="cnt">${dat.padEnd(13)} ${String(n).padStart(3)} surveys · ${String(st).padStart(4)} stations${n === 0 ? ' · file missing — skipped' : ''}</span>`).join('\n'),
+    },
+  },
+  dat: {
+    path: '/Users/friend/compass/OMEGA2/BLOWING3.DAT', fmt: 'Compass survey file (.dat) — auto-detected',
+    summary: '✓ One file — 116 surveys, 2,913 stations',
+    one: {
+      title: 'Trips CaveWhere will create — one per survey', btn: 'Attach',
+      hint: 'Cave-level attach, as in Phase 3. New: Compass surveys become trips (station-set windows).',
+      note: 'One cave. Trip-level and native trips can be added beside it.',
+      tree: BLOWING_SURVEYS.map(([n, c, d, st]) => `📎 ${n.padEnd(11)} <span class="cnt">${d} · ${st} stations${c ? ' · ' + c : ''}</span>`).join('\n') + '\n<span class="cnt">… 112 more</span>',
+    },
+  },
+  wpj: {
+    path: '/Users/friend/walls/Kaua North Maze.wpj', fmt: 'Walls project (.wpj) — auto-detected',
+    summary: '✓ Found 45 entries — root book "Actun Kaua - North Maze", 3 child books, 36 survey files, 2 fixed-point files, 2 non-survey files',
+    split: { noun: 'top-level book', locked: false, suggested: 'one',
+      hint: 'Walls defaults to one cave: a .wpj always has one root book, and its child books are usually sections, not caves. Flip it to see what per-book would make.' },
+    one: {
+      title: 'Trips CaveWhere will create — one per survey file', btn: 'Attach',
+      hint: 'Cave-level attach. Every .srv with shots becomes a trip, at any book depth; books are grouping only.',
+      note: 'One cave: Actun Kaua - North Maze.',
+      tree: KAUA_TRIPS,
+    },
+    many: {
+      title: 'Caves CaveWhere will create — one per top-level book', btn: 'Attach 1 cave',
+      hint: 'Only books with shots become caves. Here that is one: the drawing and fixed-point books hold no surveys. Per-book is the wrong cut for this project, which is why one cave is the default.',
+      note: 'Attaches at the region.',
+      tree: '<span class="cave">📎 North Maze Surveys </span> <span class="cnt">36 .srv · 1,910 stations</span>\n<span class="cnt">   SVG Sources        no survey files — skipped\n   Fixed Points       2 files, no shots — skipped</span>',
+    },
+  },
+  wpj2: {
+    path: '/Users/friend/walls/TWO.WPJ', fmt: 'Walls project (.wpj) — auto-detected',
+    summary: '✓ Found 4 entries — root book "Two Caves", 2 child books, 3 survey files',
+    split: { noun: 'top-level book', locked: false, suggested: 'one',
+      hint: 'Same default. This project really is two caves, so the user flips it.' },
+    one: {
+      title: 'Trips CaveWhere will create — one per survey file', btn: 'Attach',
+      hint: 'Cave-level attach; both books become trips of one cave.',
+      note: 'One cave: Two Caves.',
+      tree: '📎 E1 <span class="cnt">EAST/E1.SRV</span>\n📎 W1 <span class="cnt">WEST/W1.SRV</span>\n📎 W2 <span class="cnt">WEST/W2.SRV</span>',
+    },
+    many: {
+      title: 'Caves CaveWhere will create — one per top-level book', btn: 'Attach 2 caves',
+      hint: 'Each cave gets one trip per .srv under its book. Cave windows are station sets, since Walls names carry no book.',
+      note: 'Attaches at the region.',
+      tree: '<span class="cave">📎 East </span> <span class="cnt">1 .srv ·  40 stations</span>\n<span class="cave">📎 West </span> <span class="cnt">2 .srv · 112 stations</span>',
+    },
+  },
+  master: {
+    path: '/Users/friend/survex/wulong_north.svx', fmt: 'Survex (.svx) — auto-detected',
+    summary: '✓ Found 41 files — 3 top-level blocks, 3,912 stations · the entry file has no shots of its own',
+    split: { noun: 'top-level block', locked: false, suggested: 'many',
+      hint: 'Survex defaults from the Phase 3 heuristic: ≥ 2 top-level blocks and no own shots looks like a region master. Flip it if this is one cave in area files.' },
+    one: {
+      title: 'Trips CaveWhere will create', btn: 'Attach',
+      hint: 'Cave-level attach, Phase 3 rules: one trip per block with stations.',
+      note: 'One cave: wulong_north.',
+      tree: '📎 sanwangdong <span class="cnt">2,340 m</span>\n   📎 …14 nested blocks\n📎 erwangdong  <span class="cnt">1,820 m</span>\n📎 dongba      <span class="cnt">610 m</span>',
+    },
+    many: {
+      title: 'Caves CaveWhere will create — one per top-level block', btn: 'Attach 3 caves',
+      hint: 'Each top-level block becomes a cave with one trip per nested block. (Phase 3 warned here; Phase 6 acts.)',
+      note: 'Attaches at the region.',
+      tree: '<span class="cave">📎 sanwangdong </span> <span class="cnt">14 blocks · 2,340 m</span>\n<span class="cave">📎 erwangdong  </span> <span class="cnt"> 9 blocks · 1,820 m</span>\n<span class="cave">📎 dongba      </span> <span class="cnt"> 3 blocks ·   610 m</span>',
+    },
+  },
+  svx: {
+    path: '/Users/friend/survex/big-cave.svx', fmt: 'Survex (.svx) — auto-detected',
+    summary: '✓ Found 4 files — 8 survey blocks, 247 stations',
+    split: { noun: 'top-level block', locked: false, suggested: 'one',
+      hint: 'The entry has shots of its own, so it defaults to one cave.' },
+    one: {
+      title: 'Trips CaveWhere will create', btn: 'Attach',
+      hint: 'Phase 3 behavior, unchanged: cave-level attach, one trip per block with stations.',
+      note: 'One cave.',
+      tree: '📎 entrance      <span class="cnt">47 stations</span>\n📎 big-passage   <span class="cnt">89 stations</span>\n   📎 east       <span class="cnt">34 stations</span>\n   📎 west       <span class="cnt">28 stations</span>\n📎 side-cave     <span class="cnt">12 stations</span>\n📎 surface       <span class="cnt">8 stations</span>',
+    },
+    many: {
+      title: 'Caves CaveWhere will create — one per top-level block', btn: 'Attach 5 caves',
+      hint: 'Possible, but these blocks are passages of one cave. The default is one cave.',
+      note: 'Attaches at the region.',
+      tree: '<span class="cave">📎 entrance</span>\n<span class="cave">📎 big-passage</span>\n<span class="cave">📎 side-cave</span>\n<span class="cave">📎 surface</span>\n<span class="cave">📎 stream</span>',
+    },
+  },
+};
+function pick(kind) {
+  hide('browsemenu'); dlg.pick = kind;
+  const p = PICKS[kind];
+  el('path').value = p.path;
+  hide('fmthint'); show('fmtlabel'); el('fmtlabel').textContent = 'Format: ' + p.fmt;
+  show('summary'); el('summary').textContent = p.summary;
+  if (p.split) {
+    show('splitrow');
+    el('splitnoun').textContent = p.split.noun;
+    el('splithint').textContent = p.split.hint;
+    for (const r of document.querySelectorAll('input[name=split]')) {
+      r.disabled = p.split.locked;
+      r.checked = r.value === p.split.suggested;
+    }
+    setSplit(p.split.suggested);
+  } else {
+    hide('splitrow');
+    setSplit('one');
+  }
+}
+function setSplit(mode) {
+  dlg.split = mode;
+  const v = PICKS[dlg.pick][mode];
+  show('preview'); el('preview-title').textContent = v.title; el('preview-hint').textContent = v.hint;
+  el('tree').innerHTML = v.tree;
+  el('attachbtn').disabled = false; el('attachbtn').textContent = v.btn;
+  el('attach-note').textContent = v.note;
+}
+function doAttach() {
+  el('attachbtn').disabled = true; show('busy');
+  setTimeout(() => {
+    hide('busy'); closeDialog();
+    const pick = dlg.pick, many = dlg.split === 'many';
+    if (pick === 'mak') {
+      for (const [name, dat, n, st, len] of OMEGA_DATS) {
+        if (n === 0) continue;
+        state.caves.push({ name, src: 'OMEGA2.MAK', trips: n + (name === 'Blowing' ? 1 : 0), len,
+                           status: name === 'Blowing' ? 'warn' : 'ok' });
+      }
+      state.sources.push({ label: 'OMEGA2.MAK', caves: 18, trips: 246 });
+      renderCaves(); gotoCave(state.caves.find(c => c.name === 'Blowing'));
+      return;
+    }
+    if (pick === 'master' && many) {
+      for (const [name, len] of [['sanwangdong','2,340 m'],['erwangdong','1,820 m'],['dongba','610 m']])
+        state.caves.push({ name, src: 'wulong_north.svx', trips: 9, len, status: 'ok' });
+      state.sources.push({ label: 'wulong_north.svx', caves: 3, trips: 26 });
+    } else if (pick === 'wpj' && many) {
+      state.caves.push({ name: 'North Maze Surveys', src: 'Kaua North Maze.wpj', trips: 36, len: '4,880 m', status: 'ok' });
+      state.sources.push({ label: 'Kaua North Maze.wpj', caves: 1, trips: 36 });
+    } else if (pick === 'wpj2' && many) {
+      state.caves.push({ name: 'East', src: 'TWO.WPJ', trips: 1, len: '210 m', status: 'ok' });
+      state.caves.push({ name: 'West', src: 'TWO.WPJ', trips: 2, len: '640 m', status: 'ok' });
+      state.sources.push({ label: 'TWO.WPJ', caves: 2, trips: 3 });
+    } else if (pick === 'svx' && many) {
+      for (const name of ['entrance','big-passage','side-cave','surface','stream'])
+        state.caves.push({ name, src: 'big-cave.svx', trips: 1, len: '—', status: 'ok' });
+      state.sources.push({ label: 'big-cave.svx', caves: 5, trips: 8 });
+    } else {
+      const one = {
+        dat:    ['Blowing3', 'BLOWING3.DAT', 116, '18,204 m'],
+        wpj:    ['Actun Kaua - North Maze', 'Kaua North Maze.wpj', 36, '4,880 m'],
+        wpj2:   ['Two Caves', 'TWO.WPJ', 3, '850 m'],
+        master: ['wulong_north', 'wulong_north.svx', 3, '4,770 m'],
+        svx:    ['Big Cave', 'big-cave.svx', 6, '2,340 m'],
+      }[pick];
+      state.caves.push({ name: one[0], src: one[1], trips: one[2], len: one[3], status: 'ok', caveLevel: true });
+    }
+    renderCaves(); gotoData();
+  }, 900);
+}
+
+/* ---------- hamburger: region sources ---------- */
+function renderHamburger() {
+  const m = el('hamburger');
+  m.innerHTML = '';
+  const head = document.createElement('div');
+  head.style.cssText = 'font-weight:700; cursor:default';
+  head.textContent = 'Survey sources';
+  m.appendChild(head);
+  if (state.sources.length === 0) {
+    const d = document.createElement('div');
+    d.className = 'hint'; d.style.cursor = 'default';
+    d.textContent = 'No survey sources attached at the region.';
+    m.appendChild(d);
+  }
+  for (const src of state.sources) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:8px; align-items:center';
+    row.innerHTML = `<span style="flex:1">📎 ${src.label} <span class="hint">(${src.caves} cave${src.caves === 1 ? '' : 's'})</span></span>`;
+    for (const [label, fn] of [['Reload', () => reloadSource(src)], ['Replace…', () => replaceSource(src)], ['Detach…', () => askDetach(src)]]) {
+      const b = document.createElement('button');
+      b.className = 'btn small'; b.textContent = label;
+      b.onclick = (e) => { e.stopPropagation(); hide('hamburger'); fn(); };
+      row.appendChild(b);
+    }
+    row.onclick = (e) => e.stopPropagation();
+    m.appendChild(row);
+  }
+  const foot = document.createElement('div');
+  foot.className = 'hint'; foot.style.cursor = 'default';
+  foot.textContent = 'Cave-level and trip-level attachments keep their verbs on their own pages.';
+  m.appendChild(foot);
+}
+function replaceSource(src) {
+  alert(`Replace ${src.label}: the Phase 2 replace dialog bound to the whole source. Reconcile keeps derived caves whose unit still exists, creates caves for new units, removes Scope trips of vanished units; native trips stay.`);
+}
+
+/* ---------- simulations ---------- */
+function simSourceChanged(on) {
+  const strip = el('bannerstrip');
+  strip.innerHTML = '';
+  if (!on) return;
+  const b = document.createElement('div');
+  b.className = 'infobanner';
+  b.innerHTML = '<span class="msg">Survey source changed on disk: <b>OMEGA2.MAK</b> (18 caves). </span>' +
+    '<button class="btn small" onclick="alert(\'Reload copies the source again and re-solves. Derived caves are reconciled by unit: new .dat files become caves, vanished ones lose their Scope trips.\')">Update</button>' +
+    '<button class="btn small" onclick="this.parentElement.remove()">✕</button>';
+  strip.appendChild(b);
+}
+function simMissingDat(on) {
+  state.missingDat = on;
+  const blowing = state.caves.find(c => c.name === 'Solomon');
+  const strip = el('bannerstrip');
+  const existing = el('missingnotice');
+  if (existing) existing.remove();
+  if (!on) return;
+  const n = document.createElement('div');
+  n.id = 'missingnotice'; n.className = 'notice warn';
+  n.innerHTML = '<div class="title">OMEGA2.MAK lists a file that is missing: Solomon.DAT</div>' +
+    '<div class="body">cavern skipped it (warning, as of the survex port change 805dc4f2). No cave was created for it. Add the file next to the .mak and Reload.</div>';
+  strip.appendChild(n);
+}
+function reloadSource(src) {
+  alert(`Reload ${src.label}: re-copies every file, re-scans, reconciles derived caves and their Scope trips with the stored Attach-as choice, re-solves. Native trips untouched.`);
+}
+
+resetDemo();
+</script>
+</body>
+</html>

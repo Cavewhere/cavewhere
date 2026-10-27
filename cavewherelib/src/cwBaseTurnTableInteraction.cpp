@@ -424,17 +424,18 @@ void cwBaseTurnTableInteraction::zoom(QPoint position, double delta) {
   the origin (issue #549) is brought back into view without zooming out to
   include geometry the user hid. When the scene is empty, everything is
   hidden, or the bounds are degenerate there is nothing to frame, so fall
-  back to the fixed default pose.
+  back to the fixed default pose. Every reset ends with animationFinished,
+  the snap included, so a caller waiting for the reset to settle needs no
+  knowledge of which path ran.
   */
 void cwBaseTurnTableInteraction::resetView() {
-    if(Camera.isNull() || scene() == nullptr) {
-        resetViewImmediate();
-        return;
-    }
-
-    const QBox3D box = scene()->visibleFramingBounds();
+    const QBox3D box = (Camera.isNull() || scene() == nullptr)
+            ? QBox3D()
+            : scene()->visibleFramingBounds();
     if(box.isNull() || !box.isFinite()) {
         resetViewImmediate();
+        QMetaObject::invokeMethod(this, &cwBaseTurnTableInteraction::animationFinished,
+                                  Qt::QueuedConnection);
         return;
     }
 

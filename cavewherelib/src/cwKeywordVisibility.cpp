@@ -83,23 +83,50 @@ void cwKeywordVisibility::setHideModel(QAbstractItemModel* hideModel)
     }
 
     mHideModel = hideModel;
+    markHiddenObjectsDirty();
+    // Connected ahead of connectModel so the cache is stale before any
+    // resolve that the same hide-model signal triggers.
+    connectHideModelCache();
     connectModel(mHideModel);
     emit hideModelChanged();
 }
 
-bool cwKeywordVisibility::isInModel(QAbstractItemModel* model, QObject* object) const
+void cwKeywordVisibility::markHiddenObjectsDirty()
 {
-    if(!model || !object) {
+    mHiddenObjectsDirty = true;
+}
+
+void cwKeywordVisibility::connectHideModelCache()
+{
+    if(!mHideModel) {
+        return;
+    }
+
+    connect(mHideModel, &QAbstractItemModel::rowsInserted, this, &cwKeywordVisibility::markHiddenObjectsDirty);
+    connect(mHideModel, &QAbstractItemModel::rowsRemoved, this, &cwKeywordVisibility::markHiddenObjectsDirty);
+    connect(mHideModel, &QAbstractItemModel::rowsMoved, this, &cwKeywordVisibility::markHiddenObjectsDirty);
+    connect(mHideModel, &QAbstractItemModel::modelReset, this, &cwKeywordVisibility::markHiddenObjectsDirty);
+    connect(mHideModel, &QAbstractItemModel::layoutChanged, this, &cwKeywordVisibility::markHiddenObjectsDirty);
+    connect(mHideModel, &QAbstractItemModel::dataChanged, this, &cwKeywordVisibility::markHiddenObjectsDirty);
+}
+
+bool cwKeywordVisibility::isHidden(QObject* object) const
+{
+    if(!mHideModel || !object) {
         return false;
     }
-    const int rows = model->rowCount();
-    for(int i = 0; i < rows; ++i) {
-        const QModelIndex idx = model->index(i, 0);
-        if(idx.data(cwKeywordItemModel::ObjectRole).value<QObject*>() == object) {
-            return true;
+
+    if(mHiddenObjectsDirty) {
+        mHiddenObjects.clear();
+        const int rows = mHideModel->rowCount();
+        mHiddenObjects.reserve(rows);
+        for(int i = 0; i < rows; ++i) {
+            const QModelIndex idx = mHideModel->index(i, 0);
+            mHiddenObjects.insert(idx.data(cwKeywordItemModel::ObjectRole).value<QObject*>());
         }
+        mHiddenObjectsDirty = false;
     }
-    return false;
+    return mHiddenObjects.contains(object);
 }
 
 void cwKeywordVisibility::resolveVisibility(QObject* object) const
@@ -110,7 +137,7 @@ void cwKeywordVisibility::resolveVisibility(QObject* object) const
     // Hide wins. Without the hide-precedence rule, the same object appearing
     // in both models leaves the final visibility a function of whichever
     // model's rowsInserted fired last.
-    if(isInModel(mHideModel, object)) {
+    if(isHidden(object)) {
         invokeVisible(object, false);
     } else {
         invokeVisible(object, true);

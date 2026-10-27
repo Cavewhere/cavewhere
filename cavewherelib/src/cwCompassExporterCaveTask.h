@@ -50,8 +50,8 @@ private:
 
     static QByteArray compassNewLine() { return QByteArrayLiteral("\r\n");};
 
-    void writeTrip(QTextStream& stream, cwTrip* trip);
-    void writeHeader(QTextStream& stream, cwTrip* trip);
+    void writeTrip(QTextStream& stream, cwTrip* trip, const QString& caveName);
+    void writeHeader(QTextStream& stream, cwTrip* trip, const QString& caveName);
     void writeDataFormat(QTextStream& stream, cwTripCalibration* calibrations);
     void writeDeclination(QTextStream& stream, cwTripCalibration* calibrations);
     void writeCorrections(QTextStream& stream, cwTripCalibration* calibrations);

@@ -12,6 +12,7 @@
 #include "Monad/Result.h"
 #include "cwCavingRegionData.h"
 #include "cwStationPositionLookup.h"
+#include "cwSurveyNetwork.h"
 #include "cwSurvex3DFileReader.h"
 
 #include <QHash>
@@ -22,15 +23,33 @@
 /**
  * \brief Generate the 3D line-plot geometry for a caving region.
  *
- * Iterates the region's caves, trips and survey chunks; produces a vector of
- * station positions laid out as a non-indexed line list and per-cave
- * length/depth values.
+ * Walks the region's survey tree pre-order — each node's own trips, then its
+ * child nodes — and produces a vector of station positions laid out as a
+ * non-indexed line list and per-node length/depth values. A node's length and
+ * depth fold over its whole subtree: a Folder's length is the sum of its
+ * caves', and its depth spans from the highest station below it to the lowest.
+ *
+ * A trip attached to an external centerline owns no cwSurveyChunk — its shot
+ * topology exists only in the solved survey network. For those scopes the
+ * segments are read from `network` instead (coordinates still come from
+ * `stationPositions`, so both paths are in the project's local projection
+ * frame). Pass an empty network when there are no external scopes.
+ *
+ * `stationPositions` is the region's solved lookup, keyed by full cavern name
+ * (cwCavingRegion::stationPositions): a node's station resolves under the
+ * node's label path, then its trip's scope.
  *
  * Vertices are de-shared per shot: each drawn shot owns its own two endpoint
  * vertices (points[2i] = from, points[2i+1] = to), so a station reused by
  * consecutive shots — or shared as a tie-in between trips — is duplicated, once
  * per shot. Collapsing a shot's two vertices therefore affects exactly that
  * shot, with no shared-vertex bookkeeping.
+ *
+ * Each leg has exactly one owner. A nested external scope's stations also
+ * carry its parent scope's prefix, so a station claimed by a longer scope
+ * prefix in the same node belongs to that innermost scope; a leg tying two
+ * scopes together is drawn by whichever of them the node reaches first. Per-node
+ * length and depth therefore count each leg once, as does per-trip visibility.
  *
  * Each trip's vertices are emitted contiguously — centerline segments first,
  * then the trip's splay segments (station position -> solved splay tip, also
@@ -39,23 +58,35 @@
  * its tail, so hiding a trip covers its splays and a splay-only toggle can
  * address just the tail. tripUuids[i] maps that running id back to a stable
  * cwTripData::id so callers can re-attach it to a live trip without relying on
- * list position. A running id is assigned to every trip in cave->trip
- * iteration order, even trips that emit no geometry (count 0), so all three
- * tables are the total trip count.
+ * list position, and tripLengths[i] is the length in meters of the legs that
+ * trip draws (its counted chunk shots for a native trip). A running id is
+ * assigned to every trip in the walk's order, even trips that emit no geometry
+ * (count 0, length 0), so all four tables are the total trip count.
  *
- * Splay tips arrive keyed per cave-level station name while the survey data
- * stores splays per station occurrence, so a name shared between trips merges
- * its tips into one bucket. Attribution rule: a station's tips belong to the
- * first trip holding an occurrence of that station with splays, falling back
- * to the first trip holding the station at all (tips from an external .svx
- * include have no stored splays to match).
+ * `splayTipsByNode` is keyed by node id, and each node's tips by the
+ * node-local canonical station name, landing only in the node that owns the
+ * station. The survey data stores splays per station occurrence, so a name
+ * shared between trips merges its tips into one bucket. Attribution rule: a
+ * station's tips belong to the first native trip holding an occurrence of that
+ * station with splays, falling back to the first native trip holding the
+ * station at all; a station no native trip holds goes to the external scope
+ * that owns it (tips from an external .svx include have no stored splays to
+ * match). Splays never count toward length or depth.
+ *
+ * A sourced subtree draws from its root's view. A derived trip draws the legs
+ * whose two ends its unit holds (a leg two units both hold draws in both), the
+ * root's whole-node window (cwTrip::windowsWholeNode) draws the legs no unit
+ * drew, and a native trip draws its chunks under its label in the root's
+ * block. Every node of the subtree folds its trips' legs, each leg once, while
+ * each trip's length counts every leg it draws, so a leg two units share counts
+ * in both trips and once in their node.
  *
  * segmentErrors runs parallel to points: segmentErrors[i] belongs to the
  * segment at points[2i], points[2i+1]. It holds the leg's survex closure error
  * e (in σ) when the cave's legErrorsByCave map has the leg, and kNoErrorValue
  * for every other centerline segment and every splay segment.
- * legErrorsByCave is keyed by cwCave::id(), with canonical station names
- * (cave prefix stripped) in each cwSurvex3DFileReader::legKey().
+ * legErrorsByNode is keyed like splayTipsByNode: by the owning node's id, with
+ * node-local canonical station names in each cwSurvex3DFileReader::legKey().
  *
  * Pure compute — no file I/O, no Qt object machinery. Caller invokes from
  * any thread; only reads the const region snapshot.
@@ -69,10 +100,10 @@ public:
     // any value below zero as "no loop".
     static constexpr float kNoErrorValue = -1.0f;
 
-    class CaveLengthAndDepth {
+    class LengthAndDepth {
     public:
-        CaveLengthAndDepth() : Depth(-1), Length(-1) {}
-        CaveLengthAndDepth(double length, double depth) : Depth(depth), Length(length) {}
+        LengthAndDepth() : Depth(0.0), Length(0.0) {}
+        LengthAndDepth(double length, double depth) : Depth(depth), Length(length) {}
 
         double length() const { return Length; }
         double depth() const { return Depth; }
@@ -95,14 +126,17 @@ public:
         QVector<VertexRange> tripVertexRanges;  // running trip id -> full span in points
         QVector<VertexRange> tripSplayVertexRanges; // running trip id -> splay tail of that span
         QVector<QUuid> tripUuids;               // running trip id -> stable cwTripData::id
-        QVector<CaveLengthAndDepth> cavesLengthAndDepths;
+        QVector<double> tripLengths;            // running trip id -> length of the legs it draws, meters
+        QHash<QUuid, LengthAndDepth> nodeLengthAndDepths; // every node, keyed by cwCaveData::id
         QVector<float> segmentErrors;           // 1 per segment, parallel to points / 2
     };
 
     static Monad::Result<Result> generate(
         const cwCavingRegionData& region,
-        const QHash<QUuid, cwSplayTipsByStation>& splayTipsByCave = {},
-        const QHash<QUuid, cwLegErrorsByShot>& legErrorsByCave = {});
+        const cwStationPositionLookup& stationPositions,
+        const cwSurveyNetwork& network = cwSurveyNetwork(),
+        const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode = {},
+        const QHash<QUuid, cwLegErrorsByShot>& legErrorsByNode = {});
 };
 
 #endif // CWLINEPLOTGEOMETRY_H

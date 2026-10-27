@@ -28,10 +28,28 @@ QQ.Item {
     property bool doubleClickEdit: false
     property bool isEditting: false
     property Validator validator;
+    //The editor this field opens. Null gets the plain shadow editor; a field
+    //with more to offer while editing names its own (see StationNameEditor).
+    property QQ.Component editorComponent
+    //The scope the station editor autocompletes against.
+    property ScopeStationListModel stationScope: null
     property bool readOnly: false
     property bool autoResize: false
     property alias wrapMode: textAreaId.wrapMode
+    property alias horizontalAlignment: textAreaId.horizontalAlignment
     property string errorText
+
+    //The editor host for whichever window this field is in. Resolved rather
+    //than named: there is one host per window, and a field can be moved
+    //between windows (issue #494).
+    readonly property ShadowEditorHost _shadowEditor:
+        (WindowOverlay.overlay as AppOverlay)?.shadowEditor ?? null
+
+    //The host this field actually handed its editor to. Held rather than
+    //re-resolved, because _shadowEditor follows the field between windows: a
+    //commit has to land in the editor holding the text, not in whichever
+    //window the field has moved to since (issue #494).
+    property ShadowEditorHost _openHost: null
 
     signal startedEditting()
     signal finishedEditting(string newText)
@@ -45,8 +63,9 @@ QQ.Item {
 
     onFocusChanged: {
         if(focus) {
-            if(GlobalShadowTextInput.coreClickInput !== null) {
-                GlobalShadowTextInput.coreClickInput.commitChanges()
+            let openField = clickTextInput._shadowEditor?.coreClickInput ?? null
+            if(openField !== null) {
+                openField.commitChanges()
             }
             openEditor()
         }
@@ -61,42 +80,53 @@ QQ.Item {
     }
 
     function commitChanges() {
-        //Emit the finishedEditting signal
-        if(validator !== null) {
-            var accepted = 2;
-            if(validator.validate(GlobalShadowTextInput.textInput.text) === accepted) {
-                finishedEditting(GlobalShadowTextInput.textInput.text)
-                closeEditor();
-                return true;
-            } else {
-                GlobalShadowTextInput.errorHelpBox.text = validator.errorText
-                GlobalShadowTextInput.errorHelpBox.visible = true
-                GlobalShadowTextInput.textInput.focus = true
-                return false;
-            }
-        } else {
-            var newText = GlobalShadowTextInput.textInput.text
-            closeEditor();
-            finishedEditting(GlobalShadowTextInput.textInput.text);
-            return true;
+        const acceptable = 2 //QValidator.Acceptable, which Validator doesn't export
+
+        let host = clickTextInput._openHost ?? clickTextInput._shadowEditor
+        if(host === null) {
+            return false;
         }
+
+        let newText = host.editorText()
+
+        if(validator !== null && validator.validate(newText) !== acceptable) {
+            host.showError(validator.errorText)
+            host.focusEditor()
+            return false;
+        }
+
+        //Close before emitting, whether or not there's a validator: handlers
+        //move focus and rewrite the model, and an editor still open for that
+        //sees the focus leave and tries to commit a second time.
+        closeEditor();
+        finishedEditting(newText);
+        return true;
     }
 
     function closeEditor() {
-        GlobalShadowTextInput.editor.visible = false;
-        GlobalShadowTextInput.textInput.focus = false;
-        GlobalShadowTextInput.textInput.validator = null;
+        let host = clickTextInput._openHost ?? clickTextInput._shadowEditor
+        host?.closeEditor()
+        clickTextInput._openHost = null
 
-        GlobalShadowTextInput.enabled = false
         doubleClickArea.enabled = true;
         textAreaId.visible = true;
         isEditting = false;
-        GlobalShadowTextInput.errorHelpBox.visible = false;
-
-        GlobalShadowTextInput.coreClickInput = null
     }
 
     function openEditor() {
+        //A read-only field stays read-only however the open is asked for: a tap,
+        //focus arriving, or a caller reaching in.
+        if(clickTextInput.readOnly) {
+            return
+        }
+
+        let host = clickTextInput._shadowEditor
+        if(host === null) {
+            console.warn("No AppOverlay in this field's window, so there is "
+                         + "nowhere to edit it", clickTextInput)
+            return
+        }
+
         //Open the virtual keyboard if any
         Qt.inputMethod.show()
 
@@ -104,32 +134,16 @@ QQ.Item {
 
         textAreaId.visible = false
 
-        GlobalShadowTextInput.textInput.text = clickTextInput.editText
-        GlobalShadowTextInput.textInput.font = textAreaId.font
-        GlobalShadowTextInput.editor.visible = true
-        GlobalShadowTextInput.textInput.forceActiveFocus()
-        GlobalShadowTextInput.textInput.selectAll();
-
-        if(clickTextInput.validator !== null) {
-            GlobalShadowTextInput.textInput.validator = clickTextInput.validator
+        //The editor itself — which one, where it sits, what it holds — is the
+        //host's business
+        if(!host.openEditor(clickTextInput)) {
+            textAreaId.visible = true
+            return
         }
 
-        GlobalShadowTextInput.enabled = true
+        clickTextInput._openHost = host
         doubleClickArea.enabled = false
         isEditting = true
-
-        //Set the editor's position
-        //Calling this function with just GlobalShadowTextInput cause a crash, maybe because it's a singleton?
-        //Using the parent, should be the CavewhereMainWindow
-        var globalPosition = clickTextInput.mapToItem(GlobalShadowTextInput.parent, 0, 0)
-        GlobalShadowTextInput.editor.x = globalPosition.x - 3
-        GlobalShadowTextInput.editor.y = globalPosition.y - 3
-
-        GlobalShadowTextInput.minWidth = clickTextInput.width + 6
-        GlobalShadowTextInput.minHeight = clickTextInput.height + 6
-
-        //Connect to commitChanges()
-        GlobalShadowTextInput.coreClickInput = clickTextInput
     }
 
     QC.Label {

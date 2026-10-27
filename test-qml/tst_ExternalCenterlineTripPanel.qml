@@ -1,0 +1,945 @@
+import QtQuick as QQ
+import QtQuick.Controls as QC
+import QtTest
+import cavewherelib
+import cw.TestLib
+import QmlTestRecorder
+
+// Commit-11 assembly tests for ExternalCenterlineTripPanel: the five
+// commit-10 sub-components wired to the real managers, plus the
+// attach completion-signal bridge.
+MainWindowTest {
+    id: rootId
+
+    property Trip trip: null
+
+    // Tall enough for the whole column; the short-viewport test shrinks the
+    // panel and init() puts it back.
+    readonly property int fullPanelHeight: 650
+
+    ExternalCenterlineTripPanel {
+        id: panelId
+        width: 500
+        height: rootId.fullPanelHeight
+        trip: rootId.trip
+    }
+
+    ExternalCenterlineTestCase {
+        name: "ExternalCenterlineTripPanel"
+        when: windowShown
+
+        SignalSpy {
+            id: attachCompletedSpyId
+            target: RootData.externalCenterlineManager
+            signalName: "attachCompleted"
+        }
+
+        SignalSpy {
+            id: stationClickSpyId
+            target: panelId
+            signalName: "stationClicked"
+        }
+
+        function init() {
+            panelId.height = rootId.fullPanelHeight
+            RootData.futureManagerModel.waitForFinished()
+            RootData.newProject()
+            RootData.futureManagerModel.waitForFinished()
+            RootData.pageSelectionModel.currentPageAddress = "View"
+            rootId.trip = null
+            attachCompletedSpyId.clear()
+            stationClickSpyId.clear()
+        }
+
+        function cleanup() {
+            rootId.closeAnyOpenEditor()
+            RootData.newProject()
+        }
+
+        function attachAndBind(projectBaseName) {
+            const fixture = attachFixtureTrip(projectBaseName)
+            rootId.trip = fixture.trip
+            return fixture
+        }
+
+        function test_attachRendersSubComponentsInOrder() {
+            attachAndBind("trip-panel-attach")
+
+            compare(attachCompletedSpyId.count, 1, "attach emits exactly one completion")
+            const report = attachCompletedSpyId.signalArguments[0][0]
+            verify(report.success, "the fixture attach reports success")
+            verify(!report.canceled, "a successful attach is not canceled")
+            compare(report.errorMessage, "", "no error text on success")
+            verify(report.entryFile.indexOf("survex_simple.svx") >= 0,
+                   "report carries the persisted entry file; got: " + report.entryFile)
+            // QUuid reaches JS as an opaque wrapper — compare() on two of
+            // them degenerates to comparing empty JSON. Compare the string
+            // forms, pinned to the "{uuid}" shape so the check can't go
+            // vacuous through a generic Object toString either.
+            verify(String(report.ownerId).indexOf("{") === 0,
+                   "ownerId stringifies to a uuid; got: " + String(report.ownerId))
+            compare(String(report.ownerId), String(rootId.trip.id))
+
+            const header = findChild(panelId, "attachedHeader")
+            const stationsList = findChild(panelId, "stationsList")
+            const metadata = findChild(panelId, "tripMetadata")
+            verify(header !== null && header.visible, "attached header renders")
+            verify(header.attached, "the header reads Attached after the fixture attach")
+            verify(stationsList !== null && stationsList.visible, "stations list renders")
+            verify(metadata !== null && metadata.visible, "trip metadata renders")
+            compare(findChild(panelId, "solveStatusLabel"), null,
+                    "the trip page carries no solve status; the source root card has it")
+
+            // Header row, Date/Declination/Team, then the station list at
+            // the bottom.
+            waitForRendering(panelId)
+            const panelY = (item) => item.mapToItem(panelId, 0, 0).y
+            tryVerify(() => panelY(header) < panelY(metadata),
+                      5000, "header above trip metadata")
+            tryVerify(() => panelY(metadata) < panelY(stationsList),
+                      5000, "trip metadata above the stations list")
+
+            const fileLabel = findChild(header, "attachedFileLabel")
+            verify(fileLabel !== null, "attachedFileLabel must exist")
+            tryCompare(fileLabel, "text", "survex_simple.svx")
+
+            // MP.9: the file row carries no buttons; its right-click menu
+            // reaches across the whole row, empty strip included.
+            compare(findChild(header, "replaceButton"), null,
+                    "Replace… is no longer a button on the file row")
+            closeMenu(openAttachedFileMenu(header))
+
+            // The Date label leads the metadata block in bold.
+            const dateLabel = findChild(metadata, "tripMetadataDateLabel")
+            verify(dateLabel !== null, "tripMetadataDateLabel must exist")
+            verify(dateLabel.font.bold, "the Date label is bold")
+
+            // The real per-trip scope prefix ("<caveLabel>.<tripLabel>.")
+            // must select the solved stations.
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
+                      10000, "the attach-chained solve publishes stations")
+            tryVerify(() => stationsList.count > 0, 10000,
+                      "scoped rows appear for the attached trip")
+
+            // The metadata scan resolves survex_simple.svx (no
+            // *calibrate declination) to CaveWhere-owned declination, so the
+            // editor takes the readout's place.
+            const declEditor = findChild(metadata, "tripMetadataDeclination")
+            verify(declEditor !== null, "tripMetadataDeclination must exist")
+            tryVerify(() => declEditor.visible, 10000,
+                      "declination editor shows when CaveWhere owns declination")
+            const readout = findChild(metadata, "tripMetadataDeclinationReadout")
+            verify(readout !== null, "tripMetadataDeclinationReadout must exist")
+            verify(!readout.visible, "the editor replaces the read-only declination")
+        }
+
+        // §16 B2d: a viewport shorter than the content must still reach
+        // every block, and it must never scroll sideways.
+        function test_aShortPanelScrollsToTheLastBlock() {
+            attachAndBind("trip-panel-scroll")
+
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null, "stationsList must exist")
+            tryVerify(() => stationsList.count > 0, 10000,
+                      "scoped rows appear for the attached trip")
+
+            const scrollView = findChild(panelId, "panelScrollView")
+            verify(scrollView !== null, "panelScrollView must exist")
+            const flickable = scrollView.contentItem
+
+            const shortViewportHeight = 180
+            panelId.height = shortViewportHeight
+            waitForRendering(panelId)
+
+            tryVerify(() => flickable.contentHeight > flickable.height, 5000,
+                      "the short viewport leaves content below the fold; got "
+                      + flickable.contentHeight + " in " + flickable.height)
+
+            // The whole width fits, so there is nothing to scroll sideways to.
+            tryCompare(flickable, "contentWidth", flickable.width,
+                       5000, "the content is exactly the viewport wide")
+
+            // The last block in the B2a order is the station list, and
+            // scrolling to the end has to bring it into the viewport.
+            // mapToItem(flickable) is already viewport-relative: the
+            // flickable's own content item carries the -contentY offset.
+            const listBottom = () => stationsList.mapToItem(flickable, 0, 0).y
+                    + stationsList.height
+            verify(listBottom() > flickable.height,
+                   "the stations list starts out below the fold")
+
+            // Fractional layout heights round, so allow a pixel of slack.
+            const roundingSlack = 1
+            flickable.contentY = flickable.contentHeight - flickable.height
+            waitForRendering(panelId)
+            tryVerify(() => listBottom() <= flickable.height + roundingSlack, 5000,
+                      "scrolling to the end reveals the stations list; bottom at "
+                      + listBottom() + " in " + flickable.height)
+        }
+
+        function test_stationClickForwardsStationHandle() {
+            attachAndBind("trip-panel-stations")
+
+            const stationsList = findChild(panelId, "stationsList")
+            tryVerify(() => stationsList.count > 0, 10000,
+                      "scoped rows appear for the attached trip")
+
+            const listView = findChild(stationsList, "stationsListView")
+            tryVerify(() => listView.itemAtIndex(0) !== null, 5000,
+                      "first delegate must materialize")
+
+            mouseClick(listView.itemAtIndex(0))
+            compare(stationClickSpyId.count, 1, "panel forwards the click")
+            const handle = stationClickSpyId.signalArguments[0][0]
+
+            // Identity derivation is the stations list's own test; the panel's
+            // job is forwarding, so pin that the handle is the clicked row's.
+            compare(handle.tail, listView.itemAtIndex(0).text,
+                    "the panel forwards the clicked row's handle")
+        }
+
+        // plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html §7 q1: the copy is
+        // the only file the project reads, so its absence is the state the
+        // panel has to name — and Replace is the way out of it.
+        function test_aMissingProjectCopyBannersItselfAndOffersReplace() {
+            const fixture = attachAndBind("trip-panel-missing-copy")
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
+                      10000, "the attach-chained solve settles first")
+            RootData.futureManagerModel.waitForFinished()
+
+            const banner = findChild(panelId, "missingCenterlineCopyBanner")
+            verify(banner !== null, "missingCenterlineCopyBanner must exist")
+            verify(!banner.visible, "an attachment whose copy is on disk banners nothing")
+
+            const copyPath = TestHelper.externalCenterlineCopyPath(
+                RootData.project, rootId.trip, "survex_simple.svx")
+            verify(copyPath.length > 0, "the attachment dir must resolve")
+            const copyUrl = TestHelper.toLocalUrl(copyPath)
+            verify(TestHelper.fileExists(copyUrl),
+                   "the attach copied the file into the project")
+
+            // Deleting the copy fires the watcher, which recomputes.
+            TestHelper.removeFile(copyUrl)
+            tryVerify(() => banner.visible, 10000,
+                      "deleting the in-project copy banners the trip")
+
+            // Named by its project-relative path: the copy is the file the
+            // user has now, and the absolute one says nothing they can act on.
+            verify(banner.missingPath.length > 0, "the banner names a file")
+            verify(banner.missingPath.indexOf("/") !== 0,
+                   "the path is project-relative; got: " + banner.missingPath)
+            verify(banner.missingPath.indexOf("survex_simple.svx") >= 0,
+                   "the path names the missing file; got: " + banner.missingPath)
+            const title = findChild(banner, "missingCopyTitle")
+            verify(title !== null, "missingCopyTitle must render")
+            verify(title.visible && title.font.bold,
+                   "the banner leads with its bold title")
+            const detail = findChild(banner, "missingCopyDetail")
+            verify(detail !== null, "missingCopyDetail must exist")
+            verify(detail.text.indexOf(banner.missingPath) >= 0,
+                   "the banner text carries the path")
+
+            // The affordance the banner exists for opens the same dialog the
+            // actions row does.
+            const replaceButton = findChild(banner, "missingCopyReplaceButton")
+            verify(replaceButton !== null, "missingCopyReplaceButton must exist")
+            verify(findChild(panelId, "replaceCenterlineDialog") === null,
+                   "the panel defers the dialog until Replace is clicked")
+            waitForRendering(panelId)
+            mouseClick(replaceButton)
+            const dialog = findChild(panelId, "replaceCenterlineDialog")
+            verify(dialog !== null, "the banner's Replace opens the replace dialog")
+
+            // Modal — it has to be off the screen before anything else in the
+            // panel is clickable again, and the panel drops it once it is.
+            const dialogPopup = findChild(dialog, "replaceDialog")
+            verify(dialogPopup !== null, "replaceDialog must exist")
+            dialogPopup.close()
+            tryVerify(() => findChild(panelId, "replaceCenterlineDialog") === null,
+                      5000, "closing the dialog frees it")
+
+            // Putting the file back clears the banner on the next scan.
+            verify(TestHelper.copyFile(fixture.source, copyPath),
+                   "the fixture copies back into the project")
+            RootData.externalCenterlineManager.rescanAttachments()
+            tryVerify(() => !banner.visible, 10000,
+                      "the restored copy clears the banner")
+        }
+
+        // plans/EXTERNAL_FILE_SCAN_STATION_HARVEST_PLAN.html §6: the banner
+        // promises Replace is the whole fix, so the missing copy has to cost
+        // its own survey and nothing else. Cavern fatals on an *include it
+        // cannot open, which would leave every panel in the region reading
+        // "Solve failed" instead.
+        function test_aMissingProjectCopyCostsOnlyItsOwnSurvey() {
+            attachAndBind("trip-panel-missing-copy-solve")
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
+                      10000, "the attach-chained solve settles first")
+
+            // A second attachment in the same cave: the survey the region
+            // still has to plot once this panel's copy is gone.
+            const cave = RootData.region.cave(0)
+            cave.addTrip()
+            const source = TestHelper.testcasesDatasetPath(
+                "external-centerlines/survex_simple.svx")
+            RootData.attachTripCenterline(cave.trip(1), source)
+            tryVerify(() => RootData.externalCenterlineManager
+                                .attachedCenterlinesModel.rowCount() === 2,
+                      10000, "the second attachment lands its own row")
+            RootData.futureManagerModel.waitForFinished()
+
+            const banner = findChild(panelId, "missingCenterlineCopyBanner")
+            verify(banner !== null, "missingCenterlineCopyBanner must exist")
+
+            const copyPath = TestHelper.externalCenterlineCopyPath(
+                RootData.project, rootId.trip, "survex_simple.svx")
+            verify(copyPath.length > 0, "the attachment dir must resolve")
+
+            TestHelper.removeFile(TestHelper.toLocalUrl(copyPath))
+            tryVerify(() => banner.visible, 10000,
+                      "deleting the in-project copy banners the trip")
+
+            // The deletion's own solve is queued through the future manager,
+            // so draining it is what makes the solve below the region's
+            // answer to the missing file rather than the previous one.
+            RootData.futureManagerModel.waitForFinished()
+            verify(!RootData.linePlotManager.hasSolveError, "the region still solved")
+            verify(RootData.linePlotManager.lastSolveStationCount > 0,
+                   "the surviving attachment's stations are counted")
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null, "stationsList must exist")
+            tryCompare(stationsList, "count", 0, 10000,
+                       "the trip whose copy is gone lists no stations")
+        }
+
+        // The commit-3b gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
+        // §4.1), narrowed by §16 B9b to the one verb that is about the file
+        // row. Detaching is now "remove the trip" on the Cave page, so the
+        // panel must offer nothing else — enumerated rather than
+        // spot-checked, so a re-added action fails here instead of shipping
+        // unnoticed.
+        function test_attachedPanelOffersReplaceOnly() {
+            attachAndBind("trip-panel-actions")
+            RootData.futureManagerModel.waitForFinished()
+
+            // MP.9 took Replace… off the file-name row into its menu, so the
+            // row holds the name and nothing to click.
+            const fileRow = findChild(panelId, "attachedHeaderFileRow")
+            verify(fileRow !== null, "attachedHeaderFileRow must exist")
+            const fileLabel = findChild(fileRow, "attachedFileLabel")
+            verify(fileLabel !== null, "attachedFileLabel must exist")
+            const rowLayout = fileLabel.parent
+            verify(rowLayout !== fileRow,
+                   "the name attachedHeaderFileRow sits on the row's wrapper, never on the layout")
+
+            const rowNames = []
+            for (let i = 0; i < rowLayout.children.length; ++i) {
+                const child = rowLayout.children[i]
+                if (child.objectName.length > 0) {
+                    rowNames.push(child.objectName)
+                }
+            }
+            compare(rowNames.join(","),
+                    "attachedFileLabel",
+                    "the file row holds the name and no action")
+            // The label and the fill spacer — pins the row's size so an
+            // action added without an objectName fails here too.
+            compare(rowLayout.children.length, 2,
+                    "the file row holds the name and spacer")
+
+            // §16 B2e: the panel hands the header an absolute path, so the
+            // file-name context menu acts on the copy inside the project.
+            const header = findChild(panelId, "attachedHeader")
+            verify(header !== null, "attachedHeader must exist")
+            verify(RootData.pathExists(header.entryFilePath),
+                   "the panel resolves the entry file on disk; got: "
+                   + header.entryFilePath)
+
+            const menuArea = openAttachedFileMenu(header)
+            const replaceItem = findChild(menuArea, "replaceAction")
+            verify(replaceItem !== null, "the file menu holds replaceAction")
+            verify(replaceItem.enabled, "Replace… is offered on an idle attached trip")
+            closeMenu(menuArea)
+
+            verify(findChild(panelId, "detachAskBox") === null,
+                   "the detach confirm box is gone with the action that opened it")
+        }
+
+        function test_replaceSwapsTheAttachedFileThroughTheDialog() {
+            attachAndBind("trip-panel-replace")
+            RootData.futureManagerModel.waitForFinished()
+
+            const menuArea = openAttachedFileMenu(findChild(panelId, "attachedHeader"))
+            const replaceItem = findChild(menuArea, "replaceAction")
+            verify(replaceItem !== null, "the file menu holds replaceAction")
+            verify(replaceItem.enabled, "Replace… is offered on an idle attached trip")
+            closeMenu(menuArea)
+
+            // The dialog is built by the verb that opens it.
+            verify(findChild(panelId, "replaceCenterlineDialog") === null,
+                   "the panel defers the dialog until Replace… is chosen")
+            replaceItem.triggered()
+            const dialog = findChild(panelId, "replaceCenterlineDialog")
+            verify(dialog !== null, "replaceCenterlineDialog must exist")
+
+            const pathField = findChild(dialog, "sourcePathField")
+            verify(pathField !== null, "sourcePathField must exist")
+            const confirmButton = findChild(dialog, "replaceConfirmButton")
+            verify(confirmButton !== null, "replaceConfirmButton must exist")
+            verify(!confirmButton.enabled, "Replace stays disabled until a file scans")
+
+            // A three-file closure replacing the one-file fixture, so the
+            // swap is visible in the entry file the panel shows.
+            pathField.text = TestHelper.testcasesDatasetPath(
+                "external-centerlines/survex_nested.svx")
+            tryVerify(() => confirmButton.enabled, 10000,
+                      "the scan preview enables Replace")
+
+            attachCompletedSpyId.clear()
+            mouseClick(confirmButton)
+
+            // Replace holds the same per-owner token as attach, so the
+            // panel's affordances disable while it drains.
+            compare(panelId.ownerBusy, true, "owner is busy right after confirming")
+            verify(!replaceItem.enabled, "Replace… disables while the owner is busy")
+
+            tryVerify(() => attachCompletedSpyId.count === 1, 10000,
+                      "replace reports once through the attach bridge")
+            const report = attachCompletedSpyId.signalArguments[0][0]
+            verify(report.success, "the replace reports success; got: " + report.errorMessage)
+
+            tryVerify(() => rootId.trip.externalCenterline.entryFile === "survex_nested.svx",
+                      10000, "the trip now carries the replacement entry file")
+
+            const header = findChild(panelId, "attachedHeader")
+            const fileLabel = findChild(header, "attachedFileLabel")
+            tryCompare(fileLabel, "text", "survex_nested.svx")
+            tryVerify(() => !panelId.ownerBusy, 10000, "the busy token releases")
+        }
+
+        // The commit-3 gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
+        // §6): whether a source is remembered is no longer something the
+        // panel reacts to. Forgetting one is the state change QML can stage
+        // — the manager's own test covers a remembered source whose file has
+        // since vanished, which needs a setter QML cannot reach.
+        function test_forgettingTheSourceLeavesThePanelUnchanged() {
+            attachAndBind("trip-panel-forget")
+
+            // Let the relayout the trip binding causes settle before taking
+            // the baseline — a snapshot mid-polish would make the exact-y
+            // compares below fail for reasons unrelated to forgetting.
+            const componentNames = ["attachedHeader", "stationsList", "tripMetadata"]
+            componentNames.forEach(name => {
+                tryVerify(() => {
+                    const item = findChild(panelId, name)
+                    return item !== null && item.visible
+                }, 5000, name + " must exist and be laid out")
+            })
+            waitForRendering(panelId)
+            const before = componentNames.map(name => {
+                const item = findChild(panelId, name)
+                return { visible: item.visible, y: item.mapToItem(panelId, 0, 0).y }
+            })
+            verify(RootData.externalSourceSettings
+                       .breadcrumbPath(rootId.trip.id).length > 0,
+                   "the attach remembered a source path")
+
+            RootData.externalSourceSettings.clearBreadcrumb(rootId.trip.id)
+            tryVerify(() => RootData.externalSourceSettings
+                                .breadcrumbPath(rootId.trip.id).length === 0,
+                      5000, "clearing drops the remembered path")
+
+            // The breadcrumb line is the one thing that may move, and it is
+            // inside the header — so wait for it to settle before comparing
+            // the layout, or the comparison races the relayout it causes.
+            const sourceLabel = findChild(panelId, "sourceModeLabel")
+            verify(sourceLabel !== null, "sourceModeLabel must exist")
+            tryCompare(sourceLabel, "text",
+                       "Copied from an unknown location (this machine)")
+
+            componentNames.forEach((name, i) => {
+                const item = findChild(panelId, name)
+                compare(item.visible, before[i].visible,
+                        name + " keeps its visibility")
+                compare(item.mapToItem(panelId, 0, 0).y, before[i].y,
+                        name + " keeps its place")
+            })
+        }
+
+        // §16 B9c: the header stays manager-free, so the panel is what
+        // answers the eligibility refresh and what runs the verb. Reload
+        // re-copies the source over the in-project copy, which reports
+        // through the attach bridge like every other replace.
+        function test_sourceMenuReloadRunsTheManagersVerb() {
+            attachAndBind("trip-panel-source-reload")
+            compare(attachCompletedSpyId.count, 1,
+                    "the fixture attach reported once")
+
+            const header = findChild(panelId, "attachedHeader")
+            const sourceLabel = findChild(panelId, "sourceModeLabel")
+            verify(sourceLabel !== null, "sourceModeLabel must exist")
+            const contextMenu = findChild(panelId, "sourceContextMenu")
+            verify(contextMenu !== null, "sourceContextMenu must exist")
+
+            waitForRendering(panelId)
+            mouseClick(sourceLabel, sourceLabel.width / 2,
+                       sourceLabel.height / 2, Qt.RightButton)
+            tryVerify(() => contextMenu.menu.opened, 5000,
+                      "right-clicking the source line opens the menu")
+            tryVerify(() => header.sourceReloadable, 5000,
+                      "the panel answers eligibility from the manager")
+
+            const reloadItem = findChild(contextMenu, "reloadFromSourceAction")
+            verify(reloadItem !== null, "reloadFromSourceAction must exist")
+            verify(reloadItem.enabled, "an existing external source can be reloaded")
+
+            reloadItem.triggered()
+            contextMenu.menu.dismiss()
+            tryVerify(() => !contextMenu.menu.opened, 5000, "the menu closes")
+
+            tryVerify(() => attachCompletedSpyId.count === 2, 15000,
+                      "the reload reports through the attach bridge")
+            const report = attachCompletedSpyId.signalArguments[1][0]
+            verify(report.success, "the reload succeeds; got: " + report.errorMessage)
+            tryVerify(() => !panelId.ownerBusy, 10000, "the busy token releases")
+        }
+
+        // EXTERNAL_SOURCE_CHANGE_NOTIFY §4: the panel reads the manager's
+        // status model and hands the answer to the header, so an edit of
+        // the source on disk reaches the provenance line live.
+        function test_sourceLineMarksAChangedSourceLive() {
+            const trip = makeSavedTrip("trip-panel-source-changed")
+            const source = TestHelper.copyToTempDir(
+                        TestHelper.testcasesDatasetPath(
+                            "external-centerlines/survex_simple.svx"))
+            attachSourceToTrip(trip, source)
+            rootId.trip = trip
+
+            const header = findChild(panelId, "attachedHeader")
+            verify(header !== null, "attachedHeader must exist")
+            const sourceLabel = findChild(panelId, "sourceModeLabel")
+            verify(sourceLabel !== null, "sourceModeLabel must exist")
+            verify(!panelId.sourceChangedSinceCopy,
+                   "a fresh copy matches the source it came from")
+            verify(!sourceLabel.text.includes("changed since copied"),
+                   "the line reads plain while the copy is current; got: "
+                   + sourceLabel.text)
+
+            // A real edit: different contents, so the fingerprint check
+            // reaches its hash verdict.
+            verify(TestHelper.copyFile(
+                       TestHelper.testcasesDatasetPath(
+                           "external-centerlines/survex_no_metadata.svx"),
+                       source),
+                   "the source is rewritten with different contents")
+
+            tryVerify(() => panelId.sourceChangedSinceCopy, 15000,
+                      "the source sweep reports the edited source as changed")
+            verify(header.sourceChangedSinceCopy,
+                   "the panel hands the state to the manager-free header")
+            tryVerify(() => sourceLabel.text.includes("changed since copied"),
+                      5000, "the source line says so inline; got: "
+                      + sourceLabel.text)
+        }
+
+        function test_aSecondAttachmentNothingTiesInBannersItself() {
+            const fixture = attachAndBind("trip-panel-floating")
+            const cave = RootData.region.cave(0)
+
+            const banner = findChild(panelId, "floatingSurveyBanner")
+            verify(banner !== null, "floatingSurveyBanner must exist")
+
+            // Gate on the solve first: "not visible" before any answer has
+            // landed is silence, not a negative, and would pass even if the
+            // sole attachment in a cave started reporting itself floating.
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0, 10000,
+                      "the anchoring attachment solved")
+            verify(!banner.visible,
+                   "the only attachment in a cave anchors it, so nothing floats")
+
+            // A second centerline in the same cave. The first solved, so it is
+            // what the cave is measured against, and no equate joins the second
+            // to it — the silent failure this banner exists for.
+            //
+            // Bound before the attach on purpose: the banner has to appear on
+            // the panel the user is already looking at, which is the solve's
+            // answer arriving rather than a trip change asking for it.
+            cave.addTrip()
+            const second = cave.trip(1)
+            rootId.trip = second
+            verify(!banner.visible, "a trip with no centerline yet floats nothing")
+
+            RootData.attachTripCenterline(second, fixture.source)
+            tryVerify(() => banner.visible, 10000,
+                      "the untied second attachment banners itself")
+
+            const stations = findChild(banner, "floatingSurveyStations")
+            verify(stations !== null, "floatingSurveyStations must exist")
+            // Pinned whole rather than searched: a qualified spelling contains
+            // the trip-local one as a substring, so indexOf cannot tell the two
+            // apart and would pass on exactly the regression this guards.
+            compare(stations.text, "Floating: simple.a1, simple.a2, simple.a3",
+                    "stations render in the trip's own namespace")
+
+            // The identity behind those strings. The suggester that lands in
+            // this banner ties stations, and a tail on its own names no
+            // container — so the handles have to reach qml, in step with the
+            // strings and pointing at the trip whose scope they live in.
+            const status = findChild(panelId, "floatingSurveyStatus")
+            verify(status !== null, "floatingSurveyStatus must exist")
+            compare(status.stationHandles.length, 3, "one handle per floating station")
+            compare(status.stationHandles[0].tail, "simple.a1")
+            compare(String(status.stationHandles[0].containerId), String(second.id),
+                    "the handle names the trip whose scope the station lives in")
+
+            // Binding back to the anchor must clear it — the banner is about
+            // the trip on screen, not about the cave holding a floating one.
+            rootId.trip = fixture.trip
+            tryVerify(() => !banner.visible, 5000,
+                      "the anchoring attachment is not floating")
+        }
+
+        function test_aDroppedAttachmentIsNamedAndTiedFromTheBanner() {
+            const fixture = attachAndBind("trip-panel-dropped")
+            const cave = RootData.region.cave(0)
+
+            const banner = findChild(panelId, "floatingSurveyBanner")
+            verify(banner !== null, "floatingSurveyBanner must exist")
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0, 10000,
+                      "the anchoring attachment solved")
+
+            // Nothing fixes this second attachment and no equate ties it in, so
+            // cavern drops the whole survey rather than placing it in a corner
+            // of its own. The Dusk Butte shape, in miniature.
+            cave.addTrip()
+            const second = cave.trip(1)
+            rootId.trip = second
+            const dropped = TestHelper.testcasesDatasetPath(
+                "external-centerlines/survex_hanging_alike.svx")
+            RootData.attachTripCenterline(second, dropped)
+            tryVerify(() => banner.visible, 10000,
+                      "the untied second attachment banners itself")
+
+            // The solve placed none of its stations, so every name here came
+            // from the scan reading the attachment on its own. The list shows
+            // them anyway: it lists what the trip is known to have, not what
+            // was placed, so it cannot contradict the banner a few pixels below
+            // it. Waited for, because the scan's harvest lands well after the
+            // attach that provoked it.
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null, "stationsList must exist")
+            tryCompare(stationsList, "count", 3, 10000,
+                       "the harvested stations are listed even though none solved")
+
+            const stations = findChild(banner, "floatingSurveyStations")
+            verify(stations !== null, "floatingSurveyStations must exist")
+            tryCompare(stations, "text", "Floating: simple.a1, simple.a2, simple.a3",
+                       10000, "harvested stations render in the trip's own namespace")
+            verify(stations.visible, "the stations line shows what floats")
+
+            const detail = findChild(banner, "floatingSurveyDetail")
+            verify(detail !== null, "floatingSurveyDetail must exist")
+            compare(detail.text,
+                    "Nothing joins it to the rest of the project, so it can't be placed with the others.",
+                    "the copy stops short of claiming they were placed")
+
+            // And the names are worth having because they are tieable: before
+            // the harvest this banner listed nothing and offered nothing for
+            // exactly the surveys that most needed tying in.
+            // Waited for: the suggester runs off the solve this test just
+            // kicked, so the row is created some frames after its banner.
+            tryVerify(() => findChild(banner, "tieSuggestionText") !== null, 10000,
+                      "a suggestion row must render")
+            const suggestionText = findChild(banner, "tieSuggestionText")
+            tryCompare(suggestionText, "text",
+                       "simple.a1 and simple.a1 in " + fixture.trip.name + " are named alike",
+                       10000,
+                       "the row names the station, its partner, and the trip holding it")
+
+            const connectButton = findChild(banner, "tieSuggestionConnectButton")
+            verify(connectButton !== null, "tieSuggestionConnectButton must exist")
+            compare(RootData.region.equates.count, 0, "nothing is tied until the user says so")
+
+            mouseClick(connectButton)
+
+            compare(RootData.region.equates.count, 1, "the click records exactly one tie")
+            tryVerify(() => !banner.visible, 15000,
+                      "the tied attachment is no longer floating")
+            tryVerify(() => stationsList.count > 0, 15000,
+                      "and the solve now places it, so it has stations of its own")
+        }
+
+        function test_aBrokenAttachmentSaysWhichFileIsBroken() {
+            const trip = makeSavedTrip("trip-panel-broken")
+            rootId.trip = trip
+
+            const errorBanner = findChild(panelId, "externalCenterlineFileErrorBanner")
+            verify(errorBanner !== null, "externalCenterlineFileErrorBanner must exist")
+            verify(!errorBanner.visible, "nothing is broken before anything is attached")
+
+            const source = TestHelper.testcasesDatasetPath("external-centerlines/broken.svx")
+            RootData.attachTripCenterline(trip, source)
+
+            // The region solve fails as one run with one log, so it can say the
+            // region is broken but not which attachment broke it. The scan runs
+            // cavern over this file alone, which is what makes the complaint
+            // land on the panel the user just attached from.
+            tryVerify(() => errorBanner.visible, 10000,
+                      "the scan's per-file harvest reports the broken attachment")
+
+            const message = findChild(errorBanner, "fileErrorMessage")
+            verify(message !== null, "fileErrorMessage must exist")
+            verify(message.text.indexOf("broken.svx") >= 0,
+                   "cavern's own text names the file; got: " + message.text)
+
+            // And it is the only banner up: a file cavern cannot read fails the
+            // region driver as a whole, so the cave solves nothing, no scope is
+            // the anchor, and cwFindFloatingSurveys returns before it can name
+            // anything adrift. Which is the point — a broken file gets one
+            // complaint about the file, not a second one about a float that is
+            // really just the first problem seen from the other side.
+            const floatingBanner = findChild(panelId, "floatingSurveyBanner")
+            verify(floatingBanner !== null, "floatingSurveyBanner must exist")
+            verify(!floatingBanner.visible,
+                   "a broken file is reported once, as a broken file")
+        }
+
+        function test_connectingASuggestionEndsTheFloat() {
+            const fixture = attachAndBind("trip-panel-connect")
+            const cave = RootData.region.cave(0)
+
+            const banner = findChild(panelId, "floatingSurveyBanner")
+            verify(banner !== null, "floatingSurveyBanner must exist")
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0, 10000,
+                      "the anchoring attachment solved")
+
+            cave.addTrip()
+            const second = cave.trip(1)
+            rootId.trip = second
+            RootData.attachTripCenterline(second, fixture.source)
+            tryVerify(() => banner.visible, 10000,
+                      "the untied second attachment banners itself")
+
+            // Both attachments are the same file, so every station in the second
+            // is named after one in the first — the ordinary case, and the one
+            // the ranking is built for.
+            // Waited for: the suggester runs off the solve this test just
+            // kicked, so the row is created some frames after its banner.
+            tryVerify(() => findChild(banner, "tieSuggestionText") !== null, 10000,
+                      "a suggestion row must render")
+            const suggestionText = findChild(banner, "tieSuggestionText")
+            tryCompare(suggestionText, "text",
+                       "simple.a1 and simple.a1 in " + fixture.trip.name + " are named alike",
+                       10000,
+                       "the row names the station, its partner, and the trip holding it")
+
+            const connectButton = findChild(banner, "tieSuggestionConnectButton")
+            verify(connectButton !== null, "tieSuggestionConnectButton must exist")
+            compare(RootData.region.equates.count, 0, "nothing is tied until the user says so")
+
+            mouseClick(connectButton)
+
+            // One click is the whole gesture: the equate lands in the region, the
+            // plot re-solves because of it, and the banner that asked for the
+            // tie takes itself down. Nothing else on this page has to be touched.
+            compare(RootData.region.equates.count, 1, "the click records exactly one tie")
+            tryVerify(() => !banner.visible, 15000,
+                      "the tied attachment is no longer floating")
+        }
+
+        // survex_blocks.svx attaches as a SurvexFile root with no shots of its
+        // own. A block with nested blocks is a derived node holding its own
+        // shots as a derived trip; a leaf block with shots is one derived trip
+        // of the node above it. Binds the panel to east, the deepest block.
+        // Returns the source root.
+        function bindDerivedTrip(projectBaseName) {
+            const sourceRoot = makeSavedCaveAttach(
+                                 projectBaseName,
+                                 "external-centerlines/survex_blocks.svx")
+
+            compare(sourceRoot.rowCount(), 0, "the file's root holds no shots of its own")
+            const doghill = childNamed(sourceRoot, "doghill")
+            const bigPassage = childNamed(doghill, "big-passage")
+            const sump = childNamed(bigPassage, "sump")
+            verify(bigPassage !== null && sump !== null, "each block with nested blocks is a derived node")
+            compare([doghill.rowCount(), bigPassage.rowCount(), sump.rowCount()],
+                    [1, 2, 0], "big-passage holds its own shots and the leaf block east")
+
+            const trip = bigPassage.trip(1)
+            compare(trip.name, "east", "the leaf block east is a derived trip")
+            verify(trip.externallyBacked,
+                   "a derived trip is backed by its source root's file")
+            compare(trip.externalCenterline.entryFile, "",
+                    "a derived trip owns no file of its own")
+
+            rootId.trip = trip
+            waitForRendering(panelId)
+            return sourceRoot
+        }
+
+        // A derived trip is externally backed by its root's file and owns none
+        // of its own, so every manager lookup the panel makes misses: they
+        // render as empty rather than tearing the panel down. The page has no
+        // header: the breadcrumb names the trip's place, and the trip leaves
+        // only with its file.
+        function test_aDerivedTripRendersThePanelWithNoFileOfItsOwn() {
+            bindDerivedTrip("trip-panel-scope")
+
+            verify(!panelId.isAttached, "a derived trip owns no file to be attached to")
+            verify(rootId.trip.sourcePath.length > 0, "the trip derives from its root's file")
+
+            const stationsList = findChild(panelId, "stationsList")
+            compare(findChild(panelId, "scopeHeader"), null,
+                    "a derived trip's page has no Part of: header")
+            compare(findChild(panelId, "attachedHeader"), null,
+                    "the attached header belongs to a trip with a file of its own")
+            compare(findChild(panelId, "solveStatusLabel"), null,
+                    "the trip page carries no solve status")
+            verify(stationsList !== null && stationsList.visible, "stations list renders")
+
+            // Every imperative lookup misses, and each answers with its
+            // nothing rather than throwing.
+            compare(panelId.entryFilePath, "", "no file of its own means no path")
+            compare(panelId.missingCopyPath, "", "no copy of its own can be missing")
+            verify(!panelId.ownerBusy, "an untracked owner is never busy")
+            verify(!panelId.sourceChangedSinceCopy,
+                   "an untracked owner has no source to have changed")
+        }
+
+        // The trip has no file, so the whole attached-only surface is gone:
+        // no Replace, no provenance line, and neither banner about a file of
+        // the trip's own. Declination comes from the survey file (§5 Q6).
+        function test_aDerivedTripHidesTheAttachedOnlySurface() {
+            bindDerivedTrip("trip-panel-scope-surface")
+
+            compare(findChild(panelId, "attachedFileContextMenu"), null,
+                    "there is nothing of the trip's own to replace")
+            compare(findChild(panelId, "sourceModeLabel"), null,
+                    "the trip's copy has no provenance of its own")
+
+            const missingBanner = findChild(panelId, "missingCenterlineCopyBanner")
+            verify(missingBanner !== null, "missingCenterlineCopyBanner must exist")
+            verify(!missingBanner.visible, "no copy of its own can be missing")
+
+            const fileErrorBanner = findChild(panelId, "externalCenterlineFileErrorBanner")
+            verify(fileErrorBanner !== null, "externalCenterlineFileErrorBanner must exist")
+            verify(!fileErrorBanner.visible, "no file of its own can have failed")
+
+            const metadata = findChild(panelId, "tripMetadata")
+            const declEditor = findChild(metadata, "tripMetadataDeclination")
+            verify(declEditor !== null, "tripMetadataDeclination must exist")
+            verify(!declEditor.visible, "cavern owns a derived trip's declination")
+
+            // survex_blocks.svx sets no declination, so east reads the 0
+            // cavern applies, as its tree row does.
+            const readout = findChild(metadata, "tripMetadataDeclinationReadout")
+            verify(readout !== null, "tripMetadataDeclinationReadout must exist")
+            tryVerify(() => readout.visible, 5000, "the page reports the declination it applies")
+            tryCompare(findChild(readout, "value"), "text", "0.00°")
+            compare(declinationText(readout), "none 0.00°", "the caption reads before the angle")
+
+            compare(findChild(metadata, "caveOwnsDeclinationHint"), null,
+                    "the number replaces the sentence about the cave's file")
+            compare(findChild(metadata, "fileOwnsDeclinationHint"), null,
+                    "the number replaces the sentence about the trip's file")
+        }
+
+        // survex_with_metadata.svx sets *calibrate declination 7.2, so the
+        // trip's own file owns the declination cavern applies: -7.2.
+        function test_anAttachedTripWithAFileDeclinationShowsTheFileValue() {
+            const trip = makeSavedTrip("trip-panel-file-declination")
+            attachSourceToTrip(trip, TestHelper.testcasesDatasetPath(
+                                   "external-centerlines/survex_with_metadata.svx"))
+            rootId.trip = trip
+
+            const metadata = findChild(panelId, "tripMetadata")
+            const readout = findChild(metadata, "tripMetadataDeclinationReadout")
+            verify(readout !== null, "tripMetadataDeclinationReadout must exist")
+            tryVerify(() => readout.visible, 10000, "the page reports the file's declination")
+            tryCompare(findChild(readout, "value"), "text", "-7.20°")
+            compare(declinationText(readout), "file -7.20°")
+
+            const declEditor = findChild(metadata, "tripMetadataDeclination")
+            verify(declEditor !== null, "tripMetadataDeclination must exist")
+            verify(!declEditor.visible, "the trip's file owns its declination")
+        }
+
+        // The file seeds the date and owns it: east inherits its ancestor
+        // block's *date, and the page shows it read-only.
+        function test_aDerivedTripDateShowsTheSeedReadOnly() {
+            bindDerivedTrip("trip-panel-scope-date")
+
+            const metadata = findChild(panelId, "tripMetadata")
+            const dateField = findChild(metadata, "tripMetadataDate")
+            verify(dateField !== null, "tripMetadataDate must exist")
+            tryCompare(dateField, "text", "2024-01-05", 5000,
+                       "the block's date seeded the derived trip")
+            verify(dateField instanceof QC.Label, "the file owns the date, so it reads as a label")
+            compare(dateField.finishedEditting, undefined, "the date readout has no commit path")
+        }
+
+        // The station list is the one block the two modes share: a derived
+        // trip lists the solved stations of its own unit.
+        function test_aDerivedTripListsItsOwnBlocksStations() {
+            bindDerivedTrip("trip-panel-scope-stations")
+
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null, "stationsList must exist")
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
+                      10000, "the attach's chained solve publishes stations")
+            tryVerify(() => stationsList.count > 0, 10000,
+                      "the block's stations reach the derived trip's list")
+        }
+
+        // A derived trip lists its own stations, the number its tree row
+        // shows, rather than every station the region solved. counts.svx's
+        // leaf block left holds l1-l3 of the file's 12.
+        function test_aDerivedTripListsOnlyItsOwnStations() {
+            saveProjectAs("trip-panel-own-count")
+            const root = attachSourceToRegion(
+                           TestHelper.testcasesDatasetSourcePath(
+                               "external-centerlines/survex_station_counts/counts.svx"))
+            const lower = childNamed(childNamed(root, "system"), "lower")
+            verify(lower !== null, "the file holds the block lower")
+            const left = tripNamed(lower, "left")
+            verify(left !== null, "lower holds the leaf trip left")
+
+            rootId.trip = left
+            waitForRendering(panelId)
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 3,
+                      10000, "the attach's chained solve places the whole file")
+
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null, "stationsList must exist")
+            tryCompare(stationsList, "count", 3, 10000,
+                       "the list holds left's own stations")
+        }
+
+        // The whole-node window (§7.2 step 6): the source root's own unit,
+        // which owns every station no other unit claims. The panel renders it
+        // like any derived trip.
+        function test_aWholeNodeWindowRendersLikeADerivedTrip() {
+            const root = makeSavedCaveAttach(
+                           "trip-panel-whole-node",
+                           "external-centerlines/survex_root_and_block.svx")
+
+            let window = null
+            for (let row = 0; row < root.rowCount(); row++) {
+                if (root.trip(row).windowsWholeNode) {
+                    window = root.trip(row)
+                }
+            }
+            verify(window !== null, "the attach created the whole-node window")
+
+            rootId.trip = window
+            waitForRendering(panelId)
+
+            verify(!panelId.isAttached, "the window owns no file of its own")
+            compare(findChild(panelId, "attachedHeader"), null,
+                    "the window has no file row of its own")
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null && stationsList.visible,
+                   "the stations list renders for the whole-node window")
+        }
+    }
+}

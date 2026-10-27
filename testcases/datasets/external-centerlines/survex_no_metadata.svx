@@ -1,0 +1,8 @@
+; No-metadata fixture for the [Scanner][Metadata] tests: no *date,
+; no *team, no *calibrate declination. Doubles as the
+; CaveWhere-owns-declination fixture for [Attach][Declination].
+*begin NoMetadata
+*fix B1 0 0 0
+*data normal from to tape compass clino
+B1 B2 10.0 0 0
+*end NoMetadata

@@ -131,7 +131,7 @@ public:
 
     ParentKind parentKind() const;
 
-    cwTrip* parentTrip() const;
+    Q_INVOKABLE cwTrip* parentTrip() const;
     cwCave* parentCave() const;
     cwTripCalibration* tripCalibration() const;
 

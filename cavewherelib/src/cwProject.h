@@ -206,6 +206,12 @@ signals:
     // -----Old save and load
     void filenameChanged(QString newFilename);
     void fileTypeChanged();
+
+    // The owned cwSaveLoad was replaced (newProject retires the old
+    // pipeline and creates a fresh one). Consumers holding the pointer
+    // — e.g. cwExternalCenterlineManager via cwRootData — re-resolve it
+    // here.
+    void saveLoadChanged();
     void dataRootChanged();
     void canSaveDirectlyChanged();
     void isTemporaryProjectChanged();
@@ -239,6 +245,7 @@ private:
     void runSyncOperation(const std::shared_ptr<SyncCycle>& cycle,
                           const QFuture<Monad::ResultBase>& operationFuture);
     void setModified(bool modified);
+    void completeSave(const cwSaveLoad::SaveReceipt& receipt);
 
     //! Seed the region's unitSystem from the app-level default. Runs only at
     //! new-project creation on the main thread; a load overrides it via setData().
@@ -261,8 +268,8 @@ private:
 
     bool m_modified = false;
 
-    //Mark true if temp project when loaded via legacy SQLite/v6 paths
-    bool SQLiteTempProject;
+    //Set by convertFromProjectV6Helper for a read-only legacy SQLite source; cleared by load, saveAs, and newProject
+    bool m_unsavedReadOnlyConversion;
     bool LoadedFromBundledArchive;
     bool ConvertedFromSqlite; //!< True when a SQLite .cw was auto-converted; distinguishes from a genuine bundled .cw zip
     QString BundledArchivePath;
@@ -296,7 +303,7 @@ private:
     void disconnectSaveLoad(cwSaveLoad *saveLoad);
 
     bool emitVersionGuardError(const QString& action);
-    void setSqliteTemporaryProject(bool isTemp);
+    void setUnsavedReadOnlyConversion(bool isUnsavedConversion);
     void completeSyncOperation(const Monad::ResultBase& result);
     void continueSyncAfterGates(const std::shared_ptr<SyncCycle>& cycle);
 

@@ -96,7 +96,7 @@ struct LinePlotFixture {
 
     QVector3D position(const QString& stationName) const
     {
-        return cave->stationPositionLookup().position(stationName);
+        return cave->scopedPositions().position(stationName);
     }
 
     cwCavingRegion region;

@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scan-Time Station Harvest — Per-Attachment Cavern Run</title>
+<style>
+  :root {
+    --bg: #1b1d21;
+    --panel: #22252a;
+    --panel2: #26292e;
+    --border: #3a3f47;
+    --text: #e6e8eb;
+    --dim: #9aa0a8;
+    --accent: #61afef;
+    --good: #98c379;
+    --warn: #e5c07b;
+    --bad: #e06c75;
+    --mono: "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, "Segoe UI", sans-serif;
+    margin: 0; padding: 2rem 1rem 6rem;
+  }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+  h2 { font-size: 1.25rem; margin: 2.6rem 0 .8rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; color: var(--accent); }
+  .meta { color: var(--dim); font-size: .9rem; margin-bottom: 1.5rem; }
+  code, .mono { font-family: var(--mono); font-size: .86em; }
+  code { background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: .08em .35em; }
+  pre {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; overflow-x: auto; font-family: var(--mono); font-size: .82rem; line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); }
+  td code { white-space: nowrap; }
+  .pill { display: inline-block; border-radius: 999px; padding: .05rem .6rem; font-size: .75rem; font-weight: 600; letter-spacing: .3px; vertical-align: middle; }
+  .pill.draft { background: #3d3524; color: var(--warn); border: 1px solid var(--warn); }
+  .pill.done { background: #2b3a2b; color: var(--good); border: 1px solid var(--good); }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: .7rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout .title { font-weight: 700; margin-bottom: .2rem; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .3rem 0; }
+  .dim { color: var(--dim); }
+  .good { color: var(--good); }
+  .bad { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Scan-Time Station Harvest <span class="pill done">H1–H4 DONE</span></h1>
+<p class="meta">
+Per-attachment cavern run at scan time, so an attached centerline's station names are known
+<em>before</em> — and independently of — the region solve. Branch <code>externalFiles</code>.
+Follows the 6c creation-path/suggester slice (<code>ebf5ca5d</code>). Companion to
+<code>plans/EXTERNAL_FILE_EQUATES_AND_SCOPING.html</code>.
+</p>
+
+<div class="callout">
+<div class="title">Status</div>
+Shipped as <code>71559eec</code> (H1), <code>5afa18ea</code> (H2), <code>ca72e0fa</code> (H3) and
+<code>261990e4</code> (review fixes). Sections below were reconciled with the shipped code after
+the H1–H3 review; where the built thing differs from the original design, the section says so
+rather than describing the draft. Two things remain open: the <strong>manual acceptance</strong>
+at the end of §4, and <a href="https://github.com/Cavewhere/cavewhere/issues/651">issue #651</a>
+(the harvest loses surveys not connected to netskel's single implicit fix — see §3.1).
+</div>
+
+<h2 id="problem">1. The problem</h2>
+
+<p>
+Station names for an attached centerline are learned only from the region solve
+(<code>cwTrip::solvedStations()</code>, read back out of the run's <code>.3d</code>), and the
+solve is exactly what fails for the surveys that need tying. Cavern drops a survey nothing
+fixes and nothing ties in (<code>netartic.c</code> warning 45), so its stations never reach the
+<code>.3d</code>, so:
+</p>
+
+<ul>
+  <li><code>cwFindFloatingSurveys::Result::stations</code> comes back empty
+      (<code>cwFindFloatingSurveys.cpp</code>, <code>appendFloatingSurveysOf</code> reads
+      <code>SolvedScopes</code>, which only sees the region network);</li>
+  <li>the banner says <em>"none of its stations were placed"</em> and can list nothing;</li>
+  <li>the tie suggester's <code>localStations()</code> falls back to
+      <code>solvedStations()</code> for a chunk-less trip and finds nothing — for exactly the
+      trips the suggester exists to rescue.</li>
+</ul>
+
+<p>
+<strong>Real-world case (the acceptance test):</strong> <code>Dusk Butte.cwproj</code> has two
+TopoDroid attachments, <code>Nimbus_D_survey</code> and <code>Nimbus_g_survey</code>, neither
+with a <code>*fix</code>, plus a native trip (<code>Trip 3</code>) whose single shot
+<code>g2 → d4</code> is the intended tie-in. Both attachments show an empty "This survey is not
+tied in" banner. The native side already works — <code>localStations()</code> reads native
+stations from chunks, no solve needed — so <code>g2</code> and <code>d4</code> are sitting there
+as candidates. Only the attachment side is blind. After this plan, each banner should offer a
+one-click exact-name tie (<code>g2 ↔ g2</code>, <code>d4 ↔ d4</code>).
+</p>
+
+<h3 id="rejected">Rejected approaches</h3>
+<ul>
+  <li><strong>Scrape cavern's log.</strong> The "not connected" info lines
+      (<code>netartic.c:328-373</code>) enumerate stations from the <em>reduced</em> network —
+      network reduction collapses degree-2 chains — so most stations never appear. The strings
+      are also translated.</li>
+  <li><strong>Auto-<code>*fix</code> the hanging survey in the main solve.</strong> Impossible:
+      <code>*fix</code> takes a station name, and not knowing the names is the whole problem.</li>
+  <li><strong>Parse the files ourselves.</strong> Means owning name-extraction parsers for
+      Survex, Compass, and Walls, forever, in parallel with cavern's. The harvest run below gets
+      cavern to do it with zero new parsing code.</li>
+</ul>
+
+<h2 id="mechanism">2. The enabling mechanism</h2>
+
+<div class="callout">
+<div class="title">Cavern always solves a run with no fixed points</div>
+<p>
+<code>survex/src/netskel.c:102-137</code>: when a run contains no fixed station at all
+<em>and</em> no coordinate system is set (<code>!pcs->proj_str && !proj_str_out</code>), cavern
+picks the first station and fixes it at (0,&nbsp;0,&nbsp;0) — message 72, "Survey has no fixed
+points. Therefore I've fixed %s at (0,0,0)" — and solves the whole file in that arbitrary
+frame.
+</p>
+</div>
+
+<p>
+So a driver that is nothing but <code>*include "&lt;entry file&gt;"</code> — no
+<code>*fix</code>, no <code>*cs</code>, no wrapper <code>*begin</code> — <strong>always
+solves</strong>, and its <code>.3d</code> carries <em>every</em> station name in the
+attachment. Coordinates come out in a meaningless local frame; we throw them away and keep the
+names.
+</p>
+
+<p>
+<strong>Names match the trip's tails by construction.</strong> The main solve's driver wraps
+the same <code>*include</code> in the cave and trip <code>*begin</code> labels, producing
+<code>&lt;cave&gt;.&lt;trip&gt;.hanging.h1</code>; <code>cwTrip::solvedStations()</code> strips
+the scope prefix, yielding the tail <code>hanging.h1</code>. The harvest driver's bare
+<code>*include</code> of the same entry file produces the label <code>hanging.h1</code>
+directly. Both are cavern's own labeling of the same bytes — the only difference is the wrapper,
+which is exactly what tail-stripping removes. This holds for Compass and Walls attachments too
+(cavern reads <code>.dat</code>/<code>.mak</code>/<code>.wpj</code>/<code>.srv</code> natively
+through <code>*include</code>, same as the main driver).
+</p>
+
+<div class="callout warn">
+<div class="title">Corrected after H1 — the separator is not what carries Compass/Walls</div>
+<p>
+This section originally argued the Compass/Walls case rested on the <code>':'</code> separator
+those runs emit being normalized to <code>'.'</code> by <code>cwSurvex3DFileReader</code>
+(<code>3f7ddbfe</code>). H1 showed that argument is beside the point <em>here</em>: cavern's
+<code>.dat</code>/<code>.wpj</code> readers contribute <strong>bare tails</strong> (§3.1), so no
+harvested label ever contains a separator at all. The normalization still matters — for the
+region solve's own labels — but it is not what makes the harvest work for these formats, and no
+fixture in the H1 gate exercises it.
+</p>
+</div>
+
+<h2 id="design">3. Design</h2>
+
+<h3 id="harvester">3.1 The harvester — new free-function unit</h3>
+
+<p><code>cavewherelib/src/cwExternalStationHarvest.h/.cpp</code> (new; globbed via
+<code>CONFIGURE_DEPENDS</code>, no CMake edit):</p>
+
+<pre><code>namespace cwExternalStationHarvest {
+
+//! Every station name declared by an external centerline's entry file, learned
+//! by running cavern over the file alone. ... Returns canonical
+//! (cwStation::canonicalKey) sorted tails in the attachment's own namespace —
+//! the same spelling cwTrip::solvedStations() yields for the trip once the
+//! region solve places it.
+CAVEWHERE_LIB_EXPORT Monad::Result&lt;QStringList&gt; harvest(const QString&amp; entryFile);
+
+} // namespace cwExternalStationHarvest</code></pre>
+
+<p>Implementation (as shipped — steps 1 and 2 are guards the original list omitted):</p>
+<ol>
+  <li><strong>Entry must exist.</strong> <code>QFileInfo::exists</code> on the absolute path, else
+      a <code>Monad::Result</code> error naming it. Unreachable from the production caller, which
+      checks the same thing first (§3.2) — it exists so the unit is safe standalone.</li>
+  <li><strong>Refuse a path Survex cannot quote.</strong> <code>*include</code> has no escape for
+      an embedded <code>"</code>, and survex treats <code>\n</code>, <code>\r</code> and
+      <code>\032</code> alike as end of line (<code>datain.c</code>'s <code>SPECIAL_EOL</code>
+      table), so such a path would break the driver or smuggle in a second token. Same refusal
+      <code>cwSurvexExporterCaveTask::writeExternalInclude</code> makes.
+      <br><strong>Widened in the review:</strong> both guards originally rejected only
+      <code>"</code> and <code>\n</code>. Both now reject all four characters — the duplication is
+      left standing on purpose, since unifying the two copies is its own follow-up (§6).</li>
+  <li><code>QTemporaryDir</code>; write <code>harvest.svx</code> containing exactly one line:
+      <code>*include "&lt;absolute entry path&gt;"</code>. Nothing else — no fix, no cs, no
+      begin. (Includes inside the entry resolve relative to the entry's own directory, so the
+      attachment-dir closure that reconcile copied is what gets read.)
+      <br><strong>Added in the review:</strong> the write is checked
+      (<code>QTextStream::status</code> plus <code>QFile::flush</code>). A driver that only partly
+      reached the disk is still valid Survex — an empty one just includes nothing — so a full disk
+      would otherwise get the user's entry file blamed for "No survey data".</li>
+  <li><code>cwCavernRunner::run(driverPath, out3dPath)</code> — already serialized against the
+      main solve by its internal mutex, already writes the <code>.log</code> sidecar.</li>
+  <li><code>cwSurvex3DFileReader::readStationPositions(out3d)</code>; return its keys.
+      <code>cwStationPositionLookup</code> canonicalizes on insert and keeps a
+      <code>QMap</code>, so they are already canonical and sorted — and sorted the same way
+      <code>cwTrip::solvedStations()</code> walks the cave lookup, so a trip's names don't
+      reorder when the fallback swaps one source for the other.
+      <br><strong>Added in the review:</strong> an empty lookup is an <em>error</em>, not a
+      success. The reader only <code>qWarning</code>s on a <code>.3d</code> it cannot read and
+      hands back an empty lookup, which would have this function report success with no names —
+      the one answer it must never give, since no caller can tell it apart from a file that
+      declares nothing. Cavern never writes an empty <code>.3d</code>: a run with no survey data
+      is <code>fatalerror</code> 43 (<code>netskel.c:93</code>), so empty-after-success means the
+      read failed.</li>
+  <li>On cavern failure (a genuinely broken file): return the <code>Monad::Result</code> error
+      with cavern's log text. The caller records empty names — the pre-harvest status quo.</li>
+</ol>
+
+<p><strong>Error codes, corrected in the review.</strong> Every failure path originally returned
+<code>LinePlotErrorCode::ExportFailed</code>, naming an operation the harvest never performs. As
+shipped: the two input guards return <code>ValidationFailed</code>, the three driver-writing
+failures <code>ExportFailed</code> (the same meaning
+<code>cwSurvexExporterRegion</code> gives it — "could not produce the survex input"), cavern's own
+failure passes its <code>CavernFailed</code> through untouched, and an unreadable
+<code>.3d</code> returns <code>ParseFailed</code>.</p>
+
+<div class="callout">
+<div class="title">Two things the implementation settled</div>
+<p><strong>The error text is trimmed of the driver.</strong> Cavern prefixes the real error with
+<code>In file included from /tmp/&lt;random&gt;/harvest.svx:1:</code>. That path is deleted before
+anyone reads the message and is different on every run, so the same failure would look like a new
+one each time and §3.7's panel callout would name a file the user can't open. The
+<code>survex_with_missing_include.svx</code> case asserts two runs are byte-identical, which fails
+without the trim.</p>
+<p><strong>Corrected in the review (<code>261990e4</code>):</strong> the original approach — drop
+every line mentioning the working directory — rested on the claim that "the error itself points at
+the entry file and survives". That is false whenever cavern blames the <em>driver</em> rather than
+the entry, which is exactly what happens for an entry that exists but cannot be opened:
+<code>harvest.svx:1: error: Couldn't open file "…"</code> was the only line carrying the
+diagnosis, and dropping it left the user an echoed <code>*include</code> and a caret with no
+reason. The harvest now strips only the <code>&lt;file&gt;:&lt;line&gt;:&lt;column&gt;: </code>
+location prefix, drops <code>In file included from</code> lines, and falls back to dropping the
+whole line only if it still names the driver afterwards — so determinism is preserved and the
+reason survives. Covered by "Harvest keeps cavern's reason when cavern blames the driver".</p>
+<p><strong>Compass and Walls contribute bare tails.</strong> Cavern's <code>.dat</code>/
+<code>.wpj</code> readers do not turn the file's own survey names into naming levels the way
+<code>*begin</code> does: <code>compass_solvable.dat</code> harvests as <code>s1/s2/s3</code>, not
+<code>s.s1</code>, and <code>walls_simple.wpj</code> as <code>a1..a4</code>. The region solve sees
+the same bare tails, so the by-construction match still holds — and §3.5's leaf comparison has
+nothing to strip for these two formats.</p>
+</div>
+
+<div class="callout warn">
+<div class="title">Known limitation — *cs without *fix</div>
+An entry file that sets a coordinate system but fixes nothing defeats the auto-fix
+(<code>netskel.c</code> requires no proj string) and cavern errors out. Harvest then returns an
+error and the names stay empty — exactly today's behavior, no regression. Not worth special
+handling: such a file is self-contradictory (a CRS with nothing positioned in it).
+</div>
+
+<div class="callout bad">
+<div class="title">Known limitation — internally disconnected surveys (issue #651)</div>
+<p>
+Found by the H1–H3 review, and the more serious of the two. <code>netskel.c</code> fixes
+<strong>exactly one</strong> station, and <code>articulate()</code> then drops every component
+that station cannot reach (<code>netartic.c:337</code>, warning 45) — while cavern still exits
+<strong>0</strong>. So an entry file holding two surveys with no leg and no <code>*equate</code>
+between them harvests <em>short, with no error at all</em>. The
+<code>survex_two_parts.svx</code> fixture yields exactly
+<code>parta.a1/a2/a3</code>; PartB's three stations are simply gone, invisible to both the banner
+and the suggester, and untieable from the UI.
+</p>
+<p>
+Fixing it means fixing one station <em>per connected component</em> rather than one per file — a
+change to the vendored cavern, hence its own commit and
+<a href="https://github.com/Cavewhere/cavewhere/issues/651">issue #651</a>. Until then the header
+carries a <code>\warning</code> and "Harvest loses the components netskel's one fix cannot reach"
+pins the loss so it fails loudly when fixed. Note this also feeds the precedence split in §3.5.
+</p>
+</div>
+
+<h3 id="wiring">3.2 Where it runs — the manager's existing scan pipeline</h3>
+
+<p>
+<code>cwExternalCenterlineManager</code> already has the right seam: the three-stage recompute
+(<code>recomputeWatchSetAndProbeSources</code> → worker <code>scanOwners</code> → main-thread
+<code>applyScanResult</code>) runs at attach, at detach, at project load
+(<code>setRegion</code>), on every watched-file change, and on every settings mutation — and is
+coalesced through <code>m_scanRestarter</code> so edit bursts cost one scan.
+</p>
+
+<ul>
+  <li><code>ExternalScanResult</code> gains <code>QHash&lt;QUuid, QStringList&gt;
+      tripStations</code>.</li>
+  <li><code>scanOwners</code> (worker thread, static, pure): for each <strong>trip</strong>
+      owner whose project-side entry resolves (the same <code>projectEntry</code> the scan
+      already builds at <code>cwExternalCenterlineManager.cpp:332</code>), call
+      <code>cwExternalStationHarvest::harvest(projectEntry)</code> and record the names.
+      Project-side only — the project copy is the source of truth (Phase 2 direction change),
+      and it is what the solve <code>*include</code>s. Cave-level owners are skipped
+      (§6).</li>
+  <li><code>applyScanResult</code> (main thread) pushes the names <em>before</em> the
+      <code>solveNeeded()</code> emission, so the solve that follows snapshots fresh names.
+      <br><strong>Built differently than drafted:</strong> this bullet originally said "resolve
+      each ownerId to its live trip and push". The shipped <code>applyHarvestToTrips</code>
+      inverts that — it walks <strong>every trip in the region</strong> and assigns
+      <code>result.tripStations.value(trip-&gt;id())</code>, which is empty for any trip the scan
+      did not harvest. The inversion is load-bearing, not incidental: resolving only the result's
+      ownerIds would leave stale names on a <em>detached</em> trip, since a detached trip
+      contributes no owner and so appears in no result. The wiring test's detach case asserts
+      exactly this. Both setters early-return on equality, so assigning empty-to-empty across a
+      region of native trips emits nothing.</li>
+</ul>
+
+<div class="callout warn">
+<div class="title">Consequence the review flagged (open, 🟡)</div>
+Because the apply assigns per trip inside that loop and each setter emits synchronously, a bound
+<code>cwTieSuggestionModel</code> does a full <code>beginResetModel</code> rebuild <em>per trip</em>,
+and the first N−1 of those read a half-applied region — transient wrong rows in an open panel, with
+a correct end state. Batching the emissions (or applying under a single reset) would remove it.
+</div>
+
+<div class="callout warn">
+<div class="title">A missing in-project copy is silent (open, 🟡)</div>
+<p>
+The harvest only runs for an owner whose project-side entry <em>resolves</em>. When it doesn't —
+the in-project copy is gone, the reconcile hasn't run yet, the attachment directory was deleted
+out from under the project — the owner contributes nothing to <code>tripStations</code>, and
+<code>applyHarvestToTrips</code>' walk-every-trip inversion then assigns empty names <em>and</em>
+an empty error. Which is byte-identical to the state of a trip with no attachment at all.
+</p>
+<p>
+So the one failure the user can actually act on — "the file this trip points at isn't there" —
+is the one that produces no banner, no complaint, and no station list, while
+<code>ExternalCenterlineMissingSourceBanner</code> speaks only for a missing <em>source</em>
+(the user's original), not a missing project copy. Wants the unresolved case to record an error
+rather than nothing, which also gives §3.7's banner something true to say. Fixing it means
+deciding what <code>scanOwners</code> knows about <em>why</em> an entry didn't resolve, so it is
+not a one-liner.
+</p>
+</div>
+
+<p>
+Cost: one cavern run per attached trip per recompute, off the main thread, serialized by
+cavern's mutex, coalesced by the restarter. Attachments are single-survey files — milliseconds
+each. An mtime-keyed skip cache is possible later if a project with dozens of attachments ever
+notices; not in this slice.
+</p>
+
+<h3 id="trip">3.3 Where the names live — <code>cwTrip</code></h3>
+
+<p class="dim">As shipped — the draft showed plain accessors and a single signal; the QML binds
+both fields directly (§3.7), so each is a <code>Q_PROPERTY</code> with its own NOTIFY:</p>
+
+<pre><code>Q_PROPERTY(QStringList externalStations READ externalStations
+           NOTIFY externalStationsChanged FINAL)
+Q_PROPERTY(QString externalStationsError READ externalStationsError
+           NOTIFY externalStationsErrorChanged FINAL)
+
+//! Station names declared by this trip's attached external centerline, in the
+//! trip's own namespace — learned at scan time by running cavern over the
+//! attachment alone, so they exist whether or not the region solve placed the
+//! survey. Empty for a native trip, and for an attachment whose file cavern
+//! cannot read. Derived state: rebuilt by every external-centerline scan,
+//! never persisted.
+QStringList externalStations() const;
+void setExternalStations(const QStringList&amp; stations);   // manager-only in practice
+
+QString externalStationsError() const;
+void setExternalStationsError(const QString&amp; error);
+...
+//! Each signal covers only its own field — the two move independently.
+void externalStationsChanged();
+void externalStationsErrorChanged();</code></pre>
+
+<ul>
+  <li>Plain member + explicit setter with the standard
+      <code>if (m_x == x) return;</code> guard (no bindable properties).</li>
+  <li><code>cwTripData</code> gains a <code>QStringList externalStations</code> field, filled by
+      <code>cwTrip::data()</code> so the value rides the solve's region snapshot into the worker.
+      <strong>Not serialized</strong> — no proto change; it is derived from files the project
+      already owns, and persisting it would only add a staleness channel.
+      <br><strong>Settled in H2:</strong> <code>setData()</code> deliberately does
+      <em>not</em> read it back. Every <code>cwTripData</code> reaching that setter either came
+      off disk — where the field is never written, so it is empty — or was just taken from the
+      same trip, so assigning could only ever wipe the live harvest (on a load, or a sync-driven
+      trip reload) and never carry anything in.</li>
+  <li>Setting it must <strong>not</strong> mark the project dirty or trigger a save — it is
+      scan output, not user data. (Same reasoning that made the C2 review flag the save-trigger
+      bug, from the other direction.)</li>
+</ul>
+
+<div class="callout warn">
+<div class="title">Follow-up — derived scan output belongs in a group, not loose on the trip
+(🟡)</div>
+<p>
+<code>cwTripData</code> now carries <code>externalStations</code> as a bare field that
+<code>data()</code> writes and <code>setData()</code> deliberately skips — a rule that lives
+nowhere but a comment, and that the next derived field will have to restate. The codebase already
+has the pattern for this: <code>ExternalCenterlineInputs</code> groups an attachment's
+scan-derived inputs behind one type, so "this rides the snapshot out but never rides back in" is
+a property of the group rather than of each field.
+</p>
+<p>
+<code>externalStationsError</code> is the second such field and it arrived one commit later, which
+is the argument. Folding both into the existing group makes the asymmetry structural, and gives
+the missing-copy case above and the accessor below one place to land. Blast radius:
+<code>cwTripData</code>, <code>cwTrip::data/setData</code>, the manager's apply, and the
+consumers' reads.
+</p>
+</div>
+
+<h3 id="floating">3.4 Consumer — <code>cwFindFloatingSurveys::fromExternalScopes</code></h3>
+
+<p>
+In <code>appendFloatingSurveysOf</code> (<code>cwFindFloatingSurveys.cpp:220-250</code>), the
+floating verdict is untouched — solving nothing still settles "adrift" on its own. Only the
+station list gains a fallback:
+</p>
+
+<pre><code>result.stations = solved.solvedAnything(trip.id)
+                  ? solved.stations(trip.id)
+                  : caveLocalHarvestOf(trip, labels.tripLabels(cave.id));</code></pre>
+
+<div class="note">
+<strong>Superseded by H4.</strong> The fallback above is now a union, and the choice of sources
+is no longer made here: <code>caveLocalStationsOf</code> calls
+<code>cwTrip::knownStationNames(trip, solved.stations(trip.id))</code> and puts the trip's scope
+on the result. <code>SolvedScopes::stations()</code> changed with it — it now hands back
+<em>scope</em>-local names (a trip scope's own "*begin" head comes off), so both sources reaching
+the merge speak one namespace.
+</div>
+
+<div class="note">
+<strong>Settled in H3:</strong> the harvested names cannot be dropped in raw. A record's
+stations are <em>cave-local</em> — <code>SolvedScopes</code> strips only the cave head, so a
+solved attachment reads <code>"&lt;tripLabel&gt;.&lt;fileBegin&gt;.&lt;tail&gt;"</code> —
+while the harvest reads the file on its own and so carries only the levels the file itself
+opens. <code>cwFloatingSurveyModel</code> turns a record into handles by stripping the trip's
+scope prefix, so a trip whose label happens to match the file's own <code>*begin</code> (an
+attachment named after its file — the ordinary case) would have one level too many stripped
+and every tie would name the wrong station. <code>appendFloatingSurveysOf</code> therefore
+puts the trip's scope back on, through the same <code>cwTrip::scopePrefix(data, labels)</code>
+the live side uses, and <code>Result::stations</code> keeps one contract whichever pass named
+it.
+</div>
+
+<p>
+Doc updates ride along: <code>Result::stations</code>' "Empty means the survey produced no
+solved station at all" contract (<code>cwFindFloatingSurveys.h:70-75</code>) becomes "Empty
+means the survey's stations could not be learned at all — cavern dropped it <em>and</em> the
+scan-time harvest failed." The same empty-means-dropped phrasing in
+<code>cwFloatingSurveyModel.h:79-83</code> and <code>cwFloatingSurveyStatus.h:75-79</code> gets
+the same correction.
+</p>
+
+<div class="callout warn">
+<div class="title">Follow-up — the record should carry handles, not scope-prefixed strings
+(🟡)</div>
+<p>
+<code>Result::stations</code> is a <code>QStringList</code> of cave-local names, so this pass has
+to <em>add</em> the trip's scope prefix (the H3 fix above) purely so
+<code>cwFloatingSurveyModel</code> can <em>strip</em> it back off to build the handles the UI
+actually uses. Two passes agreeing on an encode/decode of the same identity, with the ordinary
+case — an attachment named after its file — sitting one level away from silently naming the wrong
+station.
+</p>
+<p>
+The A1 work already made identity travel as a <code>cwStationHandle</code>
+(<code>project_qualified_name_ownership</code>), and this record is the remaining place it
+doesn't. Carrying handles end to end deletes both the prefix add and the strip, and with them the
+class of bug the H3 note exists to prevent. Blast radius: <code>cwFindFloatingSurveys</code>,
+<code>cwFloatingSurveyModel</code>, <code>cwFloatingSurveyStatus</code>, and the QML that reads
+<code>stations</code> for display only.
+</p>
+</div>
+
+<h3 id="suggester">3.5 Consumer — <code>cwTieSuggestionModel</code></h3>
+
+<ul>
+  <li><code>localStations()</code> (<code>cwTieSuggestionModel.cpp:63-84</code>): for a
+      chunk-less trip, prefer <code>trip-&gt;externalStations()</code> when non-empty; keep the
+      <code>solvedStations()</code> fallback for the window before the first scan applies. (The
+      chunk branch is untouched — native trips never harvest.) This upgrades both sides: the
+      floating trip's own list <em>and</em> attached candidate trips elsewhere in the
+      cave. <em>Superseded by H4:</em> the whole function is now three lines over
+      <code>cwTrip::knownStations()</code>, which owns the policy and unions the sources rather
+      than choosing between them.</li>
+  <li><code>setTripConnected()</code>: add <code>cwTrip::externalStationsChanged</code> to the
+      <code>forEachSignal</code> list, so a harvest landing on the bound trip rebuilds rows
+      immediately. Candidate trips' harvests arrive through the existing pulses: every scan
+      apply that changes anything requests a solve, and the solve fires
+      <code>solvedStationsChanged</code> (cave-relayed) at the bound trip. If testing shows a
+      candidate-only harvest that provokes no re-solve, add a cave-level relay then — not
+      preemptively. <em>Review note:</em> the relay is still absent and the gap is still latent —
+      no traced path changes a candidate trip's harvest without also requesting a solve — but that
+      invariant is spread across four call sites and nothing enforces it.
+      <em>Closed by H4:</em> the list is now <code>knownStationsChanged</code> (this trip's
+      stations, the cave's solve included) plus <code>cwCave::tripExternalStationsChanged</code>
+      (a <em>candidate</em> trip's harvest), so the latent gap is a wire rather than an
+      invariant.</li>
+</ul>
+
+<div class="callout" id="h4">
+<div class="title">Follow-up phase H4 — one accessor owns "this trip's names" — DONE</div>
+<p>
+<strong>The defect that forces it.</strong> This section prefers the <strong>harvest</strong> over
+the solve; §3.4 prefers the <strong>solve</strong> over the harvest. Both render into the same
+banner — the station list comes from the find pass, the suggestion rows from the suggester — so
+the two can disagree on one screen. With issue #651 live that is reachable rather than
+theoretical: a multi-component attachment the region solve <em>did</em> place fully (one equate
+per component) has solved names the harvest never learned, so the suggester can offer strictly
+fewer stations than the list above it shows.
+</p>
+<p>
+<strong>The fix.</strong> One accessor on <code>cwTrip</code> — "this trip's names in its own
+namespace, best available source" — that every consumer calls, instead of the policy living in
+two anonymous namespaces that never had to agree.
+</p>
+<p>
+<strong>Why it is its own phase rather than a fix here.</strong> It closes three separate items at
+once, and closing any one of them alone would put the policy in a third place:
+</p>
+<ul>
+  <li>the precedence split above (the suggester and the find pass disagreeing);</li>
+  <li>the missing cave-level <code>externalStationsChanged</code> relay below — with one accessor
+      there is one thing to subscribe to, instead of an invariant spread across four call sites
+      that nothing enforces;</li>
+  <li>the <code>cwScopeStationListModel</code> follow-up in §6, which is blind to harvested names
+      for exactly the same reason: it reads one source directly.</li>
+</ul>
+<p>
+Sequenced after the C7 scope-lens work, since that model is the third consumer and the accessor
+should land with all three converted rather than leaving a fourth reader of the raw fields.
+</p>
+
+<hr>
+
+<p>
+<strong>What landed.</strong> <code>cwTrip::knownStations()</code> — one entry per station, the
+scope-relative name plus a <code>std::optional&lt;QVector3D&gt;</code> position that is set only
+where the solve placed it. The policy is a <strong>union</strong>, not a precedence: chunks, the
+scan's harvest, and the solve all contribute, deduplicated by canonical key keeping the authored
+spelling, sorted in natural order. Preferring one source was the bug — each of the three knows
+names the others cannot, so any choice among them lists strictly fewer stations than the trip
+has. A static <code>knownStationNames(const cwTripData&amp;, const QStringList&amp;
+scopeLocalSolved)</code> overload does the same for the worker-side snapshot, which carries no
+cave lookup and so is handed the solved names it cannot derive.
+</p>
+<p>
+All three consumers converted: <code>cwTieSuggestionModel::localStations</code> (now three lines),
+<code>cwScopeStationListModel::rebuildRows</code> (which gained known-but-unplaced rows —
+<code>PositionRole</code> is <em>undefined</em> there, not the origin, closing the §6 item), and
+<code>cwFindFloatingSurveys::appendFloatingSurveysOf</code>.
+</p>
+<p>
+The signal came out one step differently from the sketch above. <code>cwTrip</code> gained
+<code>knownStationsChanged</code>, chained from its own <code>solvedStationsChanged</code> and
+<code>externalStationsChanged</code>. The cave-level relay is a new
+<code>cwCave::tripExternalStationsChanged</code> aggregate, chained <em>from</em> each trip's
+harvest but deliberately <strong>not</strong> back <em>into</em> each trip's
+<code>knownStationsChanged</code> the way <code>stationPositionPositionChanged</code> is: a trip's
+harvest is its own field, so it already pulses for itself, and relaying it back doubled every one
+of those pulses (caught by the first run of the new signal test). So a consumer that reads only
+its bound trip subscribes to one signal, and one that reads across the cave — the tie suggester —
+subscribes to two, which is honest, since it genuinely reads two scopes.
+</p>
+<p>
+Tests: <code>[cwTrip][knownStations]</code> pins the union, the authored-spelling rule, natural
+order, snapshot/live parity, and each pulse (including that a sibling's harvest reaches the
+aggregate exactly once and stops on removal from the cave).
+<code>[FloatingSurveys]</code> gains a direct <code>fromExternalScopes</code> case built from a
+hand-made snapshot — issue #651's shape without needing cavern to reproduce it.
+<code>[ScopeStations]</code> gains the known-but-unplaced row.
+<code>[TieSuggestionModel]</code> gains the candidate-trip harvest pulse, which nothing carried
+before.
+</p>
+<p>
+<strong>One gap H4 opened, left open on purpose (🟢).</strong> Chunks are the one source with no
+pulse of their own — nothing on <code>cwTrip</code> watches chunk stations, so a chunk edit
+reaches <code>knownStationsChanged</code> only through the solve that follows it. That was
+invisible while <code>cwScopeStationListModel</code> listed solved stations only, and it is
+visible now that it lists unplaced ones: a station typed into a cave that <em>will not solve</em>
+stays out of the list until one does. Wiring it means per-chunk
+<code>dataChanged</code>/<code>stationsAdded</code>/<code>stationsRemoved</code> connections
+managed across <code>insertChunk</code>/<code>removeChunks</code>, and <code>dataChanged</code>
+fires per keystroke — so a naive wire would reset the autocomplete model under the very cursor
+that is typing into it. Wants debouncing, and is worth its own commit if anyone hits it.
+</p>
+</div>
+
+<h3 id="banner">3.6 Consumer — <code>FloatingSurveyBanner.qml</code> copy</h3>
+
+<p>
+The detail text branches on <code>stations.length</code>
+(<code>FloatingSurveyBanner.qml:55-61</code>). Today's non-empty branch — "its stations were
+placed in a frame of their own" — becomes <em>false</em> for a dropped survey whose names now
+arrive from the harvest: those stations were not placed anywhere. Reword so each branch is true
+in every state that can reach it:
+</p>
+
+<table>
+<tr><th>Branch</th><th>New copy</th></tr>
+<tr>
+  <td><code>stations.length &gt; 0</code></td>
+  <td>"Nothing joins it to the rest of the cave, so it can't be placed with the others."</td>
+</tr>
+<tr>
+  <td>empty <span class="dim">(now: harvest failed too — unreadable/broken file)</span></td>
+  <td>"Nothing joins it to the rest of the cave, and its stations couldn't be read from its
+      file."</td>
+</tr>
+</table>
+
+<div class="note">
+<strong>The empty branch is rarer than "broken file" suggests.</strong> The review tried to pin it
+from <code>test_aBrokenAttachmentSaysWhichFileIsBroken</code> — the obvious candidate — and it
+does not hold: a file cavern cannot read fails the <em>region</em> driver too, so the cave solves
+nothing, no scope becomes the anchor, and <code>appendFloatingSurveysOf</code> returns at
+<code>cwFindFloatingSurveys.cpp:247</code> before it can name anything adrift. A broken file
+therefore gets one complaint, about the file — which is the behavior worth having, and the test
+now asserts the floating banner stays down. What actually reaches the empty branch is narrower: a
+cave that <em>did</em> solve, holding a trip whose own harvest yielded nothing. Today that is the
+window before the first scan applies, and the unresolved-copy case in §3.2. The copy stays as
+written; the isolation test is what pins its wording.
+</div>
+
+<h3 id="validation">3.7 Validation for free — per-attachment error attribution</h3>
+
+<p>
+The harvest is also the first pass that <em>validates</em> an attachment. The scanner only
+walks includes and best-effort-parses metadata — it never checks syntax — so today a broken
+<code>.svx</code>/<code>.dat</code>/<code>.wpj</code> surfaces only when the <strong>whole
+region solve</strong> fails, with one region-level cavern log that doesn't say which attachment
+poisoned it (and the floating records just carry forward, so even the banner goes quiet). The
+harvest runs cavern over each attachment alone, so a failure is attributed to the exact file,
+with cavern's own error text, at scan time — right after attach and on every watched-file
+edit.
+</p>
+
+<ul>
+  <li><code>ExternalScanResult</code> gains <code>QHash&lt;QUuid, QString&gt;
+      tripHarvestErrors</code> — cavern's error text from the harvest's
+      <code>Monad::Result</code>, empty entry (or absent key) for a clean file.</li>
+  <li><code>cwTrip</code> gains <code>externalStationsError</code> (QString + NOTIFY) beside
+      <code>externalStations</code>, pushed in the same apply. The two are one fact from one
+      run: names empty <em>and</em> error non-empty ⇔ cavern rejected the file. Derived state,
+      never persisted, never a save trigger — same rules as §3.3.</li>
+  <li><strong>Surface:</strong> <code>ExternalCenterlineTripPanel</code> shows an error callout
+      when non-empty ("This file has errors" + cavern's message), which is the right home
+      because a broken file is broken whether or not the trip floats — and because a broken
+      file fails the region solve, the floating banner may be showing stale rows at exactly
+      that moment. The banner's empty branch (§3.6) stays as the summary; the panel error is
+      the explanation.</li>
+  <li><code>cwAttachedCenterlinesModel</code> row error flag/count: optional, later — the
+      per-trip panel is the surface users are looking at when they hit this.</li>
+</ul>
+
+<div class="callout">
+<div class="title">Follow-up, not in this slice</div>
+Running the harvest in the attach dialog's preview (<code>cwExternalCenterlineScanPreview</code>)
+would catch a broken file <em>before</em> [Attach] is clicked. Deliberately deferred: detection
+lands seconds later anyway via the post-attach recompute, and the preview should stay fast.
+</div>
+
+<div class="callout">
+<div class="title">Open question (carried from 6c) — answered in H3</div>
+The <code>tieSuggestionsEmpty</code> label promised "the tie has to be made by hand" — a path
+that doesn't exist. H3 replaced it with "…Renaming one to match will connect them", which the
+review then found false in turn: this banner renders only for an <em>attached</em> survey, and an
+attachment is always scoped (<code>cwTrip::isScoped()</code> is true whenever
+<code>externalCenterline</code> is non-empty), so matching names stay separate stations until a
+tie is actually made. Shipped wording (<code>261990e4</code>): <em>"No station in the rest of the
+cave is named like one of these. Renaming one to match will offer a one-click tie here."</em>
+Now pinned in <code>tst_ExternalCenterlinePanelComponents</code> beside the two sibling strings,
+along with both states that hide the label: a surface that offers no suggester at all, and a
+survey with no names to rename.
+</div>
+
+<div class="note">
+<strong>The error log is height-capped.</strong> Cavern reports every problem in a file, not the
+first, so a badly broken attachment produces dozens of lines — and the panel's way out of that
+state, Reload and Detach, sits <em>below</em> this banner. An uncapped log pushed them off the
+bottom, leaving the user reading a complaint they had no way to act on. The message now scrolls
+inside a fixed <code>maximumMessageHeight</code>; nothing is truncated, and the isolation test
+asserts both halves — the banner stops growing, and all 60 lines are still there to scroll to.
+</div>
+
+<h2 id="commits">4. Commit sequence</h2>
+
+<table>
+<tr><th></th><th>Commit</th><th>Contents</th><th>Test gate</th></tr>
+<tr>
+  <td>H1</td>
+  <td>Harvester</td>
+  <td><code>cwExternalStationHarvest</code> + <code>testcases/test_cwExternalStationHarvest.cpp</code>
+      (tag <code>[ExternalStationHarvest]</code>) + a new <code>compass_solvable.dat</code>
+      fixture. No wiring. <strong>DONE — green; tag now 9 cases, 31 assertions after the
+      review added two.</strong></td>
+  <td>New tag green: <code>survex_hanging.svx</code> → <code>hanging.h1/h2/h3</code>;
+      <code>survex_simple.svx</code> (has its own <code>*fix</code> — auto-fix not needed,
+      harvest identical) → <code>simple.a1/a2/a3</code>; <code>compass_solvable.dat</code> →
+      <code>s1/s2/s3</code> and <code>walls_simple.wpj</code> → <code>a1..a4</code>, proving
+      the <strong>format</strong> path — <em>not</em> the separator path, since both yield
+      single-level bare names (see §2); <code>broken.svx</code> → error;
+      <code>survex_with_missing_include.svx</code> → error, byte-identical across two runs;
+      a nonexistent entry file → error naming it.</td>
+</tr>
+<tr>
+  <td>H2</td>
+  <td>Storage + wiring</td>
+  <td><code>cwTrip::externalStations</code> + <code>externalStationsError</code>
+      (+ <code>cwTripData</code> field, no proto, no save trigger),
+      <code>ExternalScanResult::tripStations</code>/<code>tripHarvestErrors</code>, harvest call
+      in <code>scanOwners</code>, push in <code>applyScanResult</code>.
+      <strong>DONE — 3 cases, 33 assertions, green.</strong></td>
+  <td>Manager test: attach <code>survex_hanging.svx</code>, <code>waitToFinish()</code> →
+      <code>trip-&gt;externalStations()</code> populated, error empty; detach → cleared on next
+      apply. Attach <code>broken.svx</code> → names empty, <code>externalStationsError()</code>
+      carries cavern's text; overwrite the project copy with valid bytes → watcher recompute
+      clears the error and fills the names. Save-trigger check: neither setter enqueues a save
+      (disk-state/mtime assertion, per the C2 lesson).</td>
+</tr>
+<tr>
+  <td>H3</td>
+  <td>Consumers</td>
+  <td><code>fromExternalScopes</code> fallback (+ the three header-doc corrections),
+      <code>cwTieSuggestionModel</code> preference + signal, banner copy, the
+      <code>ExternalCenterlineFileErrorBanner</code> callout on
+      <code>ExternalCenterlineTripPanel</code> (§3.7).
+      <strong>DONE — green.</strong></td>
+  <td>C++: dropped-scope result carries harvested stations; suggester offers
+      <code>SameName</code> rows for a no-fix attachment beside a native trip sharing a leaf;
+      tie ends the float. QML (<code>tst_ExternalCenterlineTripPanel</code>): the Dusk Butte
+      shape in miniature — an anchoring <code>survex_simple.svx</code> plus a second, unfixed
+      attachment of the new <code>survex_hanging_alike.svx</code> fixture (a hanging survey
+      whose names match the anchor's, since a QML test cannot build a native trip with shots).
+      The banner lists <code>simple.a1..a3</code> while the stations list — what the solve
+      placed — is empty, a suggestion row appears <em>while the survey is dropped</em>, one
+      click on Connect ends the float and the solve then places it. Error surface: attach
+      <code>broken.svx</code> → the panel's error callout appears with cavern's text naming
+      the file.</td>
+</tr>
+</table>
+
+<p>
+Both full suites before anything is called done — last full run at <code>261990e4</code>:
+<strong>cavewhere-test 315,052 assertions / 1747 cases, 0 failed; cavewhere-qml-test 842 passed,
+0 failed, 82 skipped.</strong>
+</p>
+
+<div class="callout">
+<div class="title">Manual acceptance — VERIFIED</div>
+<code>/Users/cave/Desktop/svx/Dusk Butte/Dusk Butte.cwproj</code> opens with both Nimbus banners
+listing their stations and offering <code>g2 ↔ g2</code> (Trip 3) and <code>d4 ↔ d4</code>
+(Trip 3), and two clicks tie the cave together and end both floats. Confirmed by hand on
+2026-08-03; it needs a real window, so no automated run stands in for it. The QML test covers the
+<em>shape</em> in miniature (an anchor attachment plus a second unfixed one) but not the
+native-trip-plus-two-attachments case this describes, so this gate stays manual.
+</div>
+
+<p class="dim">
+Coverage gaps the review noted against these gates: no test attaches a <strong>cave-level</strong>
+centerline to assert nothing is harvested, though one line
+(<code>ownerKind == kTripOwnerKind</code>) is all that prevents N extra cavern runs per scan; and
+the broken-attachment QML test asserts only that the message contains the filename, which the
+region-level log would also satisfy — per-trip attribution is proven in C++, not there.
+</p>
+
+<h2 id="ordering">5. Ordering &amp; races (why this is safe)</h2>
+
+<ul>
+  <li><strong>Load:</strong> the manager's contract already defers the initial solve until the
+      scan applies ("the consumer's initial solve is requested through <code>solveNeeded()</code>
+      after the scan applies", <code>cwExternalCenterlineManager.h:65-69</code>). Apply pushes
+      trip names before emitting, so the first solve's region snapshot carries them.</li>
+  <li><strong>File edit:</strong> watcher → recompute → apply (names refresh) →
+      <code>solveNeeded</code>. Same ordering.</li>
+  <li><strong>Solve triggered without a scan</strong> (shot edit, equate, rename): names are
+      whatever the last scan cached — correct, since the attachment's bytes didn't change.</li>
+  <li><strong>Worker purity:</strong> <code>scanOwners</code> stays static and value-in/value-out;
+      the harvest touches only the filesystem and cavernlib (mutex-serialized). No live pointer
+      crosses the boundary; the trip push happens in the main-thread apply.</li>
+  <li><strong>Restarter supersession:</strong> a stale harvest never lands — same guarantee every
+      other <code>ExternalScanResult</code> field already relies on.</li>
+  <li><strong>Threading &amp; job tracking come free:</strong> the harvest runs inside
+      <code>scanOwners</code>, i.e. on the <code>cwConcurrent</code> worker the pipeline already
+      uses, and the restarter's future is already registered with
+      <code>cwFutureManagerToken</code> as the "External centerline scan" job
+      (<code>cwExternalCenterlineManager.cpp:97</code>). No new AsyncFuture or token wiring.</li>
+</ul>
+
+<div class="callout warn">
+<div class="title">Two claims this section overstated (corrected after the review)</div>
+<ul>
+  <li><strong>"The only main-thread work is the apply-stage push"</strong> understates it. The
+      apply runs <em>two</em> setters against <em>every</em> trip in the region, and each emission
+      synchronously re-enters any bound model's reset (see §3.2). Still main-thread and still
+      ordered before <code>solveNeeded()</code> — but it is model-reset work, not a field
+      assignment.</li>
+  <li><strong>Restarter supersession bounds correctness, not cost.</strong> A stale harvest indeed
+      never lands. But <code>scanOwners</code> is a plain <code>cwConcurrent::run</code> with no
+      <code>isCanceled()</code> check, so a superseded scan runs its whole owner loop to
+      completion — and each iteration is now a cavern run on the same global mutex the region
+      solve needs. On a load that fires several recomputes across event-loop turns, that is N
+      serialized cavern runs per superseded scan. Bounded and correct; potentially slow on an
+      attachment-heavy project. The cancellation check was the cheaper half and is <strong>done</strong>
+      (§6); the mtime-keyed cache stays measure-first.</li>
+</ul>
+</div>
+
+<h2 id="notinslice">6. Not in this slice</h2>
+
+<ul>
+  <li><strong>Cave-level attachments.</strong> No consumer: <code>fromExternalScopes</code>
+      structurally can't see them (they unwrap into the cave scope,
+      <code>cwFindFloatingSurveys.h:103-108</code>) and the suggester is trip-based. Harvesting
+      for cave owners is a two-line extension when a consumer exists.</li>
+  <li><strong>Source-side harvest.</strong> Live-link staleness is notify + one-click Update; the
+      project copy is the source of truth, and it's what the solve reads.</li>
+  <li><strong>Persisting harvested names</strong> (proto). Derived data; the scan rebuilds it at
+      every load before the first solve needs it.</li>
+  <li><strong>Cancelling a superseded scan mid-batch.</strong> <strong>DONE.</strong> The coupling
+      is structural, not just a cost: <code>cwCavernRunner::run</code> serializes every caller on
+      one function-static mutex (mandatory — cavern keeps global state), so a scan of N attachments
+      queues N cavern runs, and the scan's latency became the solve's latency the moment the
+      harvest landed. <code>scanOwners</code> ran through every remaining owner of an
+      already-superseded scan, because the restarter coalesces the <em>starts</em> and the plain
+      <code>cwConcurrent::run</code> overload gives the worker no promise to ask. A project load,
+      which fires one recompute per cave insertion, paid that in full ahead of the first solve.
+      The fix is the promise-taking <code>QtConcurrent::run</code> overload (already what
+      <code>cwCompassImporter</code> uses, so <code>cwConcurrent</code> needed nothing new) plus a
+      <code>promise.isCanceled()</code> poll at the top of the per-owner loop. The canceled worker
+      returns without <code>addResult</code>: the restarter cancels the inner future before a
+      restart, so the manager's <code>observe(...).context(...)</code> apply takes its canceled
+      branch, and the restarter either drops the delivery as generation-stale (a supersede) or
+      cancels the outer future (<code>cancelScan</code>) — it never reads a result.
+      <code>scanOwners</code> stays a pure function of its snapshot — the promise is its only
+      new input.</li>
+  <li><strong>mtime-keyed harvest cache.</strong> Still open, and deliberately
+      <em>measure first</em> — attachments are small, and the cancellation check above already
+      removes the wasted-work case that motivated the cache. Phase-0 note for whoever picks it up:
+      the cache key has to fingerprint the whole dependency closure the scan already computes
+      (<code>ExternalScanResult::watchedFiles</code> comes from
+      <code>cwExternalCenterlineScanner::scan</code>), never the entry file's mtime alone — cavern
+      follows <code>*include</code>, so editing an included file changes the harvested stations
+      while the entry file's mtime sits still, and an entry-keyed cache would serve stale names.
+      <em>Raised by the H1–H3 review.</em></li>
+  <li><strong>Proximity ranking / coordinates.</strong> Harvest coordinates are an arbitrary
+      auto-fixed frame — meaningless against the cave. Name-only ranking remains complete for the
+      banner surface (the tie ends the float); proximity belongs to the future Connections
+      list.</li>
+  <li><strong>Naming the file the user recognizes in a harvest error.</strong> Cavern's log names
+      the path it opened, which is the in-project copy — an <em>absolute</em> path the user did not
+      choose, machine-specific in its prefix, and therefore different for two collaborators looking
+      at the same broken file. <code>ExternalCenterlineFileErrorBanner</code> shows that text
+      verbatim. The tail is legible
+      (<code>&lt;Cave&gt;/trips/&lt;Trip&gt;/external-centerline/foo.svx</code>, built from sanitized
+      owner names in <code>cwSaveLoad::caveDirHelper</code>/<code>tripDirHelper</code>/<code>externalCenterlineDirHelper</code>,
+      <code>cwSaveLoad.cpp:4804-4823</code>), so the fix is to render it project-relative rather
+      than to substitute a different file's name. Wants a cavern-log → user-facing-text mapper
+      owned by the manager, which is also where §3.1's <code>withoutDriverNoise</code> belongs.
+      Note §3.7 assumes the message is user-facing as-is. Blast radius: harvest (or a new helper),
+      manager, banner, QML test. <em>Raised by the H1–H3 review; corrected 2026-08-04 — an earlier
+      draft of this item described the path as
+      <code>&lt;project&gt;/ExternalCenterlines/&lt;uuid&gt;/foo.svx</code>, which was never the
+      layout. Sequencing: do this</em> after <em>the
+      <a href="EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html">live-link retirement</a>, which removes the
+      remembered source and so removes the second candidate for "the file the user recognizes".</em>
+      <strong>DONE</strong> — and smaller than drafted. The manager owns a file-scope
+      <code>withProjectRelativePaths(message, boundary)</code> beside
+      <code>projectRelativePath</code>, applied where <code>scanOwners</code> fills
+      <code>tripHarvestErrors</code>: it strips the <code>dataRootDir</code> prefix (both
+      <code>QDir</code> and native separator forms, matched with the trailing separator so a
+      sibling directory sharing the prefix is left alone) and returns the message untouched for an
+      empty boundary, mirroring <code>projectRelativePath</code>'s scan-only branch. The banner and
+      its QML needed no change — the text it already showed verbatim is now project-relative, the
+      same name <code>MissingCenterlineCopyBanner</code> gives the same file. Two corrections to the
+      draft: <code>withoutDriverNoise</code> stays in
+      <code>cwExternalStationHarvest</code> (it is keyed on the harvest's private
+      <code>QTemporaryDir</code>, which the manager never sees), and containment errors keep their
+      absolute paths — an escaping <code>*include</code> genuinely resolves outside the project, so
+      absolute is the honest name there. Keying the rewrite on the stable data root also preserves
+      §3.7's run-to-run identical messages, which
+      <code>cwTrip::setExternalStationsError</code>'s equality early-out depends on.</li>
+  <li><strong>Teaching <code>cwScopeStationListModel</code> the harvested names.</strong> It builds
+      rows from <code>solvedStations()</code> alone
+      (<code>cwScopeStationListModel.cpp:100-111</code>), so a dropped attachment's stations are
+      known to the banner and invisible to the station list — <code>tst_ExternalCenterlineTripPanel</code>
+      now asserts <code>stationsList.count === 0</code> a dozen lines from asserting those same
+      names in the banner. The same model backs note/scrap/LiDAR autocomplete, so those stay blind
+      too. Wants a known-but-unplaced row (no <code>PositionRole</code>) plus an
+      <code>externalStationsChanged</code> subscription; a fifth consumer alongside §3.4–§3.7, and
+      a natural fit with the C7 scope-lens work. Folded into follow-up phase H4 (§3.5), which is
+      where the accessor it should read lands. <em>Raised by the H1–H3 review.</em>
+      <strong>DONE in H4</strong> — it reads <code>cwTrip::knownStations()</code> and subscribes to
+      <code>knownStationsChanged</code>; an unplaced row's <code>PositionRole</code> is undefined
+      rather than the origin.</li>
+  <li><strong>One owner for the <code>*include</code> quote guard.</strong> The refusal now lives
+      in two places — <code>cwExternalStationHarvest</code> and
+      <code>cwSurvexExporterCaveTask::writeExternalInclude</code> — and the review had to widen
+      both by hand to cover <code>\r</code> and <code>\032</code>, which is the demonstration that
+      one will eventually be widened and the other won't. It is really one question ("can survex
+      <code>*include</code> quote this path?") with one answer, and it belongs beside the code
+      that writes the <code>*include</code> line. Small, mechanical, and blocked on nothing.
+      <em>Raised by the H1–H3 review.</em>
+      <strong>DONE in commit <code>17a0b467</code> (F6)</strong> — the blacklist
+      (<code>"</code>, newline, carriage return, Ctrl-Z, per cavern's <code>SPECIAL_EOL</code>
+      table) lives once as <code>cwSurvexExporterUtils::isQuotableIncludePath</code>, and both
+      <code>cwExternalStationHarvest</code> and
+      <code>cwSurvexExporterCaveTask::writeExternalInclude</code> call it.</li>
+  <li><strong>One broken file lit three surfaces — half fixed at the source.</strong> A file the
+      solve cannot read used to light <code>ExternalCenterlineFileErrorBanner</code> or
+      <code>MissingCenterlineCopyBanner</code> (the per-file complaint),
+      <code>ExternalCenterlineSolveStatus</code> reading "Solve failed" (the region solve failing
+      as a whole), and the region-level cavern log page — three tellings of one problem in one
+      panel, and the loudest of the three was the one the user could do least about.
+      <strong>Shipped:</strong> a <em>missing in-project copy</em> now joins the containment
+      errors in <code>cwExternalCenterlineManager::solveInputs()</code>'s excluded set, so the
+      driver writes no <code>*include</code> for it and the region keeps its plot. The status
+      strip goes back to counting the stations that solved, with no precedence rule and no QML
+      change: the second surface stops firing because the second problem stops happening. A
+      change in the missing-copy set, in either direction, also joins the scan-apply
+      solve-trigger diff, so Replace and a restored file re-include the owner on their own. The
+      equate paths needed nothing — <code>equateOperand</code> and <code>qualifiedOperand</code>
+      already drop a tie naming any excluded owner, which is what keeps cavern from
+      <em>creating</em> a phantom station under a scope the driver never opened.
+      <strong>Deferred to Phase 3:</strong> the other half — an owner cavern itself rejected
+      (<code>tripHarvestErrors</code>) — stays in the solve, because dropping it would hide a
+      whole survey behind a per-trip banner nobody has to be looking at. It waits on a
+      region-level visible-exclusion surface, which also covers the accepted trade-off here: a
+      <em>cave</em>-level missing copy is silent outside the attached-centerlines model, exactly
+      as a cave-level containment exclusion already is (B7's follow-up in
+      <a href="EXTERNAL_FILE_PHASE2.html">EXTERNAL_FILE_PHASE2.html</a>).
+      <em>Raised by the H1–H3 review; re-scoped and half-shipped 2026-08-12.</em></li>
+  <li><strong>Third copy of the banner chassis.</strong>
+      <code>FloatingSurveyBanner</code>, <code>ExternalCenterlineFileErrorBanner</code> and
+      <code>MissingCenterlineCopyBanner</code> repeat the same shape verbatim: a rounded
+      <code>QQ.Rectangle</code> keyed to a Theme color, a <code>ColumnLayout</code> at
+      <code>Theme.sectionSpacing</code> margins with <code>Theme.tightSpacing</code>, a bold
+      word-wrapped title <code>QC.Label</code>, a body, an optional action row, and
+      <code>implicitHeight: contentLayout.implicitHeight + Theme.sectionSpacing * 2</code>. The
+      F12 log-height cap had to be written into one of them knowing the others have the same
+      unbounded-content problem. A <code>NoticeBanner</code> base with a
+      <code>default property alias</code> for the body would leave each of these holding only its
+      copy and its actions. <em>Raised by the H1–H3 review; count corrected 2026-08-13 — the draft
+      said five. The live-link retirement deleted
+      <code>ExternalCenterlineMissingSourceBanner</code>, and the two toast-style banners
+      (<code>LfsMissingFilesBanner</code>, <code>VersionIncompatibleBanner</code>) were never this
+      shape, so they are out of scope.</em>
+      <strong>DONE</strong> — <code>cavewherelib/qml/NoticeBanner.qml</code> owns the card: the
+      corner radius, the <code>Theme.sectionSpacing</code> margins, the
+      <code>Theme.tightSpacing</code> rhythm, the bold word-wrapped title (named through a
+      <code>titleObjectName</code> passthrough so each banner keeps its own handle for tests), the
+      <code>implicitHeight</code> formula, and a <code>default property alias</code> onto an inner
+      <code>ColumnLayout</code> placed <em>below</em> the title, so injected children land under it
+      and <code>Layout.fillWidth</code> behaves as before. All three banners now hold only their
+      visibility predicate, color, title, body and actions; the file-error banner keeps its
+      <code>Flickable</code> and <code>maximumMessageHeight</code> cap unchanged inside the alias.
+      The existing QML tests stayed green unedited, which is the proof the extraction preserved
+      behavior; <code>tst_ExternalCenterlinePanelComponents</code> gained a chassis assertion
+      (title at the section margin, body under it, height covering both margins) and
+      <code>tst_ExternalCenterlineTripPanel</code> a title-renders check, since nothing addressed
+      those titles before.</li>
+</ul>
+
+</main>
+</body>
+</html>

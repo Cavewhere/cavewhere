@@ -1,0 +1,11 @@
+; The fix station tree's sort and filter fixture. Its fixes are listed out of
+; name order and out of coordinate order, and none names a *cs. The entry
+; writes no *begin of its own, so st2, st1 and st10 belong to the source root,
+; and north.svx's *begin block becomes the derived node north.
+*fix st2 100 20 1
+*fix st1 110 20 1
+*fix st10 100 10 1
+*data normal from to tape compass clino
+st10 st2 10.0 0 0
+st2 st1 10.0 90 0
+*include "north"

@@ -1,0 +1,7 @@
+; One file included from two scopes: one.s1 and two.s1 are two stations.
+*begin one
+*include shared
+*end one
+*begin two
+*include shared
+*end two

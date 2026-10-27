@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External Centerline — Interactive UX Prototype</title>
+<style>
+  :root {
+    --background: #f2f2f2;
+    --surface: #ffffff;
+    --text: #1a1a1a;
+    --text-secondary: #33363a;
+    --text-subtle: #616469;
+    --text-link: #1d4d77;
+    --accent: #2f6fb0;
+    --success: #4caf50;
+    --warning: #FF9C14;
+    --danger: #FF6736;
+    --info: #85c1f4;
+    --border: #d3d3d3;
+    --chrome: #e8e8e8;
+    --shadow: rgba(0,0,0,.25);
+  }
+  [data-theme="dark"] {
+    --background: #14171c;
+    --surface: #1f232a;
+    --text: #e8ebf0;
+    --text-secondary: #cdd2db;
+    --text-subtle: #9fa6b1;
+    --text-link: #85c1f4;
+    --accent: #6aa5dd;
+    --success: #76e596;
+    --warning: #6b643e;
+    --danger: #6f312e;
+    --info: #1f3f61;
+    --border: #4a4f58;
+    --chrome: #262b33;
+    --shadow: rgba(0,0,0,.6);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    background: var(--background);
+    color: var(--text);
+    padding: 24px;
+    line-height: 1.45;
+  }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .doc-sub { color: var(--text-subtle); margin-bottom: 16px; max-width: 900px; }
+  .doc-sub code { font-size: 12px; }
+  code { font-family: "Courier Prime", "Courier New", monospace; }
+
+  /* ---- top tabs ---- */
+  .tabs { display: flex; gap: 4px; margin: 18px 0 0; }
+  .tabs button {
+    font-size: 14px; padding: 8px 18px; border: 1px solid var(--border);
+    border-bottom: none; border-radius: 6px 6px 0 0; background: var(--chrome);
+    color: var(--text); cursor: pointer;
+  }
+  .tabs button.active { background: var(--surface); font-weight: 700; }
+  .tab-body {
+    border: 1px solid var(--border); background: var(--surface);
+    border-radius: 0 6px 6px 6px; padding: 18px;
+  }
+  .lane { display: none; }
+  .lane.active { display: block; }
+
+  .theme-toggle { float: right; font-size: 12px; padding: 4px 10px;
+    border: 1px solid var(--border); border-radius: 4px; background: var(--chrome);
+    color: var(--text); cursor: pointer; }
+
+  .badge-shipped, .badge-proposed {
+    display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px;
+    border-radius: 10px; vertical-align: middle; margin-left: 8px;
+  }
+  .badge-shipped  { background: var(--success); color: #fff; }
+  .badge-proposed { background: var(--warning); color: #fff; }
+  [data-theme="dark"] .badge-shipped { color: #10321a; }
+
+  /* ---- fake app window ---- */
+  .appwin {
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    max-width: 980px; background: var(--background);
+    box-shadow: 0 4px 18px var(--shadow); margin-top: 14px; position: relative;
+  }
+  .titlebar {
+    background: var(--chrome); padding: 6px 12px; font-size: 12px;
+    color: var(--text-subtle); border-bottom: 1px solid var(--border);
+    display: flex; gap: 6px; align-items: center;
+  }
+  .dots span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+  .dots .r { background: #ff5f57; } .dots .y { background: #febc2e; } .dots .g { background: #28c840; }
+  .winbody { padding: 0; min-height: 460px; position: relative; }
+
+  /* banner strip floats over content at top (AppOverlay) */
+  .banner-strip {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 40;
+    padding: 8px; display: flex; flex-direction: column; gap: 2px; pointer-events: none;
+  }
+  .banner-strip > * { pointer-events: auto; }
+
+  .page { padding: 12px; }
+  .page-nav { display:flex; gap: 8px; margin-bottom: 10px; font-size: 12px; }
+  .page-nav a { color: var(--text-link); cursor: pointer; text-decoration: none; }
+  .page-nav a:hover { text-decoration: underline; }
+  .page-nav .here { color: var(--text-subtle); }
+
+  /* ---- widgets ---- */
+  .btn {
+    font-size: 13px; padding: 5px 12px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer;
+  }
+  .btn:hover:enabled { background: var(--chrome); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.small { font-size: 12px; padding: 3px 9px; }
+  .split { display: inline-flex; }
+  .split .btn.main { border-radius: 4px 0 0 4px; }
+  .split .btn.chev { border-radius: 0 4px 4px 0; border-left: none; padding: 5px 7px; }
+
+  .menu {
+    position: absolute; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; box-shadow: 0 3px 10px var(--shadow); z-index: 60;
+    min-width: 220px; padding: 4px 0; font-size: 13px;
+  }
+  .menu div { padding: 6px 14px; cursor: pointer; }
+  .menu div:hover { background: var(--chrome); }
+  .menu div.disabled { color: var(--text-subtle); cursor: default; }
+  .menu div.disabled:hover { background: none; }
+
+  .field {
+    font-size: 13px; padding: 5px 8px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--surface); color: var(--text); width: 100%;
+  }
+
+  /* dialog */
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.35); z-index: 50;
+    display: flex; align-items: center; justify-content: center; }
+  .dialog {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 30px var(--shadow); width: 640px; max-width: 92%;
+    padding: 16px; max-height: 92%; overflow: auto;
+  }
+  .dialog h3 { font-size: 16px; margin-bottom: 12px; }
+  .hint { color: var(--text-subtle); font-size: 12px; }
+  .secondary { color: var(--text-secondary); font-size: 13px; }
+  .warn-text { color: var(--warning); font-size: 13px; white-space: pre-line; }
+  [data-theme="dark"] .warn-text { color: #e8c86a; }
+  .error-text { color: var(--danger); font-size: 13px; }
+  [data-theme="dark"] .error-text { color: #ff9c8a; }
+
+  .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+  .groupbox {
+    border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+    display: flex; flex-direction: column; font-size: 13px;
+  }
+  .groupbox .grow { flex: 1; }
+  .groupbox .actions { display: flex; justify-content: flex-end; align-items: center;
+    gap: 6px; margin-top: 8px; }
+  .recommended { color: var(--accent); font-weight: 700; font-size: 12px; }
+  [data-theme="dark"] .recommended { color: #8fc1ee; }
+
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; }
+  .busyrow { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; }
+  .spinner { width: 18px; height: 18px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* notice banners (page scope) */
+  .notice { border-radius: 5px; padding: 8px; margin-bottom: 8px; color: var(--text); }
+  .notice .title { font-weight: 700; margin-bottom: 2px; }
+  .notice.error { background: var(--danger); }
+  .notice.warn  { background: var(--warning); }
+  [data-theme="light"] .notice.error, [data-theme="light"] .notice.warn { color: #241206; }
+  .notice .body { font-size: 12px; }
+  .log-scroll { max-height: 120px; overflow-y: auto; background: rgba(255,255,255,.55);
+    border-radius: 3px; padding: 4px 6px; font-size: 12px; margin-top: 4px;
+    font-family: "Courier Prime", monospace; white-space: pre-wrap; }
+  [data-theme="dark"] .log-scroll { background: rgba(0,0,0,.35); }
+
+  /* app-scope info banner */
+  .infobanner {
+    background: var(--info); border: 1px solid var(--border); border-radius: 3px;
+    padding: 8px; display: flex; gap: 6px; align-items: center; font-size: 14px;
+  }
+  [data-theme="light"] .infobanner { color: #102b45; }
+  .infobanner .msg { flex: 1; }
+  .srclist { background: var(--surface); border: 1px solid var(--border); border-radius: 3px;
+    max-height: 220px; overflow-y: auto; padding: 8px; }
+  .srcrow { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+  .srcrow .who { flex: 1; min-width: 0; }
+  .srcrow .who .name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srcrow .who .path { font-size: 12px; color: var(--text-subtle); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+  .srcrow .status { font-size: 12px; }
+
+  /* trip panel */
+  .trip-layout { display: flex; min-height: 420px; }
+  .trip-panel { width: 500px; max-width: 60%; border-right: 1px solid var(--border);
+    padding: 8px; overflow-y: auto; background: var(--surface); }
+  .trip-right { flex: 1; display: flex; align-items: center; justify-content: center;
+    color: var(--text-subtle); font-size: 13px; background: var(--background); }
+
+  .header-filerow { display: flex; align-items: baseline; gap: 6px; }
+  .header-filerow .fname { font-weight: 700; cursor: context-menu; }
+  .header-filerow .fmt { color: var(--text-secondary); font-size: 13px; }
+  .header-filerow .spacer { flex: 1; }
+  .provenance { font-size: 12px; color: var(--text-subtle); cursor: context-menu;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .provenance.changed { color: var(--text-secondary); }
+
+  .solve-status { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot.ok { background: var(--success); } .dot.warn { background: var(--warning); }
+  .dot.err { background: var(--danger); }
+  a.link { color: var(--text-link); cursor: pointer; text-decoration: none; }
+  a.link:hover { text-decoration: underline; }
+  .solve-status .spacer { flex: 1; }
+  .pill { color: var(--text-secondary); font-size: 13px; }
+
+  .meta { margin: 10px 0; font-size: 13px; }
+  .meta .row { display: flex; gap: 8px; margin-bottom: 4px; align-items: baseline; }
+  .meta .k { font-weight: 700; min-width: 80px; }
+  .teamtable { border: 1px solid var(--border); border-radius: 4px; width: 100%;
+    border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+  .teamtable th, .teamtable td { border-bottom: 1px solid var(--border); text-align: left;
+    padding: 3px 8px; font-weight: 400; }
+  .teamtable th { font-weight: 700; background: var(--chrome); }
+  .teamtable tr:last-child td { border-bottom: none; }
+
+  .stations { margin-top: 10px; }
+  .stations .hdr { font-weight: 700; margin-bottom: 2px; }
+  .stationlist { border: 1px solid var(--border); border-radius: 4px; max-height: 264px;
+    overflow-y: auto; }
+  .stationlist div { padding: 4px 8px; font-size: 14px; cursor: pointer; }
+  .stationlist div:hover { background: var(--chrome); }
+
+  /* cavern page */
+  .cavern-status { font-size: 18px; }
+  .cavern-status.err { color: var(--danger); }
+  [data-theme="dark"] .cavern-status.err { color: #ff9c8a; }
+  .attached-section { margin: 12px 0; }
+  .attached-section .hdr { font-weight: 700; margin-bottom: 4px; }
+  .attrow { display: flex; gap: 8px; font-size: 13px; padding: 2px 0; }
+  .attrow .main { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .attrow .count { color: var(--text-subtle); }
+  .attrow-error { color: var(--danger); font-size: 12px; margin: 0 0 6px 12px; }
+  [data-theme="dark"] .attrow-error { color: #ff9c8a; }
+  .switcher { display: flex; gap: 12px; margin: 10px 0; }
+  .switcher .gb { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+  .switcher .gb .t { font-size: 11px; color: var(--text-subtle); margin-bottom: 3px; }
+  .btn.checked { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .mono-pane { border: 1px solid var(--border); border-radius: 4px; background: var(--surface);
+    font-family: "Courier Prime", monospace; font-size: 12px; padding: 8px;
+    height: 200px; overflow: auto; white-space: pre; }
+
+  /* cave page (phase 3) */
+  .cavecard { border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+    margin: 10px 0; background: var(--surface); font-size: 13px; }
+  .cavecard .t { font-weight: 700; margin-bottom: 4px; }
+  .triptable { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  .triptable th, .triptable td { border-bottom: 1px solid var(--border); text-align: left;
+    padding: 4px 8px; }
+  .triptable th { background: var(--chrome); }
+  .triptable td.num { text-align: right; }
+  .triptable .prefix { color: var(--text-subtle); font-family: "Courier Prime", monospace;
+    font-size: 12px; }
+
+  .blocktree { font-family: "Courier Prime", monospace; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin-top: 6px;
+    background: var(--background); max-height: 180px; overflow: auto; }
+  .blocktree .cnt { color: var(--text-subtle); }
+
+  .heuristic {
+    border: 1px solid var(--warning); border-left: 4px solid var(--warning);
+    border-radius: 4px; padding: 8px 10px; margin-top: 10px; font-size: 13px;
+  }
+  .heuristic .t { font-weight: 700; margin-bottom: 3px; }
+  .heuristic ul { margin: 6px 0 0 18px; }
+  .heuristic li a { color: var(--text-link); cursor: pointer; }
+  .heuristic li a:hover { text-decoration: underline; }
+
+  .askbox { border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+    box-shadow: 0 3px 10px var(--shadow); padding: 10px 12px; font-size: 13px;
+    max-width: 480px; }
+  .askbox .t { font-weight: 700; margin-bottom: 4px; }
+  .askbox .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+
+  /* simulation controls */
+  .simbar {
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+    border: 1px dashed var(--border); border-radius: 6px; padding: 8px 12px;
+    margin-top: 12px; font-size: 12px; color: var(--text-subtle); max-width: 980px;
+  }
+  .simbar label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+  .simbar b { color: var(--text); }
+
+  .kicker { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-subtle); margin: 18px 0 4px; }
+  .notes { max-width: 900px; font-size: 13px; }
+  .notes h3 { font-size: 15px; margin: 14px 0 4px; }
+  .notes li { margin: 3px 0 3px 18px; }
+  .notes .q { font-weight: 700; }
+  .tooltip { position: absolute; background: var(--chrome); border: 1px solid var(--border);
+    padding: 3px 8px; border-radius: 3px; font-size: 11px; z-index: 90; pointer-events: none; }
+</style>
+</head>
+<body data-theme="light">
+
+<button class="theme-toggle" onclick="toggleTheme()">Toggle dark mode</button>
+<h1>External Centerline — Interactive UX Prototype</h1>
+<p class="doc-sub">
+  Companion to <code>plans/EXTERNAL_FILE_INTEGRATION_PLAN.html</code> and successor to
+  <code>plans/EXTERNAL_CENTERLINE_UX_PROTOTYPE.html</code> (kept as design history).
+  The <b>Phase 2</b> lane mirrors the shipped QML — every string, verb, and show/hide
+  condition below is verbatim from the code. The <b>Phase 3</b> lane is a proposal built
+  from the same visual language, for pressure-testing the cave-level attach flow —
+  including what happens when the user points it at a multi-cave root file.
+  Everything with a button is clickable.
+</p>
+
+<div class="tabs">
+  <button id="tabbtn-p2" class="active" onclick="showLane('p2')">Phase 2 — Trip-level <span class="badge-shipped">SHIPPED</span></button>
+  <button id="tabbtn-p3" onclick="showLane('p3')">Phase 3 — Cave-level <span class="badge-proposed">PROPOSED</span></button>
+  <button id="tabbtn-notes" onclick="showLane('notes')">Design notes</button>
+</div>
+
+<div class="tab-body">
+
+<!-- ================= PHASE 2 LANE ================= -->
+<div class="lane active" id="lane-p2">
+
+  <div class="appwin" id="p2win">
+    <div class="titlebar"><span class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></span>
+      CaveWhere — Azure Canyon.cwproj — <span id="p2-pagename">Trip: Day 3</span></div>
+
+    <div class="winbody" id="p2body">
+      <!-- app-scope banner strip (AppOverlay) -->
+      <div class="banner-strip" id="p2-bannerstrip" style="display:none">
+        <div class="infobanner" id="p2-srcbanner">
+          <span class="msg" id="p2-srcbanner-msg">1 external source has changed since it was copied into this project.</span>
+          <button class="btn small" onclick="p2UpdateAll()">Update all</button>
+          <button class="btn small" onclick="p2ToggleSrcList()">Show</button>
+          <button class="btn small" title="Hide this until a source changes again" onclick="p2DismissBanner()">✕</button>
+        </div>
+        <div class="srclist" id="p2-srclist" style="display:none"></div>
+      </div>
+
+      <!-- ======== TRIP PAGE ======== -->
+      <div class="page" id="p2-trippage">
+        <div class="page-nav"><a onclick="alert('Not in this prototype — the cave page here is the Phase 3 lane.')">Azure Canyon</a> ▸ <span class="here">Day 3</span></div>
+
+        <div class="trip-layout">
+          <div class="trip-panel" id="p2-panel">
+            <!-- state: no attachment yet -->
+            <div id="p2-noattach">
+              <p class="hint" style="margin-bottom:10px">This trip has no survey data yet.
+                On CavePage the entry point is the <b>Add Trip</b> split button; on an empty
+                trip, SurveyEditor shows the equivalent <b>Add Survey Data</b> split button.</p>
+              <span class="split" style="position:relative">
+                <button class="btn main" onclick="alert('Adds a native trip and navigates to it — the primary click is the native path. The external path lives under the chevron.')">＋ Add Trip</button>
+                <button class="btn chev" title="More ways to add a trip" onclick="p2ToggleAddMenu(event)">▾</button>
+                <div class="menu" id="p2-addmenu" style="display:none; top: 30px; left: 0;">
+                  <div onclick="p2OpenAttachDialog()">Add trip from survey file…</div>
+                </div>
+              </span>
+            </div>
+
+            <!-- state: attached -->
+            <div id="p2-attached" style="display:none">
+              <!-- page-scope banners, in shipped order -->
+              <div class="notice error" id="p2-missingcopy" style="display:none">
+                <div class="title">This survey's file is missing</div>
+                <div class="body">Surveys/Day 3/external-centerline/trip.svx is gone from the
+                  project folder, so this survey can't be read. Pick the file again to put it back.</div>
+                <button class="btn small" style="margin-top:4px" onclick="p2OpenReplaceDialog()">Replace…</button>
+              </div>
+
+              <div class="notice error" id="p2-fileerror" style="display:none">
+                <div class="title">This file has errors</div>
+                <div class="log-scroll">trip.svx:14:9: error: Reading in data without extended elevation information
+trip.svx:22:1: error: End of line not blank
+trip.svx:23:1: error: Station "A7" referred to just once, with an explicit prefix - typo?
+There were 3 errors and 0 warnings — no survey data loaded from this file.</div>
+              </div>
+
+              <div class="notice warn" id="p2-floating" style="display:none">
+                <div class="title">This survey is not tied in</div>
+                <div class="body">Nothing joins it to the rest of the cave, so it can't be placed with the others.</div>
+                <div class="body" style="margin-top:2px">Floating: A1, A2, A3, A4</div>
+                <div class="body" style="font-weight:700; margin-top:4px">Stations that look like the same point</div>
+                <div class="body" style="display:flex; gap:6px; align-items:center">
+                  <span style="flex:1">A1 and a1 in Day 1 are named alike</span>
+                  <button class="btn small" onclick="p2Tie()">Connect</button>
+                </div>
+              </div>
+
+              <!-- attached header -->
+              <div class="header-filerow">
+                <span class="fname" id="p2-fname" title="…/Azure Canyon.cwproj/Surveys/Day 3/external-centerline/trip.svx"
+                      oncontextmenu="p2CtxMenu(event,'file')">trip.svx</span>
+                <span class="fmt">Survex</span>
+                <span class="spacer"></span>
+                <button class="btn small" id="p2-replacebtn" onclick="p2OpenReplaceDialog()">Replace…</button>
+              </div>
+              <div class="provenance" id="p2-provenance"
+                   title="/Users/me/topodroid/2026-06-01/trip.svx"
+                   oncontextmenu="p2CtxMenu(event,'source')">Copied from: /Users/me/topodroid/2026-06-01/trip.svx</div>
+              <div class="hint" style="margin-top:2px">right-click the file name or the source line for the shipped context menus</div>
+
+              <!-- solve status -->
+              <div class="solve-status" id="p2-solvestatus">
+                <span class="dot ok" id="p2-dot"></span>
+                <span id="p2-solvetext">14 stations</span>
+                <span class="pill" id="p2-warnpill" style="display:none">2 warnings</span>
+                <span class="spacer"></span>
+                <a class="link" onclick="p2GotoCavern()">View cavern output</a>
+              </div>
+
+              <!-- metadata -->
+              <div class="meta">
+                <div class="row"><span class="k">Date</span><span>2026-06-01</span></div>
+                <div class="row" id="p2-declrow">
+                  <span class="k">Declination</span>
+                  <select class="field" style="width:90px" onchange="this.nextElementSibling.style.opacity = this.value==='Manual' ? 1 : .6">
+                    <option>Auto</option><option>Manual</option>
+                  </select>
+                  <span style="opacity:.6">6.83°</span>
+                </div>
+                <div class="row hint" id="p2-declfilehint" style="display:none">Declination is set by your survey file.</div>
+                <label class="hint"><input type="checkbox" onchange="p2ToggleFileDecl(this.checked)"> simulate: file carries its own declination</label>
+                <div class="row" style="margin-top:6px"><span class="k">Team</span></div>
+                <table class="teamtable"><tr><th>Name</th><th>Role</th></tr>
+                  <tr><td>Sam</td><td>Book</td></tr><tr><td>Riley</td><td>Instruments</td></tr></table>
+              </div>
+
+              <!-- stations -->
+              <div class="stations">
+                <div class="hdr">Stations</div>
+                <div class="stationlist" id="p2-stations"></div>
+              </div>
+            </div>
+          </div>
+          <div class="trip-right">3D view / notes carpet<br>(unchanged by the feature)</div>
+        </div>
+      </div>
+
+      <!-- ======== CAVERN OUTPUT PAGE ======== -->
+      <div class="page" id="p2-cavernpage" style="display:none">
+        <div class="page-nav"><a onclick="p2GotoTrip()">◂ Back to Day 3</a> <span class="here">· Cavern</span></div>
+        <div style="display:flex; gap:12px; align-items:baseline; flex-wrap:wrap">
+          <span class="cavern-status" id="p2-cavernstatus">Last solve completed successfully in 0.3 s — 214 stations, 2 warnings.</span>
+          <button class="btn" onclick="alert('linePlotManager.rerunSurvex()')">Solve</button>
+        </div>
+        <div class="error-text" id="p2-cavernerrmsg" style="display:none; margin-top:4px">
+          cavern exited with an error — see Cavern Output below.</div>
+
+        <div class="attached-section">
+          <div class="hdr">Attached external centerlines</div>
+          <div class="attrow"><span class="main">Trip Day 3 — trip.svx</span><span class="count">1 files</span></div>
+          <div class="attrow"><span class="main">Trip Entrance Series — main.svx</span><span class="count">4 files, 2 warnings</span></div>
+          <div class="attrow"><span class="main" id="p2-caverow">Cave North Maze — north.svx</span><span class="count">6 files</span></div>
+          <div class="attrow-error" id="p2-caverowerr" style="display:none">
+            Left out of the survey: this file includes data stored outside the project folder
+            (../shared/hmg-grade5.svx). Only files inside the project travel with it, so copy
+            them in, or point the *include at a copy inside the project.</div>
+          <label class="hint"><input type="checkbox" onchange="document.getElementById('p2-caverowerr').style.display = this.checked ? 'block':'none'">
+            simulate: the cave-level owner was excluded from the solve (the row is the only surface a cave-level owner has)</label>
+        </div>
+
+        <div class="switcher">
+          <div class="gb"><div class="t">Input</div>
+            <button class="btn small" id="p2-sw-in" onclick="p2Switch('in')">Cavern Input</button></div>
+          <div class="gb"><div class="t">Output</div>
+            <button class="btn small checked" id="p2-sw-out" onclick="p2Switch('out')">Cavern Output</button>
+            <button class="btn small" id="p2-sw-loop" onclick="p2Switch('loop')">Loop Closure</button></div>
+        </div>
+        <div class="mono-pane" id="p2-monopane"></div>
+      </div>
+
+      <!-- attach dialog -->
+      <div class="scrim" id="p2-dialog" style="display:none">
+        <div class="dialog">
+          <h3 id="p2-dlgtitle">Add trip from survey file</h3>
+          <div>Pick the entry file:</div>
+          <div style="display:flex; gap:6px; margin:4px 0">
+            <input class="field" id="p2-path" placeholder="/path/to/centerline.svx" oninput="p2Scan(this.value)">
+            <span style="position:relative">
+              <button class="btn" onclick="p2ToggleBrowse(event)">Browse…</button>
+              <div class="menu" id="p2-browsemenu" style="display:none; top:30px; right:0; min-width:340px"></div>
+            </span>
+          </div>
+          <div class="hint" id="p2-fmthint">You can open Survex (.svx), Compass (.dat, .mak), or Walls (.wpj, .srv) files.</div>
+          <div class="secondary" id="p2-fmtlabel" style="display:none"></div>
+          <div class="secondary" id="p2-scanning" style="display:none">Scanning…</div>
+          <div id="p2-scansummary" style="display:none">✓ Found 1 file</div>
+          <div class="warn-text" id="p2-scanwarn" style="display:none"></div>
+          <div class="error-text" id="p2-scanerr" style="display:none"></div>
+
+          <div style="font-weight:700; margin-top:12px">How should CaveWhere use this file?</div>
+          <div class="choice-grid">
+            <div class="groupbox">
+              <div class="grow">The file stays the source of truth — keep editing it in your
+                survey tool and CaveWhere stays in sync. A copy travels with your project for
+                git sync, backups, and sharing; CaveWhere never writes to your original files.
+                Survey data is read-only in CaveWhere.</div>
+              <div class="actions"><span class="recommended">Recommended</span>
+                <button class="btn" id="p2-attachbtn" disabled onclick="p2DoAttach()">Attach</button></div>
+            </div>
+            <div class="groupbox">
+              <div class="grow">Copies the data into CaveWhere. You edit it here; the original
+                file is never read again.
+                <div class="hint" id="p2-importnote" style="display:none; margin-top:4px">Import supports Survex files only.</div>
+              </div>
+              <div class="actions"><button class="btn" id="p2-importbtn" disabled
+                onclick="alert('surveyImportManager.importSurvexToTrip — the trip becomes a normal native trip; this prototype follows the Attach path.')">Import a copy</button></div>
+            </div>
+          </div>
+
+          <div class="busyrow" id="p2-busy" style="display:none"><span class="spinner"></span><span id="p2-busytext">Attaching…</span></div>
+          <div class="dlg-actions"><button class="btn" onclick="p2CancelDialog()">Cancel</button></div>
+        </div>
+      </div>
+
+      <!-- replace dialog -->
+      <div class="scrim" id="p2-replacedlg" style="display:none">
+        <div class="dialog" style="width:520px">
+          <h3>Replace centerline file</h3>
+          <div style="margin-bottom:6px">Currently attached: trip.svx</div>
+          <div>Pick the replacement file:</div>
+          <div style="display:flex; gap:6px; margin:4px 0">
+            <input class="field" id="p2-rpath" placeholder="/path/to/centerline.svx" oninput="p2RScan(this.value)">
+            <button class="btn" onclick="document.getElementById('p2-rpath').value='/Users/me/topodroid/2026-06-01/trip-v2.svx'; p2RScan('ok')">Browse…</button>
+          </div>
+          <div class="secondary" id="p2-rfmt" style="display:none">Format: Survex (auto-detected)</div>
+          <div id="p2-rsummary" style="display:none">✓ Found 1 file</div>
+          <div style="margin-top:10px">Replacing swaps the files copied into this project for
+            the picked file and everything it includes. The current copies, including any edits
+            made to them, are replaced; files the new one leaves out are removed.</div>
+          <div class="busyrow" id="p2-rbusy" style="display:none"><span class="spinner"></span>Replacing…</div>
+          <div class="dlg-actions">
+            <button class="btn" onclick="p2CloseReplace(false)">Cancel</button>
+            <button class="btn" id="p2-rconfirm" disabled onclick="p2DoReplace()">Replace</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- shared context menu -->
+      <div class="menu" id="p2-ctxmenu" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="simbar">
+    <b>Simulate:</b>
+    <label><input type="checkbox" id="sim-srcchanged" onchange="p2SimSourceChanged(this.checked)"> source edited since copy (app-scope banner)</label>
+    <label><input type="checkbox" id="sim-missing" onchange="p2SimMissing(this.checked)"> project copy missing</label>
+    <label><input type="checkbox" id="sim-fileerr" onchange="p2SimFileError(this.checked)"> cavern errors in the file</label>
+    <label><input type="checkbox" id="sim-floating" onchange="p2SimFloating(this.checked)"> survey not tied in</label>
+    <label><input type="checkbox" id="sim-warns" onchange="p2SimWarnings(this.checked)"> solve warnings</label>
+    <span class="hint">· toggles work once a trip is attached</span>
+  </div>
+</div>
+
+<!-- ================= PHASE 3 LANE ================= -->
+<div class="lane" id="lane-p3">
+  <p class="doc-sub" style="margin-top:0">
+    Proposal: cave-level attach reuses the Phase 2 attach dialog and panel language.
+    New pieces are marked <span class="badge-proposed">PROPOSED</span>: the Add Cave menu
+    entry, the block-tree preview with Scope-trip auto-creation, the multi-cave root-file
+    heuristic, and cave-level detach. Try both demo files in Browse — the region master
+    triggers the heuristic.
+  </p>
+
+  <div class="appwin">
+    <div class="titlebar"><span class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></span>
+      CaveWhere — Region.cwproj — <span id="p3-pagename">Data</span></div>
+    <div class="winbody" id="p3body">
+
+      <!-- ======== DATA MAIN PAGE ======== -->
+      <div class="page" id="p3-datapage">
+        <div class="page-nav"><span class="here">All Caves</span></div>
+        <span class="split" style="position:relative">
+          <button class="btn main" onclick="alert('Adds a native cave — primary click stays the native path, mirroring Add Trip.')">＋ Add Cave</button>
+          <button class="btn chev" title="More ways to add a cave" onclick="p3ToggleAddMenu(event)">▾</button>
+          <div class="menu" id="p3-addmenu" style="display:none; top:30px; left:0; min-width:260px">
+            <div onclick="p3OpenDialog()">Add cave from survey file…</div>
+          </div>
+        </span>
+        <p class="hint" style="margin-top:8px">Naming follows Phase 2's shipped menu item
+          ("Add trip from survey file…"), replacing the older prototype's "External cave…".
+          One verb family: add <i>thing</i> from survey file.</p>
+
+        <div class="cavecard" id="p3-cavelist" style="display:none">
+          <div class="t">Caves</div>
+          <table class="triptable">
+            <tr><th>Name</th><th>Trips</th><th>Length</th></tr>
+            <tr><td>📎 <a class="link" onclick="p3GotoCave()">Big Cave</a></td><td>8</td><td>2,340 m</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- ======== CAVE PAGE (after attach) ======== -->
+      <div class="page" id="p3-cavepage" style="display:none">
+        <div class="page-nav"><a onclick="p3GotoData()">◂ All Caves</a> <span class="here">· Big Cave 📎</span></div>
+
+        <div class="cavecard">
+          <div class="t">External Centerline</div>
+          <div class="header-filerow">
+            <span class="fname">big-cave.svx</span><span class="fmt">Survex</span>
+            <span class="spacer"></span>
+            <button class="btn small" onclick="alert('Same Replace dialog as Phase 2, plus the Scope-trip diff table (see Design notes).')">Replace…</button>
+            <button class="btn small" onclick="p3AskDetach()">Detach…</button>
+          </div>
+          <div class="provenance">Copied from: /Users/friend/survex/big-cave.svx</div>
+          <div class="solve-status" style="margin:8px 0 0">
+            <span class="dot ok"></span><span>247 stations</span>
+            <span class="pill">2 warnings</span><span class="spacer"></span>
+            <a class="link" onclick="alert('Navigates to CavernOutputPage — same page as Phase 2.')">View cavern output</a>
+          </div>
+        </div>
+
+        <div style="position:relative" id="p3-askhost"></div>
+
+        <div class="cavecard">
+          <div class="t">Trips <span class="hint" style="font-weight:400">— auto-created from the file's *begin blocks</span></div>
+          <table class="triptable" id="p3-triptable">
+            <tr><th>Name</th><th class="num">Stations</th><th>Prefix in file</th><th>Decl</th></tr>
+            <tr><td>📎 entrance</td><td class="num">47</td><td class="prefix">entrance</td><td>—</td></tr>
+            <tr><td>📎 big-passage</td><td class="num">89</td><td class="prefix">big-passage</td><td>—</td></tr>
+            <tr><td>📎 east</td><td class="num">34</td><td class="prefix">big-passage.east</td><td>—</td></tr>
+            <tr><td>📎 west</td><td class="num">28</td><td class="prefix">big-passage.west</td><td>—</td></tr>
+            <tr><td>📎 side-cave</td><td class="num">12</td><td class="prefix">side-cave</td><td>—</td></tr>
+            <tr><td>📎 surface</td><td class="num">8</td><td class="prefix">surface</td><td>—</td></tr>
+            <tr><td>📎 stream</td><td class="num">26</td><td class="prefix">stream</td><td>—</td></tr>
+            <tr><td>📎 tight</td><td class="num">3</td><td class="prefix">side-cave.tight</td><td>—</td></tr>
+          </table>
+          <div style="margin-top:8px">
+            <span class="split" style="position:relative">
+              <button class="btn main small" onclick="alert('Native trip in an externally backed cave — allowed (Mixed cave).')">＋ Add Trip</button>
+              <button class="btn chev small" onclick="alert('Menu: Add trip from survey file… — trip-level attach still works under a cave-level attach (Mixed).')">▾</button>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- cave attach dialog -->
+      <div class="scrim" id="p3-dialog" style="display:none">
+        <div class="dialog">
+          <h3>Add cave from survey file</h3>
+          <div>Pick the entry file:</div>
+          <div style="display:flex; gap:6px; margin:4px 0">
+            <input class="field" id="p3-path" placeholder="/path/to/cave.svx" oninput="p3Reset()">
+            <span style="position:relative">
+              <button class="btn" onclick="p3ToggleBrowse(event)">Browse…</button>
+              <div class="menu" id="p3-browsemenu" style="display:none; top:30px; right:0; min-width:360px">
+                <div onclick="p3Pick('cave')">📄 /Users/friend/survex/big-cave.svx — one cave, 8 blocks</div>
+                <div onclick="p3Pick('region')">📄 /Users/friend/survex/wulong_north.svx — region master, 6 caves</div>
+              </div>
+            </span>
+          </div>
+          <div class="hint" id="p3-fmthint">You can open Survex (.svx), Compass (.dat, .mak), or Walls (.wpj, .srv) files.</div>
+          <div class="secondary" id="p3-fmtlabel" style="display:none">Format: Survex (auto-detected)</div>
+          <div id="p3-summary" style="display:none"></div>
+
+          <!-- block tree preview (PROPOSED) -->
+          <div id="p3-preview" style="display:none">
+            <div style="font-weight:700; margin-top:10px">Trips CaveWhere will create
+              <span class="badge-proposed">PROPOSED</span></div>
+            <div class="hint">One trip per *begin block with stations. Rename or delete any of
+              them afterward — they are windows into the file, not copies of it.</div>
+            <div class="blocktree" id="p3-tree"></div>
+          </div>
+
+          <!-- multi-cave heuristic (PROPOSED) -->
+          <div class="heuristic" id="p3-heuristic" style="display:none">
+            <div class="t">This file looks like a whole survey project, not one cave</div>
+            <div>It has 6 top-level blocks that resolve into 3 disconnected networks — in
+              CaveWhere those are separate caves. Attaching it here makes them all trips of
+              one cave named "wulong_north".</div>
+            <div style="margin-top:6px">The files it includes look like the caves. Attach one of those instead?</div>
+            <ul>
+              <li><a onclick="p3Pick('cave')">sanwangdong/sanwangdong.svx — 1 network, 2,340 m</a></li>
+              <li><a onclick="p3Pick('cave')">erwangdong/erwangdong.svx — 1 network, 1,820 m</a></li>
+              <li><a onclick="p3Pick('cave')">dongba/dongba.svx — 1 network, 610 m</a></li>
+            </ul>
+            <div class="hint" style="margin-top:6px">Attaching whole projects as one piece —
+              with each cave kept separate — arrives with region-level attach (Phase 6).</div>
+          </div>
+
+          <div class="busyrow" id="p3-busy" style="display:none"><span class="spinner"></span>Attaching…</div>
+          <div class="dlg-actions">
+            <button class="btn" onclick="p3CloseDialog()">Cancel</button>
+            <button class="btn" id="p3-attachbtn" disabled onclick="p3DoAttach()">Attach</button>
+          </div>
+          <p class="hint" style="margin-top:8px">Layout note: cave-level drops the
+            Attach/Import two-box choice — importing a whole multi-block file as native
+            chunks is a different feature (Import Survex, which already exists). One primary
+            verb: Attach.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="simbar"><b>Try:</b> Add Cave ▾ → Add cave from survey file… → Browse… →
+    pick the region master to see the heuristic, or the single cave for the happy path.
+    Then Detach… on the cave page for the cascade confirm.</div>
+</div>
+
+<!-- ================= NOTES LANE ================= -->
+<div class="lane notes" id="lane-notes">
+  <h3>What the Phase 2 lane reflects (all shipped)</h3>
+  <li>Attach entry points: CavePage <b>Add Trip</b> split button (primary = native, menu = "Add trip from survey file…") and SurveyEditor's <b>Add Survey Data</b> equivalent on an empty trip. Cancel deletes the up-front-created trip.</li>
+  <li>Attach dialog: two-box <b>Attach</b> (Recommended) vs <b>Import a copy</b> choice — buttons, not radios. Import is Survex-only. Failure keeps the dialog open with the error in the picker; the in-project-source refusal (G2) reads exactly as shipped.</li>
+  <li>Trip panel order: missing-copy banner → file-error banner → floating banner → attached header → solve status → metadata → stations. Panel width 500, error log capped at 120 px, station list at 12 rows.</li>
+  <li>Provenance line's three states and both context menus (file: Show in Finder / Open; source: Reload / Show in Finder / Open — Reload enabled only when <code>canReloadFromSource</code>).</li>
+  <li>App-scope source-change banner (AppOverlay strip): Update all / Show / ✕ (dismiss is per-revision, session-only). Row Update disabled for "Source missing".</li>
+  <li>Replace dialog: explainer paragraph <i>is</i> the confirmation; overwrites edits (Q2 behavior change).</li>
+  <li>CavernOutputPage: status line, attached-centerlines rows, per-owner error (the only surface a cave-level owner has — F3), Input / Output / Loop Closure switcher over the mono pane.</li>
+  <li><b>Detach has no UI in Phase 2</b> — the C++ verb exists, no menu exposes it. Phase 3 adds the first Detach button (cave-level); trip-level detach should ship with the same pattern.</li>
+
+  <h3>Phase 3 proposals encoded in the second lane</h3>
+  <li><span class="q">Naming.</span> "Add cave from survey file…" under the Add Cave chevron — same verb family as Phase 2's shipped menu item, replacing the old prototype's "External cave…".</li>
+  <li><span class="q">No Import box at cave level.</span> The dialog carries a single Attach verb; whole-file native import is the existing Import Survex feature, not this dialog's job.</li>
+  <li><span class="q">Scope-trip preview in the dialog.</span> The scanner already resolves the block tree, so the dialog shows exactly which trips will be auto-created before the user commits. Silent auto-creation (old prototype resolution) stays — the preview is disclosure, not a picker.</li>
+  <li><span class="q">Multi-cave root-file heuristic.</span> When the entry resolves to several top-level blocks forming ≥2 disconnected networks, warn that the file is a project, list the included sub-files as one-click alternate targets, and still allow the attach. Signals available at scan time: top-level block count, connected-component count, include fan-out. This is the answer to "user points at the region master" — guidance, not refusal, since Phase 6 owns the real multi-cave mapping.</li>
+  <li><span class="q">Cave-level detach cascade.</span> RemoveAskBox-style inline confirm naming the auto-created trip count and the copied-file deletion, per the resolved question in the old prototype.</li>
+  <li><span class="q">Declination column.</span> Scope trips show an em-dash — cavern owns the math for the whole file; per-trip declination only exists where CaveWhere feeds the driver (trip-level attach without file declination).</li>
+
+  <h3>Open questions this prototype should help settle</h3>
+  <li>Heuristic thresholds: is "≥2 disconnected networks" the right trigger, or top-level block count, or both? False positives (one cave surveyed as two unconnected fragments) are real caves mid-exploration.</li>
+  <li>Should the sub-file suggestions in the heuristic be limited to direct includes of the entry, or any file in the closure whose subtree is a single network?</li>
+  <li>Does the Scope-trip preview need a station threshold display (blocks with 0 stations are skipped) or is silence fine?</li>
+  <li>Where does the cave-level attach live when the region master case truly is wanted as one cave (small two-entrance systems)? Current answer: the warning is dismissible by just clicking Attach.</li>
+</div>
+
+</div><!-- /tab-body -->
+
+<script>
+'use strict';
+/* ---------- chrome ---------- */
+function toggleTheme() {
+  const b = document.body;
+  b.dataset.theme = b.dataset.theme === 'light' ? 'dark' : 'light';
+}
+function showLane(name) {
+  for (const l of ['p2','p3','notes']) {
+    document.getElementById('lane-' + l).classList.toggle('active', l === name);
+    document.getElementById('tabbtn-' + l).classList.toggle('active', l === name);
+  }
+}
+document.addEventListener('click', e => {
+  for (const id of ['p2-addmenu','p2-browsemenu','p3-addmenu','p3-browsemenu','p2-ctxmenu'])
+    if (!e.target.closest('.split') && !e.target.closest('.menu') && !e.target.closest('button'))
+      hide(id);
+});
+const show = id => document.getElementById(id).style.display = '';
+const hide = id => document.getElementById(id).style.display = 'none';
+const el = id => document.getElementById(id);
+
+/* ================= PHASE 2 ================= */
+const p2 = { attached: false, scanState: null, srcListShown: false, dismissed: false };
+
+function p2ToggleAddMenu(e) {
+  const m = el('p2-addmenu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  e.stopPropagation();
+}
+function p2OpenAttachDialog() {
+  hide('p2-addmenu');
+  el('p2-path').value = '';
+  p2Scan('');
+  show('p2-dialog');
+}
+function p2ToggleBrowse(e) {
+  const m = el('p2-browsemenu');
+  if (m.style.display !== 'none') { hide('p2-browsemenu'); return; }
+  m.innerHTML = '';
+  const files = [
+    ['📄 /Users/me/topodroid/2026-06-01/trip.svx — clean TopoDroid export', 'ok'],
+    ['📄 /Users/friend/compass/big-cave.mak — Compass, scan warnings', 'warn'],
+    ['📄 …/Azure Canyon.cwproj/Surveys/Day 3/…/trip.svx — the project’s own copy', 'refused'],
+    ['📄 /Users/me/old/missing.svx — file does not exist', 'noexist'],
+  ];
+  for (const [label, kind] of files) {
+    const d = document.createElement('div');
+    d.textContent = label;
+    d.onclick = () => { p2PickFile(kind); };
+    m.appendChild(d);
+  }
+  m.style.display = 'block';
+  e.stopPropagation();
+}
+function p2PickFile(kind) {
+  hide('p2-browsemenu');
+  const paths = {
+    ok: '/Users/me/topodroid/2026-06-01/trip.svx',
+    warn: '/Users/friend/compass/big-cave.mak',
+    refused: '/Users/me/Documents/Azure Canyon.cwproj/Surveys/Day 3/external-centerline/trip.svx',
+    noexist: '/Users/me/old/missing.svx',
+  };
+  el('p2-path').value = paths[kind];
+  el('p2-scanning').style.display = '';
+  ['p2-fmtlabel','p2-scansummary','p2-scanwarn','p2-scanerr'].forEach(hide);
+  setTimeout(() => p2ApplyScan(kind), 500);
+}
+function p2Scan(text) {  // typing a path: clear host error (shipped behavior), rescan naively
+  ['p2-fmtlabel','p2-scansummary','p2-scanwarn','p2-scanerr','p2-scanning'].forEach(hide);
+  el('p2-fmthint').style.display = '';
+  el('p2-attachbtn').disabled = true;
+  el('p2-importbtn').disabled = true;
+  hide('p2-importnote');
+  p2.scanState = null;
+  if (text.trim().length > 3) {
+    el('p2-scanning').style.display = '';
+    setTimeout(() => { if (el('p2-path').value === text) p2ApplyScan(text.endsWith('.mak') ? 'warn' : 'ok'); }, 600);
+  }
+}
+function p2ApplyScan(kind) {
+  hide('p2-scanning');
+  p2.scanState = kind;
+  const fmt = el('p2-fmtlabel'), sum = el('p2-scansummary'),
+        warn = el('p2-scanwarn'), err = el('p2-scanerr');
+  if (kind === 'noexist') {
+    err.textContent = 'scan: entry file does not exist: /Users/me/old/missing.svx';
+    err.style.display = '';
+    return;
+  }
+  hide('p2-fmthint');
+  if (kind === 'refused') {
+    // scan succeeds; refusal happens on Attach (shipped: synchronous guard in attach())
+    fmt.textContent = 'Format: Survex (auto-detected)';
+    fmt.style.display = ''; sum.textContent = '✓ Found 1 file'; sum.style.display = '';
+    el('p2-attachbtn').disabled = false;
+    el('p2-importbtn').disabled = false;
+    return;
+  }
+  if (kind === 'warn') {
+    fmt.textContent = 'Format: Compass (auto-detected)';
+    fmt.style.display = ''; sum.textContent = '✓ Found 4 files'; sum.style.display = '';
+    warn.textContent = 'missing Compass reference: fixed-points.dat\ncase-fallback match: include ‘BigCave.dat’ resolved to ‘bigcave.dat’';
+    warn.style.display = '';
+    el('p2-attachbtn').disabled = false;
+    el('p2-importbtn').disabled = true;   // Compass: import unsupported
+    show('p2-importnote');
+    return;
+  }
+  fmt.textContent = 'Format: Survex (auto-detected)';
+  fmt.style.display = ''; sum.textContent = '✓ Found 1 file'; sum.style.display = '';
+  el('p2-attachbtn').disabled = false;
+  el('p2-importbtn').disabled = false;
+}
+function p2DoAttach() {
+  if (p2.scanState === 'refused') {
+    const err = el('p2-scanerr');
+    err.textContent = "attach: /Users/me/Documents/Azure Canyon.cwproj/Surveys/Day 3/external-centerline/trip.svx is inside this project's data folder — it is CaveWhere's own copy, not a source. Pick the original file the data came from instead.";
+    err.style.display = '';
+    return;   // dialog stays open, user can repick — shipped semantics
+  }
+  el('p2-attachbtn').disabled = true;
+  show('p2-busy');
+  setTimeout(() => {
+    hide('p2-busy'); hide('p2-dialog');
+    p2.attached = true;
+    hide('p2-noattach'); show('p2-attached');
+    p2FillStations();
+  }, 900);
+}
+function p2CancelDialog() { hide('p2-dialog'); hide('p2-busy'); }
+function p2FillStations() {
+  const list = el('p2-stations');
+  list.innerHTML = '';
+  for (const s of ['A1','A2','A3','A4','A5','A6','A7','A8','A9','A10','A11','A12','A13','A14']) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    d.onclick = () => alert('stationClicked(' + s + ') — selects the station in the 3D view');
+    list.appendChild(d);
+  }
+}
+
+/* context menus */
+function p2CtxMenu(e, which) {
+  e.preventDefault();
+  const m = el('p2-ctxmenu');
+  m.innerHTML = '';
+  const items = which === 'file'
+    ? [['Show in Finder', true], ['Open', true]]
+    : [['Reload', true, 'externalCenterlineManager.reloadFromSource(trip) — re-copies the source over the project copy'],
+       ['Show in Finder', true], ['Open', true]];
+  for (const [label, enabled, note] of items) {
+    const d = document.createElement('div');
+    d.textContent = label;
+    if (!enabled) d.className = 'disabled';
+    else d.onclick = () => { hide('p2-ctxmenu'); if (note) alert(note); };
+    m.appendChild(d);
+  }
+  const host = el('p2body').getBoundingClientRect();
+  m.style.left = (e.clientX - host.left) + 'px';
+  m.style.top = (e.clientY - host.top) + 'px';
+  m.style.display = 'block';
+}
+
+/* replace */
+function p2OpenReplaceDialog() {
+  el('p2-rpath').value = '';
+  hide('p2-rfmt'); hide('p2-rsummary'); el('p2-rconfirm').disabled = true;
+  show('p2-replacedlg');
+}
+function p2RScan() {
+  show('p2-rfmt'); show('p2-rsummary');
+  el('p2-rconfirm').disabled = false;
+}
+function p2DoReplace() {
+  show('p2-rbusy'); el('p2-rconfirm').disabled = true;
+  setTimeout(() => {
+    hide('p2-rbusy'); hide('p2-replacedlg');
+    el('sim-missing').checked = false; p2SimMissing(false);
+    el('p2-fname').textContent = 'trip-v2.svx';
+    el('p2-provenance').textContent = 'Copied from: /Users/me/topodroid/2026-06-01/trip-v2.svx';
+  }, 900);
+}
+function p2CloseReplace() { hide('p2-replacedlg'); hide('p2-rbusy'); }
+
+/* navigation */
+function p2GotoCavern() {
+  hide('p2-trippage'); show('p2-cavernpage');
+  el('p2-pagename').textContent = 'Cavern';
+  p2Switch('out');
+}
+function p2GotoTrip() {
+  show('p2-trippage'); hide('p2-cavernpage');
+  el('p2-pagename').textContent = 'Trip: Day 3';
+}
+function p2Switch(which) {
+  for (const [id, key] of [['p2-sw-in','in'],['p2-sw-out','out'],['p2-sw-loop','loop']])
+    el(id).classList.toggle('checked', key === which);
+  const panes = {
+    in: '; CaveWhere solve driver — generated, do not edit\n*begin cave_1f3a\n  *fix entrance 0 0 0\n  *begin trip_9c21\n    *date 2026.06.01\n    *calibrate declination 6.83\n    *include "Surveys/Day 3/external-centerline/trip.svx"\n  *end trip_9c21\n*end cave_1f3a',
+    out: 'Survex 1.4.9\nProcessing "driver.svx"...\ntrip.svx:14:9: warning: Compass reading looks dodgy\nRemoving trailing traverses...\nConcatenating traverses...\nCalculating network...\nDone.\n214 stations, 2 warnings.',
+    loop: 'Loop closure statistics\n-----------------------\nLoop 1: 12 legs, misclosure 0.34 m (0.8%)\nLoop 2:  7 legs, misclosure 0.11 m (0.4%)',
+  };
+  el('p2-monopane').textContent = panes[which];
+}
+
+/* simulation toggles */
+function p2NeedAttach(box) {
+  if (!p2.attached) { alert('Attach a trip first (Add Trip ▾ → Add trip from survey file…).'); box.checked = false; return true; }
+  return false;
+}
+function p2SimSourceChanged(on) {
+  p2.dismissed = false;
+  el('p2-bannerstrip').style.display = on ? '' : 'none';
+  if (on) p2FillSrcList();
+  else { hide('p2-srclist'); p2.srcListShown = false; }
+  const prov = el('p2-provenance');
+  if (p2.attached) {
+    prov.textContent = 'Copied from: /Users/me/topodroid/2026-06-01/trip.svx' + (on ? ' — changed since copied' : '');
+    prov.classList.toggle('changed', on);
+  }
+}
+function p2FillSrcList() {
+  const list = el('p2-srclist');
+  list.innerHTML = '';
+  const rows = [
+    ['Azure Canyon — Day 3', '/Users/me/topodroid/2026-06-01/trip.svx', 'Changed', true],
+    ['Azure Canyon — Entrance Series', '/Users/me/exports/main.svx', 'Source missing', false],
+  ];
+  for (const [name, path, status, updatable] of rows) {
+    const r = document.createElement('div');
+    r.className = 'srcrow';
+    r.innerHTML = '<span class="who"><div class="name">' + name + '</div><div class="path">' + path +
+      '</div></span><span class="status">' + status + '</span>';
+    const b = document.createElement('button');
+    b.className = 'btn small'; b.textContent = 'Update'; b.disabled = !updatable;
+    b.onclick = () => { r.remove(); if (!list.querySelector('button:enabled')) p2DismissBanner(); };
+    r.appendChild(b);
+    list.appendChild(r);
+  }
+}
+function p2ToggleSrcList() {
+  p2.srcListShown = !p2.srcListShown;
+  el('p2-srclist').style.display = p2.srcListShown ? '' : 'none';
+}
+function p2UpdateAll() {
+  alert('updateAllChangedSources() — copies every Changed source over its project copy and re-solves. "Source missing" rows are skipped.');
+  p2DismissBanner();
+  el('sim-srcchanged').checked = false;
+  p2SimSourceChanged(false);
+}
+function p2DismissBanner() {
+  el('p2-bannerstrip').style.display = 'none';
+  hide('p2-srclist'); p2.srcListShown = false;
+}
+function p2SimMissing(on) {
+  if (on && p2NeedAttach(el('sim-missing'))) return;
+  el('p2-missingcopy').style.display = on ? '' : 'none';
+}
+function p2SimFileError(on) {
+  if (on && p2NeedAttach(el('sim-fileerr'))) return;
+  el('p2-fileerror').style.display = on ? '' : 'none';
+  el('p2-dot').className = 'dot ' + (on ? 'err' : 'ok');
+  el('p2-solvetext').textContent = on ? 'Solve failed' : '14 stations';
+  el('p2-cavernstatus').textContent = on
+    ? 'Cavern reported an error during the last solve.'
+    : 'Last solve completed successfully in 0.3 s — 214 stations, 2 warnings.';
+  el('p2-cavernstatus').classList.toggle('err', on);
+  el('p2-cavernerrmsg').style.display = on ? '' : 'none';
+}
+function p2SimFloating(on) {
+  if (on && p2NeedAttach(el('sim-floating'))) return;
+  el('p2-floating').style.display = on ? '' : 'none';
+}
+function p2SimWarnings(on) {
+  if (on && p2NeedAttach(el('sim-warns'))) return;
+  el('p2-warnpill').style.display = on ? '' : 'none';
+  if (el('p2-dot').className !== 'dot err')
+    el('p2-dot').className = 'dot ' + (on ? 'warn' : 'ok');
+}
+function p2Tie() {
+  alert('suggestions.tieAt(index) — writes the tie and re-solves; the banner clears when the survey stops floating.');
+  el('sim-floating').checked = false; p2SimFloating(false);
+}
+function p2ToggleFileDecl(on) {
+  el('p2-declrow').style.display = on ? 'none' : '';
+  el('p2-declfilehint').style.display = on ? '' : 'none';
+}
+
+/* ================= PHASE 3 ================= */
+const p3 = { pick: null };
+
+function p3ToggleAddMenu(e) {
+  const m = el('p3-addmenu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  e.stopPropagation();
+}
+function p3OpenDialog() {
+  hide('p3-addmenu');
+  el('p3-path').value = '';
+  p3Reset();
+  show('p3-dialog');
+}
+function p3ToggleBrowse(e) {
+  const m = el('p3-browsemenu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  e.stopPropagation();
+}
+function p3Reset() {
+  ['p3-fmtlabel','p3-summary','p3-preview','p3-heuristic'].forEach(hide);
+  el('p3-fmthint').style.display = '';
+  el('p3-attachbtn').disabled = true;
+  p3.pick = null;
+}
+function p3Pick(kind) {
+  hide('p3-browsemenu');
+  p3.pick = kind;
+  el('p3-path').value = kind === 'cave'
+    ? '/Users/friend/survex/big-cave.svx'
+    : '/Users/friend/survex/wulong_north.svx';
+  hide('p3-fmthint');
+  show('p3-fmtlabel');
+  const sum = el('p3-summary');
+  sum.style.display = '';
+  if (kind === 'cave') {
+    sum.textContent = '✓ Found 4 files — 8 survey blocks, 247 stations, 1 connected network';
+    hide('p3-heuristic');
+    const tree = el('p3-tree');
+    tree.innerHTML =
+      '*begin big-cave\n' +
+      '  📎 entrance      <span class="cnt">47 stations</span>\n' +
+      '  📎 big-passage   <span class="cnt">89 stations</span>\n' +
+      '     📎 east       <span class="cnt">34 stations · prefix big-passage.east</span>\n' +
+      '     📎 west       <span class="cnt">28 stations · prefix big-passage.west</span>\n' +
+      '  📎 side-cave     <span class="cnt">12 stations</span>\n' +
+      '     📎 tight      <span class="cnt">3 stations · prefix side-cave.tight</span>\n' +
+      '  📎 surface       <span class="cnt">8 stations</span>\n' +
+      '  📎 stream        <span class="cnt">26 stations</span>\n' +
+      '*end big-cave';
+    show('p3-preview');
+    el('p3-attachbtn').disabled = false;
+  } else {
+    sum.textContent = '✓ Found 41 files — 6 top-level blocks, 3,912 stations, 3 disconnected networks';
+    hide('p3-preview');
+    show('p3-heuristic');
+    el('p3-attachbtn').disabled = false;   // guidance, not refusal
+  }
+}
+function p3DoAttach() {
+  el('p3-attachbtn').disabled = true;
+  show('p3-busy');
+  setTimeout(() => {
+    hide('p3-busy'); hide('p3-dialog');
+    show('p3-cavelist');
+    p3GotoCave();
+  }, 900);
+}
+function p3CloseDialog() { hide('p3-dialog'); hide('p3-busy'); }
+function p3GotoCave() {
+  hide('p3-datapage'); show('p3-cavepage');
+  el('p3-pagename').textContent = 'Cave: Big Cave';
+}
+function p3GotoData() {
+  show('p3-datapage'); hide('p3-cavepage');
+  el('p3-pagename').textContent = 'Data';
+}
+function p3AskDetach() {
+  const host = el('p3-askhost');
+  if (host.firstChild) { host.innerHTML = ''; return; }
+  const box = document.createElement('div');
+  box.className = 'askbox';
+  box.innerHTML = '<div class="t">Detach external centerline from "Big Cave"?</div>' +
+    '<div>Removes 8 auto-created trips and their notes and scraps, and deletes the copied ' +
+    'files in this cave’s folder. Git history is the way back.</div>';
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const cancel = document.createElement('button');
+  cancel.className = 'btn small'; cancel.textContent = 'Cancel';
+  cancel.onclick = () => host.innerHTML = '';
+  const detach = document.createElement('button');
+  detach.className = 'btn small'; detach.textContent = 'Detach';
+  detach.onclick = () => {
+    host.innerHTML = '';
+    hide('p3-cavelist');
+    p3GotoData();
+    alert('Cave reverts to an empty native cave (or is removed — open question); Scope trips and copies are gone.');
+  };
+  actions.append(cancel, detach);
+  box.appendChild(actions);
+  host.appendChild(box);
+}
+</script>
+</body>
+</html>

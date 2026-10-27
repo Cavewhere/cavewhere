@@ -25,6 +25,7 @@
 #include "CwRhiSceneTestAccess.h"
 #include "CwRhiTexturedItemsTestAccess.h"
 #include "TestGeometryBuilders.h"
+#include "TestHelper.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -95,21 +96,6 @@ cwStreamedTexture streamedSource(const QString& id)
 // Loads run on cwConcurrent, so the render-thread state they settle has to be
 // waited for rather than assumed.
 constexpr int kWaitTimeoutMs = 30000;
-constexpr int kPollIntervalMs = 1;
-
-template <typename Predicate>
-bool waitFor(Predicate predicate)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < kWaitTimeoutMs) {
-        if (predicate()) {
-            return true;
-        }
-        QThread::msleep(kPollIntervalMs);
-    }
-    return predicate();
-}
 
 qint64 ledgerStreamedCpuBytes()
 {
@@ -180,10 +166,10 @@ void countResidencyFloorWarnings(QtMsgType type, const QMessageLogContext& conte
 // render-side gate reads only opens once events have run.
 bool waitForItemVisible(cwScene& scene, cwRenderObjectId ownerId, uint32_t id)
 {
-    return waitFor([&]() {
+    return waitUntil([&]() {
         QCoreApplication::processEvents();
         return scene.visibility()->snapshot().subVisible(ownerId, id);
-    });
+    }, kWaitTimeoutMs);
 }
 
 cwRhiTexturedItems* syncedBackend(cwRhiScene& rhiScene, cwScene& scene, cwRenderTexturedItems& render)
@@ -595,9 +581,9 @@ TEST_CASE("a load for a replaced descriptor never lands on the item",
     render.updateStreamedTexture(id, streamedSource(QStringLiteral("scrap-2")));
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
 
-    REQUIRE(waitFor([&]() {
+    REQUIRE(waitUntil([&]() {
         return !CwRhiTexturedItemsTestAccess::hasStreamingWork(*backend);
-    }));
+    }, kWaitTimeoutMs));
     CHECK(ledgerStreamedCpuBytes() == 0);
 
     // Draining takes nothing onto the item: the stale load is gone, and the new
@@ -793,9 +779,9 @@ TEST_CASE("a camera back on the resident level cancels the demotion instead of r
           == CwRhiTexturedItemsTestAccess::noResidentLevel());
     CHECK_FALSE(CwRhiTexturedItemsTestAccess::demotionInFlight(*backend, id));
     CHECK(CwRhiTexturedItemsTestAccess::residentTopLevel(*backend, id) == 0);
-    CHECK(waitFor([&]() {
+    CHECK(waitUntil([&]() {
         return !CwRhiTexturedItemsTestAccess::hasStreamingWork(*backend);
-    }));
+    }, kWaitTimeoutMs));
 
     render.removeItem(id);
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);

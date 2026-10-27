@@ -809,6 +809,18 @@ cwCoordinateText::parse(const QString& text, cwUnits::UnitSystem units, AxisOrde
     return readCoordinate(components.value(), units, order);
 }
 
+QString cwCoordinateText::componentText(const std::array<double, 3>& values, double scale)
+{
+    QStringList texts;
+    texts.reserve(static_cast<qsizetype>(values.size()));
+    for (const double value : values) {
+        // Adding 0.0 turns a rounded -0 into 0.
+        const double rounded = std::round(value * scale) / scale + 0.0;
+        texts.append(QLocale::c().toString(rounded, 'f', QLocale::FloatingPointShortest));
+    }
+    return texts.join(QLatin1Char(' '));
+}
+
 QString cwCoordinateText::format(double easting,
                                  double northing,
                                  double elevationInMeters,

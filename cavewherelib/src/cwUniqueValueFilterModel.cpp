@@ -73,81 +73,155 @@ QModelIndex cwUniqueValueFilterModel::mapToSource(const QModelIndex &proxyIndex)
 
 QModelIndex cwUniqueValueFilterModel::mapFromSource(const QModelIndex &sourceIndex) const
 {
-    return findRunAction<QModelIndex>(sourceIndex,
-                                      [this, sourceIndex](auto iter) { return contains(iter, sourceIndex); },
-    [this](auto iter) {
-        return index(iteratorToRow(iter));
-    });
+    const int row = findRow(uniqueValue(sourceIndex));
+    if(row < 0) {
+        return QModelIndex();
+    }
+    return index(row);
 }
 
 void cwUniqueValueFilterModel::buildIndex()
 {
     if(!mUniqueIndex.isEmpty() || isValid()) {
         beginResetModel();
-        mUniqueIndex.clear();
         if(isValid()) {
             if(!isConnected) {
                 connectSourceModel();
             }
-
-            for(int i = 0; i < sourceModel()->rowCount(); i++) {
-                const auto index = sourceModel()->index(i, 0);
-
-                findRunAction<void>(index,
-                                    [this, index](auto iter) { return !contains(iter, index); },
-                [this, index](auto iter) {
-                    mUniqueIndex.insert(iter, toRow(index));
-                });
-            }
         } else {
             disconnectSourceModel();
         }
+        rebuildRows();
         endResetModel();
     }
 }
 
-void cwUniqueValueFilterModel::insertIntoIndex(const QModelIndex &sourceIndex)
+void cwUniqueValueFilterModel::rebuildRows()
 {
-    auto iter = findProxyIndex(sourceIndex);
-    if(iter == mUniqueIndex.end() || iter->index != sourceIndex) {
-        int row = iteratorToRow(iter);
-        beginInsertRows(QModelIndex(), row, row);
-        mUniqueIndex.insert(iter, toRow(sourceIndex));
-        endInsertRows();
+    mUniqueIndex.clear();
+    mSortedRows.clear();
+    if(!isValid()) {
+        return;
+    }
+
+    for(int i = 0; i < sourceModel()->rowCount(); i++) {
+        const auto index = sourceModel()->index(i, 0);
+        const QVariant value = uniqueValue(index);
+        if(findRow(value) < 0) {
+            appendRow({index, value});
+        }
     }
 }
 
-QVector<cwUniqueValueFilterModel::Row>::const_iterator cwUniqueValueFilterModel::findProxyIndex(const QModelIndex &sourceIndex) const
+QVector<int>::const_iterator cwUniqueValueFilterModel::lowerBound(const QVariant &value) const
 {
-    return findProxyIndex(uniqueValue(sourceIndex));
-}
-
-QVector<cwUniqueValueFilterModel::Row>::iterator cwUniqueValueFilterModel::findProxyIndex(const QModelIndex &sourceIndex)
-{
-    return findProxyIndex(uniqueValue(sourceIndex));
-}
-
-
-QVector<cwUniqueValueFilterModel::Row>::const_iterator cwUniqueValueFilterModel::findProxyIndex(const QVariant &value) const
-{
-    return std::lower_bound(mUniqueIndex.cbegin(),
-                            mUniqueIndex.cend(),
+    return std::lower_bound(mSortedRows.cbegin(),
+                            mSortedRows.cend(),
                             value,
-                            [this](const Row& row, const QVariant& value)
+                            [this](int row, const QVariant& value)
     {
-        return mLessThan(row.value, value);
+        return mLessThan(mUniqueIndex.at(row).value, value);
     });
 }
 
-QVector<cwUniqueValueFilterModel::Row>::iterator cwUniqueValueFilterModel::findProxyIndex(const QVariant &value)
+int cwUniqueValueFilterModel::findRow(const QVariant &value) const
 {
-    return std::lower_bound(mUniqueIndex.begin(),
-                            mUniqueIndex.end(),
-                            value,
-                            [this](const Row& row, const QVariant& value)
-    {
-        return mLessThan(row.value, value);
-    });
+    auto iter = lowerBound(value);
+    if(iter != mSortedRows.cend() && mUniqueIndex.at(*iter).value == value) {
+        return *iter;
+    }
+    return -1;
+}
+
+void cwUniqueValueFilterModel::appendRow(const Row &row)
+{
+    const int rowNumber = static_cast<int>(mUniqueIndex.size());
+    mUniqueIndex.append(row);
+    // Inserted after mUniqueIndex grows, so the comparator can read the new row.
+    auto iter = lowerBound(row.value);
+    mSortedRows.insert(std::distance(mSortedRows.cbegin(), iter), rowNumber);
+}
+
+void cwUniqueValueFilterModel::eraseRow(int row)
+{
+    auto iter = lowerBound(mUniqueIndex.at(row).value);
+    Q_ASSERT(iter != mSortedRows.cend() && *iter == row);
+    mSortedRows.removeAt(std::distance(mSortedRows.cbegin(), iter));
+    for(int& sortedRow : mSortedRows) {
+        if(sortedRow > row) {
+            --sortedRow;
+        }
+    }
+    mUniqueIndex.removeAt(row);
+}
+
+/**
+ * Appends one row for each new value among the source rows first..last, with
+ * one insert over the new range.
+ */
+void cwUniqueValueFilterModel::insertSourceRows(int first, int last)
+{
+    QVector<Row> pending;
+    QVector<int> pendingSorted;
+    for(int i = first; i <= last; i++) {
+        const auto index = sourceModel()->index(i, 0);
+        Q_ASSERT(index.isValid());
+        const QVariant value = uniqueValue(index);
+        if(findRow(value) >= 0) {
+            continue;
+        }
+
+        auto iter = std::lower_bound(pendingSorted.cbegin(), pendingSorted.cend(), value,
+                                     [this, &pending](int row, const QVariant& value)
+        {
+            return mLessThan(pending.at(row).value, value);
+        });
+        if(iter != pendingSorted.cend() && pending.at(*iter).value == value) {
+            continue;
+        }
+        pendingSorted.insert(std::distance(pendingSorted.cbegin(), iter), static_cast<int>(pending.size()));
+        pending.append({index, value});
+    }
+
+    if(pending.isEmpty()) {
+        return;
+    }
+
+    const int firstRow = static_cast<int>(mUniqueIndex.size());
+    beginInsertRows(QModelIndex(), firstRow, firstRow + static_cast<int>(pending.size()) - 1);
+    for(const Row& row : std::as_const(pending)) {
+        appendRow(row);
+    }
+    endInsertRows();
+}
+
+/**
+ * sourceIndex stops carrying the value of row. If sourceIndex represents that
+ * value, another source row with it outside skipFirst..skipLast takes its
+ * place, or the row goes away.
+ */
+void cwUniqueValueFilterModel::releaseRow(int row, const QModelIndex &sourceIndex, int skipFirst, int skipLast)
+{
+    if(mUniqueIndex.at(row).index != sourceIndex) {
+        return;
+    }
+
+    const QVariant value = mUniqueIndex.at(row).value;
+    const int n = sourceModel()->rowCount();
+    for(int i = 0; i < n; i++) {
+        if(i >= skipFirst && i <= skipLast) {
+            continue;
+        }
+        const auto candidate = sourceModel()->index(i, 0);
+        if(candidate != sourceIndex && uniqueValue(candidate) == value) {
+            mUniqueIndex[row].index = candidate;
+            return;
+        }
+    }
+
+    beginRemoveRows(QModelIndex(), row, row);
+    eraseRow(row);
+    endRemoveRows();
 }
 
 void cwUniqueValueFilterModel::connectSourceModel()
@@ -156,56 +230,8 @@ void cwUniqueValueFilterModel::connectSourceModel()
         return;
     }
 
-    auto insert = [this](const QModelIndex& sourceIndex) {
-        Q_ASSERT(sourceIndex.isValid());
-
-        // qDebug() << "cwUniqueValueFilterModel: insert" << sourceIndex;
-
-        findRunAction<void>(sourceIndex,
-                            [this, sourceIndex](auto iter) { return !contains(iter, sourceIndex); },
-        [this, sourceIndex](auto iter)
-        {
-            iter = mUniqueIndex.insert(iter, toRow(sourceIndex));
-            auto row = iteratorToRow(iter);
-
-            beginInsertRows(QModelIndex(), row, row);
-            endInsertRows();
-        });
-    };
-
-    auto remove = [this](auto iter, const QModelIndex& sourceIndex) {
-        auto findNextIndex = [this, sourceIndex](const QVariant& value)
-        {
-            auto n = this->sourceModel()->rowCount();
-            for(int i = 0; i < n; i++) {
-                auto currentIndex = this->sourceModel()->index(i, 0);
-                if(currentIndex != sourceIndex) {
-                    if(value == uniqueValue(currentIndex)) {
-                        //Found replacement index
-                        return currentIndex;
-                    }
-                }
-            }
-
-            return QModelIndex();
-        };
-
-        auto nextIndex = findNextIndex(iter->value);
-        if(nextIndex == QModelIndex()) {
-            //The only index in the whole set
-            int row = iteratorToRow(iter);
-            beginRemoveRows(QModelIndex(), row, row);
-            mUniqueIndex.erase(iter);
-            endRemoveRows();
-        } else {
-            //There's another index that has the same value, replace
-            //Don't need to datachange since it's the same??
-            iter->index = nextIndex;
-        }
-    };
-
     connect(sourceModel(), &QAbstractItemModel::rowsInserted,
-            this, [this, insert](const QModelIndex& parent, int first, int last)
+            this, [this](const QModelIndex& parent, int first, int last)
     {
         Q_UNUSED(parent);
 
@@ -214,61 +240,51 @@ void cwUniqueValueFilterModel::connectSourceModel()
             return;
         }
 
-        // Q_ASSERT(sourceModel() == sender()); //if this fails, we haven't disconnected a old sourceModel()
-        // qDebug() << "SourcModel:" << sourceModel() << sourceModel()->rowCount() << sourceModel()->columnCount() << sourceModel()->hasIndex(0, 0);
-        // qDebug() << "Insert:" << first << last;
-
-        for(int i = first; i <= last; i++) {
-            const auto index = this->sourceModel()->index(i, 0);
-            insert(index);
-        }
+        insertSourceRows(first, last);
     });
 
     //This is to handle concatination model inconsistancy with column rows
     connect(sourceModel(), &QAbstractItemModel::columnsInserted,
-            this, [this, insert](const QModelIndex& parent, int first, int last) {
+            this, [this](const QModelIndex& parent, int first, int last) {
+        Q_UNUSED(parent);
+        Q_UNUSED(first);
+        Q_UNUSED(last);
 
         if(sourceModel()->rowCount() <= 0) {
             return;
         }
 
         if(mUniqueIndex.isEmpty()) {
-            // qDebug() << "Running with column change";
-
             //Only run on new models
-            for(int i = 0; i < sourceModel()->rowCount(); i++) {
-                const auto index = this->sourceModel()->index(i, 0);
-                insert(index);
-            }
+            insertSourceRows(0, sourceModel()->rowCount() - 1);
         }
     });
 
     connect(sourceModel(), &QAbstractItemModel::rowsAboutToBeRemoved,
-            this, [this, remove](const QModelIndex& parent, int first, int last)
+            this, [this](const QModelIndex& parent, int first, int last)
     {
         Q_ASSERT(sourceModel() == sender()); //if this fails, we haven't disconnected a old sourceModel()
-
-
         Q_UNUSED(parent);
         for(int i = first; i <= last; i++) {
-            const auto sourceIndexToRemove = this->sourceModel()->index(i, 0);
-            this->findRunAction<void>(sourceIndexToRemove,
-                                [this, sourceIndexToRemove](auto iter)
-            {
-                return contains(iter, sourceIndexToRemove);
-            },
-
-            [sourceIndexToRemove, remove](auto iter)
-            {
-                remove(iter, sourceIndexToRemove);
-            });
+            const auto sourceIndex = this->sourceModel()->index(i, 0);
+            const int row = findRow(uniqueValue(sourceIndex));
+            if(row >= 0) {
+                releaseRow(row, sourceIndex, first, last);
+            }
         }
     });
 
     connect(sourceModel(), &QAbstractItemModel::modelAboutToBeReset,
             this, [this]()
     {
-        qDebug() << "Model reset" << sourceModel()->rowCount();
+        beginResetModel();
+    });
+
+    connect(sourceModel(), &QAbstractItemModel::modelReset,
+            this, [this]()
+    {
+        rebuildRows();
+        endResetModel();
     });
 
     connect(sourceModel(), &QAbstractItemModel::rowsAboutToBeMoved,
@@ -284,28 +300,26 @@ void cwUniqueValueFilterModel::connectSourceModel()
     });
 
     connect(sourceModel(), &QAbstractItemModel::dataChanged,
-            this, [this, insert, remove](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int> roles)
+            this, [this](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int> roles)
     {
-        Q_UNUSED(topLeft);
-        Q_UNUSED(bottomRight);
         if(roles.contains(mUniqueRole)) {
             for(int i = topLeft.row(); i <= bottomRight.row(); i++) {
                 const auto sourceIndex = this->sourceModel()->index(i, 0);
 
                 //Did we index the old value
-                auto iter = std::find_if(mUniqueIndex.begin(), mUniqueIndex.end(),
-                                                     [sourceIndex](const Row& row)
+                auto iter = std::find_if(mUniqueIndex.cbegin(), mUniqueIndex.cend(),
+                                         [sourceIndex](const Row& row)
                 {
                     return row.index == sourceIndex;
                 });
 
-                Q_ASSERT(iter != mUniqueIndex.end());
-                //Is in the index, but probably in the wrong spot.
-                //Remove it.
-                remove(iter, sourceIndex);
+                if(iter != mUniqueIndex.cend()) {
+                    //Indexed under its old value: hand that value to another
+                    //row or drop it, then index the new value.
+                    releaseRow(static_cast<int>(std::distance(mUniqueIndex.cbegin(), iter)), sourceIndex, i, i);
+                }
 
-                //Try to insert the sourceIndex back into the model
-                insert(sourceIndex);
+                insertSourceRows(i, i);
             }
         }
     });
@@ -316,7 +330,6 @@ void cwUniqueValueFilterModel::connectSourceModel()
 void cwUniqueValueFilterModel::disconnectSourceModel()
 {
     if(this->sourceModel()) {
-        qDebug() << "Disconnecting source model:" << this->sourceModel();
         disconnect(this->sourceModel(), nullptr, this, nullptr);
         isConnected = false;
     }
@@ -332,6 +345,5 @@ void cwUniqueValueFilterModel::setUniqueRole(int uniqueRole) {
 
 bool cwUniqueValueFilterModel::contains(const QVariant &key) const
 {
-    auto iter = findProxyIndex(key);
-    return iter != mUniqueIndex.end() && iter->value == key;
+    return findRow(key) >= 0;
 }

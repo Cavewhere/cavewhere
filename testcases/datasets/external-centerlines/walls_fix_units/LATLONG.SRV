@@ -1,0 +1,4 @@
+; A benchmark in degrees, minutes and seconds.
+#UNITS Meters
+#FIX L1 W86:57:30.5 N36:31:15.25 120
+L1	L2	10.0	180	0

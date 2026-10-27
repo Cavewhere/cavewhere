@@ -17,6 +17,10 @@ QQ.Item {
 
     property Team model
 
+    //When false the table presents the team without editing it: no add, no
+    //row delete, no name/role editors, and no role-add affordance.
+    property bool editable: true
+
     implicitHeight: childrenRect.height
 
     function updateState() {
@@ -41,6 +45,7 @@ QQ.Item {
         anchors.topMargin: 5
         anchors.horizontalCenter: parent.horizontalCenter
         text: "Add Team Member"
+        visible: teamTable.editable
 
         onClicked: {
             teamTable.model.addTeamMember();
@@ -51,7 +56,7 @@ QQ.Item {
     QQ.Item {
         id: personTable
 
-        anchors.top: addTeamMemberButton.bottom
+        anchors.top: teamTable.editable ? addTeamMemberButton.bottom : titleLabel.bottom
         anchors.topMargin: 5
 
         width: teamList.width
@@ -176,13 +181,14 @@ QQ.Item {
                         }
 
 
-                        visible: rowDelegate.selected
+                        visible: teamTable.editable && rowDelegate.selected
                     }
 
                     DoubleClickTextInput {
                         id: nameText
                         text: rowDelegate.name
                         autoResize: true
+                        readOnly: !teamTable.editable
 
                         anchors.left: deletePersonButton.right
                         anchors.right: parent.right
@@ -244,6 +250,7 @@ QQ.Item {
                                 id: jobText
                                 anchors.centerIn: parent
                                 text: job.modelData
+                                readOnly: !teamTable.editable
 
                                 onFinishedEditting: (newText) => {
                                     var alljobs = rowDelegate.jobs
@@ -266,18 +273,20 @@ QQ.Item {
                                     job.forceActiveFocus()
                                 }
 
-                                onDoubleClicked: {
-                                    jobText.openEditor()
-                                }
+                                onDoubleClicked: jobText.openEditor()
                             }
 
                             QQ.Keys.onDeletePressed: {
-                                removeJob()
+                                if(teamTable.editable) {
+                                    removeJob()
+                                }
                             }
                         }
                     }
 
                     QQ.Rectangle {
+                        objectName: "addJobButton." + rowDelegate.index
+
                         radius: 5
                         color: Theme.accent
 
@@ -287,7 +296,7 @@ QQ.Item {
                         width: addJobRow.width + 6
                         height: addJobRow.height + 6
 
-                        visible: rowDelegate.selected
+                        visible: teamTable.editable && rowDelegate.selected
 
                         QQ.Row {
                             id: addJobRow

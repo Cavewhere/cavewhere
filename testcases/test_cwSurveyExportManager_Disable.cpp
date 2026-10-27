@@ -17,6 +17,7 @@
 #include "cwSurveyChunk.h"
 #include "cwSurveyExportManager.h"
 #include "cwTrip.h"
+#include "TestHelper.h"
 #include "cwSignalSpy.h"
 
 // Qt includes
@@ -186,10 +187,12 @@ TEST_CASE("Attaching a trip added after region setup is still tracked",
     cwTrip* lateTrip = new cwTrip();
     lateTrip->setName(QStringLiteral("Late"));
     cave->addTrip(lateTrip);
-    REQUIRE(manager.canExport() == true);
 
     lateTrip->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));
-    CHECK(manager.canExport() == false);
+    REQUIRE(waitUntil([&manager]() { return !manager.canExport(); }));
+
+    lateTrip->setExternalCenterline(cwExternalCenterline());
+    CHECK(manager.canExport() == true);
 }
 
 TEST_CASE("Attaching a cave added after region setup is still tracked",
@@ -205,8 +208,37 @@ TEST_CASE("Attaching a cave added after region setup is still tracked",
     REQUIRE(manager.canExport() == true);
 
     cwCave* lateCave = addCaveWithOneShot(region, QStringLiteral("LateCave"));
-    REQUIRE(manager.canExport() == true);
 
     lateCave->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));
-    CHECK(manager.canExport() == false);
+    REQUIRE(waitUntil([&manager]() { return !manager.canExport(); }));
+
+    lateCave->setExternalCenterline(cwExternalCenterline());
+    CHECK(manager.canExport() == true);
+}
+
+TEST_CASE("Attaching a trip in a depth-2 node added after region setup is still tracked",
+          "[Export][Disable]")
+{
+    // The gate reads the whole tree, so a Section inserted under a cave, and a
+    // trip inserted under that Section, are tracked like a cave's own trips.
+    cwCavingRegion region;
+    cwCave* cave = addCaveWithOneShot(region, QStringLiteral("GrowingCave"));
+
+    cwSurveyExportManager manager;
+    manager.setCavingRegion(&region);
+    REQUIRE(manager.canExport() == true);
+
+    cwCave* section = new cwCave();
+    section->setName(QStringLiteral("Upper"));
+    cave->addNode(section);
+
+    cwTrip* lateTrip = new cwTrip();
+    lateTrip->setName(QStringLiteral("Late"));
+    section->addTrip(lateTrip);
+
+    lateTrip->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));
+    REQUIRE(waitUntil([&manager]() { return !manager.canExport(); }));
+
+    lateTrip->setExternalCenterline(cwExternalCenterline());
+    CHECK(manager.canExport() == true);
 }

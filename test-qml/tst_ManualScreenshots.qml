@@ -862,7 +862,7 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "View";
             RootData.futureManagerModel.waitForFinished();
             RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Cave=Phake Cave 3000/Trip=Release 0.08";
+                "Source/Data/Node=Phake Cave 3000/Trip=Release 0.08";
             tryVerify(() => RootData.pageView.currentPageItem !== null
                 && RootData.pageView.currentPageItem.objectName === "tripPage");
             let tripPageItem = RootData.pageView.currentPageItem;
@@ -1034,7 +1034,7 @@ MainWindowTest {
         //     than in its own Notes test for the first-visit reason above.
         function test_scrapNoteShots() {
             let page = loadCarpetNote("test_cwProject/Phake Cave 3000.cw", false,
-                "Source/Data/Cave=Phake Cave 3000/Trip=Release 0.08/Note=001");
+                "Source/Data/Node=Phake Cave 3000/Trip=Release 0.08/Note=001");
             if (!page) { return; }
 
             // --- Digitize shot ---
@@ -1277,7 +1277,7 @@ MainWindowTest {
         // the git image provider, so both panes must finish loading before the grab.
         function test_gitImageCompare() {
             let notePage = loadCarpetNote("test_cwProject/Phake Cave 3000.cw", false,
-                "Source/Data/Cave=Phake Cave 3000/Trip=Release 0.08/Note=001");
+                "Source/Data/Node=Phake Cave 3000/Trip=Release 0.08/Note=001");
             if (!notePage) { return; }
 
             // Commits need an identity; cleared settings otherwise fail the commit.
@@ -1544,7 +1544,7 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "View";
             RootData.futureManagerModel.waitForFinished();
             RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault";
+                "Source/Data/Node=Jaws of the Beast/Trip=2019c154_-_party_fault";
             tryVerify(() => RootData.pageView.currentPageItem !== null
                 && RootData.pageView.currentPageItem.objectName === "tripPage");
 
@@ -1869,7 +1869,7 @@ MainWindowTest {
         // this is whole-window too.
         // Backs the "Add a trip" section of survey-data/caves-and-trips.md.
         function test_addTripButton() {
-            let page = openDataPage("Source/Data/Cave=Phake Cave 3000", "cavePage");
+            let page = openDataPage("Source/Data/Node=Phake Cave 3000", "cavePage");
             if (!page) { return; }
 
             // CavePage builds a wide (table) and a narrow (flow) layout, both
@@ -1899,12 +1899,12 @@ MainWindowTest {
         readonly property real georefNorthing: 4300000
         readonly property real georefElevation: 1200
 
-        // Fix `page.currentCave`'s first station to real coordinates, which
+        // Fix `page.currentNode`'s first station to real coordinates, which
         // georeferences the cave — the fix anchors the project's frame. Undone
         // by the restoreDemoProject() reload each georef shot ends with.
         function georeferenceDemoCave(page) {
 
-            let model = page.currentCave.fixStations;
+            let model = page.currentNode.fixStations;
             model.addFixStation();
             model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);
             model.setData(model.index(0), georefCS, FixStationModel.InputCSRole);
@@ -1955,7 +1955,7 @@ MainWindowTest {
         // Back docs/manual/georeferencing/georeference-a-cave.md and
         // grid-convergence.md.
         function test_georefFixAndConvergence() {
-            let page = openDataPage("Source/Data/Cave=Phake Cave 3000", "cavePage");
+            let page = openDataPage("Source/Data/Node=Phake Cave 3000", "cavePage");
             if (!page) { return; }
 
             georeferenceDemoCave(page);
@@ -1986,8 +1986,8 @@ MainWindowTest {
 
             // No highlight ring here: the row is a single populated line and the
             // ring would occlude the easting. The columns are the point.
-            let csCombo = findVisibleByName(fixPage, "inputCSComboBox.0");
-            verify(csCombo, "found the row's Input CS picker (page rendered)");
+            let csLabel = findVisibleByName(fixPage, "inputCSLabel.0");
+            verify(csLabel, "found the row's Input CS text at rest (page rendered)");
             highlightOverlayId.target = null;
             settle();
 
@@ -2236,7 +2236,7 @@ MainWindowTest {
         // of the 0 m a lead reports with none. Backs
         // docs/manual/leads/track-and-export-leads.md.
         function test_leadsList() {
-            let page = openDataPage("Source/Data/Cave=Phake Cave 3000", "cavePage");
+            let page = openDataPage("Source/Data/Node=Phake Cave 3000", "cavePage");
             if (!page) { return; }
 
             // The Leads sub-page is registered on the cave page; reach it the way the
@@ -2381,12 +2381,12 @@ MainWindowTest {
         // Backs docs/manual/import-export/export-surveys.md.
         //
         // On the cave page rather than the Data page: there currentCave is always
-        // set (cavePageArea.currentCave), so the Compass and Chipdata items — which
+        // set (nodePageArea.currentNode), so the Compass and Chipdata items — which
         // disable on an empty cave — read enabled. The top level (Survex / Compass /
         // Chipdata) is what's grabbed; its submenus expand on hover, one at a time,
         // and the format list is the point.
         function test_exportMenu() {
-            let page = openDataPage("Source/Data/Cave=Phake Cave 3000", "cavePage");
+            let page = openDataPage("Source/Data/Node=Phake Cave 3000", "cavePage");
             if (!page) { return; }
 
             let menu = findChild(page, "exportMenu");
@@ -2534,7 +2534,7 @@ MainWindowTest {
         // CavePage builds a wide (table) and a narrow (flow) layout, both carrying
         // objectName "importSurvexButton" — findVisibleByName picks the shown one.
         function test_importSurvexTrip() {
-            let page = openDataPage("Source/Data/Cave=Phake Cave 3000", "cavePage");
+            let page = openDataPage("Source/Data/Node=Phake Cave 3000", "cavePage");
             if (!page) { return; }
 
             let importSurvex = findVisibleByName(page, "importSurvexButton");
@@ -2565,7 +2565,7 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "View";
             RootData.futureManagerModel.waitForFinished();
             RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Cave=Phake Cave 3000/Trip=Release 0.08";
+                "Source/Data/Node=Phake Cave 3000/Trip=Release 0.08";
             tryVerify(() => RootData.pageView.currentPageItem !== null
                       && RootData.pageView.currentPageItem.objectName === "tripPage",
                       5000, "the trip page is current");
@@ -2637,7 +2637,7 @@ MainWindowTest {
         // On the trip page rather than the View page the app actually opens on,
         // because the trip page is the one that fills the breadcrumb in. The tour
         // teaches reading and clicking a trail like
-        // "Source / Data / Cave=... / Trip=...", and on the View page that trail
+        // "Source / All caves / <cave> / <trip>", and on the View page that trail
         // is a single crumb reading "View".
         function test_gettingStartedTour() {
             let view = openSurveyEditorView();

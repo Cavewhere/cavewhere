@@ -38,11 +38,12 @@ class cwSurveyExportManager : public QObject
     Q_PROPERTY(cwCave* cave READ cave WRITE setCave NOTIFY caveChanged)
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
 
-    // True when nothing in the region has an external-centerline attachment
-    // (or a Scope sub-entity once Phase 3 introduces stationPrefix).
-    // The Survex and Compass exports refuse to run when this is false because
+    // True when every node and trip in the region is free of an
+    // external-centerline attachment (every source root carries one). The
+    // Survex and Compass exports refuse to run when this is false because
     // those output formats cannot round-trip the *include topology the
-    // attached entry brought in. See master plan §7.5.
+    // attached entry brought in.
+    // See master plan §7.5.
     Q_PROPERTY(bool canExport READ canExport NOTIFY canExportChanged FINAL)
 
     // Human-readable explanation for the disabled state, or empty when
@@ -94,7 +95,7 @@ private:
     QPointer<cwCavingRegion> CavingRegion; //!<
 
     // Cached gate state. Recomputed by recomputeCanExport() whenever the
-    // region's cave/trip set changes or any cave/trip's externalCenterline
+    // region's node/trip set changes, any node/trip's externalCenterline
     // changes. Defaults to true (pure-Native projects export normally).
     bool m_canExport = true;
     QString m_exportDisabledReason;
@@ -106,6 +107,13 @@ private:
     // the manager outliving any individual cave/trip in the region.
     QList<QMetaObject::Connection> m_externalCenterlineConnections;
 
+    // The region root's subtreeChanged, which schedules the rewire. Held apart
+    // from the rewire's own connections so a rewire never drops it.
+    QMetaObject::Connection m_subtreeConnection;
+
+    // Whether a scheduleRewire() is still waiting for its turn.
+    bool m_rewirePending = false;
+
     void updateCaveActions(const QModelIndex& index);
     void updateTripActions(const QModelIndex& index);
 
@@ -113,13 +121,14 @@ private:
     cwTrip* currentTrip() const;
 
     // Tears down and re-establishes every signal connection used to drive
-    // recomputeCanExport(): region cave-insert/remove, per-cave
-    // trip-insert/remove, and per-cave / per-trip externalCenterlineChanged.
-    // Cheap (a handful of caves and trips in normal projects) and run only
-    // on structural changes.
+    // recomputeCanExport(): the per-node / per-trip externalCenterlineChanged,
+    // at every depth. Walks the whole tree, so structural changes reach it
+    // through scheduleRewire(), once per event-loop turn.
     void rewireExternalCenterlineTracking();
+    void scheduleRewire();
+    void runPendingRewire();
 
-    // Walks every cave (and its trips) in the current region; updates
+    // Walks every node (and its trips) in the current region; updates
     // m_canExport / m_exportDisabledReason and emits canExportChanged()
     // only when the gate flips. Cheap and idempotent.
     void recomputeCanExport();

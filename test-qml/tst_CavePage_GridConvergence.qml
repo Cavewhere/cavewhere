@@ -18,7 +18,7 @@ MainWindowTest {
             RootData.region.addCave()
             cave = RootData.region.cave(0)
             cave.name = "ConvCave"
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=ConvCave"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=ConvCave"
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "cavePage")
         }
 
@@ -53,6 +53,10 @@ MainWindowTest {
             cave.fixStations.setData(idx, e, FixStationModel.EastingRole)
             cave.fixStations.setData(idx, n, FixStationModel.NorthingRole)
             cave.fixStations.setData(idx, z, FixStationModel.ElevationRole)
+            // The frame settles on the next event-loop turn; a fix moved in the
+            // same turn would anchor where it ended up rather than where it
+            // was typed.
+            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem)
         }
 
         // ── No fix station → "n/a (no fix station)" ──────────────────────────
@@ -249,7 +253,7 @@ MainWindowTest {
             // Lat/lon has no grid of its own, but it places the cave — and the
             // grid the answer is about is the project's local projection, which
             // this fix anchors.
-            compare(cave.gridConvergence.state, GridConvergence.Valid)
+            tryCompare(cave.gridConvergence, "state", GridConvergence.Valid)
             verify(cave.gridConvergence.text.indexOf("a1") >= 0,
                    "the readout names the fix it converged at: "
                    + cave.gridConvergence.text)

@@ -346,7 +346,8 @@ TEST_CASE("Splays make the round trip through cavern into the line plot's result
     REQUIRE(splayTips.size() == 1);
     REQUIRE(splayTips.contains(QStringLiteral("a2")));
 
-    const QVector3D a2 = caveData.stationPositions().position(QStringLiteral("a2"));
+    const QVector3D a2 =
+        result.regionStationPositions().scoped(cave->scopePrefix()).position(QStringLiteral("a2"));
     const QList<QVector3D> tips = splayTips.value(QStringLiteral("a2"));
     REQUIRE(tips.size() == 2);
     CHECK(hasTipNear(tips, a2 + QVector3D(5.0f, 0.0f, 0.0f)));

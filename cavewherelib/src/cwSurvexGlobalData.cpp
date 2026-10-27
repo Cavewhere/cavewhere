@@ -16,6 +16,10 @@
 
 //Qt includes
 #include <QThread>
+#include <QHash>
+#include <QMap>
+#include <QSet>
+#include <QStringList>
 
 cwSurvexGlobalData::cwSurvexGlobalData(QObject* parent) :
     cwTreeImportData(parent), NodeData()
@@ -278,36 +282,82 @@ void cwSurvexGlobalData::fixDuplicatedStationInShot(cwSurveyChunk *chunk, cwTree
 void cwSurvexGlobalData::populateEquateMap(cwTreeImportDataNode *block)
 {
     auto blockData = nodeData(block);
-    foreach(QStringList equateList, blockData->EqualStations) {
-        if(equateList.size() < 2) {
+
+    //Collapse every *equate in this block by transitive closure (union-find)
+    //instead of per-statement, so a chain of 2-way ties — *equate A B;
+    //*equate B C; *equate C D — merges to one representative name exactly like a
+    //single N-way *equate A B C D would. The previous per-statement merge only
+    //looked at one statement at a time and left transitively-equated stations
+    //under different names (the old 3+-way FIXME).
+    QHash<QString, QString> parent; //name -> parent in the union-find forest
+
+    //Names absent from `parent` are their own root, so find() returns them
+    //unchanged and unite() only has to relink the two roots.
+    const auto find = [&parent](QString name) -> QString {
+        QString root = name;
+        while (parent.value(root, root) != root) {
+            root = parent.value(root, root);
+        }
+        while (name != root) {
+            const QString next = parent.value(name, name);
+            parent.insert(name, root);
+            name = next;
+        }
+        return root;
+    };
+
+    const auto unite = [&parent, &find](const QString& a, const QString& b) {
+        const QString rootA = find(a);
+        const QString rootB = find(b);
+        if (rootA != rootB) {
+            parent.insert(rootB, rootA);
+        }
+    };
+
+    //Keep first-seen order so the representative choice is deterministic.
+    QStringList order;
+    QSet<QString> seen;
+    const auto note = [&order, &seen](const QString& name) {
+        if (!seen.contains(name)) {
+            seen.insert(name);
+            order.append(name);
+        }
+    };
+
+    for (const QStringList& equateList : blockData->EqualStations) {
+        if (equateList.size() < 2) {
             continue;
         }
-
-        //Find the best station
-        QString bestStationName;
-        foreach(QString name, equateList) {
-            if(blockData->EquateMap.contains(name) && bestStationName.isEmpty()) {
-                bestStationName = blockData->EquateMap.value(name);
-                break;
-//            } else if(block->EquateMap.contains(name)) {
-                //There's 3 or more equates linking a bunch of stations together
-                //Cavewhere can't handle this right now
-                //FIXME: Allow for 3 or more equates
-//                qDebug() << "Can't handle 3 or more equates with the same stations" << LOCATION;
-            }
-        }
-
-        if(bestStationName.isEmpty()) {
-            bestStationName = equateList.first();
-        }
-
-        bestStationName = bestStationName.split(".").last();
-
-        foreach(QString name, equateList) {
-            blockData->EquateMap.insert(name, bestStationName);
+        note(equateList.first());
+        for (int i = 1; i < equateList.size(); ++i) {
+            note(equateList.at(i));
+            unite(equateList.first(), equateList.at(i));
         }
     }
 
+    //A name already carrying a mapping is an existing/known station; prefer it
+    //as the representative for its set, matching the old "best station" bias.
+    const QMap<QString, QString> preExisting = blockData->EquateMap;
+
+    QHash<QString, QString> representativeForRoot; //root -> chosen full name
+    for (const QString& name : order) {
+        const QString root = find(name);
+        if (!representativeForRoot.contains(root)
+                || (preExisting.contains(name)
+                    && !preExisting.contains(representativeForRoot.value(root)))) {
+            representativeForRoot.insert(root, name);
+        }
+    }
+
+    for (const QString& name : order) {
+        const QString root = find(name);
+        QString base = representativeForRoot.value(root);
+        if (preExisting.contains(base)) {
+            base = preExisting.value(base);
+        }
+        const QString bestStationName = base.split(QLatin1Char('.')).last();
+        blockData->EquateMap.insert(name, bestStationName);
+    }
 }
 
 /**

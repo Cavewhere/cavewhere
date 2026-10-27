@@ -17,6 +17,7 @@
 #include <QHash>
 #include <QPair>
 #include <QString>
+#include <QStringList>
 
 // Survex's closure error for the traverse a leg sits in, in standard deviations:
 // total (e), horizontal (h) and vertical (v).
@@ -43,6 +44,10 @@ public:
         cwSurveyNetwork network;
         cwStationPositionLookup lookup;
         cwSplayTipsByStation splayTips;
+        //! Canonical names of the stations the data fixes with *fix (or a
+        //! format's own fix). The origin cavern invents for a survey with no
+        //! fix is excluded.
+        QStringList fixedStations;
 
         // The img_ERROR_INFO closure error of every leg that sits in a loop,
         // keyed by legKey() of its two full station names. Legs outside any
@@ -58,7 +63,8 @@ public:
     // Parses a .3d file once, returning the survey network (station names,
     // shot connectivity, positions), a standalone position lookup, and the
     // splay tips. Two-pass using img_rewind(): pass 1 indexes LABEL items,
-    // pass 2 resolves LINE endpoints by coordinate match.
+    // pass 2 resolves LINE endpoints by coordinate, naming each end under the
+    // leg's own survey.
     NetworkAndLookup readNetworkAndLookup(const QString& threeDFilePath);
 };
 

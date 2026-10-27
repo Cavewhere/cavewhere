@@ -1,0 +1,4 @@
+; A benchmark in feet with a variance.
+#Units feet
+#FIX F1 1707000 13256000 1000 (R5,?)
+F1	F2	30	90	0

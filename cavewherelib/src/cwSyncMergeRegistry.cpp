@@ -1,9 +1,9 @@
 #include "cwSyncMergeRegistry.h"
 
-#include "cwCaveSyncMergeHandler.h"
 #include "cwCavingRegionSyncMergeHandler.h"
 #include "cwNoteLiDARSyncMergeHandler.h"
 #include "cwNoteSyncMergeHandler.h"
+#include "cwSurveyNodeSyncMergeHandler.h"
 #include "cwTripSyncMergeHandler.h"
 
 #include <QSet>
@@ -11,7 +11,7 @@
 cwSyncMergeRegistry::cwSyncMergeRegistry()
 {
     m_handlers.emplace_back(std::make_unique<cwCavingRegionSyncMergeHandler>());
-    m_handlers.emplace_back(std::make_unique<cwCaveSyncMergeHandler>());
+    m_handlers.emplace_back(std::make_unique<cwSurveyNodeSyncMergeHandler>());
     m_handlers.emplace_back(std::make_unique<cwTripSyncMergeHandler>());
     m_handlers.emplace_back(std::make_unique<cwNoteLiDARSyncMergeHandler>());
     m_handlers.emplace_back(std::make_unique<cwNoteSyncMergeHandler>());
@@ -52,6 +52,11 @@ cwReconcileMergeResult cwSyncMergeRegistry::reconcile(const cwReconcileMergeCont
         }
 
         if (result.outcome == cwReconcileMergeResult::Outcome::RequiresFullReload) {
+            // The reload replaces the model, but the cleanup earlier handlers decided on
+            // still describes the merged disk: an orphan left in place would load as a
+            // second node beside its winner.
+            result.orphanDirectoriesToRemove =
+                aggregateResult.orphanDirectoriesToRemove + result.orphanDirectoriesToRemove;
             return result;
         }
 
@@ -59,6 +64,14 @@ cwReconcileMergeResult cwSyncMergeRegistry::reconcile(const cwReconcileMergeCont
         aggregateResult.modelMutated = aggregateResult.modelMutated || result.modelMutated;
         aggregateResult.pendingConflictCleanup =
             aggregateResult.pendingConflictCleanup || result.pendingConflictCleanup;
+        aggregateResult.persistNoteDescriptors =
+            aggregateResult.persistNoteDescriptors || result.persistNoteDescriptors;
+        aggregateResult.persistLiDARNoteDescriptors =
+            aggregateResult.persistLiDARNoteDescriptors || result.persistLiDARNoteDescriptors;
+        aggregateResult.persistProjectFile =
+            aggregateResult.persistProjectFile || result.persistProjectFile;
+        aggregateResult.orphanDirectoriesToRemove.append(result.orphanDirectoriesToRemove);
+        aggregateResult.filesToRestore.append(result.filesToRestore);
         aggregateResult.diagnostics.append(result.diagnostics);
         appliedHandlers.append(result.handlerName);
         // If a mutating handler did NOT synchronize disk, persistence is required.

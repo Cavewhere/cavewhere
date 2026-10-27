@@ -50,6 +50,7 @@
 
 #include "LazFixtureHelper.h"
 #include "LocalSpacingFixtureHelper.h"
+#include "TestHelper.h"
 
 using namespace cw::octree;
 using cwLocalSpacingFixture::estimateLocalSpacing;
@@ -1199,11 +1200,9 @@ TEST_CASE("cwPointOctreeBuilder: the build shows up as a job and finishes its pr
 
     REQUIRE(rowsInsertedSpy.size() >= 1);
 
-    while(!future.isFinished()) {
-        QCoreApplication::processEvents();
-        QThread::msleep(5);
-    }
-    QCoreApplication::processEvents();
+    constexpr int kBuildTimeoutMs = 60000;
+    REQUIRE(waitUntil([&] { return future.isFinished() && manager.rowCount() == 0; },
+                      kBuildTimeoutMs));
 
     REQUIRE(future.progressMaximum() > 0);
     REQUIRE(future.progressValue() == future.progressMaximum());

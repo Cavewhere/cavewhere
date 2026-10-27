@@ -1,0 +1,2 @@
+; Middle of the include chain; its handle is the second one to leak.
+*include "too_many_errors.svx"

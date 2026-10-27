@@ -2,55 +2,1304 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>External File Integration — Phase 3</title>
+<title>External File Integration — Phase 3: Cave-level attach</title>
 <style>
-  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
-  h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
-  h2 { font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
-  code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
-  .meta { color: #5a5a5a; font-size: 0.92em; }
-  .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
-  a { color: #2451a4; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 15px;
+         line-height: 1.5; color: #222; max-width: 980px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 26px; } h2 { font-size: 21px; margin-top: 36px; border-bottom: 2px solid #ddd;
+       padding-bottom: 4px; } h3 { font-size: 17px; margin-top: 24px; } h4 { font-size: 15px; }
+  code { font-family: "Courier Prime", "Courier New", monospace; font-size: 13px;
+         background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; margin: 12px 0; }
+  th, td { border: 1px solid #ccc; padding: 5px 10px; text-align: left; vertical-align: top; }
+  th { background: #eee; }
+  .note { background: #eef6fd; border-left: 4px solid #5b9bd5; padding: 10px 14px; margin: 14px 0; }
+  .decision { background: #f0f9f0; border-left: 4px solid #6aa84f; padding: 10px 14px; margin: 14px 0; }
+  .warning { background: #fdf3e7; border-left: 4px solid #e69138; padding: 10px 14px; margin: 14px 0; }
+  .resolved { background: #f0f9f0; border-left: 4px solid #6aa84f; padding: 10px 14px; margin: 14px 0; }
+  .commit { border: 1px solid #ccc; border-radius: 6px; padding: 4px 18px 14px; margin: 22px 0; }
+  .commit h3 { margin-top: 14px; }
+  .gate { background: #f8f4fc; border-left: 4px solid #8e7cc3; padding: 8px 14px; margin: 10px 0;
+          font-size: 14px; }
+  .meta { color: #555; }
+  .filelist { font-size: 13px; }
 </style>
 </head>
 <body>
 
-<h1>External File Integration — Phase 3: Cave-level attach + nav badging</h1>
+<h1>External File Integration — Phase 3: Cave-level attach</h1>
 
 <p class="meta">
-  Part of the External File Integration plan. Read
-  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a>
-  first &mdash; this file assumes its architecture, data model, scanner,
-  copy workflow, driver shape, consumer-side pipeline, and UX model are
-  the source of truth for cross-cutting decisions.
+  Full plan, written 2026-08-24 (supersedes the stub). Part of the External File
+  Integration plan — <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a>
+  holds the architecture and state model; its §9 Phase 3 block now points here.
+  The settled UX is the clickable
+  <a href="EXTERNAL_CENTERLINE_UX_INTERACTIVE.html">interactive prototype</a>
+  (Phase 3 lane), approved 2026-08-24. Phase 2's as-shipped surface is inventoried in
+  the prototype's Phase 2 lane and in <a href="EXTERNAL_FILE_PHASE2.html">the Phase 2 plan</a>.
 </p>
 
 <div class="note">
-  <strong>Status: stub.</strong> Phase 3's plan currently lives in
-  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p3">&sect;9 Phase 3 of the
-  master plan</a>. When Phase 3 gets a full planning pass, the contents
-  move here and the master gets a one-paragraph pointer back.
+  <strong>How to execute this plan.</strong> Each commit below (P3.1 … P3.11) is one run of
+  the 5-stage workflow pipeline (plan → implement → simplify → code-review → fix+commit),
+  strictly in order — later commits assume earlier ones are in the tree. Every factual
+  claim about existing code carries a <code>file:line</code> reference measured at
+  <code>externalFiles</code> HEAD <code>8ee3ec30</code>; re-verify line numbers before
+  editing, trust the identifiers.
 </div>
 
-<h2>What this file will contain</h2>
+<h2 id="goal">1. Goal and scope</h2>
 
+<p><strong>Goal:</strong> a user can create a cave from an external survey file
+("Add Cave ▾ → Add cave from survey file…" on DataMainPage), get one auto-created
+Scope trip per <code>*begin</code> block to anchor notes and scraps on, see solve
+errors on the cave and trip rows they navigate by, and detach the whole thing with
+one confirmed action.</p>
+
+<h4>Ships in Phase 3</h4>
 <ul>
-  <li>Phase 3 goal and acceptance criteria (currently in master &sect;9 Phase 3).</li>
-  <li>Files-touched list specific to Phase 3 &mdash; cave-level attach entry on DataMainPage, Scope-trip auto-creation from <code>*begin</code> blocks, nav-tree badge wiring, Add Trip dropdown (Native / External).</li>
-  <li>Per-commit test gates &mdash; probably 8&ndash;10 commits covering: ExternalCenterlineScopeHeader sub-component, ExternalCenterlineCaveSummary sub-component on CavePage, Scope-trip auto-creation worker step (after cavern resolves the cave-level attach), cave-level detach with auto-trip removal cascade, cwSurveyExportManager cave-level disable check, nav badge model + rendering, Add Trip menu rework.</li>
-  <li>Phase 3 fixture files &mdash; multi-<code>*begin</code> Survex / Walls projects for Scope-trip generation tests.</li>
-  <li>QML tests &mdash; <code>tst_ExternalCenterlineAttachCave.qml</code>, <code>tst_NavBadge.qml</code>, Scope-trip auto-creation visibility.</li>
-  <li>Phase 3 open UX questions (subset of master &sect;8.8: questions 2, 3, 5, 8, 10 are particularly Phase-3-relevant).</li>
+  <li>Common-ancestor rebase of the attachment copy layout (prerequisite — see §4), with the
+      absolute-include error and climb cap.</li>
+  <li>Scanner block tree (per-block station counts) + scan-preview exposure.</li>
+  <li>Cave-typed attach / detach / replace orchestration, Scope-trip auto-creation,
+      owner-generic source verbs (Update/Reload for cave owners).</li>
+  <li>Scope semantics: a <code>stationPrefix</code> trip under an Attached cave is a
+      window into the cave's resolved network; <code>externallyBacked</code> predicate.</li>
+  <li>UI: Add Cave menu + cave attach dialog (block preview, multi-cave heuristic),
+      CavePage cave-summary card, 📎 trip rows with em-dash declination, TripPage Scope
+      mode with <code>ExternalCenterlineScopeHeader</code>, cave-level Detach cascade.</li>
+  <li>Solve badges on DataMainPage cave rows and CavePage trip rows (the honest form of
+      the master plan's "nav tree badging" — there is no nav tree; see §3.5).</li>
+  <li>Export gate extended to Scope (<code>stationPrefix</code>) entities.</li>
 </ul>
 
-<h2>Key cross-references to the master plan</h2>
-
+<h4>Non-goals (deferred)</h4>
 <ul>
-  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-cave">&sect;8.6 &mdash; CavePage walkthrough</a> (Native-only / Cave-level external / Mixed wireframes).</li>
-  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-transitions">&sect;8.7 &mdash; Mode transitions</a> (auto-trip-removal cascade on cave-level detach).</li>
-  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-trip-panel">&sect;8.5.1 &mdash; ExternalCenterlineTripPanel structure</a> (ScopeHeader sub-component lights up here).</li>
-  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#data-model">&sect;3.1 &mdash; Native / Attached / Scope state model</a>; &sect;3.1.1 / 3.1.2 walk through the cave-level attach case specifically.</li>
-  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#driver">&sect;6 &mdash; Driver-file shape</a> (cave-level attach emits <code>*begin cave_&lt;uuid&gt; *include &hellip; *end</code> without trip iteration).</li>
+  <li>Region-level attach / Structure view (Phase 6).</li>
+  <li>The Replace diff dialog with per-trip Kept/Orphaned fates (v1.x — P3.4 ships a
+      silent prefix-match reconcile instead).</li>
+  <li>"Convert Scope trip to native" escape hatch (v1.x).</li>
+  <li>Disconnected-component analysis for the multi-cave heuristic (block-structure
+      signals only in v1 — see §5 Q1).</li>
+  <li>Carrying the raw <code>*include</code> directive into B7's containment message
+      (nice-to-have noted in the old stub; only the absolute-include <em>error</em> is
+      built here).</li>
+  <li>Converting an existing Native cave to cave-level external (per master §8.7 —
+      fresh-cave entry point only).</li>
+</ul>
+
+<h2 id="audit">2. Current-state audit — what already exists</h2>
+
+<p>Much of "cave-level attach" shipped sideways during Phase 2 and the equates work.
+Implement agents: <strong>do not rebuild any of this.</strong></p>
+
+<table>
+<tr><th>Already shipped</th><th>Where</th></tr>
+<tr><td>Cave-level Attached data model: <code>cwCave::externalCenterline</code>
+  Q_PROPERTY + member + signal</td>
+  <td><code>cwCave.h:57,78,189,225</code></td></tr>
+<tr><td>Persistence: <code>Cave.external_centerline = 12</code>, save/load both owners</td>
+  <td><code>cavewhere.proto:126-128</code>; <code>cwSaveLoad.cpp:1935-1938,3007-3009</code></td></tr>
+<tr><td>Driver emission for an attached cave: <code>*begin &lt;cave&gt;</code> +
+  <code>*include</code> + <code>*end</code>, trip loop / fixes / equates skipped;
+  excluded owner emits nothing</td>
+  <td><code>cwSurvexExporterCaveTask.cpp:101-155</code></td></tr>
+<tr><td>Manager scan handles Cave owners: <code>ownerKind == "Cave"</code> rows,
+  attachment dirs, containment error on the model row (F3), missing-copy tracking</td>
+  <td><code>cwExternalCenterlineManager.cpp:582-590,618-724</code>;
+      <code>cwAttachedCenterlinesModel.h:49,62-67</code></td></tr>
+<tr><td><code>attachmentDir(ownerId)</code> already owner-kind agnostic</td>
+  <td><code>cwExternalCenterlineManager.h:262-266</code></td></tr>
+<tr><td>Export gate covers cave-level attachments (but not <code>stationPrefix</code>)</td>
+  <td><code>cwSurveyExportManager.cpp:349-378</code>, connections <code>:305-341</code></td></tr>
+<tr><td><code>cwTrip::stationPrefix</code> / <code>scopePrefix</code> / <code>isScoped</code>
+  + proto field 11 + <code>scopeChanged</code> relay plumbing</td>
+  <td><code>cwTrip.h:72-74,127-146</code>; <code>cwTrip.cpp:41-52,254-291</code>;
+      <code>cavewhere.proto:152-154</code></td></tr>
+<tr><td><code>cwScopeStationListModel</code> driven by <code>cwTrip::knownStations()</code>
+  (chunks ∪ harvest ∪ solved)</td>
+  <td><code>cwScopeStationListModel.h:50-98</code>; <code>cwTrip.h:213-236</code></td></tr>
+<tr><td><code>cwStationValidator::external</code> flag + relaxed regex</td>
+  <td><code>cwStationValidator.h:32,53</code></td></tr>
+<tr><td><code>cwSaveLoad::externalCenterlineDir</code> has both cave and trip overloads</td>
+  <td><code>cwSaveLoad.h:310-311</code></td></tr>
+<tr><td>Split-button-with-menu pattern to mirror for Add Cave</td>
+  <td><code>CavePage.qml:247-254,302-311</code>; <code>AddAndSearchBar.qml:8-16</code>;
+      <code>SplitButton.qml:23-30,133-157</code></td></tr>
+<tr><td><code>RemoveAskBox</code> with <code>message</code>/<code>confirmText</code>
+  overrides for the detach cascade confirm</td>
+  <td><code>RemoveAskBox.qml:16-36</code></td></tr>
+</table>
+
+<p>And what is <strong>missing</strong> (the work of this phase): every attach/detach/replace
+entry point is <code>cwTrip*</code>-typed (<code>cwExternalCenterlineAttach.h:90,106</code>,
+<code>cwExternalCenterlineManager.h:139-163</code>, <code>cwRootData.h:165-170</code>);
+<code>updateFromSource</code> silently no-ops for cave owners
+(<code>cwExternalCenterlineManager.cpp:1145-1152</code>); the scanner has no block tree
+(<code>cwExternalCenterlineScanner.h:98-132</code> — three fields only); the copy layout
+drops up-directory includes (§4); <code>ExternalCenterlineScopeHeader.qml</code> and
+<code>ExternalCenterlineCaveSummary.qml</code> do not exist; the trip panel header is
+hard-coded to the attached header (<code>ExternalCenterlineTripPanel.qml:193-198</code>);
+TripPage's swap condition ignores Scope trips (<code>TripPage.qml:29-30</code>); the
+validator predicate is <code>parentTrip.isScoped</code> inlined at two sites and ignores
+the parent cave (<code>NoteStation.qml:84-88</code>, <code>NoteLiDARStationItem.qml:68-75</code>);
+DataMainPage's Add Cave bar has no menu (<code>DataMainPage.qml:225-237</code>); no
+<code>externallyBacked</code> helper exists anywhere.</p>
+
+<h2 id="decisions">3. Settled design decisions</h2>
+
+<h3>3.1 UX (approved via the interactive prototype, 2026-08-24)</h3>
+<ul>
+  <li><strong>Naming:</strong> the menu item is <strong>"Add cave from survey file…"</strong> —
+      same verb family as Phase 2's shipped "Add trip from survey file…", replacing the
+      older prototype's "External cave…".</li>
+  <li><strong>No Import box in the cave dialog.</strong> One primary verb: Attach.
+      Whole-file native import is the existing Import Survex feature.</li>
+  <li><strong>Scope-trip preview in the dialog:</strong> the scan shows the block tree and
+      exactly which trips will be created. Auto-creation stays silent (no picker) —
+      the preview is disclosure.</li>
+  <li><strong>Multi-cave heuristic:</strong> when the entry looks like a project master
+      (§5 Q1: ≥ 2 top-level blocks and no shot data of its own), warn, list the entry's
+      direct includes as one-click alternate targets, and <em>still allow the attach</em>.
+      Guidance, not refusal.</li>
+  <li><strong>Cave-level detach cascade:</strong> RemoveAskBox-style confirm naming the
+      Scope-trip count and the copied-file deletion; on confirm, Scope trips (and their
+      notes/scraps) are removed and the attachment dir is deleted. Git history is the
+      way back.</li>
+  <li><strong>📎 + em-dash:</strong> externally backed trips (Attached and Scope alike) get
+      a 📎 prefix in the trip table and an em-dash declination cell.</li>
+  <li><strong>Master §8.6 is superseded</strong> where it replaces the trip table with a
+      notes list and hides native trips — the Scope-trip resolution keeps the trip table,
+      showing the auto-created 📎 trips. The cave-level CavePage = summary card + normal
+      trip table.</li>
+</ul>
+
+<h3>3.2 Scope semantics</h3>
+<div class="decision">
+  A Scope trip under an Attached cave carries <code>stationPrefix</code> (dotted path of
+  its <code>*begin</code> block relative to the file root, e.g.
+  <code>big-passage.east</code>), owns no file and no chunks, and emits nothing into the
+  driver (the attached cave's exporter path already skips the trip loop,
+  <code>cwSurvexExporterCaveTask.cpp:152-155</code>). Its stations come from filtering the
+  parent cave's solved network by <code>scopePrefix()</code> — which already returns
+  <code>stationPrefix + "."</code> (<code>cwTrip.cpp:43-51</code>) and already feeds
+  <code>solvedStations()</code> / <code>knownStations()</code>. P3.6 verifies and completes
+  this path rather than inventing a new one.
+</div>
+
+<h3>3.3 Cave attach guard: fresh caves only</h3>
+<div class="decision">
+  <code>attach(cwCave*)</code> refuses a cave that already has trips
+  ("attach: cave already has trips — cave-level attach is for a new cave").
+  The only UI entry point creates the cave immediately before attaching (mirroring the
+  trip flow's create-then-dialog, <code>CavePage.qml:46-51</code>), so the guard is a
+  backstop, and it keeps the driver invariant that an attached cave has no native trips
+  (<code>cwSurvexExporterCaveTask.cpp:103-108</code>). Replace is exempt — it runs on a
+  cave whose trips are the Scope trips the previous attach created.
+</div>
+
+<h3>3.4 Scope-trip auto-creation lives in C++</h3>
+<div class="decision">
+  Creation happens in the cave-attach success continuation (main thread, contextualized
+  on <code>saveLoad</code> like the rest of the attach), not in QML: one trip per scan
+  block with ≥ 1 station of its own, <code>name = cave-&gt;uniqueTripName(block.name)</code>,
+  <code>stationPrefix = block.path</code>, created in file order (parents before children —
+  both <code>big-passage</code> and <code>big-passage.east</code> become trips when both
+  have own stations). The report carries what was created so tests and QML observe it.
+  Replace reconciles instead of recreating: keep trips whose prefix still names a block,
+  create trips for new blocks, leave orphaned trips in place (their station list just
+  goes empty). No diff dialog in v1.
+  <strong>Amended by P3.16:</strong> a station-bearing file root gets one whole-cave
+  window (empty <code>stationPrefix</code>, derived state), and an orphaned window that
+  holds no chunks is removed on reconcile instead of left in place.
+</div>
+
+<h3>3.5 "Nav badging" is row badging</h3>
+<div class="decision">
+  The master plan assumed a nav tree; none exists — navigation is DataMainPage's cave
+  list (<code>DataMainPage.qml:256-341</code>), CavePage's trip table, and the LinkBar
+  breadcrumb. Phase 3 ships a small solve badge (dot, colors per
+  <code>ExternalCenterlineSolveStatus.qml:30-42</code>) on cave delegates and trip rows
+  for externally backed owners with a solve error or warnings; click navigates to the
+  Cavern page. Anchoring to the owner's section on CavernOutputPage is satisfied by the
+  attached-centerlines list already sitting at the top of that page.
+</div>
+
+<h2 id="rebase">4. Prerequisite design: rebase the attachment copy to the dependencies' common ancestor</h2>
+
+<p class="meta">Carried from the stub (2026-08-04), unchanged in substance; status updated.
+This is the difference between cave-level attach working and failing on roughly a quarter
+of real cave masters.</p>
+
+<h4>The defect</h4>
+<p><code>cwExternalCenterlineSync::computePlan</code> mirrors every dependency relative to
+the <em>entry file's own directory</em> (<code>cwExternalCenterlineSync.cpp:140-156</code>).
+A dependency above the entry — the ordinary <code>*include "../conventions.svx"</code> —
+produces a relative path starting <code>../</code>;
+<code>relativeEscapesAttachmentDir</code> (<code>cwExternalCenterlineSync.cpp:27-41</code>)
+omits it with a warning, and since B7 the attach fails outright on any omission warning
+(<code>cwExternalCenterlineAttach.cpp:236-245</code>).</p>
+
+<h4>Measured frequency (one 2111-file Survex corpus; don't over-fit)</h4>
+<table>
+<tr><th>Attach target</th><th>Entries</th><th>Escape their own directory</th></tr>
+<tr><td>Trip (leaf file)</td><td>1777 (84.2%)</td><td>0 — 0.0%</td></tr>
+<tr><td>Cave (master including trip files)</td><td>242 (11.5%)</td><td>56 — 23.1%</td></tr>
+<tr><td>Area / region (master of masters)</td><td>92 (4.4%)</td><td>5 — 5.4%</td></tr>
+</table>
+<p>97% of escaping entries escape via exactly one shared file exactly one level up
+(a shared BCRA error model feeding loop closure — losing it is not cosmetic). "Attach the
+parent instead" usually has no target: nothing includes the cave master and the shared
+file as siblings.</p>
+
+<h4>The mechanism</h4>
+<p>Choose the mirror base as the <strong>longest common ancestor directory</strong> of all
+(canonicalized) dependencies instead of the entry's directory. Every dependency then has a
+relative path that cannot begin with <code>../</code>, by definition of "ancestor". No
+survey file is rewritten — a relative include is position-independent as long as the tree
+shape is preserved, and mirroring from the common ancestor preserves the shape. The
+persisted <code>entryFile</code> becomes a subpath (<code>trips/trip1.svx</code>) instead
+of a bare name; every consumer already joins it with the attachment dir or strips to a
+basename for display (ripple audit in P3.2).</p>
+
+<h4>Guards</h4>
+<ul>
+  <li><strong>Climb cap:</strong> refuse when the common ancestor sits more than
+      <code>kMaxRebaseClimb = 2</code> levels above the entry's directory (keeps a
+      scattered project from dragging the base toward <code>/</code>; costs nothing on
+      the measured corpus, where every climb is 1).</li>
+  <li><strong>Absolute includes become an error</strong> (they are silently resolved
+      today): rebasing preserves relative graphs only — a copied file that literally says
+      <code>/opt/shared/conventions.svx</code> points outside the attachment on every
+      machine. Built in P3.1 because <code>ScanResult</code> currently records only
+      resolved paths, so nothing can tell an absolute directive from a relative one.</li>
+  <li><strong>Canonicalize before computing the prefix</strong> — the scanner already
+      canonicalizes dependencies; the helper must not re-introduce lexical comparison of
+      uncleaned paths.</li>
+  <li><strong>No common ancestor</strong> (different Windows volumes) — error.</li>
+</ul>
+
+<div class="resolved">
+  <strong>Status of the stub's other prerequisite ("a cave-level owner has nowhere to show
+  a file error"): RESOLVED</strong> by commit <code>f63f465c</code> — the reason lives on
+  <code>cwAttachedCenterlinesModel::Row::error</code> (<code>.h:62-67</code>), exactly the
+  preferred shape the stub described, surfaced on CavernOutputPage. P3.10's row badges
+  reuse the same role.
+</div>
+
+<h2 id="questions">5. Open questions — v1 answers</h2>
+
+<table>
+<tr><th>#</th><th>Question</th><th>v1 answer</th></tr>
+<tr><td>Q1</td><td>Multi-cave heuristic trigger</td>
+  <td><code>topLevelBlockCount ≥ 2 &amp;&amp; !entryHasOwnShots</code> (both computed by the
+  scanner, P3.3). Purely structural — no connected-component analysis in v1 (deferred;
+  a cave surveyed as two unconnected fragments must not be nagged, and that case has
+  1 top-level block or own shots in practice).</td></tr>
+<tr><td>Q2</td><td>Sub-file suggestions in the heuristic</td>
+  <td>The entry file's <em>direct</em> includes only (<code>entryDirectIncludes</code>,
+  P3.3). Clicking one re-points the picker at it.</td></tr>
+<tr><td>Q3</td><td>Blocks with 0 own stations</td>
+  <td>Skipped silently for trip creation; still shown in the dialog's tree preview
+  (grayed count) so the user sees the whole structure.</td></tr>
+<tr><td>Q4</td><td>Region master attached as one cave anyway</td>
+  <td>Allowed — the heuristic warns, Attach stays enabled (small two-entrance systems
+  legitimately look multi-block).</td></tr>
+<tr><td>Q5</td><td>Orphaned Scope trips after Replace</td>
+  <td>Kept, silently — their station lists go empty; the user renames/rebinds/deletes.
+  The diff dialog is v1.x. <strong>Amended by P3.16:</strong> an orphan holding no chunks
+  is removed by the reconcile (a window is derived from the file); one the user put chunks
+  in is kept, as this row says.</td></tr>
+<tr><td>Q6</td><td>Scope-trip metadata</td>
+  <td>Date stays editable (informational); declination is cavern-owned — the panel hides
+  the editor and shows "Declination comes from the cave's survey file."; the table cell
+  shows an em-dash.</td></tr>
+<tr><td>Q7</td><td>Detach end-state</td>
+  <td>The cave survives as an empty Native cave (name kept). Removing the cave entirely
+  is the existing remove-cave flow; detach must not conflate the two.</td></tr>
+<tr><td>Q8</td><td>Export gate vs. native-prefixed (equates) trips</td>
+  <td>Gated too — per master §7.5 both Attached and Scope break round-trip (a
+  <code>stationPrefix</code> cannot be represented in a Compass export). Deliberate
+  behavior change, called out in P3.11.</td></tr>
+</table>
+
+<h2 id="commits">6. Commit sequence</h2>
+
+<p class="meta">Eleven commits (P3.1&ndash;P3.11, <strong>landed 2026-08-24</strong>,
+<code>5794bd6c..8204b7f4</code>) plus three manual-test follow-up commits
+(P3.12&ndash;P3.14, filed 2026-08-25 from Philip's first manual pass &mdash; see each
+commit's "Root cause" for the investigation results) plus two commits for the
+Compass/Walls cave-level windows (P3.15&ndash;P3.16, filed 2026-09-12 from a cavern
+naming spike; root causes measured, see P3.15). Test gate = what the workflow's
+implement/fix stages run (foreground, narrow tags); the full suites run once at the end,
+outside the workflow. See §7 for build/test invocations and §8 for fixtures.</p>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.1 — Scanner records how includes were written; absolute includes become an error</h3>
+<p><strong>Why first:</strong> the rebase (P3.2) is unsafe while an absolute
+<code>*include</code> can slip through as an ordinary resolved dependency.</p>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwExternalCenterlineScanner.h/.cpp</code> — in each format
+      scanner (<code>scanSurvex</code>, <code>scanCompass</code>, <code>scanWalls</code>),
+      where an include/reference path is resolved, first check the path <em>as written</em>
+      (quotes trimmed): if <code>QDir::isAbsolutePath()</code>, fail the scan with
+      <code>"absolute include path in %1: %2 — survey files must reference their includes
+      relatively so the attached copy works on other machines"</code> (%1 = referencing
+      file, %2 = directive path as written). Also add
+      <code>QStringList ScanResult::entryDirectIncludes</code> — the resolved paths the
+      entry file references directly (first-level only), needed by the P3.7 heuristic.</li>
+  <li><code>testcases/test_cwExternalCenterlineScanner.cpp</code> — per-format absolute
+      cases. The fixture cannot be checked in (a valid absolute path is machine-local):
+      the test writes a temp dir with <code>TestHelper</code>-style file writes, one
+      include line built from the temp dir's absolute path. Also cover
+      <code>entryDirectIncludes</code> on <code>survex_nested.svx</code>.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Scanner]"</code>, then
+<code>"[Attach]"</code> (attach reports the scan error through the existing failure path —
+no attach-side change expected).</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.2 — Common-ancestor rebase in <code>computePlan</code></h3>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwExternalCenterlineSync.cpp</code> — anonymous-namespace
+      <code>commonAncestorDir(const QStringList&amp; canonicalPaths)</code> (longest common
+      directory prefix, component-wise, case rules per platform). In
+      <code>computePlan</code> (<code>:128-181</code>): base = common ancestor of
+      <code>scan.dependencies</code> instead of the entry's dir. Guards, each producing a
+      plan warning (which fails the attach, <code>cwExternalCenterlineAttach.cpp:236-245</code>):
+      no common ancestor → <code>"dependencies share no common folder"</code>; ancestor more
+      than <code>kMaxRebaseClimb = 2</code> levels above the entry's directory →
+      <code>"the files this entry includes are spread more than %1 folders above it —
+      attach the file that owns them instead"</code>.
+      <code>relativeEscapesAttachmentDir</code> survives as a defensive check that should
+      never fire (keep, with a comment saying so).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineAttach.cpp:263-264</code> — persist the
+      entry as a base-relative subpath: <code>base.relativeFilePath(scan.dependencies.first())</code>
+      replaces <code>QFileInfo(...).fileName()</code>. <code>computePlan</code> should expose
+      the chosen base (add <code>QString ReconcilePlan::baseDir</code>) so attach derives the
+      same subpath rather than recomputing the ancestor.</li>
+  <li><strong>Ripple audit (verify, expect no change):</strong> manager composes
+      <code>QDir(attachmentDir).filePath(entryFile)</code> (<code>cwExternalCenterlineManager.cpp:640-706</code>);
+      header displays the basename (<code>ExternalCenterlineAttachedHeader.qml</code>);
+      GC recurses (<code>cwExternalCenterlineSync.cpp:170-177</code>);
+      <code>driverIncludePathFor</code> joins (<code>cwSurvexExporterCaveTask.cpp:30-34</code>);
+      CavernOutputPage shows the subpath (cosmetic).</li>
+  <li><code>testcases/test_cwExternalCenterlineSync.cpp</code> — updir dependency lands
+      inside the attachment (fixture <code>updir_project/</code>, §8); climb-cap refusal
+      (test-written temp tree 3 levels deep); flat entry keeps today's layout (base ==
+      entry dir ⇒ byte-identical plan; regression guard for trip-level attach).</li>
+  <li><code>testcases/test_cwExternalCenterlineAttach.cpp</code> — end-to-end attach of
+      <code>updir_project/caves/dusk.svx</code>: copies land as
+      <code>conventions.svx</code> + <code>caves/dusk.svx</code>, persisted entryFile is
+      <code>caves/dusk.svx</code>, solve resolves the shared file. Update any test
+      asserting the bare-filename entryFile.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Sync]"</code>,
+<code>"[Attach]"</code>, <code>"[LinePlotManager][AttachedCenterlinesModel]"</code>;
+QML <code>tst_ExternalCenterlineTripPanel.qml</code> (entryFile display).</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.3 — Scanner block tree + scan-preview exposure</h3>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwExternalCenterlineScanner.h/.cpp</code> — new Q_GADGET
+      value type <code>cwScanBlock</code> { <code>QString path</code> (dotted, relative to
+      the file root, e.g. <code>big-passage.east</code>); <code>QString name() const</code>
+      (last segment); <code>int stationCount</code> (unique station names in the block's
+      <em>own</em> shot lines, child blocks excluded); <code>int depth</code> }.
+      <code>ScanResult</code> gains <code>QList&lt;cwScanBlock&gt; blocks</code> (document
+      order, parents before children) and <code>bool entryHasOwnShots</code> (the entry
+      file itself contains shot data outside any include).
+      Per format: Survex — the <code>*begin</code>/<code>*end</code> tree, anonymous
+      blocks fold into their parent; Compass — one block per survey header per
+      <code>.dat</code> (flat, path = survey name); Walls — one block per referenced
+      <code>.srv</code> (flat, path = <code>#survey</code> title or filename stem;
+      approximation, documented in the header).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineScanPreview.h/.cpp</code> — expose
+      <code>blocks</code> (QML sequential container of <code>cwScanBlock</code>, same
+      pattern as <code>cwExternalSourceAttentionRow</code>),
+      <code>topLevelBlockCount</code>, <code>entryHasOwnShots</code>,
+      <code>entryDirectIncludes</code>.</li>
+  <li>Register <code>cwScanBlock</code> as a QML value type next to the existing gadget
+      registrations.</li>
+  <li><code>testcases/test_cwExternalCenterlineScanner.cpp</code> — new
+      <code>survex_blocks.svx</code> fixture: nested tree, one 0-station block, station
+      counts per block; <code>compass_multi.mak</code> and <code>walls_simple.wpj</code>
+      block extraction; <code>survex_master/master.svx</code> yields
+      <code>entryHasOwnShots == false</code>, top-level count 3.
+      <code>test_cwExternalCenterlineScanPreview.cpp</code> — preview exposes them.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Scanner]"</code> +
+the scan-preview test tags in <code>test_cwExternalCenterlineScanPreview.cpp</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.4 — Cave-typed attach / detach / replace + Scope-trip auto-creation</h3>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwExternalCenterlineAttach.h/.cpp</code> — factor the
+      trip body over a small internal owner target (QPointer to cave or trip; provides
+      <code>id()</code>, <code>setExternalCenterline</code>, membership/liveness checks,
+      <code>saveLoad-&gt;externalCenterlineDir(owner)</code>). Public overloads:
+      <code>attach(cwCave*, …)</code>, <code>detach(cwCave*, …)</code>. Cave guards:
+      null cave; cave not in a region; <em>fresh-cave</em> guard per §3.3 (skipped on the
+      replace path); the shared guards (in-project source, scan error, empty deps,
+      mid-attach deletion) come along from the factoring.
+      Cave metadata seeding: none in v1 (SeededTripMetadata stays trip-only).
+      <strong>Auto-creation</strong> in the cave success continuation per §3.4;
+      <code>AttachReport</code> gains the created Scope-trip descriptions.
+      <code>detach(cwCave*)</code> cascade: remove every trip with
+      <code>!stationPrefix().isEmpty() &amp;&amp; chunkCount() == 0</code> via
+      <code>cave-&gt;removeTrip()</code> (G1's <code>tripsDeleted</code> fires from the
+      remove verb — correct boundary; note <code>reference_pushundo_no_stack_deletes</code>:
+      without an undo stack the trips are destroyed, which is intended here), then clear
+      the attachment + remove tree + verify, mirroring the trip detach
+      (<code>cwExternalCenterlineAttach.cpp:289-338</code>).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineManager.h/.cpp</code> —
+      <code>attachCenterline(cwCave*, …)</code> / <code>replaceCenterline(cwCave*, …)</code> /
+      <code>detachCenterline(cwCave*)</code> overloads reusing <code>OperationGuard</code>
+      (already QUuid-keyed). Replace reconcile per §3.4 (prefix-match keep / create-new /
+      leave-orphans).</li>
+  <li><code>cavewherelib/src/cwRootData.h/.cpp</code> — Q_INVOKABLE
+      <code>attachCaveCenterline(cwCave*, QString)</code>,
+      <code>replaceCaveCenterline(cwCave*, QString)</code>,
+      <code>detachCaveCenterline(cwCave*)</code>, next to the trip trio
+      (<code>cwRootData.h:165-170</code>).</li>
+  <li><code>testcases/test_cwExternalCenterlineAttachCave.cpp</code> (new,
+      <code>[Attach][Cave]</code>) — attach <code>survex_blocks.svx</code>: Scope trips
+      created in file order with correct names/prefixes, 0-station block skipped,
+      name collision resolved via <code>uniqueTripName</code>; fresh-cave refusal;
+      in-project-source refusal; detach cascade (trips gone, dir gone, cave empty Native,
+      breadcrumb cleared); replace with a block added/removed (kept / new / orphan
+      behavior); cancel mid-attach.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Attach]"</code> (includes
+<code>[Attach][Cave]</code>), <code>"[LinePlotManager][AttachedCenterlinesModel]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.5 — Owner-generic source verbs (Update / Reload / status for cave owners)</h3>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwExternalCenterlineManager.h/.cpp</code> — add
+      <code>caveForOwner(QUuid)</code> beside <code>tripForOwner</code>
+      (<code>cpp:1129-1143</code>); <code>updateFromSource(QUuid)</code>
+      (<code>cpp:1145-1152</code>) resolves either owner kind and routes to the matching
+      <code>reloadFromSource</code>; Q_INVOKABLE <code>reloadFromSource(cwCave*)</code> and
+      <code>canReloadFromSource(cwCave*)</code> overloads mirroring the trip pair
+      (<code>cpp:1096-1127</code>). Delete the "nothing copies into a cave owner yet"
+      doc (<code>.h:174-181</code>) and the matching note in
+      <code>cwSurvexExporterRegion.h:81-85</code> if stale after this commit.
+      Harvest stays trip-gated (<code>cpp:663</code>) — keep, with the comment updated to
+      say Scope trips read the solved network instead.</li>
+  <li><code>testcases/test_cwExternalSourceStatus.cpp</code> /
+      <code>test_cwExternalCenterlineAttachCave.cpp</code> — a cave owner with an edited
+      source shows Changed and <code>updateFromSource(caveId)</code> re-copies + re-solves;
+      <code>updateAllChangedSources()</code> now covers cave rows;
+      the source-change banner rows for a cave owner (ownerKind already carried,
+      <code>cwExternalSourceAttentionRow</code>).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Attach][Cave]"</code> +
+the source-status/settings/watch tags; QML <code>tst_ExternalSourceChangeBanner.qml</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.6 — Scope window semantics + <code>externallyBacked</code> predicate</h3>
+<ul class="filelist">
+  <li><strong>Verify-and-complete, not rebuild:</strong> with a cave-level attach solved,
+      a Scope trip's <code>solvedStations()</code> / <code>knownStations()</code>
+      (<code>cwTrip.cpp:556-626</code>, filtering by <code>scopePrefix()</code>) must
+      surface the cave-network stations under its prefix, so
+      <code>cwScopeStationListModel</code> works unchanged. Fix whatever the test
+      exposes — likely candidates are prefix normalization (case, trailing dot) and the
+      floating-survey model treating a chunk-less Scope trip as floating
+      (<code>cwFloatingSurveyModel.cpp:42</code>, <code>cwFindFloatingSurveys.cpp:243</code> —
+      a Scope trip under an attached cave must never be reported floating).</li>
+  <li><code>cavewherelib/src/cwTrip.h/.cpp</code> — <code>Q_PROPERTY(bool externallyBacked
+      READ externallyBacked NOTIFY externallyBackedChanged)</code> =
+      <code>isScoped() || (parentCave() != nullptr &amp;&amp;
+      !parentCave()-&gt;externalCenterline().isEmpty())</code>. Notify wiring: emit
+      alongside <code>scopeChanged</code>'s own-state sources, and have
+      <code>cwCave::setExternalCenterline</code> notify its trips (same relay style as
+      the existing scope-label chaining, plain connects in
+      <code>connectTrip</code>/<code>disconnectTrip</code>).</li>
+  <li><code>NoteStation.qml:84-88</code>, <code>NoteLiDARStationItem.qml:68-75</code> —
+      predicate becomes <code>parentTrip.externallyBacked</code>.</li>
+  <li><code>TripPage.qml:29-30</code> — swap condition becomes
+      <code>currentTrip.externallyBacked</code> (the panel branches internally in P3.9;
+      this commit may land before P3.9 only if the panel doesn't crash for a Scope trip —
+      otherwise fold the guard <code>refreshFromManager()</code> null-tolerance here).</li>
+  <li>Tests: <code>[Trip]</code> truth table for <code>externallyBacked</code> incl. the
+      parent-cave notify; <code>[Model][ScopeStations]</code> scope-under-attached-cave
+      end-to-end (attach <code>survex_blocks.svx</code>, solve, assert a Scope trip's
+      station list = its block's stations, prefix-stripped); floating-survey exclusion;
+      QML <code>tst_StationValidator</code>-adjacent case: a note station field in a Scope
+      trip accepts dotted names.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Trip]"</code>,
+<code>"[Model][ScopeStations]"</code>, <code>"[Attach][Cave]"</code>, floating-survey tags;
+QML <code>tst_ExternalCenterlineTripPanel.qml</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.7 — Add Cave menu + <code>AddCaveSurveyFileDialog</code> (preview + heuristic)</h3>
+<ul class="filelist">
+  <li><code>cavewherelib/qml/DataMainPage.qml:225-237</code> — the existing
+      <code>AddAndSearchBar</code> gains <code>objectName: "addCave"</code>,
+      <code>menu: addCaveMenuId</code>, <code>menuToolTip: qsTr("More ways to add a
+      cave")</code>; sibling <code>QC.Menu { objectName: "addCaveMenu" }</code> with one
+      item <code>objectName: "addExternalCaveMenuItem"</code>, text
+      <code>qsTr("Add cave from survey file…")</code> →
+      <code>addCaveFromSurveyFileWithDialog()</code> (create cave via
+      <code>RootData.region.addCave()</code>, bind dialog, open — mirror
+      <code>CavePage.qml:46-51</code>).</li>
+  <li><code>cavewherelib/qml/AddCaveSurveyFileDialog.qml</code> (new) — title
+      <code>qsTr("Add cave from survey file")</code>; <code>ExternalCenterlineFilePicker</code>;
+      attach explainer text (reuse Phase 2's wording); <strong>block preview</strong>
+      ("Trips CaveWhere will create" + tree list from <code>preview.blocks</code>,
+      0-station rows grayed, capped height, hint "One trip per *begin block with stations.
+      Rename or delete any of them afterward."); <strong>heuristic panel</strong> per §3.1 /
+      §5 Q1-Q2 (title "This file looks like a whole survey project, not one cave"; body
+      names the top-level block count and the resulting single-cave shape; links from
+      <code>preview.entryDirectIncludes</code> re-point the picker; closing hint that
+      per-cave splitting arrives with region-level attach); busy row "Attaching…";
+      Cancel / Attach. Signals <code>attached()</code> / <code>dismissed()</code>.
+      Item body ordering per CLAUDE.md.</li>
+  <li><code>cavewherelib/qml/ExternalCenterlineAttachSession.qml:26,41-45</code> — widen
+      <code>property Trip owner</code> to <code>property QtObject owner</code> (both
+      owners expose <code>id</code>; <code>start()</code>/<code>cancel()</code> unchanged).</li>
+  <li>Cave naming on <code>attached()</code>: name from the entry file's basename via a
+      new <code>Q_INVOKABLE QString cwCavingRegion::uniqueCaveName(const QString&amp;)</code>
+      mirroring <code>cwCave::uniqueTripName</code> (<code>cwCave.h:116</code>), then
+      navigate to the cave page. <code>dismissed()</code> removes the just-created cave.</li>
+  <li>QML test <code>tst_AddCaveFromSurveyFile.qml</code> (new) — menu present; happy path
+      on <code>survex_blocks.svx</code>: cave named from file, Scope-trip rows appear;
+      dismiss removes the cave; heuristic visible for
+      <code>survex_master/master.svx</code> and absent for <code>survex_blocks.svx</code>;
+      suggestion click re-points the picker. Conventions: <code>waitForRendering</code>
+      after navigation (LayoutItemProxy), scope <code>findChild</code> to the dialog.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> QML <code>tst_AddCaveFromSurveyFile.qml</code>,
+<code>tst_DataMainPageExternal.qml</code>; <code>cavewhere-test "[Attach][Cave]"</code>
+(uniqueCaveName unit case rides along).</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.8 — CavePage cave-level state: summary card, 📎 rows, em-dash declination</h3>
+<ul class="filelist">
+  <li><code>cavewherelib/qml/ExternalCenterlineAttachedHeader.qml</code> — widen the
+      owner binding from <code>Trip</code> to <code>QtObject</code> (it reads
+      <code>externalCenterline</code> + <code>id</code>, both on cave and trip); keep all
+      objectNames; panel and new card pass their owners.</li>
+  <li><code>cavewherelib/qml/ExternalCenterlineCaveSummary.qml</code> (new) — card:
+      <code>ExternalCenterlineAttachedHeader</code> (file row, Replace…, provenance +
+      context menus, now cave-owned) + <code>ExternalCenterlineSolveStatus</code> +
+      <strong>Detach…</strong> hosting its own <code>RemoveAskBox</code> with
+      <code>message</code> override: "Detach external centerline from
+      &lt;b&gt;%1&lt;/b&gt;? Removes %2 auto-created trips and their notes and scraps,
+      and deletes the copied files." and <code>confirmText: "Detach"</code> →
+      <code>RootData.detachCaveCenterline(cave)</code>. Replace opens
+      <code>ReplaceCenterlineDialog</code> (widen its owner the same way).</li>
+  <li><code>cavewherelib/qml/CavePage.qml</code> — instantiate the card in the wide right
+      column between the <code>actionBar</code> proxy and <code>wideLoaderId</code>
+      (<code>:423-430</code>) and in the narrow header column (<code>:769-893</code>),
+      <code>visible</code> on cave-attached; suppress the <code>noTripsHint</code> when
+      attached. Trip table: 📎 prefix in the name cell and an em-dash declination cell
+      when <code>tripObjectRole.externallyBacked</code> — both the wide RowDelegate
+      (<code>:612-750</code>, name cell <code>:664-676</code>, decl cell
+      <code>:727-748</code>) and the narrow delegate (<code>:895-979</code>).</li>
+  <li>QML test <code>tst_CavePageExternalCave.qml</code> (new) — card visible only for an
+      attached cave; 📎 + em-dash on Scope rows and on a Phase-2 Attached trip row;
+      detach flow: confirm text names the trip count, on confirm rows and card disappear
+      and the cave stays; Replace reachable.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> QML <code>tst_CavePageExternalCave.qml</code>,
+<code>tst_CavePage.qml</code>, <code>tst_ExternalCenterlinePanelComponents.qml</code>
+(header widening regression), <code>tst_ExternalCenterlineTripPanel.qml</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.9 — TripPage Scope mode: <code>ExternalCenterlineScopeHeader</code> + panel branches</h3>
+<ul class="filelist">
+  <li><code>cavewherelib/qml/ExternalCenterlineScopeHeader.qml</code> (new, per master
+      §8.5.1) — "Part of: &lt;parent cave name&gt;" as a <code>LinkText</code> to the cave
+      page; "Prefix in file:" + read-only prefix with <strong>Change prefix…</strong>
+      (edits <code>trip.stationPrefix</code> via the existing click-to-edit pattern);
+      <strong>Remove trip…</strong> hosting <code>RemoveAskBox</code> →
+      <code>cave.removeTrip</code>.</li>
+  <li><code>cavewherelib/qml/ExternalCenterlineTripPanel.qml</code> — readonly
+      <code>isAttached</code> / <code>isScope</code> (per master §8.5.1:
+      <code>externalCenterline.entryFile.length &gt; 0</code> vs
+      <code>stationPrefix.length &gt; 0</code> — <code>scopePrefix</code> alone cannot
+      distinguish them, <code>cwTrip.cpp:43-51</code>); header Loader picks the scope
+      header (<code>:193-198</code> loses its hard-coding); in Scope mode hide the
+      attached-only surface (missing-copy banner, file-error banner, Replace, provenance)
+      and the declination editor (hint per §5 Q6); guard
+      <code>refreshFromManager()</code> for an owner the manager doesn't track.
+      Keep <code>expandedWidth</code> exposed (TripPage transitions read it,
+      <code>TripPage.qml:353,379-381</code>).</li>
+  <li>QML tests <code>tst_ExternalCenterlineScopeHeader.qml</code> (new) + scope-mode
+      cases in <code>tst_ExternalCenterlineTripPanel.qml</code> — scope trip shows the
+      scope header, station list carries the block's stations, Change prefix edits
+      persist, Remove trip removes; attached trip regression (attached header intact).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> QML <code>tst_ExternalCenterlineScopeHeader.qml</code>,
+<code>tst_ExternalCenterlineTripPanel.qml</code>, <code>tst_TripPageExternalAttach.qml</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.10 — Solve badges on cave and trip rows</h3>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwAttachedCenterlinesModel.h/.cpp</code> —
+      <code>Q_INVOKABLE QString errorFor(const QUuid&amp;) const</code> and
+      <code>Q_INVOKABLE int warningCountFor(const QUuid&amp;) const</code> (row lookup by
+      <code>ownerId</code>; refresh signal for QML = the model's existing reset/dataChanged).</li>
+  <li><code>cavewherelib/qml/ExternalSolveBadge.qml</code> (new) — dot sized/colored per
+      <code>ExternalCenterlineSolveStatus.qml:30-42</code> (danger on error, warning on
+      warnings, hidden when clean or owner not externally backed); tooltip = the error
+      text; <code>TapHandler</code> →
+      <code>RootData.pageSelectionModel.gotoPageByName(null, "Cavern")</code>; re-reads on
+      the model's signals via <code>QQ.Connections</code>.</li>
+  <li>Placement: DataMainPage <code>CaveDelegate</code> (<code>DataMainPage.qml:264-306</code>,
+      beside the existing <code>ErrorIconBar</code>) keyed on the cave; CavePage trip-row
+      name cells (wide + narrow) keyed on the trip — a trip owner's error also covers
+      <code>trip.externalStationsError</code> (<code>cwTrip.h:110-124</code>).</li>
+  <li>QML test <code>tst_ExternalSolveBadge.qml</code> (new) — a cave-level containment
+      error (write an escaping include into the attached copy, rescan) shows the red dot
+      on the DataMainPage row; click lands on <code>cavernOutputPage</code>; clean owner
+      shows none.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> QML <code>tst_ExternalSolveBadge.qml</code>,
+<code>tst_DataMainPageExternal.qml</code>, <code>tst_CavernOutputPageExternal.qml</code>;
+<code>cavewhere-test "[LinePlotManager][AttachedCenterlinesModel]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.11 — Export gate covers Scope; docs and loose ends</h3>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwSurveyExportManager.cpp:349-378</code> —
+      <code>anyAttachment()</code> also returns true on a non-empty
+      <code>trip-&gt;stationPrefix()</code>; connect <code>cwTrip::stationPrefixChanged</code>
+      in the re-arm block (<code>:305-341</code>); update the "lands in Phase 3" comments
+      (<code>cpp:346-351</code>, <code>.h:41-42</code>). Per §5 Q8 this also gates
+      native-prefixed (equates) trips — deliberate; message unchanged
+      (<code>cpp:36-43</code>).</li>
+  <li>Doc sweep in the same commit (per <code>feedback_fix_docs_inline</code>): master
+      plan §9 Phase 3 block already points here; verify the stub-era notes deleted in
+      P3.5 stayed deleted; CavernOutputPage's <code>attachedRowLabel</code> now shows a
+      subpath — accept, no change.</li>
+  <li>Tests: <code>cavewhere-test</code> export-manager tags (a <code>stationPrefix</code>
+      trip disables export; clearing it re-enables); QML
+      <code>tst_FileMenuExportDisable.qml</code> new case.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> export-manager C++ tags +
+<code>tst_FileMenuExportDisable.qml</code>. <strong>Then, outside the workflow: the full
+suites</strong> (§7).</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.12 &mdash; Case-insensitive scope matching in line-plot geometry</h3>
+<p><strong>Symptom (manual test, 2026-08-25):</strong> cave-level attach of
+<code>48H-H12-330-feng.svx</code> solves, station labels render in the correct places,
+but <em>no centerline lines appear</em> and length/depth stay uncalculated.</p>
+<p><strong>Root cause (traced, confirmed):</strong> a Scope trip's
+<code>stationPrefix</code> is the block path <em>as authored</em>
+(<code>cwExternalCenterlineAttach.cpp</code>, <code>trip-&gt;setStationPrefix(block.path)</code>),
+which may carry uppercase (<code>48H-H12-330-feng</code>). Cavern lowercases every label
+in the <code>.3d</code>, so solved network keys are lowercase. The scope-membership
+filter in <code>cwLinePlotGeometry::emitNetworkScopeGeometry</code> is the codebase's one
+<em>case-sensitive</em> outlier &mdash; <code>station.startsWith(scopePrefix)</code> at
+<code>cwLinePlotGeometry.cpp:82</code> (and the cavePrefix strip at <code>:62</code>) &mdash;
+so an uppercase prefix matches zero network stations: zero line vertices, and
+<code>hasDepth</code> stays false (feeding P3.13). Labels still render because
+<code>cwTrip::solvedStations()</code> (<code>cwTrip.cpp:~574-578</code>) matches
+case-<em>insensitively</em>, as do <code>cwFindFloatingSurveys.cpp:243</code>
+(via <code>cwStation::canonicalKey</code>) and the position resolution inside
+<code>emitNetworkScopeGeometry</code> itself (<code>cwLinePlotGeometry.cpp:65,160</code>).
+Only the membership filter is wrong. Trip-level (Phase 2) attach never hits this because
+its prefix is the <em>sanitized lowercase</em> trip label.</p>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwLinePlotGeometry.cpp</code> &mdash; make the membership
+      test and the cavePrefix strip case-insensitive: compare via
+      <code>cwStation::canonicalKey</code> (or
+      <code>startsWith(scopePrefix, Qt::CaseInsensitive)</code>; <code>sliced(size)</code>
+      stays correct because a case-insensitive match has the same length). This is the
+      whole production change.</li>
+  <li><strong>Do NOT</strong> "fix" this by lowercasing <code>stationPrefix</code> at
+      attach time: <code>block.path</code>'s authored spelling is also the
+      reconcile/replace matching key (<code>windowedPrefixes</code>,
+      <code>cwExternalCenterlineAttach.cpp</code>) against future scans that preserve
+      authored case, and Survex station names are case-preserving for display.</li>
+  <li>Tests: cave-level analogue of "Trip-attached centerline emits renderable line
+      geometry" (<code>test_cwLinePlotTask_AttachInclude.cpp:393-455</code>) using a
+      <strong>mixed-case</strong> fixture &mdash; NEW <code>survex_mixed_case.svx</code>
+      per §8 (uppercase-bearing block names, e.g. <code>*begin 48H-Feng</code> with a
+      nested mixed-case child; solvable). Assert: attach at cave level, solve, the Scope
+      trips' <code>tripVertexRanges</code> are non-empty and segment endpoints resolve.
+      <code>survex_blocks.svx</code> is all-lowercase and would falsely pass &mdash; do not
+      gate on it alone; keep it as the lowercase regression.</li>
+  <li>Trap (leave untouched): <code>.3d</code> legs name endpoints by coordinate and the
+      reader fuses coincident stations ("first label wins"), so a cross-scope tie leg may
+      attribute to whichever side is in scope &mdash; correct for rendering; do not tighten
+      the neighbor side to in-scope-only.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test</code>
+<code>"[LinePlotTask]"</code>-family tags covering
+<code>test_cwLinePlotTask_AttachInclude.cpp</code> and
+<code>test_cwLinePlotGeometry.cpp</code> (use the tags those files declare), then
+<code>"[Attach][Cave]"</code>.</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.13 &mdash; Length/depth robustness for external owners</h3>
+<p><strong>Symptom:</strong> cave Length and Depth read zero / never calculated after a
+cave-level attach. P3.12's case fix is the primary cause; this commit hardens the rest of
+the chain, which today writes a <code>(-1,-1)</code> sentinel to the live cave and
+double-counts nested scopes.</p>
+<p><strong>Root cause (traced):</strong> <code>cwLinePlotGeometry</code>'s per-cave
+result defaults to <code>(-1,-1)</code> (<code>cwLinePlotGeometry.h:56</code>) and is
+only set under <code>if (hasDepth)</code> (<code>cwLinePlotGeometry.cpp:245-249</code>);
+<code>updateDepthLength</code> (<code>cwLinePlotTask.cpp:573-585</code>) copies it
+unconditionally and <code>cwLinePlotManager::updateLinePlot</code>
+(<code>cwLinePlotManager.cpp:698-705</code>) writes it to
+<code>cave-&gt;length()/depth()</code> &mdash; the UI then renders <code>-1.00</code>
+(<code>SelectableCaveStat.qml</code> has no clamp). Separately: on any solve error
+<code>updateLinePlot</code> is skipped entirely (<code>cwLinePlotManager.cpp:544-548</code>)
+so values silently go stale; and nested Scope trips double-emit &mdash; a parent block's
+prefix (<code>doghill.</code>) string-matches every descendant station and the
+<code>emitted</code> de-dup set is local per <code>emitNetworkScopeGeometry</code> call
+(<code>cwLinePlotGeometry.cpp:75-78</code>), so parent and child trips each emit the
+child's legs: duplicate render segments, per-trip visibility toggles disagreeing over the
+same leg, and cave length counting nested legs twice.</p>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwLinePlotGeometry.cpp/.h</code> &mdash; nested-scope
+      de-dup: when emitting a trip's scope, skip a station whose canonical key also
+      matches a <em>longer</em> scope prefix belonging to another trip of the same cave
+      (compute the sibling-prefix list once per cave, before the trip loop). Each leg then
+      belongs to exactly one Scope trip &mdash; the innermost. Cave totals stop double
+      counting and per-trip visibility owns each leg exactly once.</li>
+  <li><code>cavewherelib/src/cwLinePlotGeometry.h/.cpp</code> +
+      <code>cavewherelib/src/cwLinePlotTask.cpp</code> &mdash; retire the
+      <code>(-1,-1)</code> sentinel reaching the UI: keep "unset" internal (the
+      <code>hasDepth</code> flag already exists) and have <code>updateDepthLength</code>
+      write <code>0/0</code> for a cave that resolved nothing (an empty cave IS length 0)
+      &mdash; the plan chooses 0-on-no-data over keep-last-good so a broken attach reads
+      as "no centerline" instead of a stale number.</li>
+  <li>Solve-error staleness (<code>cwLinePlotManager.cpp:544-548</code>): leave the
+      keep-on-error behavior (matches native trips' long-standing contract) but note it in
+      a comment where <code>updateLinePlot</code> is gated, so the next reader stops
+      rediscovering it.</li>
+  <li>Tests: extend <code>test_cwLinePlotManager_AttachedCenterlines.cpp</code> /
+      <code>test_cwLinePlotGeometry.cpp</code> (today they assert <em>nothing</em> about
+      external length/depth): cave-level attach of <code>survex_mixed_case.svx</code>
+      yields positive length and depth matching hand-computed fixture values; nested
+      fixture (<code>survex_blocks.svx</code>) cave length counts each leg once
+      (regression for the double-count); a scope matching nothing yields 0/0, never
+      -1.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> the line-plot manager/geometry C++ tags
+(as declared in the two test files) + <code>"[Attach][Cave]"</code>;
+QML <code>tst_CavePageExternalCave.qml</code> (stat cells show numbers, not
+<code>-1.00</code>).</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.14 &mdash; Per-block dates: capture in the scanner, seed Scope trips, editable date</h3>
+<p><strong>Symptom:</strong> auto-created Scope trips show the import date (today)
+instead of the survey's real date &mdash; and the external panel presents the date
+read-only, so it cannot even be corrected by hand (contradicting §5 Q6, "date stays
+editable").</p>
+<p><strong>Root cause (traced):</strong> <code>reconcileScopeTrips</code>
+(<code>cwExternalCenterlineAttach.cpp:206-241</code>) sets only name / stationPrefix /
+distance unit, so the fresh trip keeps <code>cwTrip</code>'s constructor default
+<code>QDateTime(QDate::currentDate(), QTime())</code> (<code>cwTrip.cpp:104</code>).
+The scanner's metadata parse (<code>parseSeededMetadata</code>,
+<code>cwExternalCenterlineScanner.cpp:1188-1256</code>) is entry-file-only and its result
+is discarded for cave owners by design (§6 P3.4 "cave metadata seeding: none in v1");
+the block walk never matches <code>*date</code> at all.</p>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwExternalCenterlineScanner.h</code> &mdash;
+      <code>cwScanBlock</code> gains <code>QDate date</code> (invalid = none;
+      <code>&lt;QDate&gt;</code> already included) exposed as a
+      <code>Q_PROPERTY</code>, and joins <code>operator==</code> (desirable ripple: a
+      <code>*date</code>-only edit now reads as a changed scan &mdash; update any scanner
+      equality tests).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineScanner.cpp</code> &mdash; per-format
+      capture in the existing walks, first match per block wins (matching
+      <code>parseSeededMetadata</code>'s convention):
+      Survex &mdash; in <code>scanSurvexFile</code>'s directive branch, match
+      <code>*date</code> (reuse <code>parseIsoOrDottedDate</code>, <code>:939-949</code>)
+      and stamp the innermost open named block with an unset date, mirroring
+      <code>recordStation</code>'s walk (<code>:288-303</code>); a date range
+      (<code>2024.01.05-2024.01.07</code>) takes its <em>start</em> date (split the token
+      after a full leading date parse; a dotted range must not be mis-split on
+      '<code>-</code>' alone); an unparseable date leaves the block date unset (no
+      warning &mdash; cavern validates dates itself).
+      Compass &mdash; in <code>collectCompassBlocks</code>'s header section
+      (<code>:580-586</code>), match <code>SURVEY DATE:</code> reusing the metadata
+      parser's regex and 2-digit-year pivot (hoist <code>kCompassYearPivot</code> +
+      regex rather than duplicating).
+      Walls &mdash; in <code>appendWallsBlock</code>, match <code>#DATE</code>
+      (regex at <code>:1129-1131</code>) before the <code>#</code>-line skip
+      (<code>:729-733</code>).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineAttach.cpp</code> &mdash; in
+      <code>reconcileScopeTrips</code>, after <code>setStationPrefix</code>: resolve the
+      block's effective date as its own date or, when unset, the nearest ancestor
+      block's (walk <code>block.path</code> prefixes against the scanned block list &mdash;
+      Survex date scoping inherits downward); if valid,
+      <code>trip-&gt;setDate(QDateTime(date, QTime()))</code> (same convention as
+      <code>seedTripMetadata:63</code>); if no date anywhere, leave the default (which
+      <code>isDefaultTripDate</code> still treats as unset for later seeding). Replace
+      keeps existing trips untouched (<code>:222</code>) &mdash; dates seed only on
+      creation, deliberately.</li>
+  <li><code>cavewherelib/qml/ExternalCenterlineTripMetadata.qml</code> &mdash; make the
+      date row editable per §5 Q6 (reuse the same click-to-edit component the native
+      trip page uses for its date; team stays read-only), updating the header comment
+      that currently says both are file-owned. This is also the only recovery path for
+      Scope trips created before this fix.</li>
+  <li>Fixtures (§8): add <code>*date</code> lines to <code>survex_blocks.svx</code>
+      (distinct dates per block, one block dateless to prove inheritance + one top block
+      dateless to prove the leave-default path) and a date to
+      <code>compass_multi.mak</code>'s second survey + <code>walls_simple.wpj</code>'s
+      <code>#DATE</code> if absent.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Scanner]"</code>,
+<code>"[Attach][Cave]"</code>; QML <code>tst_ExternalCenterlineTripPanel.qml</code>
+(editable date row in scope mode) and <code>tst_CavePageExternalCave.qml</code>
+(date cells show the fixture dates, not today).</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.15 &mdash; Scanner: root stations, Walls prefix levels, Compass surveys stop being blocks; cavern-valid Compass fixtures</h3>
+<p><strong>Symptom:</strong> attach a Compass <code>.dat</code>/<code>.mak</code> or a Walls
+<code>.wpj</code> at cave level: the trip table shows one Scope trip per Compass survey (or
+per <code>.srv</code>), every one of them lists zero stations, the lineplot draws nothing,
+and Length/Depth read 0. The same happens to a Survex file whose shots sit outside every
+<code>*begin</code> (<code>survex_bare.svx</code>): no Scope trip is created at all, so
+nothing draws.</p>
+<p><strong>Root cause (measured 2026-09-12 by running the built <code>cavern</code> +
+<code>dump3d</code> on drivers wrapped exactly as <code>cwSurvexExporterCaveTask.cpp:138</code>
+wraps a cave-level include; drivers and outputs under the session scratchpad
+<code>spike/</code>):</strong></p>
+<ul>
+  <li><strong>Compass <code>.dat</code>:</strong> cavern discards the <code>SURVEY NAME:</code>
+      value (<code>survex/src/datain.c:817-821</code>, "Survey short name currently
+      ignored"; <code>survex/doc/compass.rst:166-169</code>). Every station lands flat under
+      the wrapper: <code>cave0.AB1</code>, never <code>cave0.AB.AB1</code>. Case is preserved.
+      A '.' inside a Compass station name is a name character
+      (<code>datain.c:649-652</code>), so <code>SA1.1</code> is one station.</li>
+  <li><strong>Compass <code>.mak</code>:</strong> each referenced <code>.dat</code> is read with
+      no surrounding level (<code>datain.c:1020</code>); link stations are ignored
+      (<code>compass.rst:53-56</code>). All <code>.dat</code>s merge into one flat namespace.</li>
+  <li><strong>Walls <code>.wpj</code> <code>.BOOK</code>/<code>.SURVEY</code> titles and
+      <code>.NAME</code>s:</strong> pure metadata (<code>datain.c:3438-3455</code> only tracks
+      a depth counter; <code>.NAME</code> locates the file on disk). <code>walls_simple.wpj</code>
+      solved to <code>cave0:A1 &hellip; cave0:A4</code>: no level at all.</li>
+  <li><strong>Walls <code>#PREFIX</code> / <code>#PREFIX2</code> / <code>#PREFIX3</code> and
+      <code>prefix=</code> / <code>prefix2=</code> / <code>prefix3=</code> in a
+      <code>.wpj</code> <code>.OPTIONS</code> line or a <code>#UNITS</code> line:</strong> these
+      ARE levels, up to three deep (<code>datain.c:3070-3080</code>, <code>2429-2443</code>;
+      <code>readval.c:495-512</code> walks <code>prefix[0..2]</code> as survey levels below the
+      enclosing scope; <code>walls.rst:250-259</code>). <code>#PREFIX XY</code> gave
+      <code>cave0:XY:P1</code>; a book-level <code>.OPTIONS prefix=BK</code> gave
+      <code>cave0:BK:O1</code>. Slot order outermost&rarr;innermost is
+      <code>PREFIX3.PREFIX2.PREFIX1</code> (<code>#PREFIX</code>/<code>#P</code> is
+      <code>PREFIX1</code>, the innermost). The scanner reads none of these directives.</li>
+  <li><strong>The membership test needs a real level:</strong>
+      <code>cwCavernNaming::scopePrefix</code> appends '.', so a Scope trip with
+      <code>stationPrefix == "AB"</code> filters on <code>cave0.AB.</code>, which never matches
+      <code>cave0.AB1</code>. Even as a bare string prefix the survey-name convention held on
+      only 3 of the 6 Compass surveys in the fixture set.</li>
+  <li><strong>Three repo Compass fixtures are unprocessable by cavern</strong>
+      (<code>compass_simple.dat</code>, <code>compass_other.dat</code> &rarr;
+      <code>compass_multi.mak</code>; <code>compass_with_metadata.dat</code> &rarr;
+      <code>compass_with_metadata.mak</code>): <code>Expecting "SURVEY"</code> and
+      <code>End of line not blank</code>. Their headers say so ("don't need to be valid
+      Compass shot data"). Every current test on them stops at the scanner, so nothing has
+      ever solved a Compass cave-level attach end to end.</li>
+</ul>
+<p><strong>Design:</strong> the scanner emits a block only for something cavern turns into a
+naming level, and separately reports how many stations live at the file root (no level at
+all). P3.16 windows the root with one whole-cave Scope trip. Per format:
+Survex &mdash; blocks unchanged; root = stations outside every named <code>*begin</code>,
+anywhere in the closure. Compass &mdash; no blocks; every station is root. Walls &mdash;
+one block per distinct prefix path, merged across files; root = stations with no prefix in
+force. Compass survey-level windows are out of scope for good: cavern throws the survey
+name away, and the only alternative (the exporter rewriting a <code>.mak</code> into
+per-<code>.dat</code> <code>*begin</code> wrappers, <code>compass.rst:58-88</code>) drops the
+<code>.mak</code>'s own datum/UTM lines and still gives nothing for a multi-survey
+<code>.dat</code>.</p>
+<div class="warning">
+  <strong>Superseded in part (2026-09-12, OMEGA2 crash investigation).</strong> The
+  <code>.mak</code> bullet above no longer holds: <code>data_file_compass_mak()</code> now
+  reads each <code>#FILE.DAT</code> into its own survey named after the DAT's leafname
+  (<code>cave0.blowing3.1</code>), honors a link station without <code>[f]</code> as an
+  equate with the same-named station in an earlier DAT, and warns instead of erroring for a
+  DAT which is absent. A real Compass project numbers each cave's stations from 1, so the
+  flat namespace fixed one station "1" once per DAT and cavern withheld every output file —
+  the user's OMEGA2 project loaded as nothing. Each DAT is therefore a naming level now, so
+  the open question the P3.15 design closed reopens: should the scanner emit one block per
+  <code>#FILE.DAT</code> so each DAT becomes its own Scope trip? Today it emits none and the
+  whole-cave window owns every station, which keeps the lineplot correct.
+</div>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwExternalCenterlineScanner.h</code> &mdash;
+      <code>ScanResult</code> gains <code>int rootStationCount</code> (unique station names
+      the closure spells outside every block; joins <code>operator==</code>) and
+      <code>QDate rootDate</code> (the first date directive seen while no block is open:
+      Survex <code>*date</code> at file root, Compass first <code>SURVEY DATE:</code>,
+      Walls first <code>#DATE</code> with no prefix in force; invalid when none).
+      Rewrite the <code>cwScanBlock</code> class comment's per-format paragraph to the
+      Design above (Compass: none; Walls: prefix path, <code>#PREFIX3.#PREFIX2.#PREFIX1</code>
+      joined by '.', <code>depth</code> = non-empty slots &minus; 1). Keep
+      <code>entryHasOwnShots</code> as is (the P3.7 heuristic reads it).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineScanner.cpp</code> &mdash;
+      <em>Survex:</em> <code>recordStation</code> (<code>:288-303</code>) currently drops a
+      station that lands in no named block; count it in a <code>ScanState</code> root set
+      instead. <em>Compass:</em> <code>collectCompassBlocks</code> stops appending blocks;
+      its station set feeds the root set and its first <code>SURVEY DATE:</code> feeds
+      <code>rootDate</code> (the P3.14 per-survey date capture moves to the root date).
+      <em>Walls:</em> replace <code>appendWallsBlock</code>'s title/stem block with a prefix
+      walk: three slots initialized from the entry's inherited options
+      (<code>dewalls::WpjEntry::allOptions()</code>, tokens matching
+      <code>prefix([123])?=(value)</code>, case-insensitive, per Walls also accepted on a
+      <code>#UNITS</code> line), updated by <code>#PREFIX</code>/<code>#P</code>
+      (slot 1), <code>#PREFIX2</code>, <code>#PREFIX3</code> with an empty value clearing the
+      slot. Each shot line's stations are counted under the path of the slots in force;
+      a <code>:</code>-qualified station token (<code>XY:P1</code>, or
+      <code>A:B:C:name</code>) overlays its explicit segments onto the innermost prefix
+      levels and keeps the outer levels in force (<code>readval.c:495-512</code> fills
+      levels below <code>3 - explicit</code> from the prefix in force), so with
+      <code>#PREFIX3 top</code> in force <code>XY:P1</code> counts under
+      <code>top.XY</code> and <code>:P1</code> under <code>top</code>. Blocks are keyed
+      by path and merged across files (first appearance sets document order); a path's
+      ancestors are materialized before it with <code>stationCount</code> 0 when nothing
+      sits directly in them, keeping "parents before children". Block date = first
+      <code>#DATE</code> seen while that path is in force. Delete
+      <code>ScanState::pendingWallsTitle</code> and the title hand-off in
+      <code>collectWallsSurveys</code> (<code>:940</code>).</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineScanPreview.h/.cpp</code> &mdash; expose
+      <code>rootStationCount</code> and <code>rootDate</code>.</li>
+  <li><code>cavewherelib/qml/AddCaveSurveyFileDialog.qml</code> &mdash; the block preview
+      grows a first row "Whole file &mdash; %n station(s)" when
+      <code>rootStationCount &gt; 0</code>, so a Compass or prefix-less Walls file explains
+      its single trip before the user attaches it.</li>
+  <li>Fixtures (§8): rewrite <code>compass_simple.dat</code> and <code>compass_other.dat</code>
+      as cavern-valid Compass (copy the header/column layout of
+      <code>compass_solvable.dat</code>; keep survey names <code>A</code>/<code>B</code>,
+      keep the <code>SURVEY DATE:</code> lines P3.14 asserts, drop the ';' comment lines
+      Compass rejects). Make <code>compass_other.dat</code> tie into
+      <code>compass_simple.dat</code> so <code>compass_multi.mak</code> solves as one
+      component: <code>A1&rarr;A2 10.00 @ 0/0</code>, <code>A2&rarr;A3 8.00 @ 90/0</code> in
+      A; <code>A2&rarr;B1 7.00 @ 180/-30</code>, <code>B1&rarr;B2 6.00 @ 270/0</code> in B
+      (5 root stations; a Compass <code>.dat</code> spells distances in decimal feet,
+      so the 31 ft of tape solves to 9.45 m of cave length and 1.07 m of depth -
+      measured 2026-09-12 with the cavern CLI). Fix
+      <code>compass_with_metadata.dat</code>'s trailing-column error the same way, keeping
+      the header values <code>[Scanner][Metadata]</code> asserts. Verify every
+      <code>.dat</code>/<code>.mak</code> with the CLI before running tests:
+      <code>cd build/Qt_6_11_1_for_macOS-Debug &amp;&amp; ./survex/cavern -o /tmp/x-$$.3d
+      driver.svx</code> (run from the build directory: cavern looks up its message files
+      relative to the current directory) where <code>driver.svx</code> is the three-line
+      cave wrapper with an absolute <code>*include</code>, then
+      <code>./survex/dump3d /tmp/x-$$.3d</code> to read the labels. New Walls fixtures
+      <code>walls_prefixed/</code>: <code>walls_prefixed.wpj</code> (one book, two
+      <code>.SURVEY</code> entries), <code>ROOT.SRV</code> (no prefix:
+      <code>A1&rarr;A2 10 @ 0/0</code>, <code>A2&rarr;A3 4 @ 90/0</code>,
+      <code>A3&rarr;XY:P1 6 @ 0/-30</code>), <code>PREFIXED.SRV</code> (<code>#DATE 2025-01-02</code>,
+      <code>#PREFIX XY</code>, <code>P1&rarr;P2 12 @ 90/0</code>): root 3 stations, block
+      <code>XY</code> 2 stations, length 32 m, depth 3 m; and
+      <code>walls_book_prefix/</code>: <code>walls_book_prefix.wpj</code> whose book carries
+      <code>.OPTIONS prefix=BK</code> over <code>OPTSRV.SRV</code>
+      (<code>O1&rarr;O2 10 @ 0/0</code>): block <code>BK</code>, 2 stations, root 0.
+      All three shapes solved in the spike, the tie shot included (labels
+      <code>cave0:A1&hellip;A3</code>, <code>cave0:XY:P1</code>, <code>cave0:XY:P2</code>,
+      <code>cave0:BK:O1</code>; cavern reports vertical range 3.00 m). New Survex fixture
+      <code>survex_root_and_block.svx</code>: root shots <code>r1&rarr;r2 10 @ 0/0</code>,
+      <code>r2&rarr;r3 5 @ 90/0</code>, <code>r3&rarr;side.s1 4 @ 0/-30</code>, then
+      <code>*begin side</code> / <code>*export s1</code> / <code>s1&rarr;s2 6 @ 180/0</code>
+      / <code>*end side</code> (root 3, block <code>side</code> 2, length 25 m, depth 2 m).</li>
+  <li><code>testcases/test_cwExternalCenterlineScanner.cpp</code> &mdash; retarget
+      "blocks name each Compass survey, flat" (<code>:1260</code>) to "Compass surveys make
+      no blocks; rootStationCount counts every station" and "blocks carry each Compass
+      survey's SURVEY DATE" (<code>:1151</code>) to <code>rootDate</code> = first survey's
+      date; retarget "blocks stand in for each Walls .srv" (<code>:1293</code>) and "a Walls
+      block carries its .srv's #DATE" (<code>:1167</code>) to the prefix fixtures (paths
+      <code>XY</code> / <code>BK</code>, counts, dates, root count, a qualified token counted
+      under the overlay of its explicit segments on the prefix in force); Survex root count on <code>survex_root_and_block.svx</code>
+      and on <code>survex_bare.svx</code> (2, no blocks); <code>survex_blocks.svx</code> root
+      count 0 (regression: nothing changes for the existing fixtures).</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Scanner]"</code>,
+<code>"[Attach]"</code> (fixture rewrites must keep every existing attach test green);
+QML <code>tst_AddCaveFromSurveyFile.qml</code> (whole-file row present for
+<code>compass_multi.mak</code>, absent for <code>survex_blocks.svx</code>).</div>
+</div>
+
+<!-- ================================================================ -->
+<div class="commit">
+<h3>P3.16 &mdash; Whole-cave Scope trip: window the root, own what no block claims</h3>
+<p><strong>Symptom:</strong> after P3.15 a Compass, prefix-less Walls, or bare Survex
+cave-level attach creates no Scope trip, so the lineplot still draws nothing:
+<code>cwLinePlotGeometry::generate</code> draws an attached cave only through its trips'
+scope prefixes (<code>cwLinePlotGeometry.cpp:214-246</code>), and a native-looking trip with
+no chunks walks zero chunks.</p>
+<p><strong>Design (§3.2 and §3.4 amended):</strong> an attached cave has no native trips
+(§3.3 invariant), so a trip under an attached cave with no external centerline of its own
+and an empty <code>stationPrefix</code> is, by construction, the <em>whole-cave window</em>:
+it owns every cave station no sibling Scope prefix claims. This is derived state &mdash;
+no proto field, no migration of saved files. Its scope, relative to the cave, is the cave
+itself, so <code>scopePrefix()</code> stays empty and everything that reads "empty prefix =
+the cave's own namespace" (<code>solvedStationPositions</code>, <code>solvedNetwork</code>,
+<code>stationHandle</code> &rarr; <code>NativeCave</code>) is already right for it. What
+changes is who lists and draws its stations. Reconcile creates the whole-cave trip when
+<code>rootStationCount &gt; 0</code>, and from now on removes an orphaned window (its
+prefix names no block, or the root emptied) when it holds no chunks &mdash; a window is
+derived from the file, and this is also how an attachment made before this fix repairs
+itself on Reload/Replace (its survey-named Compass trips go, one whole-cave trip
+appears). A window the user put chunks in stays, as before.</p>
+<ul class="filelist">
+  <li><code>cavewherelib/src/cwTrip.h/.cpp</code> &mdash; <code>bool windowsWholeCave() const</code>
+      = <code>m_externalCenterline.isEmpty() &amp;&amp; m_stationPrefix.isEmpty() &amp;&amp;
+      parentCave() != nullptr &amp;&amp; !parentCave()-&gt;externalCenterline().isEmpty()</code>,
+      exposed as <code>Q_PROPERTY(... NOTIFY externallyBackedChanged)</code> (same
+      sources), plus the snapshot overload
+      <code>static bool windowsWholeCave(const cwTripData&amp;, const cwCaveData&amp;)</code>
+      next to the <code>scopePrefix</code> overload so the worker and UI decisions share
+      one policy. <code>solvedStations()</code> gains a third branch before the native one:
+      whole-cave &rarr; every cave lookup station whose key starts with no sibling's
+      <code>stationPrefix + "."</code> (case-insensitive; siblings from
+      <code>parentCave()-&gt;trips()</code>), yielded unstripped (the tail is the cave key).
+      <code>knownStationNames(const cwTripData&amp;, scopeLocalSolved)</code> is unchanged; its
+      caller in <code>cwFindFloatingSurveys.cpp:244</code> must hand it the same
+      sibling-filtered list for a whole-cave trip. Add <code>[Trip]</code> truth-table cases
+      for the predicate (native cave, attached-trip, Scope trip, whole-cave, cave detached
+      &rarr; false).</li>
+  <li><code>cavewherelib/src/cwLinePlotGeometry.cpp</code> &mdash; in <code>generate</code>'s
+      prefix gathering (<code>:196-201</code>) a whole-cave trip's entry becomes
+      <code>cavePrefix</code> itself, so the scope path runs for it and the existing
+      <code>ownedByInnerScope</code> hands nested blocks to their deeper windows (every
+      sibling prefix is strictly longer). Fix the header comment at <code>:55-57</code>:
+      cavern preserves case for Compass and Walls labels (measured:
+      <code>cave0.AB1</code>, <code>cave0:XY:P1</code>) and lowercases Survex ones, which is
+      why both comparisons are case-insensitive. Tests in
+      <code>test_cwLinePlotGeometry.cpp</code>: whole-cave alone draws every leg; whole-cave +
+      nested window split the legs with the tie leg drawn once; cave length/depth = the
+      fixture sums.</li>
+  <li><code>cavewherelib/src/cwFindFloatingSurveys.cpp</code>,
+      <code>cwFloatingSurveyModel.cpp</code> &mdash; wherever a Scope trip under an attached
+      cave is excluded from floating (P3.6), the whole-cave trip is excluded by the same
+      test; add the case to the existing floating-exclusion test.</li>
+  <li><code>cavewherelib/src/cwExternalCenterlineAttach.cpp</code> &mdash;
+      <code>reconcileScopeTrips</code> takes the <code>ScanResult</code> (or
+      <code>blocks</code> + <code>rootStationCount</code> + <code>rootDate</code>): after the
+      block loop, when <code>rootStationCount &gt; 0</code> and no chunk-less trip with an
+      empty prefix exists, create one named
+      <code>cave-&gt;uniqueTripName(QFileInfo(entry).completeBaseName())</code>, empty
+      prefix, date seeded from <code>rootDate</code> when valid; report it with
+      <code>stationPrefix = ""</code>. Before the block loop, remove every existing trip with
+      <code>chunkCount() == 0</code> whose prefix names no station-bearing block (empty
+      prefix counts as "names the root", kept only while <code>rootStationCount &gt; 0</code>)
+      via <code>cave-&gt;removeTrip()</code> (the G1 boundary; no undo stack, so read
+      nothing afterward). Update the function comment and §3.4's "leave orphans" sentence
+      (edit the plan text in the same commit). <code>removeEmptyScopeTrips</code> (detach
+      cascade, <code>:284-296</code>) drops the prefix test: under an attached cave every
+      chunk-less trip is a window.</li>
+  <li><code>cavewherelib/qml/ExternalCenterlineTripPanel.qml:49</code> &mdash; the scope
+      branch condition becomes <code>trip.stationPrefix.length &gt; 0 ||
+      trip.windowsWholeCave</code>. <code>ExternalCenterlineScopeHeader.qml:95</code> shows
+      <code>qsTr("whole file")</code> as placeholder text for an empty prefix (editing it to a
+      block path still works and turns the trip into an ordinary window).</li>
+  <li><code>cavewherelib/src/cwSurvex3DFileReader.cpp:84-85</code> &mdash; correct the comment:
+      the separator is chosen once before Compass data is read, so a Compass-only run keeps
+      '.' even when a station name contains '.' (measured on
+      <code>compass_dotted.dat</code>: <code>cave0.SA1.1</code>); the replacement is
+      unambiguous only because a cave-level or trip-level wrapper is the sole level above
+      such names. Reference the filed item below.</li>
+  <li><code>testcases/test_cwExternalCenterlineAttachCave.cpp</code> &mdash; new
+      <code>[Attach][Cave][Geometry]</code> cases modeled on the mixed-case one
+      (<code>:540</code>; fix its comment's "cavern lowercases every label" the same way):
+      attach <code>compass_multi.mak</code> &rarr; exactly one trip, whole-cave, 5 known
+      stations, its vertex range non-empty, cave length 9.45 / depth 1.07 (Compass feet; tolerance as in
+      <code>test_cwLinePlotManager_AttachedCenterlines.cpp</code>); attach
+      <code>walls_prefixed/walls_prefixed.wpj</code> &rarr; two trips (whole-cave with 3
+      stations, <code>XY</code> with 2), both draw, length 32 / depth 3; attach
+      <code>survex_root_and_block.svx</code> &rarr; whole-cave + <code>side</code>, length
+      25 / depth 2; attach <code>walls_book_prefix</code> &rarr; one <code>BK</code> trip and
+      no whole-cave trip. Reconcile: pre-seed a cave with a stale chunk-less trip whose
+      prefix is <code>A</code> (the old Compass shape), Replace with
+      <code>compass_multi.mak</code>, assert the stale trip is gone and the whole-cave trip
+      exists; the same with a chunk added to the stale trip asserts it survives. Detach
+      cascade removes the whole-cave trip.</li>
+  <li><code>test-qml/tst_CavePageExternalCave.qml</code> &mdash; the whole-cave trip row
+      shows the 📎 and the em-dash declination like any Scope row;
+      <code>tst_ExternalCenterlineTripPanel.qml</code> &mdash; scope mode for a whole-cave
+      trip, header placeholder text.</li>
+</ul>
+<div class="gate"><strong>Gate:</strong> <code>cavewhere-test "[Trip]"</code>,
+<code>"[Attach][Cave]"</code>, <code>"[LinePlotGeometry]"</code>, the floating-survey tags,
+<code>"[LinePlotManager][AttachedCenterlinesModel]"</code>; QML
+<code>tst_CavePageExternalCave.qml</code>, <code>tst_ExternalCenterlineTripPanel.qml</code>.</div>
+</div>
+
+<p class="meta"><strong>Filed, not scheduled:</strong>
+(1) <em>Separator ambiguity.</em> cavern picks the .3d label separator once, before any
+Compass station is read (<code>find_output_separator</code> fast path,
+<code>survex/src/commands.c:826-829</code>; <code>update_output_separator()</code> runs at
+<code>datain.c:674</code> and the later <code>update_separator_map_for_foreign_name</code>
+calls never re-evaluate), so a Compass-only run emits '.' even when a station name spells
+'.'. Today only the cave/trip wrapper sits above such names, so stripping the wrapper
+prefix still resolves them; a future level between wrapper and name (a Compass
+<code>.mak</code> rewritten into per-file <code>*begin</code>s, or a region solve that
+mixes such names with Walls prefixes) would make <code>cave0.SA1.1</code> undecodable.
+Fix belongs in the vendored survex (re-run the separator choice after foreign names
+accumulate) with a <code>[Survex3DFileReader]</code> regression on
+<code>compass_dotted.dat</code> under a nested wrapper.
+(2) Still open from P3.1's review: an existing-but-unreadable child can appear in
+<code>entryDirectIncludes</code> while <code>dependencies</code> omits it &mdash; the P3.7
+heuristic should filter suggestions against <code>dependencies</code>.</p>
+
+<h2 id="testing">7. Build and test invocations (for every pipeline stage)</h2>
+
+<pre><code># Build (this exact binary + preset; binaries land in ./build/Qt_6_11_1_for_macOS-Debug/)
+/Users/cave/Qt/Tools/CMake/CMake.app/Contents/bin/cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-qml-test
+
+# C++ (narrow tags while iterating; ASAN prefix + teed log with $$ are mandatory)
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[Attach][Cave]" 2>&1 | tee /tmp/cavewhere-p3-$$.log
+
+# One QML file
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen -input test-qml/tst_AddCaveFromSurveyFile.qml 2>&1 | tee /tmp/cavewhere-p3-qml-$$.log
+
+# Full suites — run ONCE, after P3.11, by the orchestrator (not inside a workflow stage)
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "~[cwRemoteCredentialStore]" 2>&1 | tee /tmp/cavewhere-full-$$.log
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen 2>&1 | tee /tmp/cavewhere-qml-full-$$.log
+</code></pre>
+
+<p>Cross-cutting rules (master §10.1 + session constraints): tests run <strong>foreground</strong>
+inside workflow stages; one test binary of this checkout at a time; never rebuild while a
+test runs; <code>QTemporaryDir</code>/PID in every temp path; in-process cavern is
+serialized by <code>cwCavernRunner</code>'s mutex; QML waits use
+<code>tryVerify</code>/<code>tryCompare</code>; new <code>tst_*.qml</code> files need no
+CMake edit (auto-discovered). Existing suites must stay green at every commit.
+Commits: short imperative subjects, body = what/why + commands run, no Claude mentions.</p>
+
+<h2 id="fixtures">8. Fixture files</h2>
+
+<table>
+<tr><th>Fixture (under <code>testcases/datasets/external-centerlines/</code>)</th><th>Shape</th><th>Used by</th></tr>
+<tr><td><code>updir_project/conventions.svx</code> +
+        <code>updir_project/caves/dusk.svx</code></td>
+  <td>Entry in a subdirectory including <code>../conventions.svx</code> (the measured
+      shared-error-model idiom); solvable.</td>
+  <td>P3.2</td></tr>
+<tr><td><code>survex_blocks.svx</code></td>
+  <td>One top-level cave block; nested children (≥ 2 levels, e.g.
+      <code>big-passage.east</code>), one 0-station block, distinct station counts per
+      block; solvable.</td>
+  <td>P3.3, P3.4, P3.6, P3.7, P3.8, P3.9</td></tr>
+<tr><td><code>survex_master/master.svx</code> +
+        <code>survex_master/{alpha,bravo,charlie}.svx</code></td>
+  <td>Region master: only <code>*include</code> lines (no own shots), 3 top-level blocks
+      from 3 files; solvable.</td>
+  <td>P3.3, P3.7 (heuristic)</td></tr>
+<tr><td><em>(written at test runtime)</em> absolute-include tree; 3-level climb tree</td>
+  <td>Absolute paths are machine-local, so these cannot be checked in — tests write them
+      into a <code>QTemporaryDir</code>.</td>
+  <td>P3.1, P3.2</td></tr>
+<tr><td><code>survex_mixed_case.svx</code></td>
+  <td>Uppercase-bearing block names (e.g. <code>*begin 48H-Feng</code>) with a nested
+      mixed-case child; hand-computable length/depth; solvable. Repro of the
+      case-sensitive scope-filter defect (lowercase fixtures falsely pass).</td>
+  <td>P3.12, P3.13</td></tr>
+<tr><td><code>survex_blocks.svx</code> <em>(extended)</em></td>
+  <td>Gains distinct <code>*date</code> lines per block, one dateless child (inherits)
+      and a dateless top block (keeps default).</td>
+  <td>P3.14 (P3.13 nested de-dup regression)</td></tr>
+<tr><td><code>compass_simple.dat</code> + <code>compass_other.dat</code>
+        <em>(rewritten cavern-valid)</em>, <code>compass_with_metadata.dat</code>
+        <em>(repaired)</em></td>
+  <td>Surveys A and B tied through A2, one component; 31 ft of tape solving to
+      9.45 m length and 1.07 m depth (Compass distances are decimal feet), 5 root
+      stations. Same survey names, dates, and header values the scanner tests assert.</td>
+  <td>P3.15, P3.16</td></tr>
+<tr><td><code>walls_prefixed/walls_prefixed.wpj</code> + <code>ROOT.SRV</code> +
+        <code>PREFIXED.SRV</code></td>
+  <td>Prefix-less survey (3 root stations) tied to a <code>#PREFIX XY</code> survey (2
+      stations) through a <code>XY:P1</code> qualified shot; length 32 m, depth 3 m.</td>
+  <td>P3.15, P3.16</td></tr>
+<tr><td><code>walls_book_prefix/walls_book_prefix.wpj</code> + <code>OPTSRV.SRV</code></td>
+  <td>Book-level <code>.OPTIONS prefix=BK</code>; one block <code>BK</code>, root 0.</td>
+  <td>P3.15, P3.16</td></tr>
+<tr><td><code>survex_root_and_block.svx</code></td>
+  <td>Root shots plus one <code>*begin side</code> reached through <code>*export</code>;
+      root 3, block 2, length 25 m, depth 2 m.</td>
+  <td>P3.15, P3.16</td></tr>
+<tr><td>Existing: <code>compass_multi.mak</code>, <code>walls_simple.wpj</code>,
+        <code>survex_nested.svx</code>, <code>survex_simple.svx</code></td>
+  <td>Reused for block extraction, direct-includes, and regression gates; P3.14 adds
+      dates where absent.</td>
+  <td>P3.1, P3.3, P3.14</td></tr>
+</table>
+
+<h2 id="qml-tests">9. New QML test files</h2>
+<ul>
+  <li><code>tst_AddCaveFromSurveyFile.qml</code> — P3.7 (the stub's planned
+      <code>tst_ExternalCenterlineAttachCave.qml</code>, renamed to match the verb).</li>
+  <li><code>tst_CavePageExternalCave.qml</code> — P3.8.</li>
+  <li><code>tst_ExternalCenterlineScopeHeader.qml</code> — P3.9.</li>
+  <li><code>tst_ExternalSolveBadge.qml</code> — P3.10 (the stub's planned
+      <code>tst_NavBadge.qml</code>, renamed per §3.5).</li>
+</ul>
+<p>All extend <code>ExternalCenterlineTestCase.qml</code> (helpers:
+<code>makeSavedTrip</code>, <code>attachSourceToTrip</code>,
+<code>TestHelper.testcasesDatasetPath</code>) inside <code>MainWindowTest</code>; add a
+<code>makeSavedCaveAttach(projectBaseName, fixture)</code> helper there in P3.7 rather than
+repeating the setup per file.</p>
+
+<h2 id="accept">10. Phase acceptance criteria</h2>
+<ul>
+  <li>Attach <code>survex_blocks.svx</code> at cave level through the UI: the cave appears
+      named from the file, its trip table lists one 📎 Scope trip per station-bearing
+      block, each trip's station list shows its block's stations, and note-station fields
+      in those trips accept dotted names. (Covers master §9's first criterion.)</li>
+  <li>Introduce a cavern-visible fault on the attached cave: the red badge appears on the
+      DataMainPage cave row and clicking it lands on CavernOutputPage, where the
+      attached-centerlines row carries the reason. (Covers master §9's second criterion,
+      restated per §3.5.)</li>
+  <li>Attach <code>updir_project/caves/dusk.svx</code> at trip level: succeeds, with the
+      shared up-directory file copied into the attachment (the Phase 2 refusal is gone).</li>
+  <li>Detach the external cave: one confirm naming the trip count; afterward the cave is
+      an empty Native cave, the copies are gone, and the project solves cleanly.</li>
+  <li>Export menu is disabled while any Attached or Scope entity exists, with the §7.5
+      tooltip.</li>
+  <li><strong>(P3.12&ndash;P3.14)</strong> Attach
+      <code>48H-H12-330-feng.svx</code> (or any mixed-case-block source) at cave level:
+      the lineplot shows the centerline lines, cave Length and Depth read positive
+      values (never <code>-1.00</code>), and each Scope trip's date matches its block's
+      <code>*date</code> &mdash; editable from the trip panel.</li>
+  <li><strong>(P3.15&ndash;P3.16)</strong> Attach a Compass <code>.mak</code> and a Walls
+      <code>.wpj</code> at cave level: each shows one 📎 whole-file trip (plus one trip per
+      Walls prefix), the lineplot draws the centerline, Length/Depth read positive values,
+      and the Add Cave dialog's preview lists the whole-file row. Reload a Compass cave
+      attached before this fix: its survey-named empty trips are gone and one whole-file
+      trip remains.</li>
+  <li>Both full suites green at the final commit of the sequence.</li>
 </ul>
 
 </body>

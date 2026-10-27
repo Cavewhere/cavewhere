@@ -3,9 +3,15 @@
 
 // Our includes
 #include "cwPageSelectionModel.h"
+#include "cwLinkGenerator.h"
+#include "cwSurveyNode.h"
+#include "cwSurveyNodeChildModel.h"
+#include "cwCave.h"
+#include "cwTrip.h"
 
 // Qt includes
 #include <QCoreApplication>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -183,7 +189,6 @@ TEST_CASE("cwPageSelectionModel clearHistory prevents stale pages in history aft
 
     // Unregister old cave page (simulates Instantiator cleanup when caves are removed)
     model.unregisterPage(caveA);
-    QCoreApplication::processEvents();
 
     // Old trip address should not resolve anymore
     model.setCurrentPageAddress(QStringLiteral("Source/Data/Cave=Phake Cave/Trip=Trip 1"));
@@ -266,7 +271,6 @@ TEST_CASE("cwPageSelectionModel unregisterPage removes page from address resolut
 
     REQUIRE(pages.source->childPage(QStringLiteral("Data")) == pages.data);
     model.unregisterPage(pages.data);
-    QCoreApplication::processEvents();
 
     REQUIRE(pages.source->childPage(QStringLiteral("Data")) == nullptr);
     const QString dataAddress = QStringLiteral("Source/Data");
@@ -345,7 +349,6 @@ TEST_CASE("cwPageSelectionModel unregister note page removes from tree", "[cwPag
 
     // Unregister note1
     model.unregisterPage(note1);
-    QCoreApplication::processEvents();
 
     REQUIRE(pages.trip->childPage(QStringLiteral("Note=photo.png")) == nullptr);
     REQUIRE(pages.trip->childPage(QStringLiteral("Note=scan.glb")) == note2);
@@ -378,3 +381,267 @@ TEST_CASE("cwPageSelectionModel note page address updates when renamed", "[cwPag
     REQUIRE(model.currentPageAddress() == QStringLiteral("Source/Data/Cave=Alpha/Trip=Trip 1/Note=renamed.png"));
 }
 
+
+namespace
+{
+cwCave* makeNode(cwSurveyNode* parent, const QString& name)
+{
+    auto* node = new cwCave();
+    node->setName(name);
+    parent->addNode(node);
+    return node;
+}
+} // namespace
+
+TEST_CASE("cwLinkGenerator names a node page by its whole path", "[cwPageSelectionModel][cwLinkGenerator]")
+{
+    cwSurveyNode root(cwSurveyNode::RootNodeTag{});
+    cwCave* folder = makeNode(&root, QStringLiteral("Kentucky"));
+    cwCave* cave = makeNode(folder, QStringLiteral("Side Cave"));
+    cwCave* section = makeNode(cave, QStringLiteral("Upper level"));
+
+    auto* trip = new cwTrip();
+    trip->setName(QStringLiteral("Trip 1"));
+    section->addTrip(trip);
+
+    cwLinkGenerator links;
+    CHECK(links.nodeLink(folder) == QStringLiteral("Source/Data/Node=Kentucky"));
+    CHECK(links.nodeLink(section) == QStringLiteral("Source/Data/Node=Kentucky/Node=Side Cave/Node=Upper level"));
+    CHECK(links.caveLink(cave) == links.nodeLink(cave));
+    CHECK(links.tripLink(trip) == QStringLiteral("Source/Data/Node=Kentucky/Node=Side Cave/Node=Upper level/Trip=Trip 1"));
+    CHECK(links.fixStationsLink(cave) == QStringLiteral("Source/Data/Node=Kentucky/Node=Side Cave/Fix Stations"));
+    CHECK(links.nodeLink(&root) == links.dataPageLink());
+    CHECK(links.nodeLink(nullptr).isEmpty());
+    CHECK(links.fixStationsLink(nullptr).isEmpty());
+}
+
+TEST_CASE("cwPageSelectionModel resolves node pages at any depth", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* component = makePageComponent(engine, &model);
+
+    auto* source = model.registerPage(nullptr, QStringLiteral("Source"), component);
+    auto* data = model.registerPage(source, QStringLiteral("Data"), component);
+    auto* folder = model.registerPage(data, QStringLiteral("Node=Kentucky"), component);
+    auto* cave = model.registerPage(folder, QStringLiteral("Node=Side Cave"), component);
+    auto* section = model.registerPage(cave, QStringLiteral("Node=Upper level"), component);
+    auto* trip = model.registerPage(section, QStringLiteral("Trip=Trip 1"), component);
+
+    const QString tripAddress = QStringLiteral("Source/Data/Node=Kentucky/Node=Side Cave/Node=Upper level/Trip=Trip 1");
+    model.setCurrentPageAddress(tripAddress);
+    REQUIRE(model.currentPage() == trip);
+    CHECK(model.currentPageAddress() == tripAddress);
+
+    //Each crumb of the trail is a page of its own.
+    model.setCurrentPageAddress(QStringLiteral("Source/Data/Node=Kentucky/Node=Side Cave"));
+    CHECK(model.currentPage() == cave);
+    model.setCurrentPageAddress(QStringLiteral("Source/Data/Node=Kentucky"));
+    CHECK(model.currentPage() == folder);
+
+    model.setCurrentPageAddress(QStringLiteral("Source/Data/Node=Kentucky/Node=Missing/Trip=Trip 1"));
+    CHECK(model.currentPage() == nullptr);
+}
+
+//One node page item serves every Section of a cave, and pointing it at a
+//Section registers that Section's trip pages again. Opening Trip 1 of the
+//first Section after visiting the second one does exactly that while the
+//page view is still loading Trip 1's page, so the page Trip 1 already has
+//must be the one the re-registration hands back.
+TEST_CASE("cwPageSelectionModel keeps a trip page its Section registers again", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* staticComponent = makePageComponent(engine, &model);
+    auto* caveComponent = makePageComponent(engine, &model);
+    auto* sectionComponent = makePageComponent(engine, &model);
+    auto* tripComponent = makePageComponent(engine, &model);
+    auto* noteComponent = makePageComponent(engine, &model);
+
+    cwSurveyNode root(cwSurveyNode::RootNodeTag{});
+    cwCave* caveNode = makeNode(&root, QStringLiteral("Side Cave"));
+    cwCave* firstSectionNode = makeNode(caveNode, QStringLiteral("New Section"));
+    cwCave* secondSectionNode = makeNode(caveNode, QStringLiteral("New Section 2"));
+    auto* firstTrip = new cwTrip();
+    firstTrip->setName(QStringLiteral("Trip 1"));
+    firstSectionNode->addTrip(firstTrip);
+    auto* secondTrip = new cwTrip();
+    secondTrip->setName(QStringLiteral("Trip 1"));
+    secondSectionNode->addTrip(secondTrip);
+
+    const auto nodeProperties = [](cwSurveyNode* node) {
+        return QVariantMap{{QStringLiteral("currentNode"), QVariant::fromValue(node)}};
+    };
+    const auto tripProperties = [](cwTrip* trip) {
+        return QVariantMap{{QStringLiteral("currentTrip"), QVariant::fromValue(trip)}};
+    };
+
+    auto* source = model.registerPage(nullptr, QStringLiteral("Source"), staticComponent);
+    auto* data = model.registerPage(source, QStringLiteral("Data"), staticComponent);
+    auto* cave = model.registerPage(data, QStringLiteral("Node=Side Cave"), caveComponent,
+                                    nodeProperties(caveNode));
+    auto* firstSection = model.registerPage(cave, QStringLiteral("Node=New Section"), sectionComponent,
+                                            nodeProperties(firstSectionNode));
+    auto* secondSection = model.registerPage(cave, QStringLiteral("Node=New Section 2"), sectionComponent,
+                                             nodeProperties(secondSectionNode));
+
+    QPointer<cwPage> firstTripPage = model.registerPage(firstSection, QStringLiteral("Trip=Trip 1"),
+                                                        tripComponent, tripProperties(firstTrip));
+    model.gotoPage(firstTripPage);
+
+    //The Section page item moves to the second Section and gives up the first
+    //Section's trips; a page in the history stays registered.
+    model.unregisterPage(firstTripPage);
+    auto* secondTripPage = model.registerPage(secondSection, QStringLiteral("Trip=Trip 1"),
+                                              tripComponent, tripProperties(secondTrip));
+    model.gotoPage(secondTripPage);
+    model.gotoPage(cave);
+
+    const QString firstTripAddress = QStringLiteral("Source/Data/Node=Side Cave/Node=New Section/Trip=Trip 1");
+    model.setCurrentPageAddress(firstTripAddress);
+    REQUIRE(model.currentPage() == firstTripPage);
+
+    //The Section page item, pointed back at the first Section on the way.
+    cwPage* reregistered = model.registerPage(firstSection, QStringLiteral("Trip=Trip 1"),
+                                              tripComponent, tripProperties(firstTrip));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    REQUIRE(!firstTripPage.isNull());
+    CHECK(reregistered == firstTripPage);
+    CHECK(model.currentPage() == firstTripPage);
+    CHECK(model.currentPageAddress() == firstTripAddress);
+    CHECK(model.history().contains(firstTripPage.data()));
+
+    //The trip page registers its own pages under the page it holds.
+    auto* note = model.registerPage(firstTripPage, QStringLiteral("Note=photo.png"), noteComponent);
+    model.setCurrentPageAddress(firstTripAddress + QStringLiteral("/Note=photo.png"));
+    CHECK(model.currentPage() == note);
+}
+
+TEST_CASE("cwPageSelectionModel replaces a page registered again with other properties", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* component = makePageComponent(engine, &model);
+    auto pages = createPageTree(model, component);
+
+    model.gotoPage(pages.trip);
+    QPointer<cwPage> oldTrip = pages.trip;
+
+    cwPage* newTrip = model.registerPage(pages.cave, QStringLiteral("Trip=Trip 1"), component,
+                                         {{QStringLiteral("currentNoteIndex"), 1}});
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    CHECK(oldTrip.isNull());
+    CHECK(newTrip != nullptr);
+    CHECK(model.currentPage() == newTrip);
+    CHECK(model.history().contains(newTrip));
+}
+
+TEST_CASE("cwPageSelectionModel resolves an old Cave= link to the Node= page", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* component = makePageComponent(engine, &model);
+
+    auto* source = model.registerPage(nullptr, QStringLiteral("Source"), component);
+    auto* data = model.registerPage(source, QStringLiteral("Data"), component);
+    auto* cave = model.registerPage(data, QStringLiteral("Node=Alpha"), component);
+    auto* trip = model.registerPage(cave, QStringLiteral("Trip=Trip 1"), component);
+    auto* note = model.registerPage(trip, QStringLiteral("Note=photo.png"), component);
+
+    model.setCurrentPageAddress(QStringLiteral("Source/Data/Cave=Alpha/Trip=Trip 1"));
+    REQUIRE(model.currentPage() == trip);
+    CHECK(model.currentPageAddress() == QStringLiteral("Source/Data/Node=Alpha/Trip=Trip 1"));
+
+    model.setCurrentPageAddress(QStringLiteral("Source/Data/Cave=Alpha"));
+    CHECK(model.currentPage() == cave);
+
+    model.setCurrentPageAddress(QStringLiteral("Source/Data/Cave=Alpha/Trip=Trip 1/Note=photo.png"));
+    CHECK(model.currentPage() == note);
+
+    const QString missingCave = QStringLiteral("Source/Data/Cave=Missing/Trip=Trip 1");
+    model.setCurrentPageAddress(missingCave);
+    CHECK(model.currentPage() == nullptr);
+    CHECK(model.currentPageAddress() == missingCave);
+}
+
+TEST_CASE("cwPageSelectionModel clearHistory frees node pages at every depth", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* staticComponent = makePageComponent(engine, &model);
+    auto* topNodeComponent = makePageComponent(engine, &model);
+    auto* childNodeComponent = makePageComponent(engine, &model);
+    auto* grandchildNodeComponent = makePageComponent(engine, &model);
+
+    auto* source = model.registerPage(nullptr, QStringLiteral("Source"), staticComponent);
+    auto* data = model.registerPage(source, QStringLiteral("Data"), staticComponent);
+
+    //Each depth registers its children from a component of its own, as
+    //CavePage.qml does.
+    QPointer<cwPage> folder = model.registerPage(data, QStringLiteral("Node=Kentucky"), topNodeComponent);
+    QPointer<cwPage> cave = model.registerPage(folder, QStringLiteral("Node=Side Cave"), childNodeComponent);
+    QPointer<cwPage> section = model.registerPage(cave, QStringLiteral("Node=Upper level"), grandchildNodeComponent);
+    QPointer<cwPage> trip = model.registerPage(section, QStringLiteral("Trip=Trip 1"), staticComponent);
+
+    model.gotoPage(trip);
+
+    const auto clearedComponents = model.clearHistory();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    CHECK(folder.isNull());
+    CHECK(cave.isNull());
+    CHECK(section.isNull());
+    CHECK(trip.isNull());
+    CHECK(data->childPages().isEmpty());
+
+    CHECK(clearedComponents.contains(topNodeComponent));
+    CHECK(clearedComponents.contains(childNodeComponent));
+    CHECK(clearedComponents.contains(grandchildNodeComponent));
+}
+
+TEST_CASE("cwSurveyNodeChildModel lists a node's child nodes", "[cwPageSelectionModel][SurveyNodeChildModel]")
+{
+    cwSurveyNode root(cwSurveyNode::RootNodeTag{});
+    cwCave* cave = makeNode(&root, QStringLiteral("Side Cave"));
+
+    cwSurveyNodeChildModel model;
+    CHECK(model.rowCount() == 0);
+
+    model.setNode(cave);
+    CHECK(model.rowCount() == 0);
+
+    QSignalSpy insertedSpy(&model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy removedSpy(&model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+
+    cwCave* upper = makeNode(cave, QStringLiteral("Upper level"));
+    cwCave* lower = makeNode(cave, QStringLiteral("Lower level"));
+    CHECK(insertedSpy.count() == 2);
+    REQUIRE(model.rowCount() == 2);
+
+    const auto nodeAt = [&model](int row) {
+        return model.data(model.index(row), cwSurveyNodeChildModel::NodeObjectRole).value<cwSurveyNode*>();
+    };
+    QList<cwSurveyNode*> rows {nodeAt(0), nodeAt(1)};
+    CHECK(rows.contains(upper));
+    CHECK(rows.contains(lower));
+    CHECK(model.roleNames().value(cwSurveyNodeChildModel::NodeObjectRole) == QByteArrayLiteral("nodeObjectRole"));
+
+    cave->removeNode(cave->indexOfNode(upper));
+    CHECK(removedSpy.count() == 1);
+    REQUIRE(model.rowCount() == 1);
+    CHECK(nodeAt(0) == lower);
+
+    //A node that goes away takes its rows along.
+    auto* lone = new cwCave();
+    makeNode(lone, QStringLiteral("Only child"));
+    model.setNode(lone);
+    REQUIRE(model.rowCount() == 1);
+    resetSpy.clear();
+    delete lone;
+    CHECK(model.node() == nullptr);
+    CHECK(model.rowCount() == 0);
+    CHECK(resetSpy.count() == 1);
+}

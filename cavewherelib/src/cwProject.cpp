@@ -140,7 +140,7 @@ cwProject::cwProject(QObject* parent) :
     QObject(parent),
     m_saveLoad(new cwSaveLoad(this)),
     FileVersion(cwRegionIOTask::protoVersion()),
-    SQLiteTempProject(false),
+    m_unsavedReadOnlyConversion(false),
     LoadedFromBundledArchive(false),
     ConvertedFromSqlite(false),
     BundledArchivePath(),
@@ -153,9 +153,6 @@ cwProject::cwProject(QObject* parent) :
     m_saveLoad->newProject();
     seedRegionUnitSystem();
 
-    connect(this, &cwProject::fileSaved, this, [this]() {
-        setModified(false);
-    });
     connect(this, &cwProject::loaded, this, [this]() {
         setModified(false);
     });
@@ -201,7 +198,7 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
             cwError::Warning));
     });
 
-    connect(saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this, saveLoad]() {
+    connect(saveLoad, &cwSaveLoad::hasDurableHomeChanged, this, [this, saveLoad]() {
         if (m_saveLoad != saveLoad) {
             return;
         }
@@ -446,7 +443,8 @@ bool cwProject::save()
                              ConvertedFromSqlite = false;
                              emit fileTypeChanged();
                              m_syncHealth->refresh();
-                             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+                             const cwSaveLoad::SaveReceipt receipt = saveResult.value();
+                             QMetaObject::invokeMethod(this, [this, receipt]() { completeSave(receipt); }, Qt::QueuedConnection);
                          })
                          .future();
         FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
@@ -457,11 +455,14 @@ bool cwProject::save()
     SaveFuture = AsyncFuture::observe(commitFuture)
         .context(this, [this, commitFuture]() {
             const auto result = commitFuture.result();
+            m_syncHealth->refresh();
             if (result.hasError()) {
                 ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
+                return;
             }
-            m_syncHealth->refresh();
-            QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+
+            const cwSaveLoad::SaveReceipt receipt = result.value();
+            QMetaObject::invokeMethod(this, [this, receipt]() { completeSave(receipt); }, Qt::QueuedConnection);
         })
         .future();
     FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
@@ -630,6 +631,10 @@ void cwProject::waitForSyncToFinish()
 
 void cwProject::completeSyncOperation(const Monad::ResultBase& result)
 {
+    const auto report = m_saveLoad->lastSyncReport();
+    const bool flushCoveredEveryMutation = report
+        && report->mutationEpoch == m_saveLoad->localMutationEpoch();
+
     if (result.hasError()) {
         if (result.errorCodeTo<cwSaveLoad::SyncErrorCode>() == cwSaveLoad::SyncErrorCode::HttpAuthFailed) {
             emit syncAuthFailed();
@@ -638,17 +643,23 @@ void cwProject::completeSyncOperation(const Monad::ResultBase& result)
         }
         ErrorModel->append(cwError(result.errorMessage(), cwError::Warning));
         m_syncHealth->refresh();
-        // Sync flushes and commits before pushing, so the working tree may be
-        // clean even on push failure.
-        setModified(false);
+        // A report is present once the sync committed its flush, so a matching
+        // stamp proves the committed tree holds every mutation even when the
+        // pull or push failed.
+        if (flushCoveredEveryMutation) {
+            setModified(false);
+        }
         emit syncFinished();
         return;
     }
-    auto report = m_saveLoad->lastSyncReport();
-    bool bundleNeedsResave = LoadedFromBundledArchive
+    const bool bundleNeedsResave = LoadedFromBundledArchive
         && report
         && report->pullState != cwSaveLoad::SyncReport::PullState::AlreadyUpToDate;
-    setModified(bundleNeedsResave);
+    if (bundleNeedsResave) {
+        setModified(true);
+    } else if (flushCoveredEveryMutation) {
+        setModified(false);
+    }
     m_syncHealth->refresh();
     emit syncFinished();
 }
@@ -773,13 +784,15 @@ bool cwProject::saveAs(QString newFilename)
                              }
 
                              ScopedProjectStateNotifier stateGuard(this);
+                             setUnsavedReadOnlyConversion(false);
                              LoadedFromBundledArchive = true;
                              ConvertedFromSqlite = false;
                              BundledArchivePath = newFilename;
                              emit filenameChanged(filename());
                              emit fileTypeChanged();
                              m_syncHealth->refresh();
-                             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+                             const cwSaveLoad::SaveReceipt receipt = saveResult.value();
+                             QMetaObject::invokeMethod(this, [this, receipt]() { completeSave(receipt); }, Qt::QueuedConnection);
                          })
                          .future();
         FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
@@ -816,6 +829,7 @@ bool cwProject::saveAs(QString newFilename)
 
     {
         ScopedProjectStateNotifier stateGuard(this);
+        setUnsavedReadOnlyConversion(false);
         LoadedFromBundledArchive = false;
         ConvertedFromSqlite = false;
         BundledArchivePath.clear();
@@ -827,27 +841,32 @@ bool cwProject::saveAs(QString newFilename)
     // in git before fileSaved fires. Without a commit all files are untracked, and a later
     // discardChanges() (git reset --hard HEAD + cleanUntracked) would erase the entire project.
     // SaveFuture tracks the commit so waitSaveToFinish() / shutdown waits for it.
+    // A failed commit returns before completeSave, so the project stays modified and the user
+    // is asked to save again.
     auto commitFuture = m_saveLoad->enqueueFlushAndCommit();
     SaveFuture = AsyncFuture::observe(commitFuture)
         .context(this, [this, commitFuture]() {
             const auto result = commitFuture.result();
+            m_syncHealth->refresh();
             if (result.hasError()) {
                 ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
+                return;
             }
-            m_syncHealth->refresh();
-            QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+
+            const cwSaveLoad::SaveReceipt receipt = result.value();
+            QMetaObject::invokeMethod(this, [this, receipt]() { completeSave(receipt); }, Qt::QueuedConnection);
         })
         .future();
     FutureToken.addJob(SaveFuture, QStringLiteral("Saving"));
     return true;
 }
 
-void cwProject::setSqliteTemporaryProject(bool isTemp)
+void cwProject::setUnsavedReadOnlyConversion(bool isUnsavedConversion)
 {
-    if (SQLiteTempProject == isTemp) {
+    if (m_unsavedReadOnlyConversion == isUnsavedConversion) {
         return;
     }
-    SQLiteTempProject = isTemp;
+    m_unsavedReadOnlyConversion = isUnsavedConversion;
     emit fileTypeChanged();
     m_syncHealth->refresh();
 }
@@ -937,7 +956,7 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
             //Disable the m_saveLoad, since this should be a temporary project
             m_saveLoad->setCavingRegion(nullptr);
 
-            setSqliteTemporaryProject(result.isTempFile());
+            setUnsavedReadOnlyConversion(result.isTempFile());
             LoadedFromBundledArchive = false;
             ConvertedFromSqlite = false;
             BundledArchivePath.clear();
@@ -989,7 +1008,7 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
 
                 if (!result.hasError()) {
                     ScopedProjectStateNotifier stateGuard(this);
-                    setSqliteTemporaryProject(false);
+                    setUnsavedReadOnlyConversion(false);
                     LoadedFromBundledArchive = false;
                     ConvertedFromSqlite = false;
                     BundledArchivePath.clear();
@@ -1091,7 +1110,7 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                         auto result = extractedProjectLoadFuture.result();
                         if (!result.hasError()) {
                             ScopedProjectStateNotifier stateGuard(this);
-                            setSqliteTemporaryProject(false);
+                            setUnsavedReadOnlyConversion(false);
                             LoadedFromBundledArchive = true;
                             ConvertedFromSqlite = false;
                             BundledArchivePath = bundleSourcePath;
@@ -1120,7 +1139,7 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
 
 QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFilename,
                                                           const QDir &newProjectDirectory,
-                                                          bool isTemporary,
+                                                          bool isReadOnlySource,
                                                           const QString& bundledArchivePath)
 {
     //Make a temporary project
@@ -1160,14 +1179,14 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
 
     auto finalFuture =
         AsyncFuture::observe(loadTempProjectFuture)
-            .context(this, [this, loadTempProjectFuture, tempProject, isTemporary, bundledArchivePath](){
+            .context(this, [this, loadTempProjectFuture, tempProject, isReadOnlySource, bundledArchivePath](){
                 auto result = loadTempProjectFuture.result();
                 errorModel()->append(tempProject->errorModel()->toList());
 
                 if (!result.hasError()) {
                     ScopedProjectStateNotifier stateGuard(this);
 
-                    setSqliteTemporaryProject(isTemporary);
+                    setUnsavedReadOnlyConversion(isReadOnlySource);
                     const bool keepBundledTarget = !bundledArchivePath.isEmpty();
                     LoadedFromBundledArchive = keepBundledTarget;
                     ConvertedFromSqlite = keepBundledTarget;
@@ -1272,9 +1291,11 @@ void cwProject::newProject() {
         disconnectSaveLoad(m_saveLoad);
     }
 
-    //Clear all the caves
+    //Clear all the caves, and the ties that name their stations
     Region->clearCaves();
+    Region->equates()->setEquates({});
     Region->lazLayers()->clear();
+    Region->clearSolve();
     if(UndoStack) {
         UndoStack->clear();
     }
@@ -1282,8 +1303,9 @@ void cwProject::newProject() {
     //Create a new save and load
     m_saveLoad = new cwSaveLoad(this);
     connectSaveLoad(m_saveLoad);
+    emit saveLoadChanged();
     m_saveLoad->newProject();
-    setSqliteTemporaryProject(false);
+    setUnsavedReadOnlyConversion(false);
     LoadedFromBundledArchive = false;
     ConvertedFromSqlite = false;
     BundledArchivePath.clear();
@@ -1437,7 +1459,7 @@ bool cwProject::isNewEmptyProject() const
         return false;
     }
 
-    return Region->caveCount() == 0;
+    return Region->rootNode()->childNodeCount() == 0;
 }
 
 /**
@@ -1517,14 +1539,14 @@ void cwProject::loadOrConvert(const QString &filename)
                              m_saveLoad->setOwnedTempDir(dir.path());  // Track for cleanup
                              auto tempDir = QDir(dir.filePath(QFileInfo(normalizedFilename).baseName()));
                              const QFileInfo info(normalizedFilename);
-                             const bool temporaryProject = !info.isWritable();
+                             const bool isReadOnlySource = !info.isWritable();
                              // Convert legacy SQLite .cw files into a BundledGitFileType pointing
                              // back at the original .cw path, so save() re-zips over the original
                              // file in place rather than leaving the user editing a temp dir
                              // (issue #515). When the source is not writable, fall back to a
                              // temporary project so save() prompts for Save As.
-                             const QString bundledTarget = temporaryProject ? QString() : normalizedFilename;
-                             return QFuture<void>(convertFromProjectV6Helper(normalizedFilename, tempDir, temporaryProject, bundledTarget));
+                             const QString bundledTarget = isReadOnlySource ? QString() : normalizedFilename;
+                             return QFuture<void>(convertFromProjectV6Helper(normalizedFilename, tempDir, isReadOnlySource, bundledTarget));
                          } else {
                              //This could be Git file or a corrupted file
                              auto loadFuture = loadHelper(normalizedFilename, {type});
@@ -1749,6 +1771,17 @@ bool cwProject::modified() const
     return m_modified;
 }
 
+void cwProject::completeSave(const cwSaveLoad::SaveReceipt& receipt)
+{
+    // The receipt holds the epoch when the save's drain ended. A mutation
+    // counted after it may be missing from what was written, so it keeps the
+    // project modified.
+    if (receipt.mutationEpoch == m_saveLoad->localMutationEpoch()) {
+        setModified(false);
+    }
+    emit fileSaved();
+}
+
 void cwProject::setModified(bool modified)
 {
     if (m_modified == modified) {
@@ -1759,10 +1792,10 @@ void cwProject::setModified(bool modified)
 }
 
 bool cwProject::isTemporaryProject() const {
-    if (LoadedFromBundledArchive && !BundledArchivePath.isEmpty() && !ConvertedFromSqlite) {
-        return false;
-    }
-    return m_saveLoad->isTemporaryProject() || SQLiteTempProject;
+    // cwSaveLoad answers "does the working tree have a durable home?"; this asks
+    // "has the user chosen where the project lives?". They disagree only for an
+    // unsaved read-only conversion, whose converted tree is durable but unchosen.
+    return !m_saveLoad->hasDurableHome() || m_unsavedReadOnlyConversion;
 }
 
 QString cwProject::filename() const {
@@ -1774,7 +1807,7 @@ QString cwProject::filename() const {
 
 cwProject::FileType cwProject::fileType() const
 {
-    if (SQLiteTempProject) {
+    if (m_unsavedReadOnlyConversion) {
         return SqliteFileType;
     }
 

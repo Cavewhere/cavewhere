@@ -1,0 +1,6 @@
+; A leaf block: shots and a bare *fix, no nested *begin.
+*begin simmons_hall
+*fix st1 0 0 0
+st1 st2 10.0 0 0
+st2 st3 10.0 90 0
+*end simmons_hall

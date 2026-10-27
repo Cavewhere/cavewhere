@@ -129,6 +129,45 @@ TEST_CASE("importSurvexToTrip refuses non-empty trip and posts an error", "[cwSu
     CHECK(trip.chunkCount() == 1);
 }
 
+TEST_CASE("importSurvexToTrip emits importFinished exactly once per call", "[cwSurveyImportManager][importSurvexToTrip]") {
+    ImportTestRig rig;
+    cwTrip trip;
+
+    QSignalSpy finishedSpy(rig.manager.get(), &cwSurveyImportManager::importFinished);
+
+    SECTION("async success reports the trip with no errors") {
+        const QUrl url = QUrl::fromLocalFile(testcasesDatasetPath("survex/dakeng.svx"));
+        rig.manager->importSurvexToTrip(url, &trip);
+
+        CHECK(finishedSpy.count() == 0); // parse runs async; no early emit
+        REQUIRE(finishedSpy.wait(10000));
+
+        REQUIRE(finishedSpy.count() == 1);
+        CHECK(finishedSpy.at(0).at(0).value<cwTrip*>() == &trip);
+        CHECK(finishedSpy.at(0).at(1).toBool() == false);
+        CHECK(trip.chunkCount() > 0); // emission happens after the chunks land
+    }
+
+    SECTION("the non-empty-trip refusal reports synchronously with errors") {
+        trip.addChunk(new cwSurveyChunk());
+
+        const QUrl url = QUrl::fromLocalFile(testcasesDatasetPath("survex/dakeng.svx"));
+        rig.manager->importSurvexToTrip(url, &trip);
+
+        REQUIRE(finishedSpy.count() == 1);
+        CHECK(finishedSpy.at(0).at(0).value<cwTrip*>() == &trip);
+        CHECK(finishedSpy.at(0).at(1).toBool() == true);
+    }
+
+    SECTION("the empty-path refusal reports synchronously with errors") {
+        rig.manager->importSurvexToTrip(QUrl(), &trip);
+
+        REQUIRE(finishedSpy.count() == 1);
+        CHECK(finishedSpy.at(0).at(0).value<cwTrip*>() == &trip);
+        CHECK(finishedSpy.at(0).at(1).toBool() == true);
+    }
+}
+
 TEST_CASE("importSurvexToTrip flattens chunks across multiple top-level blocks", "[cwSurveyImportManager][importSurvexToTrip]") {
     ImportTestRig rig;
     cwTrip trip;
@@ -153,9 +192,6 @@ TEST_CASE("importSurvexToTrip flattens chunks across multiple top-level blocks",
     rig.manager->importSurvexToTrip(QUrl::fromLocalFile(path), &trip);
     REQUIRE(chunksInsertedSpy.wait(10000));
 
-    // Both blocks contribute chunks. Drain remaining queued events
-    // just in case the second insertion is still pending.
-    QCoreApplication::processEvents();
-
-    CHECK(trip.chunkCount() >= 2);
+    // Both blocks contribute chunks; the second insertion may still be pending.
+    REQUIRE(waitUntil([&trip]() { return trip.chunkCount() >= 2; }));
 }

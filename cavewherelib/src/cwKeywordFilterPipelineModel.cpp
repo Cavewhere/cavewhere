@@ -83,6 +83,7 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
             {
                 Q_UNUSED(parent);
                 // qDebug() << "Rows about to be removed:" << begin << last;
+                QList<QModelIndex> rejected;
                 for(int i = begin; i <= last; i++) {
                     auto index = mUniqueAcceptedModel->index(i, 0);
                     Q_ASSERT(index.isValid());
@@ -95,9 +96,10 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
                         auto keywordModelIndex = findKeywordModelIndex(index);
 
                         // qDebug() << "adding to rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                        mRejectedModel->insert(keywordModelIndex);
+                        rejected.append(keywordModelIndex);
                     }
                 }
+                mRejectedModel->insert(rejected);
             });
 }
 
@@ -112,36 +114,15 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
         linkFirst(0);
 
         if(mKeywordModel) {
-            auto indexObj = [this](int i) {
-                const auto index = mKeywordModel->index(i, 0, QModelIndex());
-                return std::tuple(index,
-                                  index.data(cwKeywordItemModel::ObjectRole).value<QObject*>());
-            };
-
-            auto addToRejected = [this, indexObj](int i) {
-                auto [index, obj] = indexObj(i);
-                // qDebug() << "try to add to rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                if(!mUniqueAcceptedModel->contains(QVariant::fromValue(obj))) {
-                    // qDebug() << "adding to rejected from keywordModel:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                    mRejectedModel->insert(index);
-                }
-            };
-
-            auto removeFromRejected = [this, indexObj](int i) {
-                auto [index, obj] = indexObj(i);
-                // qDebug() << "try to remove from rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                // qDebug() << "removing from rejected from keywordModel:" << mRejectedModel << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                mRejectedModel->remove(index);
+            auto removeFromRejected = [this](int i) {
+                mRejectedModel->remove(mKeywordModel->index(i, 0, QModelIndex()));
             };
 
             connect(mKeywordModel, &cwKeywordItemModel::rowsInserted,
-                    this, [addToRejected, this](const QModelIndex& parent, int begin, int last)
+                    this, [this](const QModelIndex& parent, int begin, int last)
                     {
-                        Q_UNUSED(parent);
                         if(parent == QModelIndex()) {
-                            for(int i = begin; i <= last; i++) {
-                                addToRejected(i);
-                            }
+                            rejectUnaccepted(begin, last);
                             updatePossibleKeys();
                         }
                     });
@@ -158,15 +139,13 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
                     });
 
             connect(mKeywordModel, &cwKeywordItemModel::dataChanged,
-                    this, [this, addToRejected](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
+                    this, [this](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
                     {
                         if(roles.contains(cwKeywordItemModel::KeywordsRole)) {
                             if(topLeft.parent().isValid()) {
-                                addToRejected(topLeft.parent().row());
+                                rejectUnaccepted(topLeft.parent().row(), topLeft.parent().row());
                             } else {
-                                for(int i = topLeft.row(); i <= bottomRight.row(); i++) {
-                                    addToRejected(i);
-                                }
+                                rejectUnaccepted(topLeft.row(), bottomRight.row());
                             }
                             updatePossibleKeys();
                         }
@@ -445,22 +424,91 @@ QAbstractItemModel *cwKeywordFilterPipelineModel::acceptedModel() const {
     return mUniqueAcceptedModel;
 }
 
+/**
+ * Resets the pipeline to its single default row. Row 0 is reset in place, so
+ * an already-default pipeline keeps every accepted and rejected row.
+ */
 void cwKeywordFilterPipelineModel::clear()
 {
+    if(isDefault()) {
+        return;
+    }
+
     beginResetModel();
-    mRows.clear();
+
+    // Detached while the concat sources change, so it rebuilds once at the end.
+    mUniqueAcceptedModel->setSourceModel(nullptr);
+
+    // From the back, so no dropped row still feeds a later one.
+    for(int i = static_cast<int>(mRows.size()) - 1; i >= 1; --i) {
+        cwKeywordGroupByKeyModel* filter = mRows.at(i).filter;
+        if(mAcceptedModel->sourceModels().contains(filter->acceptedModel())) {
+            mAcceptedModel->removeSourceModel(filter->acceptedModel());
+        }
+        filter->setSourceModel(nullptr);
+        filter->deleteLater();
+    }
+    mRows.resize(1);
+
+    Row& first = mRows.first();
+    first.modelOperator = And;
+    first.filter->setAcceptedByDefault(true);
+    first.filter->setKey(QString());
+    for(int i = 0; i < first.filter->rowCount(); ++i) {
+        first.filter->setData(first.filter->index(i), true, cwKeywordGroupByKeyModel::AcceptedRole);
+    }
 
     const auto sourceModels = mAcceptedModel->sourceModels();
     for(auto model : sourceModels) {
-        mAcceptedModel->removeSourceModel(model);
+        if(model != first.filter->acceptedModel()) {
+            mAcceptedModel->removeSourceModel(model);
+        }
     }
-    Q_ASSERT(mAcceptedModel->sourceModels().isEmpty());
-    Q_ASSERT(mAcceptedModel->rowCount() == 0);
+    if(!mAcceptedModel->sourceModels().contains(first.filter->acceptedModel())) {
+        mAcceptedModel->addSourceModel(first.filter->acceptedModel());
+    }
 
-    // mAcceptedModel->clear();
-    // mUniqueAcceptedModel->clear();
+    mUniqueAcceptedModel->setSourceModel(mAcceptedModel);
+
     mRejectedModel->clear();
-    addRow();
+    if(mKeywordModel) {
+        rejectUnaccepted(0, mKeywordModel->rowCount() - 1);
+    }
+
     endResetModel();
     updatePossibleKeys();
+}
+
+bool cwKeywordFilterPipelineModel::isDefault() const
+{
+    if(mRows.size() != 1) {
+        return false;
+    }
+
+    const Row& row = mRows.first();
+    if(row.modelOperator != And
+        || !row.filter->key().isEmpty()
+        || !row.filter->acceptByDefault()) {
+        return false;
+    }
+
+    for(int i = 0; i < row.filter->rowCount(); ++i) {
+        if(!row.filter->index(i).data(cwKeywordGroupByKeyModel::AcceptedRole).toBool()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void cwKeywordFilterPipelineModel::rejectUnaccepted(int first, int last)
+{
+    QList<QModelIndex> rejected;
+    for(int i = first; i <= last; i++) {
+        const auto index = mKeywordModel->index(i, 0, QModelIndex());
+        const auto object = index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+        if(!mUniqueAcceptedModel->contains(QVariant::fromValue(object))) {
+            rejected.append(index);
+        }
+    }
+    mRejectedModel->insert(rejected);
 }

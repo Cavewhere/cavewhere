@@ -1,0 +1,11 @@
+; A hanging external centerline whose stations are named after the ones in
+; survex_simple.svx. Nothing fixes it and nothing ties it in, so cavern warns
+; "Survey not all connected to fixed stations" and drops it exactly as
+; survex_hanging.svx is dropped — but every name it declares has a twin in the
+; cave beside it, so the tie suggester has something to offer for a survey the
+; solve placed nowhere at all.
+*begin Simple
+*data normal from to tape compass clino
+A1 A2 10.0 0 0
+A2 A3 8.5 90 0
+*end Simple

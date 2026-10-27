@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QHash>
+#include <QList>
 #include <QPointer>
 
 //Our includes
@@ -26,7 +27,7 @@
  * (when does an entity deserve a keyword item) and factory (which keyword model to
  * extend, which object to target).
  *
- * Ownership: cwKeywordItemModel::addItem reparents the item to the model, so the
+ * Ownership: cwKeywordItemModel::addItems reparents the item to the model, so the
  * item outlives the registry's owner unless removed here. removeItem() detaches it
  * from the model; the registry then deletes it. clear() (teardown) deletes
  * synchronously because the event loop may not run again to drain deleteLater;
@@ -73,22 +74,41 @@ public:
      */
     template <class Factory>
     cwKeywordItem* ensure(const Key& key, Factory&& makeItem) {
+        return ensureAll(QList<Key>{key}, [&makeItem](const Key&) { return makeItem(); }).value(0, nullptr);
+    }
+
+    /**
+     * ensure() for many keys at once: returns one item per key, in key order,
+     * and adds every newly built item to the model in one insert. makeItem(key)
+     * runs once per key that has no item yet; a repeated key shares its first
+     * occurrence's item. Returns an empty list when no model is set.
+     */
+    template <class Factory>
+    QList<cwKeywordItem*> ensureAll(const QList<Key>& keys, Factory&& makeItem) {
         if(m_model.isNull()) {
-            return nullptr;
+            return {};
         }
 
-        auto it = m_items.constFind(key);
-        if(it != m_items.constEnd() && it.value() != nullptr) {
-            return it.value();
+        QList<cwKeywordItem*> items;
+        items.reserve(keys.size());
+        QList<cwKeywordItem*> added;
+        for(const Key& key : keys) {
+            auto it = m_items.constFind(key);
+            if(it != m_items.constEnd() && it.value() != nullptr) {
+                items.append(it.value());
+                continue;
+            }
+
+            cwKeywordItem* item = makeItem(key);
+            m_items.insert(key, item);
+            added.append(item);
+            items.append(item);
         }
 
-        cwKeywordItem* item = makeItem();
-        m_items.insert(key, item);
-
-        // addItem after the factory has called setObject(), so the model's
-        // resolveVisibility sees the target when it fires.
-        m_model->addItem(item);
-        return item;
+        // addItems after every factory has called setObject(), so the model's
+        // resolveVisibility sees each target when it fires.
+        m_model->addItems(added);
+        return items;
     }
 
     /**

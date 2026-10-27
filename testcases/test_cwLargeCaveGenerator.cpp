@@ -189,7 +189,7 @@ TEST_CASE("Generate a large synthetic cave for label rendering profiling", "[.La
     plotManager->waitToFinish();
     const qint64 solveMs = stepTimer.elapsed();
 
-    const cwStationPositionLookup lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup lookup = region->memberPositions(cave);
     int solvedCount = 0;
     for (const QString& name : stationNames) {
         if (lookup.hasPosition(name)) {

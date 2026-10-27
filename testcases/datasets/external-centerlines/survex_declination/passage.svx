@@ -1,0 +1,12 @@
+; A block whose passage (LRUD) line comes before its *calibrate declination.
+; The passage line reads no bearing, so every bearing takes the one value.
+*begin lrud
+*date 2020.06.01
+*fix a 0 0 0
+*data passage station left right up down
+a 1 1 1 1
+*data normal from to tape compass clino
+*calibrate declination 2
+a b 10.0 0 0
+b c 8.5 90 0
+*end lrud

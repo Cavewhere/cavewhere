@@ -9,8 +9,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
+#include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwFixStation.h"
+#include "cwFixStationModel.h"
 #include "cwGeoReference.h"
 #include "cwProject.h"
 #include "cwRootData.h"
@@ -24,20 +26,31 @@
 
 namespace {
 
-const QString kWgs84 = QStringLiteral("EPSG:4326");
-constexpr double kOriginLatitude = 37.1832;
-constexpr double kOriginLongitude = -84.0947;
-constexpr double kOriginElevation = 0.0;
-
 const QString kLocalCS = QStringLiteral(
     "+proj=tmerc +lat_0=37.1832 +lon_0=-84.0947 +k=1 +x_0=0 +y_0=0 "
     "+datum=WGS84 +units=m +no_defs +type=crs");
-
-//! About 16 km from kLocalCS's origin: inside the manager's anchor threshold,
-//! so the anchor fix still counts as seen and the frame stays where it is set.
 const QString kOtherLocalCS = QStringLiteral(
-    "+proj=tmerc +lat_0=37.3 +lon_0=-84.2 +k=1 +x_0=0 +y_0=0 "
+    "+proj=tmerc +lat_0=38.0 +lon_0=-85.0 +k=1 +x_0=0 +y_0=0 "
     "+datum=WGS84 +units=m +no_defs +type=crs");
+
+// The origins of kLocalCS and kOtherLocalCS, as lat/long.
+const QString kWgs84 = QStringLiteral("EPSG:4326");
+constexpr double kLocalOriginLongitude = -84.0947;
+constexpr double kLocalOriginLatitude = 37.1832;
+constexpr double kOtherOriginLongitude = -85.0;
+constexpr double kOtherOriginLatitude = 38.0;
+constexpr double kOriginElevation = 0.0;
+
+//! A fix-station anchor on a real fix at (\a longitude, \a latitude). A frame
+//! anchored on a fix the region can't find is one whose fix was deleted, and
+//! loading clears it, so the anchor has to name a fix that is there.
+cwGeoReference::Anchor addAnchorFix(cwCavingRegion* region, double longitude, double latitude)
+{
+    const cwFixStation fix = makeFix(QStringLiteral("A1"), kWgs84,
+                                     longitude, latitude, kOriginElevation);
+    addCaveWithFixes(region, {fix})->setName(QStringLiteral("Anchor cave"));
+    return {cwGeoReference::Anchor::FixStation, fix.id()};
+}
 
 QString saveProject(cwRootData* root, const QTemporaryDir& tempDir, const QString& base)
 {
@@ -46,18 +59,6 @@ QString saveProject(cwRootData* root, const QTemporaryDir& tempDir, const QStrin
     REQUIRE(root->project()->saveAs(projectPath));
     root->project()->waitSaveToFinish();
     return root->project()->filename();
-}
-
-//! A named cave in \a region holding a Valid fix at kLocalCS's origin, and the
-//! anchor that names it. The name gives the cave a place on disk, so the fix
-//! is still there to find after a reload.
-cwGeoReference::Anchor addAnchorFix(cwCavingRegion* region)
-{
-    const cwFixStation fix = makeFix(QStringLiteral("A1"), kWgs84,
-                                     kOriginLongitude, kOriginLatitude, kOriginElevation);
-    REQUIRE(fix.state() == cwFixStation::Valid);
-    addCaveWithFixes(region, {fix})->setName(QStringLiteral("Anchor"));
-    return {cwGeoReference::Anchor::FixStation, fix.id()};
 }
 
 std::unique_ptr<cwRootData> reload(const QString& path)
@@ -80,8 +81,10 @@ TEST_CASE("An anchored local projection survives save/load", "[cwGeoReference]")
     REQUIRE(tempDir.isValid());
 
     auto root = std::make_unique<cwRootData>();
-    const cwGeoReference::Anchor anchor = addAnchorFix(root->project()->cavingRegion());
-    auto* geoReference = root->project()->cavingRegion()->geoReference();
+    cwCavingRegion* region = root->project()->cavingRegion();
+    const cwGeoReference::Anchor anchor =
+        addAnchorFix(region, kLocalOriginLongitude, kLocalOriginLatitude);
+    auto* geoReference = region->geoReference();
     geoReference->anchorTo(anchor, kLocalCS);
     geoReference->setVerticalDatum(QStringLiteral("NAVD88"));
 
@@ -164,9 +167,13 @@ TEST_CASE("A local projection change reaches disk without an explicit save",
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
+    // The fix sits at the re-derived frame's origin, so that frame is the one
+    // loading keeps.
     auto root = std::make_unique<cwRootData>();
-    const cwGeoReference::Anchor anchor = addAnchorFix(root->project()->cavingRegion());
-    auto* geoReference = root->project()->cavingRegion()->geoReference();
+    cwCavingRegion* region = root->project()->cavingRegion();
+    const cwGeoReference::Anchor anchor =
+        addAnchorFix(region, kOtherOriginLongitude, kOtherOriginLatitude);
+    auto* geoReference = region->geoReference();
     geoReference->anchorTo(anchor, kLocalCS);
 
     const QString path = saveProject(root.get(), tempDir, QStringLiteral("ldp-incremental"));
@@ -190,4 +197,53 @@ TEST_CASE("A local projection change reaches disk without an explicit save",
         auto* reloaded = reloadedRoot->project()->cavingRegion()->geoReference();
         CHECK(reloaded->verticalDatum() == QStringLiteral("NGVD29"));
     }
+}
+
+TEST_CASE("A local grid survives save/load with no frame",
+          "[cwGeoReference][LocalGrid][SaveLoad]")
+{
+    // A local grid has no string to save, so the state alone has to reach the
+    // file; a reload that read it as ungeoreferenced would lose the grid.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    auto* geoReference = root->project()->cavingRegion()->geoReference();
+    geoReference->restore(cwGeoReference::LocalGrid, QString(), cwGeoReference::Anchor{},
+                          QString());
+    REQUIRE(geoReference->state() == cwGeoReference::LocalGrid);
+
+    const QString path = saveProject(root.get(), tempDir, QStringLiteral("ldp-local-grid"));
+
+    auto reloadedRoot = reload(path);
+    auto* reloaded = reloadedRoot->project()->cavingRegion()->geoReference();
+    CHECK(reloaded->state() == cwGeoReference::LocalGrid);
+    CHECK(reloaded->localCoordinateSystem().isEmpty());
+    CHECK_FALSE(reloaded->anchor().isValid());
+    CHECK_FALSE(reloaded->hasCoordinateSystem());
+}
+
+TEST_CASE("A project loads with no fix stations on the region root",
+          "[cwGeoReference][FixStation][SaveLoad]")
+{
+    // The region root has no scope of its own, so no fix belongs there; a
+    // root fix left in memory stays out of the file, and a load brings none back.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    cwCavingRegion* region = root->project()->cavingRegion();
+    addAnchorFix(region, kLocalOriginLongitude, kLocalOriginLatitude);
+    region->rootNode()->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("r1"), kWgs84, kOtherOriginLongitude, kOtherOriginLatitude,
+                kOriginElevation));
+    REQUIRE(region->rootNode()->fixStations()->count() == 1);
+
+    const QString path = saveProject(root.get(), tempDir, QStringLiteral("root-fix-dropped"));
+
+    auto reloadedRoot = reload(path);
+    cwCavingRegion* reloaded = reloadedRoot->project()->cavingRegion();
+    CHECK(reloaded->rootNode()->fixStations()->count() == 0);
+    REQUIRE(reloaded->caveCount() == 1);
+    CHECK(reloaded->cave(0)->fixStations()->count() == 1);
 }

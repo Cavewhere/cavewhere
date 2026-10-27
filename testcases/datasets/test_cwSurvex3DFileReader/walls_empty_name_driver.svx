@@ -1,0 +1,5 @@
+; Every separator candidate cavern prefers over ' ' is claimed as a name
+; character here, so the ' ' entry the Walls empty-name path adds is what
+; keeps the .3d separator off the space.
+*set names ./:;,!|\
+*include walls_empty_name.srv

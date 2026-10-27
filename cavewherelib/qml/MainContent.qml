@@ -162,10 +162,13 @@ QQ.Item {
         }
     }
 
-    QQ.Item {
-        id: overlay
-        anchors.fill: parent
-    }
+    AppOverlay {}
+
+    // App-scope surface rather than part of any page: it registers itself
+    // into the overlay's banner strip and floats over the window's content.
+    ExternalSourceChangeHost {}
+
+    FarFromOriginBanner {}
 
     QQ.Component {
         id: renderingComponent
@@ -285,8 +288,6 @@ QQ.Item {
     }
 
     QQ.Component.onCompleted: {
-        GlobalShadowTextInput.parent = overlay;
-
         pageView.unknownPageComponent = unknownPageComponent
         let viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         let repositoryPage = RootData.pageSelectionModel.registerPage(null, "Source", sourceComponent);

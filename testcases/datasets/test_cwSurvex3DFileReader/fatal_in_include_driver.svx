@@ -1,0 +1,3 @@
+; Regression driver: the fatal must fire inside an *include so the aborted
+; run leaves a parent chain behind.
+*include "too_many_errors.svx"

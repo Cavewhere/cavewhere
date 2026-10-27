@@ -22,6 +22,7 @@
 #include "FixStationFixtureHelper.h"
 #include "GeoreferenceFixtureHelper.h"
 #include "LazFixtureHelper.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -75,7 +76,7 @@ bool waitForFrame(cwCavingRegion* region)
 void bindEmptyFolder(cwCavingRegion* region, const QDir& dir)
 {
     region->lazLayers()->setGisLayersDir(dir);
-    QCoreApplication::processEvents(QEventLoop::AllEvents);
+    REQUIRE(waitForQueuedEvents());
     REQUIRE(region->lazLayers()->count() == 0);
 }
 
@@ -338,7 +339,11 @@ TEST_CASE("A frame that moves takes its clouds with it", "[cwLocalProjectionFram
     // decoded into, so they are only in the right place if they decode again.
     cwFixStation corrected = fix;
     corrected.setCoordinate(500000.0, 4294000.0, 110.0);
+    const QString frameBefore = region.geoReference()->localCoordinateSystem();
     cave->fixStations()->setFixStations({corrected});
+    REQUIRE(waitUntil([&] {
+        return region.geoReference()->localCoordinateSystem() != frameBefore;
+    }));
     REQUIRE(waitForFrame(&region));
 
     CHECK(layer->loadStatus() == cwLazLayer::LoadStatus::Loaded);
@@ -376,7 +381,7 @@ TEST_CASE("A frame that only changes hands leaves its clouds alone",
     // that moving the origin would be churn. Every coordinate stays where it
     // was, so re-reading a directory of clouds off disk would buy nothing.
     cave->fixStations()->setFixStations({});
-    REQUIRE(geoReference->state() == cwGeoReference::Frozen);
+    REQUIRE(waitUntil([&] { return geoReference->state() == cwGeoReference::Frozen; }));
     REQUIRE(geoReference->localCoordinateSystem() == frame);
 
     REQUIRE(waitForFrame(&region));
@@ -444,10 +449,7 @@ TEST_CASE("Clearing the layers while the headers are still arriving leaves nothi
 
     // The reads land on threads that no longer have anywhere to deliver to,
     // and the epoch they were holding open is abandoned rather than settled.
-    constexpr int kDrainSlices = 20;
-    for (int slice = 0; slice < kDrainSlices; ++slice) {
-        spinEventLoopSlice();
-    }
+    REQUIRE(waitForQueuedEvents());
 
     CHECK(region.lazLayers()->count() == 0);
     CHECK(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);

@@ -36,10 +36,12 @@ class cwNoteLiDARData;
 class cwSketch;
 class cwSketchData;
 class cwLazLayer;
+class QAbstractItemModel;
 struct cwSaveLoadPrivate;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
 #include "cwError.h"
+#include "cwExternalSourceRecord.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
 #include "cwResultDir.h"
@@ -103,6 +105,9 @@ class GitRepository;
 class Account;
 }
 
+//QQuickGit includes
+#include "LfsPolicy.h"
+
 //Monad includes
 #include <Monad/Result.h>
 
@@ -119,12 +124,16 @@ class Account;
 #include <functional>
 #include <optional>
 
+//! Which files a CaveWhere project stores in git LFS: the raster, PDF, mesh and
+//! point-cloud formats a survey carries, matched by extension at any depth.
+CAVEWHERE_LIB_EXPORT QQuickGit::LfsPolicy cavewhereLfsPolicy();
+
 class CAVEWHERE_LIB_EXPORT cwSaveLoad : public QObject
 {
     Q_OBJECT
 
     Q_PROPERTY(QString fileName READ fileName WRITE setFileName NOTIFY fileNameChanged);
-    Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
+    Q_PROPERTY(bool hasDurableHome READ hasDurableHome NOTIFY hasDurableHomeChanged)
 
 public:
     struct ProjectMetadataData {
@@ -145,6 +154,7 @@ public:
         IdentityRepairData identityRepair;
         QList<cwError> errors;
         int maxFileVersion = 0; //!< Highest fileVersion seen across all entities during load
+        cwExternalSourceRecord::Records externalSources; //!< The project's records under .cw_local, filled only when a project is opened
     };
 
     struct SyncReport {
@@ -169,6 +179,14 @@ public:
         bool hasBackendPaths = false;
         bool hasCommitDiffPaths = false;
         bool hasHydrationDeltaPaths = false;
+        //! The local mutation epoch when the sync's flush drain ended.
+        quint64 mutationEpoch = 0;
+    };
+
+    //! What a finished save covered: the local mutation epoch at the moment
+    //! its save-job drain ended.
+    struct SaveReceipt {
+        quint64 mutationEpoch = 0;
     };
 
     enum class SyncErrorCode : int {
@@ -207,6 +225,10 @@ public:
     QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region, const QString& projectFileName);
 
     static QFuture<Monad::Result<ProjectLoadData>> loadAll(const QString& filename);
+    //! Loads like loadAll, on the calling thread, leaving out every descriptor
+    //! under \a skippedDirectories (project-root relative).
+    static Monad::Result<ProjectLoadData> loadAllSkipping(const QString& filename,
+                                                          const QStringList& skippedDirectories);
 
     QList<cwError> lastLoadErrors() const;
     int lastLoadMaxFileVersion() const;
@@ -220,6 +242,21 @@ public:
     static Monad::Result<cwLazLayerData> loadLazLayer(const QByteArray& content, const QString& filename);
 
     static QString sanitizeFileName(QString input);
+
+    //! The data-root-relative directory a node with \a nodePath (the names from
+    //! the root down, the root's own excluded) is saved in:
+    //! "Kentucky field seasons/sub/Side Cave/sub/Upper level". Every path
+    //! segment is sanitized, so this is the one place the sub/ layout is
+    //! spelled out — the loader, the writer and the sync handlers all compose
+    //! node directories through it.
+    static QString relativeNodeDir(const QStringList& nodePath);
+
+    //! The FileVersion stamped into every file of \a region's project: the tree
+    //! format's version when the project holds hierarchy (a node at depth two or
+    //! deeper, a kind other than Cave, a read-only node, or a sourced node), and
+    //! the flat format's otherwise, so a flat project saved by this build still
+    //! opens in one that predates the tree.
+    static int stampVersion(const cwCavingRegion* region);
 
     // Load-time repair helpers (exposed for testing)
     static void repairTopLevelIds(ProjectLoadData& loadData);
@@ -237,7 +274,7 @@ public:
 
     void saveProtoMessage(
         std::unique_ptr<const google::protobuf::Message> message,
-        const void* pointerId);
+        const QObject* pointerId);
 
     static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
     static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
@@ -269,8 +306,11 @@ public:
     // a data-root directory whose name matches the bundle.
     Monad::ResultBase prepareBundleStage(const QString& bundleBaseName);
 
-    QFuture<Monad::ResultBase> saveBundledArchive(const QString& targetArchivePath);
-    QFuture<Monad::ResultBase> enqueueFlushAndCommit();
+    QFuture<Monad::Result<SaveReceipt>> saveBundledArchive(const QString& targetArchivePath);
+    QFuture<Monad::Result<SaveReceipt>> enqueueFlushAndCommit();
+
+    //! Counts every localMutationOccurred emission.
+    quint64 localMutationEpoch() const;
 
     // Queues the dataRoot directory rename and .cwproj descriptor file rename jobs, and
     // rebuilds internal object-state paths to reflect the new dataRoot. Called by the sync
@@ -326,10 +366,36 @@ public:
     // as Action::Custom because Action::Copy fails when the destination
     // already exists. Identical source and destination is treated as
     // a no-op.
+    //
+    // enqueueExternalCenterlineCopyOverwriting writes the source's bytes
+    // over whatever is at `destinationPath`, whatever its size and mtime.
+    // Replace uses it so the picked file's version wins even over an edit
+    // the user made to the project's copy — an edit that keeps the byte
+    // size looks up to date to the IfNewer test, which would silently
+    // keep it across a swap the user just confirmed.
     void enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
                                               const QString& destinationPath);
+    void enqueueExternalCenterlineCopyOverwriting(const QString& sourcePath,
+                                                  const QString& destinationPath);
     void enqueueExternalCenterlineRemoveFile(const QString& path);
     void enqueueExternalCenterlineRemoveTree(const QString& path);
+
+    //! Writes ownerId's source record into the project's .cw_local, on the
+    //! file-system queue's worker.
+    void enqueueExternalSourceRecordWrite(const QUuid& ownerId,
+                                          const cwExternalSourceRecord::Record& record);
+    //! Removes ownerId's source record from the project's .cw_local.
+    void enqueueExternalSourceRecordRemove(const QUuid& ownerId);
+
+    // Reports that a file inside the project changed on disk without going
+    // through cwSaveLoad — a text editor rewriting an attached .svx, say.
+    // Marks the project modified (cwProject::modified()) so the edit is
+    // offered for save on quit, since nothing else on that path queues a
+    // job and so nothing else can reach the dirty bit.
+    //
+    // Ignored while cwSaveLoad is rewriting the project's own files; see
+    // cwSaveLoadPrivate::SelfWriteWindow.
+    void reportProjectFileChangedOnDisk();
 
     QString absolutePath(const cwNote* note, const QString& imageFilename) const;
     QString absolutePath(const cwNoteLiDAR* note, const QString& lidarFilename) const;
@@ -346,10 +412,10 @@ public:
     // only completion.
     QFuture<void> pendingJobsFinished();
 
+    bool hasDurableHome() const;
+
     //For testing
     void waitForFinished();
-
-    bool isTemporaryProject() const;
 
     QString dataRoot() const;
     void setDataRoot(const QString& dataRoot);
@@ -384,6 +450,7 @@ public:
     static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QByteArray& content, const QString& filename, const QDir &projectDir);
     static Monad::Result<cwSketchData> loadSketch(const QString& filename, const QDir& projectDir);
     static Monad::Result<cwSketchData> loadSketch(const QByteArray& content, const QString& filename, const QDir& projectDir);
+    static cwCaveData caveDataFromProtoCave(const CavewhereProto::Cave& proto);
     static cwTripData tripDataFromProtoTrip(const CavewhereProto::Trip& proto);
     static cwNoteData noteDataFromProtoNote(const CavewhereProto::Note& protoNote, const QString& filename);
     static cwNoteLiDARData noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto::NoteLiDAR& protoNote, const QString& filename);
@@ -392,15 +459,26 @@ public:
 signals:
     void fileNameChanged();
     void dataRootChanged();
-    void isTemporaryProjectChanged();
+    void hasDurableHomeChanged();
     void objectPathReady(QObject* object);
     void localMutationOccurred(); //!< Emitted when user-visible data is mutated (save queued, tracking not suppressed)
     void saveFlushCompleted(); //!< Emitted after pending file writes are flushed to disk
     void discardCompleted();
     void discardFailed(const QString& errorMessage);
     void saveBlockedByVersion(const QString& entityDescription); //!< Emitted when a save is skipped because the project has newer-version entities
+    //! Emitted as a load installs a project, before its region is set, with
+    //! the source records read from its .cw_local.
+    void externalSourceRecordsLoaded(const cwExternalSourceRecord::Records& records);
 
 private:
+    // Shared body of the two external-centerline copy entry points.
+    // `keepMatchingDestination` selects the IfNewer test: when true a
+    // destination of the same size and a same-or-newer mtime is left
+    // alone, when false the copy always lands.
+    void enqueueExternalCenterlineCopy(const QString& sourcePath,
+                                       const QString& destinationPath,
+                                       bool keepMatchingDestination);
+
     void initializeRepositoryForCurrentFile();
     // If the current projectFileName no longer exists on disk (e.g. after a git rename),
     // scan repoPath for a single .cwproj and update the in-memory filename to match.
@@ -420,11 +498,13 @@ private:
         Outcome outcome = Outcome::NoOp;
         bool persistNoteDescriptors = false;
         bool persistLiDARNoteDescriptors = false;
+        bool persistProjectFile = false;
     };
 
     struct ReconcileAttemptState {
         quint64 planEpoch = 0;
         quint64 localMutationPlanEpoch = 0;
+        quint64 flushEpoch = 0;
         std::optional<SyncReport> report;
         std::optional<ReconcileExternalResult> reconcileOutcome;
     };
@@ -440,8 +520,12 @@ private:
     QPointer<cwRemoteAuthProvider> m_authProvider;
 
     void saveProject(const QDir& dir, const cwCavingRegion* region);
+
+    void seedStampedVersion();
+    void restampProjectIfVersionChanged();
     std::unique_ptr<CavewhereProto::Project> toProtoProject(const cwCavingRegion* region);
     QDir projectRootDir() const;
+    QString externalSourceRecordPath(const QUuid& ownerId) const;
 
     QString fileNamePrivate(const cwCave* cave) const;
     QString absolutePathPrivate(const cwCave* cave) const;
@@ -489,8 +573,25 @@ private:
     void disconnectTreeModel();
     void connectTreeModel();
 
+    // Re-scan "GIS Layers/" after a git operation CaveWhere ran rewrote the
+    // working tree — a discard's reset and cleanUntracked, or a pull, checkout,
+    // or restore. The rows this drops or adds are that write coming back around
+    // rather than an edit to save, so it leaves cwProject::modified() alone.
+    void rescanLazLayersAfterGitWrite();
+
     void disconnectObjects();
     void connectObjects();
+
+    // Wire a list model's row/data (and optionally reset) signals to a save
+    // callback. WatchReset::No is mandatory for triggers connected BEFORE the
+    // model is populated (e.g. connectTreeModel): setEquates()/setData() emit
+    // modelReset during load, and saving then would overwrite the on-disk file
+    // with a half-built one. WatchReset::Yes is safe only for post-load wiring
+    // (connectCave), where the load-time reset fires before the connection.
+    enum class WatchReset { No, Yes };
+    void connectListModelSaveTrigger(QAbstractItemModel* model,
+                                     WatchReset watchReset,
+                                     const std::function<void()>& onChanged);
 
     //Save
     void connectCave(cwCave* cave);
@@ -500,7 +601,8 @@ private:
     void connectNoteLiDAR(cwNoteLiDAR * lidarNote);
     void connectSketch(cwSketch* sketch);
 
-    void setTemporary(bool isTemp);
+    void markDurableHome();
+    void markTemporaryHome();
 
     // QString
     QString randomName() const;
@@ -510,6 +612,7 @@ private:
     QFuture<void> completeSaveJobs();
 
     static QDir caveDirHelper(const QDir& projectDir, const cwCave *cave);
+    static QDir nodeDirHelper(const QDir& parentNodeDir, const cwCave* node);
     static QDir tripDirHelper(const QDir& caveDir, const cwTrip* trip);
     static QDir noteDirHelper(const QDir& tripDir);
     static QDir externalCenterlineDirHelper(const QDir& ownerDir);
@@ -521,6 +624,10 @@ private:
     QFuture<Monad::ResultBase> gitOperationAndReconcile(const QString& operationLabel,
                                                         const GitOperationFn& gitOp);
     QFuture<Monad::ResultBase> saveFlushImpl();
+    QFuture<Monad::Result<SaveReceipt>> saveFlushWithReceipt();
+    QFuture<Monad::ResultBase> enqueueSyncFlush(const std::shared_ptr<ReconcileAttemptState>& attemptState);
+    void publishSyncFlushStamp(const ReconcileAttemptState& attemptState);
+    Monad::ResultBase finishSaveFlush();
     QFuture<Monad::ResultBase> enqueueReconcilePhase(const QFuture<Monad::ResultBase>& prepareFuture,
                                                      quint64 syncGeneration,
                                                      const std::shared_ptr<ReconcileAttemptState>& attemptState,
@@ -535,7 +642,8 @@ private:
                                                                            quint64 planEpoch,
                                                                            ReconcileApplyMode applyMode);
     QFuture<Monad::ResultBase> persistIdentityRepairSave(bool persistNoteDescriptors = true,
-                                                         bool persistLiDARNoteDescriptors = true);
+                                                         bool persistLiDARNoteDescriptors = true,
+                                                         bool persistProjectFile = false);
 
 
 

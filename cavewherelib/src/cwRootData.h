@@ -22,6 +22,9 @@
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
 #include "cwLinePlotManager.h"
+#include "cwExternalCenterlineAttach.h"
+#include "cwExternalCenterlineManager.h"
+#include "cwExternalSourceSettings.h"
 #include "cwScrapManager.h"
 #include "cwUpdateCoordinator.h"
 #include "cwNoteLiDARManager.h"
@@ -39,6 +42,7 @@
 #include "cwSettings.h"
 #include "cwPageView.h"
 #include "cwRecentProjectModel.h"
+class cwCave;
 class cwKeywordItemModel;
 class cwKeywordFilterPipelineModel;
 class cwRemoteServices;
@@ -75,6 +79,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(QString version READ version NOTIFY versionChanged)
     Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
     Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
+    Q_PROPERTY(cwExternalCenterlineManager* externalCenterlineManager READ externalCenterlineManager CONSTANT FINAL)
     Q_PROPERTY(cwFutureManagerModel* futureManagerModel READ futureManagerModel CONSTANT)
     Q_PROPERTY(QQuickGit::Account* account READ account CONSTANT)
     Q_PROPERTY(cwRecentProjectModel* recentProjectModel READ recentProjectModel CONSTANT)
@@ -92,6 +97,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel CONSTANT)
     Q_PROPERTY(cwKeywordFilterPipelineModel* keywordFilterPipelineModel READ keywordFilterPipelineModel CONSTANT)
     Q_PROPERTY(cwSettings* settings READ settings CONSTANT)
+    Q_PROPERTY(cwExternalSourceSettings* externalSourceSettings READ externalSourceSettings CONSTANT)
     Q_PROPERTY(QString supportImageFormats READ supportImageFormats CONSTANT)
 
     Q_PROPERTY(int titleBarHeight READ titleBarHeight CONSTANT)
@@ -110,6 +116,7 @@ public:
     ~cwRootData();
     cwCavingRegion* region() const;
     cwLinePlotManager* linePlotManager() const;
+    cwExternalCenterlineManager* externalCenterlineManager() const;
     cwScrapManager* scrapManager() const;
     cwUpdateCoordinator* updateCoordinator() const;
     cwProject* project() const;
@@ -127,6 +134,7 @@ public:
     cwKeywordItemModel* keywordItemModel() const;
     cwKeywordFilterPipelineModel* keywordFilterPipelineModel() const;
     cwSettings* settings() const;
+    cwExternalSourceSettings* externalSourceSettings() const { return m_externalSourceSettings; }
     QQuickGit::Account *account() const { return m_account; }
     cwRecentProjectModel* recentProjectModel() const { return m_recentProjectModel; }
     cwRemoteServices* remote() const;
@@ -152,6 +160,26 @@ public:
     void setLastDirectory(QUrl lastDirectory);
 
     QString supportImageFormats() const;
+
+    // Thin QML entry points for the external-centerline orchestrator —
+    // the manager resolves the saveLoad/settings dependencies and
+    // enforces the per-owner operation token (isOwnerBusy).
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    attachTripCenterline(cwTrip* trip, const QString& sourcePath);
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    replaceTripCenterline(cwTrip* trip, const QString& sourcePath);
+    Q_INVOKABLE QFuture<Monad::ResultBase> detachTripCenterline(cwTrip* trip);
+
+    // The verbs for a survey file attached as a sourced subtree (W7): attach
+    // builds a read-only subtree under target; replace, reload, and delete act
+    // on its root.
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    attachSource(cwSurveyNode* target, const QString& sourcePath);
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    replaceSource(cwSurveyNode* root, const QString& sourcePath);
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    reloadSource(cwSurveyNode* root);
+    Q_INVOKABLE QFuture<Monad::ResultBase> deleteSourceRoot(cwSurveyNode* root);
 
     //Helper functions for creating things
     Q_INVOKABLE cwImage emptyImage() const  { return cwImage(); }
@@ -212,6 +240,7 @@ public slots:
 
 private:
     cwCavingRegion* Region; //!< Where all the data is stored
+    cwExternalSourceSettings* m_externalSourceSettings; //!< Where each external centerline came from, from the project's .cw_local
     cwLinePlotManager* LinePlotManager; //!< For keeping the lineplot updated
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
     cwUpdateCoordinator* UpdateCoordinator; //!< Owns the auto-update policy + staleness aggregate

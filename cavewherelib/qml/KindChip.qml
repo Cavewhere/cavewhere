@@ -1,0 +1,130 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+import QtQuick as QQ
+import QtQuick.Controls as QC
+import cavewherelib
+
+// The small label on a survey-tree row naming what the node is: "Cave",
+// "Folder", "Compass project", … A sourced node reads in the accent color
+// behind a lock, because a copied survey file owns its shape, and its tool tip
+// names that file.
+//
+// Handed a native node, the chip is also the picker between the two native
+// labels, Cave and Folder (Section inside a cave). Picking one changes the
+// label and the icon; the node's trips, stats and fix stations stay as they were.
+QQ.Rectangle {
+    id: chipId
+
+    property alias text: labelId.text
+    property bool sourced: false
+
+    //The node the picker relabels. The picker opens only for a native node.
+    property SurveyNode node: null
+
+    readonly property bool pickable: chipId.node !== null && !chipId.sourced
+
+    //The file a sourced node's shape comes from: its source root's copy,
+    //without its folder.
+    readonly property string sourceFileName: {
+        const sourceRoot = chipId.sourced && chipId.node !== null ? chipId.node.sourceRoot() : null;
+        return sourceRoot !== null ? RootData.fileName(sourceRoot.externalCenterline.entryFile) : "";
+    }
+
+    //Where the node sits decides what a Folder there is called: a Folder
+    //where caves go, or a Section inside a cave.
+    readonly property bool parentTakesCaves: chipId.node !== null
+                                             && (chipId.node.parentNode === null
+                                                 || chipId.node.parentNode.takesCaves)
+
+    implicitWidth: contentRowId.implicitWidth + 2 * Theme.chipPadding
+    implicitHeight: contentRowId.implicitHeight + 2 * Theme.tightSpacing
+    radius: Theme.chipRadius
+    color: {
+        if(chipId.sourced) {
+            return Theme.chipSourcedBackground;
+        }
+        return chipHoverId.hovered ? Theme.chipHoverBackground : Theme.chipBackground;
+    }
+    visible: labelId.text !== ""
+
+    //A picker entry's text: the label in force carries the check mark, the
+    //other is indented to line up with it.
+    function pickerText(label: string, kind: int) : string {
+        const current = chipId.node !== null && chipId.node.kind === kind;
+        return (current ? "✓ " : "\u2003") + label;
+    }
+
+    QC.ToolTip.visible: chipId.sourced && chipId.sourceFileName !== "" && chipHoverId.hovered
+    QC.ToolTip.text: qsTr("🔒 Read-only: it comes from %1").arg(chipId.sourceFileName)
+    QC.ToolTip.delay: Theme.toolTipDelay
+
+    QQ.HoverHandler {
+        id: chipHoverId
+
+        enabled: chipId.pickable || chipId.sourced
+        cursorShape: chipId.pickable ? Qt.PointingHandCursor : Qt.ArrowCursor
+    }
+
+    QQ.TapHandler {
+        enabled: chipId.pickable
+
+        onTapped: kindMenuId.popup(0, chipId.height)
+    }
+
+    QQ.Row {
+        id: contentRowId
+
+        anchors.centerIn: parent
+        spacing: Theme.tightSpacing
+
+        QC.Label {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "🔒"
+            font.pixelSize: Theme.fontSizeCaption
+            visible: chipId.sourced
+        }
+
+        QC.Label {
+            id: labelId
+
+            anchors.verticalCenter: parent.verticalCenter
+            font.pixelSize: Theme.fontSizeCaption
+            color: chipId.sourced ? Theme.chipSourcedText : Theme.chipText
+        }
+
+        QC.Label {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "▾"
+            font.pixelSize: Theme.fontSizeCaption
+            color: Theme.chipText
+            visible: chipId.pickable
+        }
+    }
+
+    QC.Menu {
+        id: kindMenuId
+        objectName: "kindPickerMenu"
+
+        QC.MenuItem {
+            objectName: "kindPickerCave"
+            text: chipId.pickerText(qsTr("Cave"), SurveyNodeKind.Cave)
+            icon.source: Theme.kindIconCave
+
+            onTriggered: chipId.node.kind = SurveyNodeKind.Cave
+        }
+
+        QC.MenuItem {
+            objectName: "kindPickerFolder"
+            text: chipId.pickerText(chipId.parentTakesCaves ? qsTr("Folder") : qsTr("Section"),
+                                    SurveyNodeKind.Folder)
+            icon.source: chipId.parentTakesCaves ? Theme.kindIconFolder : Theme.kindIconSection
+
+            onTriggered: chipId.node.kind = SurveyNodeKind.Folder
+        }
+    }
+}

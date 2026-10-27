@@ -6,40 +6,105 @@
 **************************************************************************/
 
 // Catch
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 // Cavewhere
+#include "cwAttachedFixModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwErrorModel.h"
 #include "cwExternalCenterline.h"
+#include "cwExternalCenterlineManager.h"
+#include "cwExternalSourceSettings.h"
+#include "cwFixStation.h"
+#include "cwFixStationModel.h"
+#include "cwGeoReference.h"
 #include "cwLinePlotManager.h"
+#include "cwCavernNaming.h"
 #include "cwLinePlotTask.h"
+#include "cwNodeWarningModel.h"
+#include "cwFixStationDiagnosticsModel.h"
+#include "cwSurvexExporterCaveTask.h"
+#include "cwScopeLabels.h"
+#include "cwCoordinateTransform.h"
+#include "cwGeoPoint.h"
+#include "cwNote.h"
+#include "cwNoteLiDAR.h"
+#include "cwNoteLiDARStation.h"
+#include "cwNoteStation.h"
+#include "cwRenderLinePlot.h"
+#include "cwSurveyNoteLiDARModel.h"
+#include "cwScrap.h"
 #include "cwShot.h"
+#include "cwSurveyNoteModel.h"
 #include "cwStation.h"
 #include "cwStationPositionLookup.h"
+#include "cwSurveyNetwork.h"
 #include "cwSurveyChunk.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 
 // Test helpers
+#include "BoulderFixtureHelper.h"
 #include "LoadProjectHelper.h"
+#include "TestHelper.h"
 
 // Qt
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QRegularExpression>
 #include <QString>
 #include <QTemporaryDir>
+#include <QTextStream>
+#include <QVector3D>
 #include <QUuid>
 
+// Std
+#include <algorithm>
+
 namespace {
+
+//! The survey label an externally-attached trip's *begin block carries, which is
+//! also the scope its solved stations are keyed under in the cave lookup.
+QString tripScopeLabel(const cwTrip* trip)
+{
+    QString prefix = trip->scopePrefix();
+    //An unscoped trip has no label, and chop() would quietly hand back "" —
+    //which turns every '*begin ' + label assertion into a match on the cave's
+    //own block instead of failing.
+    REQUIRE_FALSE(prefix.isEmpty());
+    prefix.chop(1); //the trailing '.'
+    return prefix;
+}
 
 QString fixturePath(const QString& name)
 {
     return testcasesDatasetSourcePath(QStringLiteral("external-centerlines/%1").arg(name));
+}
+
+// Pumps the event loop until the manager has solved the project in the
+// LocalGrid state: the attachment's scan lands after the first solve, and
+// the bare fix it finds moves the project onto the local grid and re-solves.
+void waitForLocalGridSolve(cwCavingRegion& region, cwLinePlotManager& manager)
+{
+    constexpr int kLocalGridWaitMs = 10000;
+    QElapsedTimer timer;
+    timer.start();
+    while (region.geoReference()->state() != cwGeoReference::LocalGrid
+           && timer.elapsed() < kLocalGridWaitMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
+    REQUIRE(region.geoReference()->state() == cwGeoReference::LocalGrid);
+    manager.waitToFinish();
 }
 
 QString tempSubdir(const QTemporaryDir& root, const QString& name)
@@ -140,12 +205,8 @@ TEST_CASE("Driver *include emits absolute forward-slash quoted path for trip att
     options.tripAttachmentDirs.insert(attached->id(), attachDir);
     options.outputCSPolicy = cwSurvexExporterRegion::OutputCSPolicy::WorkingFrame;
 
-    // Worker rewrites the cave name to cave_<uuid> via encodeCaveNames
-    // before calling exportRegion; mirror that here so the driver
-    // content assertion reflects the production line-plot path.
-    cwCavingRegionData snapshot = region.data();
+    const cwCavingRegionData snapshot = region.data();
     REQUIRE(snapshot.caves.size() == 1);
-    snapshot.caves[0].name = cwLinePlotTask::cavernCaveNameFor(cave->id());
 
     const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
     const auto result = cwSurvexExporterRegion::exportRegion(snapshot, driverPath, options);
@@ -155,9 +216,8 @@ TEST_CASE("Driver *include emits absolute forward-slash quoted path for trip att
     REQUIRE(file.open(QFile::ReadOnly));
     const QString driver = QString::fromUtf8(file.readAll());
 
-    // The trip wrapper uses trip_<uuid> with QUuid::Id128 layout
-    // (32 lower-case hex, no hyphens, no braces).
-    const QString tripLabel = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    // The trip wrapper opens a survey named for the trip itself.
+    const QString tripLabel = tripScopeLabel(attached);
     CHECK(driver.contains(QStringLiteral("*begin %1").arg(tripLabel)));
     CHECK(driver.contains(QStringLiteral("*end %1").arg(tripLabel)));
 
@@ -174,7 +234,7 @@ TEST_CASE("Driver *include emits absolute forward-slash quoted path for trip att
     CHECK_FALSE(driver.contains(QStringLiteral("*include \"") + QString(expectedAbs).replace('/', '\\')));
 }
 
-TEST_CASE("Trip-attached centerline resolves stations under cave_<uuid>.trip_<uuid>.*",
+TEST_CASE("Trip-attached centerline resolves stations under <caveLabel>.<tripLabel>.*",
           "[Attach][Trip]")
 {
     QTemporaryDir tempRoot;
@@ -191,7 +251,7 @@ TEST_CASE("Trip-attached centerline resolves stations under cave_<uuid>.trip_<uu
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
@@ -199,9 +259,9 @@ TEST_CASE("Trip-attached centerline resolves stations under cave_<uuid>.trip_<uu
 
     // survex_simple.svx defines *begin Simple with stations a1, a2, a3.
     // After cavern's tolower default and our prefix wrapping, the
-    // lookup keys are "trip_<uuid>.simple.a1" etc.
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    // lookup keys are "<tripLabel>.simple.a1" etc.
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    const QString tripPrefix = tripScopeLabel(attached);
 
     const QStringList expectedTails = {QStringLiteral("simple.a1"),
                                        QStringLiteral("simple.a2"),
@@ -213,7 +273,322 @@ TEST_CASE("Trip-attached centerline resolves stations under cave_<uuid>.trip_<uu
     }
 }
 
-TEST_CASE("Cave-attached centerline skips trip loop and resolves under cave_<uuid>.*",
+TEST_CASE("A bare external file cannot collide with the cave's native stations",
+          "[Attach][Trip]")
+{
+    // The "*begin <tripLabel>" wrap around an attached *include is the only
+    // thing keeping an unqualified station out of the cave's own namespace.
+    // Every other fixture opens its own *begin, so none of them would notice
+    // if the wrap vanished; survex_bare.svx has none, and names its stations
+    // to collide with the natives below.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("bare-attach")),
+                                             fixturePath(QStringLiteral("survex_bare.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+
+    cwTrip* nativeTrip = addTripWithShot(cave,
+                                         QStringLiteral("Native"),
+                                         QStringLiteral("A1"),
+                                         QStringLiteral("A2"),
+                                         15.0);
+    // Both declinations pinned to 0 so the geometry below is the raw compass
+    // bearings, whatever the auto-declination default becomes.
+    nativeTrip->calibrations()->setAutoDeclination(false);
+    nativeTrip->calibrations()->setDeclinationManual(0.0);
+
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_bare.svx")));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->calibrations()->setDeclinationManual(0.0);
+
+    const QString tripLabel = tripScopeLabel(attached);
+
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+
+    // Assert the wrap on the driver text as well as through the solve: when it
+    // goes missing this fails first and names the cause, where the solve below
+    // only reports the consequence.
+    cwSurvexExporterRegion::Options options;
+    options.tripAttachmentDirs = tripDirs;
+    const QString driver =
+        writeDriverFor(region,
+                       options,
+                       QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx")));
+    CHECK(driver.contains(QStringLiteral("*begin %1").arg(tripLabel)));
+    CHECK(driver.contains(QStringLiteral("*end %1").arg(tripLabel)));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    waitForLocalGridSolve(region, manager);
+
+    // Cavern names both colliding sites, so surface its text on failure.
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+
+    // Four distinct keys: the natives keep the cave-local bare names, the
+    // external pair sits one scope deeper with no *begin of its own to add.
+    const QString externalA1 = tripLabel + QStringLiteral(".a1");
+    const QString externalA2 = tripLabel + QStringLiteral(".a2");
+    REQUIRE(lookup.hasPosition(QStringLiteral("a1")));
+    REQUIRE(lookup.hasPosition(QStringLiteral("a2")));
+    REQUIRE(lookup.hasPosition(externalA1));
+    REQUIRE(lookup.hasPosition(externalA2));
+
+    // Separate keys alone would not prove separate stations — cavern could
+    // still have merged them onto one point. The leg lengths settle it: a
+    // merge of a1 with a1 and a2 with a2 would average the two legs, while
+    // separate components each keep their own (5 m vs 15 m north). Both sit
+    // at the origin: the native component through its origin fix, the
+    // external one because its bare fix is translated onto the local grid.
+    CHECK(lookup.position(QStringLiteral("a1")).x() == Catch::Approx(0.0).margin(0.01));
+    CHECK(lookup.position(QStringLiteral("a2")).x() == Catch::Approx(0.0).margin(0.01));
+    CHECK(lookup.position(externalA1).x() == Catch::Approx(0.0).margin(0.01));
+    CHECK(lookup.position(externalA2).x() == Catch::Approx(0.0).margin(0.01));
+
+    const float nativeLeg = lookup.position(QStringLiteral("a2")).y()
+                            - lookup.position(QStringLiteral("a1")).y();
+    const float externalLeg = lookup.position(externalA2).y() - lookup.position(externalA1).y();
+    CHECK(nativeLeg == Catch::Approx(15.0).margin(0.01));
+    CHECK(externalLeg == Catch::Approx(5.0).margin(0.01));
+}
+
+TEST_CASE("Two trips whose names sanitize alike keep separate scopes end to end",
+          "[Attach][Trip]")
+{
+    // The trip analogue of the two-cave collision gate in test_cwCavernNaming:
+    // "Topo 1" and "Topo-1" fold to the same identifier, so one of them must
+    // take a collision suffix. This is the case that actually holds the
+    // emitter and the decoder to one assignment — the exporter's "*begin"
+    // pool, the operand renderer, the geometry pass and the worker's cave
+    // network each derive the trip label, and a disagreement between any two
+    // of them lands these stations in the wrong scope or in none.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("collide-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* first = addEmptyTrip(cave, QStringLiteral("Topo 1"));
+    first->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+    cwTrip* second = addEmptyTrip(cave, QStringLiteral("Topo-1"));
+    second->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    const QString firstLabel = tripScopeLabel(first);
+    const QString secondLabel = tripScopeLabel(second);
+    REQUIRE(firstLabel != secondLabel);
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(first->id(), attachDir);
+    tripDirs.insert(second->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // Both trips include the same file, so both carry a "simple.a1". They must
+    // land under their own labels; if the two derivations disagreed, one set
+    // would be missing entirely rather than merely misplaced.
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    for (const QString& label : {firstLabel, secondLabel}) {
+        for (const QString& tail : {QStringLiteral("simple.a1"),
+                                    QStringLiteral("simple.a3")}) {
+            const QString key = label + QStringLiteral(".") + tail;
+            INFO("expected key: " << key.toStdString());
+            CHECK(lookup.hasPosition(key));
+        }
+    }
+
+    // And the solved-station accessor agrees with the emitted scope: each trip
+    // strips its own label, so both resolve their own tail rather than one of
+    // them coming back empty.
+    const auto hasSolvedTail = [](const cwTrip* trip, const QString& tail) {
+        const QList<QPair<QString, QVector3D>> stations = trip->solvedStations();
+        for (const auto& station : stations) {
+            if (station.first == tail) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(hasSolvedTail(first, QStringLiteral("simple.a1")));
+    CHECK(hasSolvedTail(second, QStringLiteral("simple.a1")));
+}
+
+TEST_CASE("Trip-attached centerline emits renderable line geometry",
+          "[Attach][Geometry]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("geom-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    // linePlot must outlive manager: the manager holds a raw pointer to it and
+    // its destructor drain can push geometry, so declare it first.
+    cwRenderLinePlot linePlot;
+    cwLinePlotManager manager;
+    manager.setRenderLinePlot(&linePlot);
+
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // The external stations solved and reached the cave lookup — this half
+    // works today (it is why the trip's station-list panel populates).
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    const QString tripPrefix = tripScopeLabel(attached);
+    const QString a1Key = tripPrefix + QStringLiteral(".simple.a1");
+    const QString a2Key = tripPrefix + QStringLiteral(".simple.a2");
+    const QString a3Key = tripPrefix + QStringLiteral(".simple.a3");
+    REQUIRE(lookup.hasPosition(a1Key));
+    REQUIRE(lookup.hasPosition(a2Key));
+    REQUIRE(lookup.hasPosition(a3Key));
+
+    // The attached trip has no survey chunk, so its geometry is emitted from the
+    // solved network (cwLinePlotGeometry::emitNetworkScopeGeometry). Assert the
+    // external centerline reaches the render object as line-list vertices.
+    const QVector<QVector3D> points = linePlot.points();
+
+    // Two shots (a1->a2, a2->a3) => 4 non-indexed line-list vertices.
+    CHECK(points.size() == 4);
+
+    // Every solved external station appears as a geometry vertex, in the same
+    // world-origin-relative space as the lookup.
+    const auto containsPoint = [&](const QVector3D& p) {
+        for (const QVector3D& v : points) {
+            if ((v - p).lengthSquared() < 1e-6f) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(containsPoint(lookup.position(a1Key)));
+    CHECK(containsPoint(lookup.position(a2Key)));
+    CHECK(containsPoint(lookup.position(a3Key)));
+}
+
+// B4 / Layer 1 — recompute trigger. A note+scrap on an externally attached trip,
+// anchored to an external station by its scope-stripped panel name ("simple.a1").
+// After a solve the manager announces the scrap as changed so cwScrapManager
+// remorphs it. The changed-scrap set keys on the scoped station name
+// ("TOPO_1.SIMPLE.A1", via cwTrip::scopePrefix), which is the
+// name cavern reports for the solved position — so the scrap is flagged.
+TEST_CASE("Externally attached scrap is flagged for remorph after a solve",
+          "[Attach][Scrap]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("scrap-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    cwNote* note = new cwNote(attached->notes());
+    attached->notes()->addNotes({note});
+    cwScrap* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    cwNoteStation noteStation;
+    noteStation.setName(QStringLiteral("simple.a1"));
+    noteStation.setPositionOnNote(QPointF(0.5, 0.5));
+    scrap->addStation(noteStation);
+
+    // changedScraps must outlive manager: the lambda captures it by reference
+    // and the manager's destructor drain can still emit, so declare it first.
+    QList<cwScrap*> changedScraps;
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+
+    QObject::connect(&manager, &cwLinePlotManager::stationPositionInScrapsChanged,
+                     [&changedScraps](const QList<cwScrap*>& scraps) {
+                         changedScraps.append(scraps);
+                     });
+
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    CHECK(changedScraps.contains(scrap));
+}
+
+// B4 / Layer 1 (LiDAR) — an external trip owns no chunk, so nothing maps it into
+// the changed-trip set from chunk topology. Its LiDAR-carpet notes must still get
+// the trip flagged when their tie-in stations move, so cwNoteLiDARManager remorphs
+// the carpet. The trigger keys on the scoped station name, matching cavern's report.
+TEST_CASE("Externally attached trip with a LiDAR note is flagged after a solve",
+          "[Attach][LiDAR]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("lidar-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    cwNoteLiDAR* lidarNote = new cwNoteLiDAR();
+    cwNoteLiDARStation lidarStation;
+    lidarStation.setName(QStringLiteral("simple.a1"));
+    lidarStation.setPositionOnNote(QVector3D(0.5f, 0.5f, 0.0f));
+    lidarNote->addStation(lidarStation);
+    attached->notesLiDAR()->addNotes({lidarNote});
+
+    // changedTrips must outlive manager: the lambda captures it by reference and
+    // the manager's destructor drain can still emit, so declare it first.
+    QList<cwTrip*> changedTrips;
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+
+    QObject::connect(&manager, &cwLinePlotManager::stationPositionInTripsChanged,
+                     [&changedTrips](const QList<cwTrip*>& trips) {
+                         changedTrips.append(trips);
+                     });
+
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    CHECK(changedTrips.contains(attached));
+}
+
+TEST_CASE("Cave-attached centerline skips trip loop and resolves under <caveLabel>.*",
           "[Attach][Cave]")
 {
     QTemporaryDir tempRoot;
@@ -236,14 +611,14 @@ TEST_CASE("Cave-attached centerline skips trip loop and resolves under cave_<uui
     cwLinePlotManager manager;
     QHash<QUuid, QString> caveDirs;
     caveDirs.insert(cave->id(), attachDir);
-    manager.setCaveAttachmentDirs(caveDirs);
+    manager.externalCenterlineManager()->setCaveAttachmentDirs(caveDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
     REQUIRE_FALSE(manager.hasSolveError());
 
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
-    // cave-level attachment unwraps directly inside cave_<uuid>, so the
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    // cave-level attachment unwraps directly inside the cave scope, so the
     // lookup keys reflect the file's own *begin nesting:
     //   nested.entrance.e1 / e2 (from entrance.svx)
     //   nested.entrance.passage.p2 / p3 (from passage.svx, which joins
@@ -258,6 +633,48 @@ TEST_CASE("Cave-attached centerline skips trip loop and resolves under cave_<uui
         INFO("expected key: " << key.toStdString());
         CHECK(lookup.hasPosition(key));
     }
+}
+
+TEST_CASE("Cave-attached Compass file solves with X-flagged shots that carry LRUDs",
+          "[Attach][Cave][Compass]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString fixtureName = QStringLiteral("compass_excluded_lrud.dat");
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("compass-x-lrud")),
+                                             fixturePath(fixtureName));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Excluded"));
+    cave->setExternalCenterline(cwExternalCenterline(fixtureName));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{cave->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    const QStringList kept = {QStringLiteral("k1"),
+                              QStringLiteral("k2"),
+                              QStringLiteral("k3")};
+    for (const QString& key : kept) {
+        INFO("kept key: " << key.toStdString());
+        CHECK(lookup.hasPosition(key));
+    }
+
+    // K2->XS1 and XS1->XS2 are flagged #|X# and carry LRUDs, so XS1 and XS2
+    // exist only through excluded shots.
+    const QStringList excluded = {QStringLiteral("xs1"),
+                                  QStringLiteral("xs2")};
+    for (const QString& key : excluded) {
+        INFO("excluded key: " << key.toStdString());
+        CHECK_FALSE(lookup.hasPosition(key));
+    }
+
+    CHECK(lookup.positions().size() == kept.size());
 }
 
 TEST_CASE("Mixed cave: native trip and attached trip both resolve",
@@ -283,22 +700,535 @@ TEST_CASE("Mixed cave: native trip and attached trip both resolve",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
     REQUIRE_FALSE(manager.hasSolveError());
 
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
-    // Native trip stations come from cave_<uuid>.N1 / N2 (cavern lowercases)
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    // Native trip stations come from "<caveLabel>.N1" / N2 (cavern lowercases)
     // and the lookup strips the cave prefix.
     CHECK(lookup.hasPosition(QStringLiteral("n1")));
     CHECK(lookup.hasPosition(QStringLiteral("n2")));
 
-    // Attached trip stations come through the trip_<uuid>.simple.* prefix.
-    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    // Attached trip stations come through the "<tripLabel>.simple.*" prefix.
+    const QString tripPrefix = tripScopeLabel(attached);
     CHECK(lookup.hasPosition(tripPrefix + QStringLiteral(".simple.a1")));
     CHECK(lookup.hasPosition(tripPrefix + QStringLiteral(".simple.a3")));
+}
+
+TEST_CASE("buildInput injects resolved declination only for CaveWhere-owned external trips",
+          "[Attach][Declination]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+
+    cwTrip* caveWhereOwned = addEmptyTrip(cave, QStringLiteral("CaveWhereOwned"));
+    caveWhereOwned->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+    caveWhereOwned->calibrations()->setAutoDeclination(false);
+    caveWhereOwned->calibrations()->setDeclinationManual(5.5);
+
+    cwTrip* fileOwned = addEmptyTrip(cave, QStringLiteral("FileOwned"));
+    fileOwned->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_with_metadata.svx")));
+    fileOwned->calibrations()->setAutoDeclination(false);
+    fileOwned->calibrations()->setDeclinationManual(3.3);
+
+    // Native trips never appear in the injection map, even when the flag
+    // map (wrongly) claims their file doesn't own declination.
+    cwTrip* nativeTrip = addTripWithShot(cave,
+                                         QStringLiteral("Native"),
+                                         QStringLiteral("N1"),
+                                         QStringLiteral("N2"),
+                                         15.0);
+
+    QHash<QUuid, bool> fileOwnsDeclination;
+    fileOwnsDeclination.insert(caveWhereOwned->id(), false);
+    fileOwnsDeclination.insert(fileOwned->id(), true);
+    fileOwnsDeclination.insert(nativeTrip->id(), false);
+
+    const auto input = cwLinePlotTask::buildInput(&region, { {}, {}, fileOwnsDeclination });
+
+    REQUIRE(input.tripInjectedDeclinations.size() == 1);
+    CHECK(input.tripInjectedDeclinations.value(caveWhereOwned->id()) == 5.5);
+}
+
+TEST_CASE("buildInput rides the IGRF-resolved declination for auto external trips",
+          "[Attach][Declination]")
+{
+    cwCavingRegion region;
+    region.geoReference()->restore(cwGeoReference::Frozen, QStringLiteral("EPSG:32613"), {}, QString());
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Boulder"));
+
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("a1"));
+    fix.setInputCS(QStringLiteral("EPSG:32613"));
+    fix.setEasting(478000.0);
+    fix.setNorthing(4430000.0);
+    fix.setElevation(1655.0);
+    cave->fixStations()->appendFixStation(fix);
+
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+    attached->setDate(makeUtcDate(2024, 6, 1));
+    REQUIRE(attached->calibrations()->autoDeclination());
+    REQUIRE(attached->calibrations()->autoDeclinationAvailable());
+
+    QHash<QUuid, bool> fileOwnsDeclination;
+    fileOwnsDeclination.insert(attached->id(), false);
+
+    const auto input = cwLinePlotTask::buildInput(&region, { {}, {}, fileOwnsDeclination });
+
+    // The injected value is the trip's resolved declination — IGRF here,
+    // since auto is on and a dated trip + fixed cave make it available.
+    const double resolved = attached->calibrations()->declination();
+    CHECK(resolved != 0.0);
+    CHECK(input.tripInjectedDeclinations.value(attached->id()) == resolved);
+}
+
+TEST_CASE("Driver emits injected declination inside the trip block before *include",
+          "[Attach][Declination]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-attach")),
+                                             fixturePath(QStringLiteral("survex_no_metadata.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+
+    const cwCavingRegionData snapshot = region.data();
+    REQUIRE(snapshot.caves.size() == 1);
+
+    cwSurvexExporterRegion::Options options;
+    options.tripAttachmentDirs.insert(attached->id(), attachDir);
+    options.tripInjectedDeclinations.insert(attached->id(), 5.5);
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    auto result = cwSurvexExporterRegion::exportRegion(snapshot, driverPath, options);
+    REQUIRE_FALSE(result.hasError());
+
+    QFile file(driverPath);
+    REQUIRE(file.open(QFile::ReadOnly));
+    QString driver = QString::fromUtf8(file.readAll());
+    file.close();
+
+    // Stored +5.5 east-positive comes out with survex's negated calibrate
+    // convention, same as native trips.
+    const QString tripLabel = tripScopeLabel(attached);
+    const qsizetype beginIndex = driver.indexOf(QStringLiteral("*begin %1").arg(tripLabel));
+    const qsizetype declinationIndex = driver.indexOf(QStringLiteral("*calibrate DECLINATION -5.50"));
+    const qsizetype includeIndex = driver.indexOf(QStringLiteral("*include"));
+    const qsizetype endIndex = driver.indexOf(QStringLiteral("*end %1").arg(tripLabel));
+    REQUIRE(beginIndex >= 0);
+    REQUIRE(declinationIndex >= 0);
+    REQUIRE(includeIndex >= 0);
+    REQUIRE(endIndex >= 0);
+    CHECK(beginIndex < declinationIndex);
+    CHECK(declinationIndex < includeIndex);
+    CHECK(includeIndex < endIndex);
+
+    // Without an injection entry the trip block carries no declination at
+    // all (the file-owned / unknown-ownership path).
+    options.tripInjectedDeclinations.clear();
+    result = cwSurvexExporterRegion::exportRegion(snapshot, driverPath, options);
+    REQUIRE_FALSE(result.hasError());
+    REQUIRE(file.open(QFile::ReadOnly));
+    driver = QString::fromUtf8(file.readAll());
+    CHECK_FALSE(driver.contains(QStringLiteral("*calibrate DECLINATION")));
+}
+
+TEST_CASE("An attached *include under an inherited *declination auto starts from zero",
+          "[Attach][Declination]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-reset")),
+                                             fixturePath(QStringLiteral("survex_no_metadata.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Located"));
+
+    // A native trip with auto declination and a fix on its station is what puts
+    // *declination auto in the cave block.
+    cwTrip* native = addTripWithShot(cave, QStringLiteral("Native"),
+                                     QStringLiteral("a1"), QStringLiteral("a2"), 10.0);
+    native->setDate(makeUtcDate(2024, 6, 1));
+    REQUIRE(native->calibrations()->autoDeclination());
+
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("a1"));
+    fix.setInputCS(QStringLiteral("EPSG:32613"));
+    fix.setEasting(478000.0);
+    fix.setNorthing(4430000.0);
+    fix.setElevation(1655.0);
+    cave->fixStations()->appendFixStation(fix);
+
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+
+    cwSurvexExporterRegion::Options options;
+    options.tripAttachmentDirs.insert(attached->id(), attachDir);
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString tripLabel = tripScopeLabel(attached);
+    const QString reset = QStringLiteral("*calibrate DECLINATION 0.00");
+
+    SECTION("with no injected declination the include is preceded by a reset to zero")
+    {
+        const QString driver = writeDriverFor(region, options, driverPath);
+        INFO(driver.toStdString());
+
+        const qsizetype autoIndex = driver.indexOf(QStringLiteral("*declination auto"));
+        const qsizetype beginIndex = driver.indexOf(QStringLiteral("*begin %1").arg(tripLabel));
+        const qsizetype resetIndex = driver.indexOf(reset);
+        const qsizetype includeIndex = driver.indexOf(QStringLiteral("*include"));
+        REQUIRE(autoIndex >= 0);
+        REQUIRE(beginIndex > autoIndex);
+        REQUIRE(resetIndex >= 0);
+        CHECK(driver.count(reset) == 1);
+        CHECK(beginIndex < resetIndex);
+        CHECK(resetIndex < includeIndex);
+        CHECK(driver.lastIndexOf(QStringLiteral("*calibrate DECLINATION"), includeIndex) == resetIndex);
+    }
+
+    SECTION("an injected declination is written as before, with no reset")
+    {
+        options.tripInjectedDeclinations.insert(attached->id(), 5.5);
+        const QString driver = writeDriverFor(region, options, driverPath);
+        INFO(driver.toStdString());
+
+        CHECK(driver.contains(QStringLiteral("*declination auto")));
+        CHECK_FALSE(driver.contains(reset));
+        const qsizetype beginIndex = driver.indexOf(QStringLiteral("*begin %1").arg(tripLabel));
+        const qsizetype injectedIndex = driver.indexOf(QStringLiteral("*calibrate DECLINATION"), beginIndex);
+        const qsizetype includeIndex = driver.indexOf(QStringLiteral("*include"));
+        REQUIRE(injectedIndex >= 0);
+        CHECK(injectedIndex < includeIndex);
+    }
+}
+
+TEST_CASE("Injected manual declination rotates externally attached stations",
+          "[Attach][Declination]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-rotate")),
+                                             fixturePath(QStringLiteral("survex_no_metadata.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Rotated"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->calibrations()->setDeclinationManual(90.0);
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // The scan of the in-project entry found no declination directive, so
+    // CaveWhere owns it and the driver injected the manual 90.
+    CHECK_FALSE(manager.externalCenterlineManager()->fileOwnsDeclination(attached->id()));
+
+    // survex_no_metadata.svx shoots B1→B2 at compass 0 for 10 m with B1
+    // fixed at the origin. Declination +90 east swings the true bearing
+    // to 90°, so B2 lands 10 m east instead of 10 m north.
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    const QString tripPrefix = tripScopeLabel(attached);
+    const QString b2Key = tripPrefix + QStringLiteral(".nometadata.b2");
+    REQUIRE(lookup.hasPosition(b2Key));
+    const QVector3D b2 = lookup.position(b2Key);
+    CHECK(b2.x() == Catch::Approx(10.0).margin(0.01));
+    CHECK(b2.y() == Catch::Approx(0.0).margin(0.01));
+}
+
+TEST_CASE("Project-side scan flag wins over a diverged live-link source",
+          "[Attach][Declination]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    // In-project copy carries no declination (CaveWhere owns it), but the
+    // live-link source has since gained its own *calibrate declination and
+    // no reconcile has run. The solve *includes the in-project bytes, so
+    // the flag — and therefore the injection — must follow the project
+    // copy, not the fresher source.
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-diverged")),
+                                             fixturePath(QStringLiteral("survex_no_metadata.svx")));
+    const QString sourceDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-source")),
+                                             fixturePath(QStringLiteral("survex_with_metadata.svx")));
+    const QString sourcePath = QDir(sourceDir).absoluteFilePath(QStringLiteral("survex_with_metadata.svx"));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Diverged"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->calibrations()->setDeclinationManual(90.0);
+
+    cwExternalSourceSettings settings;
+    settings.setBreadcrumbPath(attached->id(), sourcePath);
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK_FALSE(manager.externalCenterlineManager()->fileOwnsDeclination(attached->id()));
+
+    // Injection applied → B2 swings east, exactly as in the undiverged case.
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    const QString tripPrefix = tripScopeLabel(attached);
+    const QString b2Key = tripPrefix + QStringLiteral(".nometadata.b2");
+    REQUIRE(lookup.hasPosition(b2Key));
+    const QVector3D b2 = lookup.position(b2Key);
+    CHECK(b2.x() == Catch::Approx(10.0).margin(0.01));
+    CHECK(b2.y() == Catch::Approx(0.0).margin(0.01));
+}
+
+TEST_CASE("File-owned declination wins over the trip's CaveWhere setting",
+          "[Attach][Declination]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-fileowned")),
+                                             fixturePath(QStringLiteral("survex_with_metadata.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("FileOwned"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_with_metadata.svx")));
+    // Sentinel that must NOT take effect: the file's own
+    // *calibrate declination 7.2 owns the trip's declination.
+    attached->calibrations()->setAutoDeclination(false);
+    attached->calibrations()->setDeclinationManual(90.0);
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(manager.externalCenterlineManager()->fileOwnsDeclination(attached->id()));
+
+    // A1→A2, compass 0, 10 m, A1 fixed at origin. The file's
+    // *calibrate declination 7.2 means "subtract 7.2 from bearings"
+    // (survex calibrate convention), so A2 resolves at bearing -7.2°:
+    // x = 10·sin(-7.2°), y = 10·cos(-7.2°). The trip's 90° sentinel must
+    // leave no trace.
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    const QString tripPrefix = tripScopeLabel(attached);
+    const QString a2Key = tripPrefix + QStringLiteral(".withmetadata.a2");
+    REQUIRE(lookup.hasPosition(a2Key));
+    const QVector3D a2 = lookup.position(a2Key);
+    CHECK(a2.x() == Catch::Approx(-1.2533).margin(0.01));
+    CHECK(a2.y() == Catch::Approx(9.9211).margin(0.01));
+}
+
+// B5 — the accessor at the heart of the note-editing fix. After a solve the
+// cave lookup/network key an externally-attached trip's stations with the trip
+// scope ("<tripLabel>.simple.a1"), but the trip's note/scrap/lead stations carry
+// only the tail (simple.a1). solvedStationPositions()/solvedNetwork() present
+// the solved data in the trip's own local namespace so every editing consumer
+// resolves without knowing the trip is external.
+TEST_CASE("Solved accessors resolve an external trip's local tail names",
+          "[Attach][SolvedStations]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("solved-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const QString tripPrefix = tripScopeLabel(attached);
+    const QString a1Scoped = tripPrefix + QStringLiteral(".simple.a1");
+
+    // Precondition — the exact mismatch B5 fixes: the cave lookup keys are
+    // scoped, so a bare tail misses it.
+    REQUIRE(cave->scopedPositions().hasPosition(a1Scoped));
+    REQUIRE_FALSE(cave->scopedPositions().hasPosition(QStringLiteral("simple.a1")));
+
+    const cwStationPositionLookup solvedPositions = attached->solvedStationPositions();
+    // The trip resolves its own stations by their bare panel names...
+    CHECK(solvedPositions.hasPosition(QStringLiteral("simple.a1")));
+    CHECK(solvedPositions.hasPosition(QStringLiteral("simple.a2")));
+    CHECK(solvedPositions.hasPosition(QStringLiteral("simple.a3")));
+    // ...at the same world position the scoped key carries.
+    CHECK(solvedPositions.position(QStringLiteral("simple.a1"))
+          == cave->scopedPositions().position(a1Scoped));
+    // The scoped key still resolves too — the view is a superset of the cave
+    // data, so a cross-trip tie-in neighbor keeps its position.
+    CHECK(solvedPositions.hasPosition(a1Scoped));
+
+    const cwSurveyNetwork solvedNetwork = attached->solvedNetwork();
+    const QStringList a1Neighbors = solvedNetwork.neighbors(QStringLiteral("simple.a1"));
+    // Neighbors come back as local tails, never scoped — so a name the view
+    // hands to the UI (autocomplete) is already the user-facing tail.
+    CHECK(a1Neighbors.contains(QStringLiteral("simple.a2")));
+    CHECK_FALSE(a1Neighbors.contains(tripPrefix + QStringLiteral(".simple.a2")));
+}
+
+TEST_CASE("Native trip solved accessors pass through the cave data unchanged",
+          "[Attach][SolvedStations]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Native"));
+    cwTrip* nativeTrip = addTripWithShot(cave,
+                                         QStringLiteral("Native"),
+                                         QStringLiteral("N1"),
+                                         QStringLiteral("N2"),
+                                         15.0);
+
+    cwLinePlotManager manager;
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // A native trip's names already speak the cave's namespace, so the accessor
+    // returns the cave data verbatim (a byte-identical, provably safe path).
+    const cwStationPositionLookup solvedPositions = nativeTrip->solvedStationPositions();
+    CHECK(solvedPositions.hasPosition(QStringLiteral("n1")));
+    CHECK(solvedPositions.hasPosition(QStringLiteral("n2")));
+    CHECK(solvedPositions.positions() == cave->scopedPositions().positions());
+
+    const cwSurveyNetwork solvedNetwork = nativeTrip->solvedNetwork();
+    CHECK(solvedNetwork.neighbors(QStringLiteral("n1")).contains(QStringLiteral("n2")));
+    CHECK(solvedNetwork == cave->scopedNetwork());
+}
+
+// B5 site — the name-autocomplete trap. guessNeighborStationName resolves a
+// note station's neighbors and its own position, then returns the best match
+// name straight to the UI (it becomes the note-station name). For an external
+// trip both the neighbor lookup and the position lookup must speak the tail
+// namespace, AND the returned name must be a tail (not scoped) or it corrupts
+// what the user sets. Routing through solvedNetwork()/solvedStationPositions()
+// satisfies all three at once. a1's only survey neighbor is a2, so the answer
+// is geometry-independent.
+TEST_CASE("External scrap guessNeighborStationName returns the tail name",
+          "[Attach][Scrap]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("guess-attach")),
+                                             fixturePath(QStringLiteral("survex_simple.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    cwNote* note = new cwNote(attached->notes());
+    attached->notes()->addNotes({note});
+    cwScrap* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    cwNoteStation previous;
+    previous.setName(QStringLiteral("simple.a1"));
+    previous.setPositionOnNote(QPointF(0.5, 0.5));
+
+    const QString guessed = scrap->guessNeighborStationName(previous, QPointF(0.6, 0.5));
+    // a2 is a1's sole neighbor, so it is the guess — and it comes back as the
+    // user-facing tail, never the scoped "<tripLabel>.simple.a2".
+    CHECK(guessed == QStringLiteral("simple.a2"));
+}
+
+// Scrap consumers meet B6's dotted Compass names: here the tail itself
+// contains '.', so any decode that split on dots would shear the station
+// name apart. The solved accessors alias by prefix-strip, which keeps the
+// dotted tails whole for note-station position lookup and returns them
+// intact from the neighbor guess.
+TEST_CASE("External scrap resolution keeps dots inside Compass station names",
+          "[Attach][Scrap][Compass]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("dotted-scrap")),
+                                             fixturePath(QStringLiteral("compass_dotted.dat")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("compass_dotted.dat")));
+
+    cwNote* note = new cwNote(attached->notes());
+    attached->notes()->addNotes({note});
+    cwScrap* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const QString scope = tripScopeLabel(attached);
+
+    // A note/scrap station carries the bare dotted tail; the solved view must
+    // resolve it at the same world position the scoped cave key carries.
+    const cwStationPositionLookup solved = attached->solvedStationPositions();
+    REQUIRE(solved.hasPosition(QStringLiteral("sa1.1")));
+    REQUIRE(solved.hasPosition(QStringLiteral("sb2.1")));
+    CHECK(solved.position(QStringLiteral("sa1.1"))
+          == cave->scopedPositions().position(scope + QStringLiteral(".sa1.1")));
+
+    // Neighbors speak dotted tails too.
+    CHECK(attached->solvedNetwork().neighbors(QStringLiteral("sb2.1"))
+              .contains(QStringLiteral("sa1.2")));
+
+    // sa1.2 is sb2.1's sole survey neighbor, so the guess is
+    // geometry-independent — and it must come back with its dot intact.
+    cwNoteStation previous;
+    previous.setName(QStringLiteral("sb2.1"));
+    previous.setPositionOnNote(QPointF(0.5, 0.5));
+    CHECK(scrap->guessNeighborStationName(previous, QPointF(0.6, 0.5))
+          == QStringLiteral("sa1.2"));
 }
 
 TEST_CASE("Broken external centerline surfaces SolveError with Step::Cavern",
@@ -318,7 +1248,7 @@ TEST_CASE("Broken external centerline surfaces SolveError with Step::Cavern",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
@@ -328,5 +1258,829 @@ TEST_CASE("Broken external centerline surfaces SolveError with Step::Cavern",
     // included file). The cavernLog property carries the diagnostic
     // text so CavernOutputPage can surface it.
     CHECK_FALSE(manager.cavernLog().isEmpty());
-    CHECK(lookupHasAnyStationFor(cave->stationPositionLookup()) == false);
+    CHECK(lookupHasAnyStationFor(cave->scopedPositions()) == false);
+}
+
+namespace {
+
+// The project's frame and the system the beside-cave's fix is entered in: a
+// transverse Mercator centered on its own origin, so a fix in it reads in
+// meters from the scene origin.
+const QString kBareFixFrameCS = QStringLiteral(
+    "+proj=tmerc +lat_0=37.1832 +lon_0=-84.0947 +k=1 +x_0=0 +y_0=0 "
+    "+datum=WGS84 +units=m +no_defs +type=crs");
+// Away from the origin survex_blocks.svx fixes d1 at, so the two caves share no
+// point the .3d could fuse.
+constexpr double kBesideCaveEasting = 1000.0;
+
+enum class Frame { Georeferenced, Ungeoreferenced };
+enum class FileSystem { Bare, OwnCS };
+
+//! survex_blocks.svx attached as a whole cave, beside a native cave. In a
+//! georeferenced project the native cave carries a fix in the frame, which is
+//! what makes the driver write *cs out. OwnCS prepends a *cs of the file's own,
+//! so its *fix d1 carries an input system.
+struct BareFixProject {
+    cwCave* beside = nullptr;
+    cwCave* attached = nullptr;
+    QString includePath;
+};
+
+BareFixProject buildBareFixProject(cwCavingRegion& region,
+                                   cwLinePlotManager& manager,
+                                   const QTemporaryDir& tempRoot,
+                                   Frame frame,
+                                   FileSystem fileSystem)
+{
+    BareFixProject project;
+    project.beside = addEmptyCave(region, QStringLiteral("Beside"));
+    cwTrip* nativeTrip = addTripWithShot(project.beside, QStringLiteral("Native"),
+                                         QStringLiteral("b1"), QStringLiteral("b2"), 10.0);
+    nativeTrip->calibrations()->setAutoDeclination(false);
+
+    if (frame == Frame::Georeferenced) {
+        cwFixStation fix;
+        fix.setStationName(QStringLiteral("b1"));
+        fix.setInputCS(kBareFixFrameCS);
+        fix.setEasting(kBesideCaveEasting);
+        fix.setNorthing(0.0);
+        project.beside->fixStations()->appendFixStation(fix);
+        region.geoReference()->restore(cwGeoReference::Frozen, kBareFixFrameCS, {}, QString());
+    }
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("blocks")),
+                                             fixturePath(QStringLiteral("survex_blocks.svx")));
+    project.includePath = QDir(attachDir).absoluteFilePath(QStringLiteral("survex_blocks.svx"));
+    if (fileSystem == FileSystem::OwnCS) {
+        QFile file(project.includePath);
+        REQUIRE(file.open(QFile::ReadOnly));
+        const QByteArray body = file.readAll();
+        file.close();
+        REQUIRE(file.open(QFile::WriteOnly | QFile::Truncate));
+        file.write(QStringLiteral("*cs CUSTOM \"%1\"\n").arg(kBareFixFrameCS).toUtf8() + body);
+    }
+
+    project.attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    project.attached->setExternalCenterline(
+        cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+
+    QHash<QUuid, QString> caveDirs;
+    caveDirs.insert(project.attached->id(), attachDir);
+    manager.externalCenterlineManager()->setCaveAttachmentDirs(caveDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    return project;
+}
+
+QStringList attachedFixWarnings(const cwSurveyNode* node)
+{
+    return node->errorModel()->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::AttachedFileFixWithoutCS)});
+}
+
+//! The directive written just before the *include of \a includePath.
+QString lineBeforeInclude(const QString& driver, const QString& includePath)
+{
+    const QStringList lines = driver.split(QLatin1Char('\n'));
+    const QString includeLine = QStringLiteral("*include \"%1\"").arg(includePath);
+    for (qsizetype i = 1; i < lines.size(); ++i) {
+        if (lines.at(i).trimmed() == includeLine) {
+            return lines.at(i - 1).trimmed();
+        }
+    }
+    return QString();
+}
+
+} // namespace
+
+TEST_CASE("An attached file's bare *fix is placed at the origin in a georeferenced project until a system is chosen",
+          "[Attach][Cave][CS][BareFixOrigin]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    const BareFixProject project =
+        buildBareFixProject(region, manager, tempRoot, Frame::Georeferenced, FileSystem::Bare);
+    REQUIRE(region.geoReference()->hasCoordinateSystem());
+
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+
+    // The include opens under the project's *cs out and an input *cs of
+    // CaveWhere's own that places the file's first bare *fix, d1 0 0 0, at
+    // the project origin.
+    CHECK(manager.driverSource().contains(QStringLiteral("*cs out ")));
+    const QString beforeInclude = lineBeforeInclude(manager.driverSource(), project.includePath);
+    CHECK(beforeInclude.startsWith(QStringLiteral("*cs ")));
+    REQUIRE_FALSE(manager.hasSolveError());
+    {
+        const cwStationPositionLookup& lookup = project.attached->scopedPositions();
+        REQUIRE(lookup.hasPosition(QStringLiteral("doghill.d1")));
+        CHECK(lookup.position(QStringLiteral("doghill.d1")).x() == Catch::Approx(0.0).margin(0.01));
+        CHECK(lookup.position(QStringLiteral("doghill.d1")).y() == Catch::Approx(0.0).margin(0.01));
+    }
+
+    const QStringList warnings = attachedFixWarnings(project.attached);
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
+    CHECK(attachedFixWarnings(project.beside).isEmpty());
+
+    CHECK(warnings.first().contains(QStringLiteral("fixes doghill.d1 without a coordinate system, "
+                                                   "so it is placed at the project origin until a "
+                                                   "coordinate system is chosen; choose one on the "
+                                                   "Fix Stations page or add *cs to the file.")));
+
+    // A click on the warning opens the node's Fix Stations page on the file's
+    // bare fix, the first attached row after the node's own fixes.
+    cwNodeWarningModel warningModel;
+    warningModel.setNode(project.attached);
+    REQUIRE(warningModel.rowCount() == 1);
+    const QModelIndex warningIndex = warningModel.index(0);
+    CHECK(warningModel.data(warningIndex, cwNodeWarningModel::TargetRole).toInt()
+          == static_cast<int>(cwNodeWarningModel::Target::FixStationRow));
+    CHECK(warningModel.data(warningIndex, cwNodeWarningModel::FixStationRowRole).toInt()
+          == project.attached->fixStations()->rowCount());
+
+    SECTION("a system chosen for the attachment solves the file and clears the warning")
+    {
+        cwExternalCenterline centerline = project.attached->externalCenterline();
+        centerline.setFixCoordinateSystem(kBareFixFrameCS);
+        project.attached->setExternalCenterline(centerline);
+        manager.waitToFinish();
+
+        INFO("driver after the choice:\n" << manager.driverSource().toStdString());
+        INFO("solve error after the choice: " << manager.solveErrorMessage().toStdString());
+        REQUIRE_FALSE(manager.hasSolveError());
+        CHECK(lineBeforeInclude(manager.driverSource(), project.includePath)
+                  .startsWith(QStringLiteral("*cs ")));
+        CHECK(attachedFixWarnings(project.attached).isEmpty());
+
+        // Read in the frame, d1 0 0 0 lands at the frame's origin.
+        const cwStationPositionLookup& lookup = project.attached->scopedPositions();
+        REQUIRE(lookup.hasPosition(QStringLiteral("doghill.d1")));
+        CHECK(lookup.position(QStringLiteral("doghill.d1")).x() == Catch::Approx(0.0).margin(0.01));
+        CHECK(lookup.position(QStringLiteral("doghill.d1")).y() == Catch::Approx(0.0).margin(0.01));
+    }
+
+    SECTION("the project keeps the file on the local grid, and the warning, when it loses its frame")
+    {
+        project.beside->fixStations()->removeAt(0);
+        manager.waitToFinish();
+
+        REQUIRE_FALSE(region.geoReference()->hasCoordinateSystem());
+        CHECK(region.geoReference()->state() == cwGeoReference::LocalGrid);
+        INFO("driver after the frame is gone:\n" << manager.driverSource().toStdString());
+        CHECK_FALSE(manager.hasSolveError());
+        CHECK(attachedFixWarnings(project.attached).size() == 1);
+    }
+}
+
+TEST_CASE("An attached file's bare *fix puts an ungeoreferenced project on the local grid and warns",
+          "[Attach][Cave][CS][BareFixOrigin]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    const BareFixProject project =
+        buildBareFixProject(region, manager, tempRoot, Frame::Ungeoreferenced, FileSystem::Bare);
+    REQUIRE_FALSE(region.geoReference()->hasCoordinateSystem());
+
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(region.geoReference()->state() == cwGeoReference::LocalGrid);
+    // The local grid solves in a system of its own, and the include reads
+    // the file's bare fix in a translation onto the origin.
+    CHECK(manager.driverSource().contains(QStringLiteral("*cs out ")));
+    CHECK(lineBeforeInclude(manager.driverSource(), project.includePath)
+              .startsWith(QStringLiteral("*cs ")));
+    CHECK(attachedFixWarnings(project.attached).size() == 1);
+}
+
+TEST_CASE("An attached file whose fixes carry their own *cs warns nothing",
+          "[Attach][Cave][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const Frame frame = GENERATE(Frame::Georeferenced, Frame::Ungeoreferenced);
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    const BareFixProject project =
+        buildBareFixProject(region, manager, tempRoot, frame, FileSystem::OwnCS);
+
+    CHECK(attachedFixWarnings(project.attached).isEmpty());
+    CHECK(attachedFixWarnings(project.beside).isEmpty());
+
+    if (frame == Frame::Georeferenced) {
+        INFO("solve error: " << manager.solveErrorMessage().toStdString());
+        CHECK_FALSE(manager.hasSolveError());
+    }
+}
+
+namespace {
+
+// Defined with the placement tests below.
+void checkAtOrigin(const cwStationPositionLookup& lookup, const QString& station);
+
+} // namespace
+
+TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around it",
+          "[Attach][Trip][CS][BareFixOrigin]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+
+    cwCave* beside = addEmptyCave(region, QStringLiteral("Beside"));
+    cwTrip* nativeTrip = addTripWithShot(beside, QStringLiteral("Native"),
+                                         QStringLiteral("b1"), QStringLiteral("b2"), 10.0);
+    nativeTrip->calibrations()->setAutoDeclination(false);
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("b1"));
+    fix.setInputCS(kBareFixFrameCS);
+    fix.setEasting(kBesideCaveEasting);
+    fix.setNorthing(0.0);
+    beside->fixStations()->appendFixStation(fix);
+    region.geoReference()->restore(cwGeoReference::Frozen, kBareFixFrameCS, {}, QString());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("blocks")),
+                                             fixturePath(QStringLiteral("survex_blocks.svx")));
+    const QString includePath =
+        QDir(attachDir).absoluteFilePath(QStringLiteral("survex_blocks.svx"));
+
+    SECTION("under a cave with no fix of its own, the trip block opens the system chosen for it")
+    {
+        cwCave* host = addEmptyCave(region, QStringLiteral("Host"));
+        cwTrip* attached = addEmptyTrip(host, QStringLiteral("Attached"));
+        attached->calibrations()->setAutoDeclination(false);
+        attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+        manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+        manager.setRegion(&region);
+        manager.waitToFinish();
+
+        {
+            // Nothing chosen: the include reads the bare fix in CaveWhere's
+            // translation onto the project origin, and the file solves.
+            const QString driver = manager.driverSource();
+            INFO("driver:\n" << driver.toStdString());
+            INFO("solve error: " << manager.solveErrorMessage().toStdString());
+            CHECK(lineBeforeInclude(driver, includePath).startsWith(QStringLiteral("*cs ")));
+            REQUIRE_FALSE(manager.hasSolveError());
+            checkAtOrigin(host->scopedPositions(),
+                          attached->scopePrefix() + QStringLiteral("doghill.d1"));
+        }
+
+        cwExternalCenterline centerline = attached->externalCenterline();
+        centerline.setFixCoordinateSystem(kBareFixFrameCS);
+        attached->setExternalCenterline(centerline);
+        manager.waitToFinish();
+
+        {
+            const QString driver = manager.driverSource();
+            INFO("driver:\n" << driver.toStdString());
+            INFO("solve error: " << manager.solveErrorMessage().toStdString());
+            REQUIRE_FALSE(manager.hasSolveError());
+
+            const QString beforeInclude = lineBeforeInclude(driver, includePath);
+            CHECK(beforeInclude.startsWith(QStringLiteral("*cs ")));
+            CHECK_FALSE(beforeInclude.startsWith(QStringLiteral("*cs out")));
+            const qsizetype tripBegin =
+                driver.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
+            REQUIRE(tripBegin >= 0);
+            CHECK(driver.indexOf(beforeInclude, tripBegin) > tripBegin);
+            CHECK(attachedFixWarnings(host).isEmpty());
+        }
+
+        // The rest follows the warning, which comes back with the choice unset.
+        centerline.setFixCoordinateSystem(QString());
+        attached->setExternalCenterline(centerline);
+        manager.waitToFinish();
+
+        const QStringList warnings = attachedFixWarnings(host);
+        REQUIRE(warnings.size() == 1);
+        CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
+        CHECK(attachedFixWarnings(beside).isEmpty());
+
+        // The warning and the attached row name the station under the trip's
+        // scope, the way a node fix on it must be spelled.
+        const auto scopedD1 = [&]() {
+            return attached->scopePrefix() + QStringLiteral("doghill.d1");
+        };
+        const QString originalD1 = scopedD1();
+        CHECK(warnings.first().contains(QStringLiteral("fixes %1 without").arg(originalD1)));
+        REQUIRE(host->attachedFixes()->count() == 1);
+        CHECK(host->attachedFixes()->attachedFixes().first().station == originalD1);
+
+        // A rename moves the scope; the row follows before any rescan, and the
+        // warning follows on the re-solve.
+        attached->setName(QStringLiteral("Renamed"));
+        REQUIRE(scopedD1() != originalD1);
+        REQUIRE(waitUntil([&]() {
+            return host->attachedFixes()->attachedFixes().first().station == scopedD1();
+        }));
+        CHECK_FALSE(manager.externalCenterlineManager()->isScanning());
+        manager.waitToFinish();
+        const QStringList renamedWarnings = attachedFixWarnings(host);
+        REQUIRE(renamedWarnings.size() == 1);
+        CHECK(renamedWarnings.first().contains(QStringLiteral("fixes %1 without").arg(scopedD1())));
+    }
+
+    SECTION("under a cave whose fix names a system, the trip reads its bare fix in a translation of its own")
+    {
+        cwTrip* attached = addEmptyTrip(beside, QStringLiteral("Attached"));
+        attached->calibrations()->setAutoDeclination(false);
+        attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+        manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+        manager.setRegion(&region);
+        manager.waitToFinish();
+
+        const QString driver = manager.driverSource();
+        INFO("driver:\n" << driver.toStdString());
+        INFO("solve error: " << manager.solveErrorMessage().toStdString());
+        // The cave's fix ends its system before the trip's block; with
+        // nothing chosen the include reads the bare fix in CaveWhere's
+        // translation onto the project origin, and the file solves.
+        CHECK_FALSE(manager.hasSolveError());
+
+        const qsizetype tripBegin =
+            driver.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
+        const qsizetype include =
+            driver.indexOf(QStringLiteral("*include \"%1\"").arg(includePath));
+        REQUIRE(tripBegin >= 0);
+        REQUIRE(include > tripBegin);
+        CHECK(lineBeforeInclude(driver, includePath).startsWith(QStringLiteral("*cs ")));
+        checkAtOrigin(beside->scopedPositions(),
+                      attached->scopePrefix() + QStringLiteral("doghill.d1"));
+
+        const QStringList warnings = attachedFixWarnings(beside);
+        REQUIRE(warnings.size() == 1);
+        CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
+    }
+}
+
+namespace {
+
+// A local transverse Mercator centered near Boulder, the frame the placed
+// file's stations are read back in.
+const QString kBoulderFrameCS = QStringLiteral(
+    "+proj=tmerc +lat_0=40.0254 +lon_0=-105.2581 +k=1 +x_0=0 +y_0=0 "
+    "+datum=WGS84 +units=m +no_defs +type=crs");
+const QString kUtm13N = QStringLiteral("EPSG:32613");
+constexpr double kPlacedEasting = 478000.0;
+constexpr double kPlacedNorthing = 4430000.0;
+constexpr double kPlacedElevation = 1655.0;
+constexpr double kPlacedMarginMeters = 0.05;
+// The line of survex_blocks.svx that fixes d1.
+constexpr int kBlocksFixLine = 16;
+
+cwFixStation placingFix(const QString& stationName)
+{
+    cwFixStation fix;
+    fix.setStationName(stationName);
+    fix.setInputCS(kUtm13N);
+    fix.setCoordinate(kPlacedEasting, kPlacedNorthing, kPlacedElevation);
+    return fix;
+}
+
+//! Where the placing fix lands in kBoulderFrameCS.
+QVector3D placedPosition()
+{
+    const auto point = cwCoordinateTransform::transformPoint(
+        kUtm13N, kBoulderFrameCS, cwGeoPoint(kPlacedEasting, kPlacedNorthing, kPlacedElevation));
+    REQUIRE(point.has_value());
+    return QVector3D(float(point->x), float(point->y), float(point->z));
+}
+
+void checkPlaced(const cwStationPositionLookup& lookup, const QString& station)
+{
+    INFO("station " << station.toStdString());
+    REQUIRE(lookup.hasPosition(station));
+    const QVector3D expected = placedPosition();
+    const QVector3D actual = lookup.position(station);
+    CHECK(actual.x() == Catch::Approx(expected.x()).margin(kPlacedMarginMeters));
+    CHECK(actual.y() == Catch::Approx(expected.y()).margin(kPlacedMarginMeters));
+    CHECK(actual.z() == Catch::Approx(expected.z()).margin(kPlacedMarginMeters));
+}
+
+QStringList unconnectedWarnings(const cwErrorModel* errorModel)
+{
+    return errorModel->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::UnconnectedStations)});
+}
+
+//! survex_blocks.svx copied into \a attachDir, minus its own *fix line when
+//! \a keepOwnFix is false, so the copy fixes nothing. Returns the copy's path.
+QString seedBlocks(const QString& attachDir, bool keepOwnFix)
+{
+    seedAttachment(attachDir, fixturePath(QStringLiteral("survex_blocks.svx")));
+    const QString path = QDir(attachDir).absoluteFilePath(QStringLiteral("survex_blocks.svx"));
+    if (!keepOwnFix) {
+        QFile file(path);
+        REQUIRE(file.open(QFile::ReadOnly));
+        QString body = QString::fromUtf8(file.readAll());
+        file.close();
+        REQUIRE(body.contains(QStringLiteral("*fix d1 0 0 0\n")));
+        body.remove(QStringLiteral("*fix d1 0 0 0\n"));
+        REQUIRE(file.open(QFile::WriteOnly | QFile::Truncate));
+        file.write(body.toUtf8());
+    }
+    return path;
+}
+
+//! The driver text from \a writeNode up to the first *include line.
+QString driverUpToInclude(const QString& driver, const QString& includePath)
+{
+    const qsizetype include = driver.indexOf(QStringLiteral("*include \"%1\"").arg(includePath));
+    REQUIRE(include >= 0);
+    return driver.left(include);
+}
+
+} // namespace
+
+TEST_CASE("A node fix on a station of an attached file with no fix of its own places the file",
+          "[Attach][Cave][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    const QString includePath = seedBlocks(attachDir, false);
+
+    cwCavingRegion region;
+    region.geoReference()->restore(cwGeoReference::Frozen, kBoulderFrameCS, {}, QString());
+    cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    attached->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.d1")));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    const QString driver = manager.driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    // The harvest names the file's stations on the node, which is what lets
+    // the driver keep a fix on one of them.
+    CHECK(attached->externalStations().contains(QStringLiteral("doghill.d1")));
+    CHECK(attached->attachedFixes()->count() == 0);
+
+    // Written in the node's block ahead of the *include, so the name resolves
+    // to the file's own doghill.d1 inside it.
+    const QString beforeInclude = driverUpToInclude(driver, includePath);
+    const QString nodeLabel = cwScopeLabels(region.data()).label(attached->id());
+    const qsizetype nodeBegin = beforeInclude.indexOf(QStringLiteral("*begin %1 ").arg(nodeLabel));
+    REQUIRE(nodeBegin >= 0);
+    CHECK(beforeInclude.indexOf(QStringLiteral("*fix doghill.d1 478000."), nodeBegin)
+          > nodeBegin);
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    checkPlaced(attached->scopedPositions(), QStringLiteral("doghill.d1"));
+    CHECK(attachedFixWarnings(attached).isEmpty());
+    CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
+}
+
+TEST_CASE("A node fix on a station of a trip-attached file with no fix of its own places the file",
+          "[Attach][Trip][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    const QString includePath = seedBlocks(attachDir, false);
+
+    cwCavingRegion region;
+    region.geoReference()->restore(cwGeoReference::Frozen, kBoulderFrameCS, {}, QString());
+    cwCave* host = addEmptyCave(region, QStringLiteral("Host"));
+    cwTrip* attached = addEmptyTrip(host, QStringLiteral("Attached"));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    const QString tripScope = attached->scopePrefix();
+    REQUIRE_FALSE(tripScope.isEmpty());
+    host->fixStations()->appendFixStation(placingFix(tripScope + QStringLiteral("doghill.d1")));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    const QString driver = manager.driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    // In the node's block, ahead of the trip's own *begin, under the trip's
+    // scope: the *fix names the station the trip-wrapped *include declares.
+    const QString beforeInclude = driverUpToInclude(driver, includePath);
+    const qsizetype fixAt = beforeInclude.indexOf(
+        QStringLiteral("*fix %1doghill.d1 478000.").arg(tripScope));
+    const qsizetype tripBegin =
+        beforeInclude.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
+    REQUIRE(fixAt >= 0);
+    REQUIRE(tripBegin >= 0);
+    CHECK(fixAt < tripBegin);
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    checkPlaced(host->scopedPositions(), tripScope + QStringLiteral("doghill.d1"));
+    CHECK(attachedFixWarnings(host).isEmpty());
+    CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
+    CHECK(unconnectedWarnings(host->errorModel()).isEmpty());
+}
+
+TEST_CASE("A node fix on a station the attached file fixes itself is refused",
+          "[Attach][Cave][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    seedBlocks(attachDir, true);
+
+    cwCavingRegion region;
+    region.geoReference()->restore(cwGeoReference::Frozen, kBoulderFrameCS, {}, QString());
+    cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    // The file's bare d1 reads in the frame, so cavern takes it.
+    cwExternalCenterline centerline(QStringLiteral("survex_blocks.svx"));
+    centerline.setFixCoordinateSystem(kBoulderFrameCS);
+    attached->setExternalCenterline(centerline);
+
+    const QString station = GENERATE(QStringLiteral("doghill.d1"), QStringLiteral("doghill.d2"));
+    INFO("the node fixes " << station.toStdString());
+    attached->fixStations()->appendFixStation(placingFix(station));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    const QString driver = manager.driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    // The file's own fix is listed for the Fix Stations page, named as a node
+    // fix on the same station is.
+    const QList<cwAttachedFix> fileFixes = attached->attachedFixes()->attachedFixes();
+    REQUIRE(fileFixes.size() == 1);
+    const cwAttachedFix& fileFix = fileFixes.first();
+    CHECK(fileFix.station == QStringLiteral("doghill.d1"));
+    CHECK(fileFix.coordinate == QStringLiteral("0 0 0"));
+    CHECK(fileFix.coordinateSystem.isEmpty());
+    CHECK(fileFix.fileName == QStringLiteral("survex_blocks.svx"));
+    CHECK(fileFix.filePath == QStringLiteral("survex_blocks.svx"));
+    CHECK(fileFix.line == kBlocksFixLine);
+
+    // Either way cavern sees one fix per station, so the solve runs, and the
+    // file's bare fix reads in the system chosen for it.
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(fileFix.readInSystem == kBoulderFrameCS);
+    CHECK(attachedFixWarnings(attached).isEmpty());
+
+    const cwFixStationDiagnosticsModel* diagnostics = attached->fixStationDiagnostics();
+    const QString stationError =
+        diagnostics->data(diagnostics->index(0), cwFixStationDiagnosticsModel::StationErrorRole)
+            .toString();
+    const QStringList referenceWarnings = attached->errorModel()->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::FixStationReference)});
+
+    if (station == QStringLiteral("doghill.d1")) {
+        // Cavern would fail the whole run on a second fix of d1 at other
+        // coordinates, so the node's fix is dropped and the row says why.
+        CHECK_FALSE(driver.contains(QStringLiteral("*fix doghill.d1 478000.")));
+        const QString collision = QStringLiteral(
+            "survex_blocks.svx already fixes doghill.d1; remove that fix from the file or fix "
+            "another station");
+        CHECK(stationError == collision);
+        REQUIRE(referenceWarnings.size() == 1);
+        CHECK(referenceWarnings.first().contains(collision));
+    } else {
+        // Another station of the file is free to fix.
+        CHECK(driver.contains(QStringLiteral("*fix doghill.d2 478000.")));
+        CHECK(stationError.isEmpty());
+        CHECK(referenceWarnings.isEmpty());
+    }
+}
+
+TEST_CASE("A node fix naming a station its attached file lacks or fixes itself is dropped",
+          "[Attach][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    seedBlocks(attachDir, true);
+
+    cwCavingRegion region;
+    cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    attached->setExternalStations({QStringLiteral("doghill.d1"), QStringLiteral("doghill.d2")});
+    attached->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.nope")));
+    attached->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.d2")));
+
+    cwCave* host = addEmptyCave(region, QStringLiteral("Host"));
+    cwTrip* trip = addEmptyTrip(host, QStringLiteral("Attached"));
+    trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    trip->setExternalStations({QStringLiteral("doghill.d1")});
+    // A file-qualified name without the trip's scope is a name the node's
+    // block does not have.
+    host->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.d1")));
+    const QString tripFix = trip->scopePrefix() + QStringLiteral("doghill.d1");
+    host->fixStations()->appendFixStation(placingFix(tripFix));
+
+    cwSurvexExporterRegion::Options options;
+    options.caveAttachmentDirs.insert(attached->id(), attachDir);
+    options.tripAttachmentDirs.insert(trip->id(), attachDir);
+    // The stations each file fixes itself, as the scan's harvest reports them.
+    options.externalFixedStations.insert(attached->id(), {QStringLiteral("doghill.d2")});
+    options.externalFixedStations.insert(trip->id(), {QStringLiteral("doghill.d1")});
+
+    const cwCavingRegionData regionData = region.data();
+    const cwSurvexExporterCaveTask::DriverTree tree(regionData.caves, cwScopeLabels(regionData));
+    cwSurvexExporterCaveTask task;
+    task.setExportOptions(options);
+
+    QString driver;
+    QTextStream stream(&driver);
+    for (const cwCaveData& node : regionData.caves) {
+        REQUIRE(task.writeNode(stream, node, tree));
+    }
+    stream.flush();
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK_FALSE(driver.contains(QStringLiteral("*fix doghill.nope")));
+    CHECK_FALSE(driver.contains(QStringLiteral("*fix doghill.d1")));
+    const QStringList errors = task.errors();
+    CHECK(errors.contains(QStringLiteral("Fix references unknown station: \"doghill.nope\"")));
+    CHECK(errors.contains(QStringLiteral("Fix references unknown station: \"doghill.d1\"")));
+
+    CHECK_FALSE(driver.contains(QStringLiteral("*fix doghill.d2")));
+    CHECK_FALSE(driver.contains(QStringLiteral("*fix %1").arg(tripFix)));
+    CHECK(errors.contains(QStringLiteral(
+        "survex_blocks.svx already fixes doghill.d2; remove that fix from the file or fix "
+        "another station")));
+    CHECK(errors.contains(QStringLiteral(
+        "survex_blocks.svx already fixes %1; remove that fix from the file or fix another "
+        "station").arg(tripFix)));
+}
+
+namespace {
+
+QStringList unfixedFileWarnings(const cwSurveyNode* node)
+{
+    return node->errorModel()->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::AttachedFileUnfixed)});
+}
+
+//! A native cave fixed in kBareFixFrameCS away from the origin, which
+//! georeferences the project and anchors the solve on its own.
+cwCave* addFixedNativeCave(cwCavingRegion& region)
+{
+    cwCave* native = addEmptyCave(region, QStringLiteral("Native"));
+    cwTrip* trip = addTripWithShot(native, QStringLiteral("Native"), QStringLiteral("b1"),
+                                   QStringLiteral("b2"), 10.0);
+    trip->calibrations()->setAutoDeclination(false);
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("b1"));
+    fix.setInputCS(kBareFixFrameCS);
+    fix.setEasting(kBesideCaveEasting);
+    fix.setNorthing(0.0);
+    native->fixStations()->appendFixStation(fix);
+    region.geoReference()->restore(cwGeoReference::Frozen, kBareFixFrameCS, {}, QString());
+    return native;
+}
+
+void checkAtOrigin(const cwStationPositionLookup& lookup, const QString& station)
+{
+    INFO("station " << station.toStdString());
+    REQUIRE(lookup.hasPosition(station));
+    const auto position = lookup.position(station);
+    CHECK(position.x() == Catch::Approx(0.0).margin(kPlacedMarginMeters));
+    CHECK(position.y() == Catch::Approx(0.0).margin(kPlacedMarginMeters));
+    CHECK(position.z() == Catch::Approx(0.0).margin(kPlacedMarginMeters));
+}
+
+} // namespace
+
+TEST_CASE("An attached file with no fix of its own sits at the origin beside a fixed cave",
+          "[Attach][Cave][CS][LinePlotManager]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const bool keepOwnFix = GENERATE(false, true);
+    INFO("the file keeps its own *fix: " << keepOwnFix);
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    const QString includePath = seedBlocks(attachDir, keepOwnFix);
+
+    cwCavingRegion region;
+    cwCave* native = addFixedNativeCave(region);
+    cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    // The kept *fix d1 names no system; it reads in the frame.
+    cwExternalCenterline centerline(QStringLiteral("survex_blocks.svx"));
+    centerline.setFixCoordinateSystem(kBareFixFrameCS);
+    attached->setExternalCenterline(centerline);
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    const auto driverInfo = [&manager]() {
+        return "driver:\n" + manager.driverSource().toStdString() + "\nsolve error: "
+               + manager.solveErrorMessage().toStdString() + "\ncavern log:\n"
+               + manager.cavernLog().toStdString();
+    };
+    INFO(driverInfo());
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE_FALSE(attached->externalStations().isEmpty());
+    CHECK(unfixedFileWarnings(native).isEmpty());
+    CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
+
+    if (keepOwnFix) {
+        // The file places itself, so the driver adds nothing and nothing warns.
+        CHECK_FALSE(driverUpToInclude(manager.driverSource(), includePath)
+                        .contains(QStringLiteral("*fix %1 0 0 0")
+                                      .arg(attached->externalStations().first())));
+        CHECK(unfixedFileWarnings(attached).isEmpty());
+        return;
+    }
+
+    // The fallback names the file's first harvested station inside the
+    // include, the way a native node with no fix gets one on its first station.
+    const QString originStation = attached->externalStations().first();
+    CHECK(driverUpToInclude(manager.driverSource(), includePath)
+              .contains(QStringLiteral("*fix %1 0 0 0").arg(originStation)));
+    checkAtOrigin(attached->scopedPositions(), originStation);
+
+    const QStringList warnings = unfixedFileWarnings(attached);
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings.first() == QStringLiteral("survex_blocks.svx has no fixed station, so it sits "
+                                             "at the origin — fix one of its stations."));
+
+    SECTION("a node fix on one of its stations places it and clears the warning")
+    {
+        attached->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.d1")));
+        manager.waitToFinish();
+        INFO(driverInfo());
+
+        REQUIRE_FALSE(manager.hasSolveError());
+        CHECK_FALSE(manager.driverSource().contains(QStringLiteral("*fix %1 0 0 0").arg(originStation)));
+        CHECK(unfixedFileWarnings(attached).isEmpty());
+        CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
+    }
+}
+
+TEST_CASE("A trip-attached file with no fix of its own sits at the origin under the trip's scope",
+          "[Attach][Trip][CS][LinePlotManager]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    const QString includePath = seedBlocks(attachDir, false);
+
+    cwCavingRegion region;
+    addFixedNativeCave(region);
+    cwCave* host = addEmptyCave(region, QStringLiteral("Host"));
+    cwTrip* attached = addEmptyTrip(host, QStringLiteral("Attached"));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    const QString driver = manager.driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE_FALSE(attached->externalStations().isEmpty());
+
+    // Written inside the trip's own block, so the name resolves in the file.
+    const QString originStation = attached->externalStations().first();
+    const QString beforeInclude = driverUpToInclude(driver, includePath);
+    const qsizetype tripBegin =
+        beforeInclude.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
+    REQUIRE(tripBegin >= 0);
+    CHECK(beforeInclude.indexOf(QStringLiteral("*fix %1 0 0 0").arg(originStation), tripBegin)
+          > tripBegin);
+    checkAtOrigin(host->scopedPositions(), attached->scopePrefix() + originStation);
+
+    const QStringList warnings = unfixedFileWarnings(host);
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings.first().startsWith(QStringLiteral("survex_blocks.svx has no fixed station")));
+    CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
+    CHECK(unconnectedWarnings(host->errorModel()).isEmpty());
 }

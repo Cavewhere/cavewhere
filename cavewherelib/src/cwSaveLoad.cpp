@@ -22,6 +22,8 @@
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
 #include "cwCavingRegion.h"
+#include "cwCave.h"
+#include "cwEquateModel.h"
 #include "cwGeoReference.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
@@ -56,6 +58,7 @@
 
 //Google protobuffer
 #include <google/protobuf/util/json_util.h>
+#include <google/protobuf/util/message_differencer.h>
 #include "google/protobuf/message.h"
 #include "cavewhere.pb.h"
 #include "qt.pb.h"
@@ -77,6 +80,7 @@
 #include <QBuffer>
 #include <QUuid>
 #include <QtCore/qscopeguard.h>
+#include <QScopedValueRollback>
 #include <QFileInfo>
 #include <QThread>
 #ifdef Q_OS_WIN
@@ -99,12 +103,111 @@
 #include <algorithm>
 #include <atomic>
 #include <functional>
+#include <optional>
 #include <variant>
 #include <type_traits>
 
 using namespace Monad;
 
 namespace {
+
+//! The FileVersion a project with no hierarchy is stamped with: the newest
+//! format a build that predates the survey tree can read and save.
+constexpr int kFlatProjectVersion = 9;
+
+//! The directory a trip's notes live in.
+const QLatin1String kNotesDirName("notes");
+
+//! The directory an attached survey file is copied into.
+const QLatin1String kExternalCenterlineDirName("external-centerline");
+
+//! The directory a node's child nodes live in, a sibling of trips/.
+const QLatin1String kSubNodeDirName("sub");
+
+//! The directory a node's trips live in.
+const QLatin1String kTripsDirName("trips");
+
+//! Where a directory sits in a .cwproj's layout. Position is the only thing
+//! that says whether a directory called "trips" holds a node's surveys or is a
+//! node the user named that, so a descriptor scan decides what to descend into
+//! by the role it reached a directory through, never by the bare name.
+enum class ScanRole {
+    DataRoot,     //!< The project's data root; its children are survey nodes.
+    Node,         //!< A survey node's own directory.
+    SubNodeList,  //!< A node's sub/ directory; its children are survey nodes.
+    TripsList,    //!< A node's trips/ directory; its children are trips.
+    Trip,         //!< A trip's own directory.
+    Unknown       //!< A directory the layout does not name; descended, never pruned.
+};
+
+//! The role a child directory of \a parentRole named \a name is reached
+//! through, or nothing when the scan prunes it. Content directories (notes/,
+//! external-centerline/ and, for the node scan, trips/) hold no descriptor the
+//! scan wants, and a copied Compass project alone puts hundreds of files under
+//! external-centerline/. \a scanTrips says whether the caller is looking for
+//! trip descriptors and so has to walk into trips/.
+std::optional<ScanRole> childScanRole(ScanRole parentRole, const QString& name, bool scanTrips)
+{
+    const auto named = [&name](QLatin1String dirName) {
+        return name.compare(dirName, Qt::CaseInsensitive) == 0;
+    };
+
+    switch (parentRole) {
+    case ScanRole::DataRoot:
+    case ScanRole::SubNodeList:
+        return ScanRole::Node;
+    case ScanRole::Node:
+        if (named(kSubNodeDirName)) {
+            return ScanRole::SubNodeList;
+        }
+        if (named(kTripsDirName)) {
+            return scanTrips ? std::optional(ScanRole::TripsList) : std::nullopt;
+        }
+        if (named(kExternalCenterlineDirName)) {
+            return std::nullopt;
+        }
+        return ScanRole::Unknown;
+    case ScanRole::TripsList:
+        return ScanRole::Trip;
+    case ScanRole::Trip:
+        if (named(kNotesDirName) || named(kExternalCenterlineDirName)) {
+            return std::nullopt;
+        }
+        return ScanRole::Unknown;
+    case ScanRole::Unknown:
+        return ScanRole::Unknown;
+    }
+    return ScanRole::Unknown;
+}
+
+//! The version to stamp into one object's own file. Every file of a project
+//! carries the same stamp, so each of these walks up to the region and asks
+//! cwSaveLoad::stampVersion. An object no region holds — a trip serialized for a
+//! git merge, say — carries no hierarchy of its own and takes the flat stamp.
+int stampVersionFor(const cwCave* cave)
+{
+    return cwSaveLoad::stampVersion(cave != nullptr ? cave->parentRegion() : nullptr);
+}
+
+int stampVersionFor(const cwTrip* trip)
+{
+    return trip != nullptr ? stampVersionFor(trip->parentCave()) : kFlatProjectVersion;
+}
+
+int stampVersionFor(const cwNote* note)
+{
+    return note != nullptr ? stampVersionFor(note->parentTrip()) : kFlatProjectVersion;
+}
+
+int stampVersionFor(const cwNoteLiDAR* note)
+{
+    return note != nullptr ? stampVersionFor(note->parentTrip()) : kFlatProjectVersion;
+}
+
+int stampVersionFor(const cwSketch* sketch)
+{
+    return sketch != nullptr ? stampVersionFor(sketch->parentTrip()) : kFlatProjectVersion;
+}
 
 cwProfilePhase loadPhase(const QString& name)
 {
@@ -121,12 +224,16 @@ static_assert(static_cast<int>(cwGeoReference::Anchored)
               == CavewhereProto::GeoReference_State_ANCHORED);
 static_assert(static_cast<int>(cwGeoReference::Frozen)
               == CavewhereProto::GeoReference_State_FROZEN);
+static_assert(static_cast<int>(cwGeoReference::LocalGrid)
+              == CavewhereProto::GeoReference_State_LOCAL_GRID);
 static_assert(static_cast<int>(cwGeoReference::Anchor::None)
               == CavewhereProto::GeoReference_AnchorKind_NO_ANCHOR);
 static_assert(static_cast<int>(cwGeoReference::Anchor::FixStation)
               == CavewhereProto::GeoReference_AnchorKind_FIX_STATION);
 static_assert(static_cast<int>(cwGeoReference::Anchor::LazLayer)
               == CavewhereProto::GeoReference_AnchorKind_LAZ_LAYER);
+static_assert(static_cast<int>(cwGeoReference::Anchor::Attachment)
+              == CavewhereProto::GeoReference_AnchorKind_ATTACHMENT);
 
 QDir projectRootDirForFile(const QString& projectFileName)
 {
@@ -386,20 +493,6 @@ QSet<QString> cavewhereTrackedExtensions()
     return trackedExtensions;
 }
 
-QQuickGit::LfsPolicy cavewhereLfsPolicy()
-{
-    QQuickGit::LfsPolicy policy;
-    const auto alwaysEligible = [](const QString&, const QByteArray*) {
-        return true;
-    };
-
-    for (const QString& extension : cavewhereTrackedExtensions()) {
-        policy.setRule(extension, alwaysEligible);
-    }
-
-    return policy;
-}
-
 bool hasRemoteConfigured(const QQuickGit::GitRepository* repository)
 {
     return repository != nullptr && !repository->remotes().isEmpty();
@@ -451,7 +544,11 @@ LfsSnapshot captureLfsSnapshot(const QString& repoPath)
         const QString relativePath = QDir::fromNativeSeparators(repoDir.relativeFilePath(info.absoluteFilePath()));
         if (relativePath.isEmpty()
                 || relativePath == QStringLiteral(".git")
-                || relativePath.startsWith(QStringLiteral(".git/"))) {
+                || relativePath.startsWith(QStringLiteral(".git/"))
+                //What a delete carried into the trash is out of git's sight,
+                //so an LFS snapshot that counted it would report a hydration
+                //delta for files no commit can ever hold.
+                || relativePath.startsWith(QStringLiteral(".cw_trash/"))) {
             continue;
         }
 
@@ -479,6 +576,56 @@ LfsSnapshot captureLfsSnapshot(const QString& repoPath)
     }
 
     return snapshot;
+}
+
+//! What a restore of a merge handler's files wrote, and what it could not write.
+struct RestoreFromCommitOutcome {
+    int writtenFileCount = 0;
+    QStringList skippedPaths;
+};
+
+//! Writes each of \a relativePaths back from \a commit. An LFS-tracked file — a note
+//! image is one — is a pointer in the commit, so its bytes come from \a lfsStore; with
+//! the object missing locally the pointer text is written as it stands, which is how an
+//! unhydrated clone already holds its own images, and a later hydration fills it in.
+RestoreFromCommitOutcome restoreFilesFromCommit(const QDir& repoRoot,
+                                                const QString& commit,
+                                                const QStringList& relativePaths,
+                                                const std::shared_ptr<QQuickGit::LfsStore>& lfsStore)
+{
+    RestoreFromCommitOutcome outcome;
+    for (const QString& relativePath : relativePaths) {
+        const auto contentResult = QQuickGit::GitRepository::fileContentAtCommit(repoRoot.absolutePath(),
+                                                                                 commit,
+                                                                                 relativePath);
+        if (contentResult.hasError() || contentResult.value().isEmpty()) {
+            outcome.skippedPaths.append(relativePath);
+            continue;
+        }
+
+        QByteArray content = contentResult.value();
+        QQuickGit::LfsPointer pointer;
+        if (lfsStore != nullptr
+                && QQuickGit::LfsPointer::parse(content, &pointer)
+                && pointer.isValid()) {
+            const auto objectResult = lfsStore->readObject(pointer.oid);
+            if (!objectResult.hasError() && !objectResult.value().isEmpty()) {
+                content = objectResult.value();
+            }
+        }
+
+        const QString absolutePath = repoRoot.absoluteFilePath(relativePath);
+        QFile file(absolutePath);
+        if (!QDir().mkpath(QFileInfo(absolutePath).absolutePath())
+                || !file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+                || file.write(content) != content.size()) {
+            outcome.skippedPaths.append(relativePath);
+            continue;
+        }
+        ++outcome.writtenFileCount;
+    }
+
+    return outcome;
 }
 
 QStringList hydrationDeltaPaths(const LfsSnapshot& beforeSnapshot,
@@ -656,6 +803,20 @@ QUuid repairedTopLevelId(const QUuid& candidateId,
 
 } // namespace (anonymous helpers above — repairedTopLevelId, etc.)
 
+QQuickGit::LfsPolicy cavewhereLfsPolicy()
+{
+    QQuickGit::LfsPolicy policy;
+    const auto alwaysEligible = [](const QString&, const QByteArray*) {
+        return true;
+    };
+
+    for (const QString& extension : cavewhereTrackedExtensions()) {
+        policy.setRule(extension, alwaysEligible);
+    }
+
+    return policy;
+}
+
 void regenerateNoteSubtreeIds(cwNoteData& note)
 {
     note.id = QUuid::createUuid();
@@ -706,6 +867,9 @@ void regenerateCaveSubtreeIds(cwCaveData& cave)
     for (cwTripData& trip : cave.trips) {
         regenerateTripSubtreeIds(trip);
     }
+    for (cwCaveData& child : cave.nodes) {
+        regenerateCaveSubtreeIds(child);
+    }
 }
 
 void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
@@ -728,9 +892,13 @@ void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
         return false;
     };
 
-    for (cwCaveData& cave : loadData.region.caves) {
+    //Ids are unique across the whole project, so the walk covers every node of
+    //the tree: a hand-copied directory under a parent's sub/ duplicates ids
+    //just as a copied top-level cave does, and an unrepaired duplicate lets one
+    //node's loaded path stand in for the other's.
+    const auto repairNode = [&](cwCaveData& cave, auto&& self) -> void {
         if (detectDuplicate(cave.id, seenCaveIds, [&]{ regenerateCaveSubtreeIds(cave); })) {
-            continue;
+            return;
         }
 
         cave.id = repairedTopLevelId(cave.id, seenCaveIds, loadData.identityRepair);
@@ -759,12 +927,20 @@ void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
                 sketch.id = repairedTopLevelId(sketch.id, seenSketchIds, loadData.identityRepair);
             }
         }
+
+        for (cwCaveData& child : cave.nodes) {
+            self(child, self);
+        }
+    };
+
+    for (cwCaveData& cave : loadData.region.caves) {
+        repairNode(cave, repairNode);
     }
 }
 
 void cwSaveLoad::repairNestedScrapIds(ProjectLoadData& loadData)
 {
-    for (cwCaveData& cave : loadData.region.caves) {
+    const auto repairNode = [](cwCaveData& cave, ProjectLoadData& loadData, auto&& self) -> void {
         for (cwTripData& trip : cave.trips) {
             for (cwNoteData& note : trip.noteModel.notes) {
                 for (cwScrapData& scrap : note.scraps) {
@@ -787,6 +963,14 @@ void cwSaveLoad::repairNestedScrapIds(ProjectLoadData& loadData)
                 }
             }
         }
+
+        for (cwCaveData& child : cave.nodes) {
+            self(child, loadData, self);
+        }
+    };
+
+    for (cwCaveData& cave : loadData.region.caves) {
+        repairNode(cave, loadData, repairNode);
     }
 }
 
@@ -802,18 +986,26 @@ void cwSaveLoad::repairNameCollisions(ProjectLoadData& loadData)
         names.insert(name);
     };
 
-    // Caves within the region
-    {
-        cwSanitizedNameSet caveNames;
-        for (cwCaveData& cave : loadData.region.caves) {
-            dedup(caveNames, cave.name, [](const QString& old, const QString& fixed) {
-                return QStringLiteral("Cave \"%1\" renamed to \"%2\" to avoid a name collision on disk.").arg(old, fixed);
+    //Sibling nodes share a directory, so their names have to differ after
+    //sanitizing at every depth: a node's children collide with each other under
+    //its sub/, not with its trips, which live in a separate trips/.
+    const auto dedupSiblingNodes = [&](QList<cwCaveData>& siblings, const QString& parentName) {
+        cwSanitizedNameSet nodeNames;
+        for (cwCaveData& node : siblings) {
+            dedup(nodeNames, node.name, [&](const QString& old, const QString& fixed) {
+                if (parentName.isEmpty()) {
+                    return QStringLiteral("Cave \"%1\" renamed to \"%2\" to avoid a name collision on disk.").arg(old, fixed);
+                }
+                return QStringLiteral("Survey node \"%1\" in \"%2\" renamed to \"%3\" to avoid a name collision on disk.").arg(old, parentName, fixed);
             });
         }
-    }
+    };
 
-    // Trips and notes within each cave
-    for (cwCaveData& cave : loadData.region.caves) {
+    dedupSiblingNodes(loadData.region.caves, QString());
+
+    const auto repairNode = [&](cwCaveData& cave, auto&& self) -> void {
+        dedupSiblingNodes(cave.nodes, cave.name);
+
         cwSanitizedNameSet tripNames;
         for (cwTripData& trip : cave.trips) {
             dedup(tripNames, trip.name, [&](const QString& old, const QString& fixed) {
@@ -843,11 +1035,37 @@ void cwSaveLoad::repairNameCollisions(ProjectLoadData& loadData)
                 });
             }
         }
+
+        for (cwCaveData& child : cave.nodes) {
+            self(child, self);
+        }
+    };
+
+    for (cwCaveData& cave : loadData.region.caves) {
+        repairNode(cave, repairNode);
     }
 }
 
 // Reopen for remaining file-local helpers (git exclude patterns, etc.)
 namespace {
+
+//! Excludes the trash from git and from bundles, the way ".cw_cache/" is
+//! excluded: a directory a delete filled is never committed, synced or copied.
+const QString kTrashDirPattern = QStringLiteral(".cw_trash/");
+const QString kTrashDirEntry = QStringLiteral(".cw_trash");
+const QString kCacheDirPattern = QStringLiteral(".cw_cache/");
+const QString kCacheDirEntry = QStringLiteral(".cw_cache");
+//! Excludes the machine-local store from git; unlike the cache and the trash,
+//! bundles carry it.
+const QString kLocalDirPattern = QStringLiteral(".cw_local/");
+const QString kLocalDirEntry = QStringLiteral(".cw_local");
+const QString kDsStoreEntry = QStringLiteral(".DS_Store");
+
+QDir externalSourceRecordsDir(const QDir& projectRoot)
+{
+    return QDir(projectRoot.filePath(kLocalDirEntry + QLatin1Char('/')
+                                     + cwExternalSourceRecord::recordsDirName()));
+}
 
 QStringList readGitExcludePatterns(const QDir& repoDir)
 {
@@ -900,8 +1118,10 @@ void cwSaveLoad::ensureGitExcludeHasLocalEntries(const QDir& repoDir)
 
     const QStringList lines = QString::fromUtf8(existingContents).split('\n');
     const QList<QPair<QString, QStringList>> entries = {
-        {QStringLiteral(".cw_cache/"), {QStringLiteral(".cw_cache/"), QStringLiteral(".cw_cache")}},
-        {QStringLiteral(".DS_Store"), {QStringLiteral(".DS_Store")}}
+        {kCacheDirPattern, {kCacheDirPattern, kCacheDirEntry}},
+        {kTrashDirPattern, {kTrashDirPattern, kTrashDirEntry}},
+        {kLocalDirPattern, {kLocalDirPattern, kLocalDirEntry}},
+        {kDsStoreEntry, {kDsStoreEntry}}
     };
 
     QStringList missingEntries;
@@ -1132,6 +1352,13 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
 
     waitForFinished();
 
+    // A Move renames the whole root, hidden directories included, and a Copy
+    // is a copy: neither may carry what a delete took away into the folder the
+    // user is about to hand to someone. The undos still on the stack keep
+    // their descriptors and lose their payload, which is what a delete cost
+    // before the trash existed.
+    d->discardTrash(this);
+
     // Captured non-fatal warning from the transfer step (e.g. copy succeeded
     // but temp source cleanup failed on a cloud volume). Surfaced as the
     // function's return value if the rest of transferProjectTo succeeds.
@@ -1191,7 +1418,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     // For Copy mode on already-saved projects, preserve the existing dataRoot rather than
     // deriving a new one from the destination basename. This keeps the copy internally
     // consistent without mutating the loaded project's identity.
-    const bool isAlreadySavedCopy = (mode == ProjectTransferMode::Copy && !d->isTemporary);
+    const bool isAlreadySavedCopy = (mode == ProjectTransferMode::Copy && d->hasDurableHome);
     const QString newDataRootName = isAlreadySavedCopy ? d->projectMetadata.dataRoot
                                                        : destination.sanitizedBaseName;
 
@@ -1205,14 +1432,34 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
         }
     }
 
+    auto* lazLayers = region != nullptr ? region->lazLayers() : nullptr;
+
+    // Retarget before setFileName's setGisLayersDir runs, so the layer objects
+    // and their loaded point data survive the root change. Left to that setter,
+    // the rescan would re-create every row: a full point re-stream that also
+    // spuriously dirties the just-saved project via localMutationOccurred.
+    if (!sameRoot && lazLayers != nullptr) {
+        lazLayers->retargetGisLayersDir(
+                    QDir(targetRootDir.absoluteFilePath(cwLazLayerModel::folderName())));
+    }
+
     setFileName(desiredFilePath);
     initializeRepositoryForCurrentFile();
-    setTemporary(false);
+    markDurableHome();
     // Do NOT call region->setName() here: the sanitizedBaseName is a filesystem-safe
     // name and is not appropriate as the user-visible display name. The caller
     // (cwProject::saveAs) is responsible for setting the region name to the raw
     // user-chosen basename once the transfer completes.
     d->resetObjectStates(this);
+
+    // resetObjectStates covers caves/trips/notes only, so re-register each
+    // layer's .cwlaz path here. The rowsInserted hookup that used to do it
+    // fires only for re-created rows, and the retarget above keeps the rows.
+    if (lazLayers != nullptr) {
+        for (cwLazLayer* layer : lazLayers->layers()) {
+            d->seedStatePathFromLoaded(this, layer, absolutePathPrivate(layer));
+        }
+    }
     saveProject(targetRootDir, region);
 
     setSaveEnabled(true);
@@ -1339,11 +1586,12 @@ void cwSaveLoad::newProject()
         d->projectMetadata.syncEnabled = true;
         tempDir.mkpath(d->projectMetadata.dataRoot);
 
-        setTemporary(true);
+        markTemporaryHome();
         setFileName(regionFileName(tempDir, region));
         initializeRepositoryForCurrentFile();
 
         saveProject(tempDir, region);
+        seedStampedVersion();
 
         //Connect all for watching for saves
         connectTreeModel();
@@ -1431,7 +1679,21 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
 
             cwProfilePhase parsePhase = loadPhase(QStringLiteral("parse"));
 
-            auto projectDataFuture = cwSaveLoad::loadAll(filename);
+            // Only an open reads the records: a sync apply keeps the
+            // in-memory map, since .cw_local never travels through git.
+            auto projectDataFuture = cwConcurrent::run([filename]() {
+                Result<ProjectLoadData> result = loadAllSkipping(filename, {});
+                if (result.hasError()) {
+                    return result;
+                }
+                ProjectLoadData loadData = result.value();
+                loadData.externalSources = cwExternalSourceRecord::readRecords(
+                    externalSourceRecordsDir(projectRootDirForFile(filename)));
+                if (result.errorCode() == ResultBase::Warning) {
+                    return Result<ProjectLoadData>(loadData, result.errorMessage());
+                }
+                return Result<ProjectLoadData>(loadData);
+            });
 
             d->futureToken.addJob(projectDataFuture, QStringLiteral("Loading"));
 
@@ -1446,7 +1708,6 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                         return canceledResult();
                     }
 
-                    // setTemporaryProject(false);
                     //The filename needs to be set first because, image providers should
                     //have the filename before the region model is set
                     setFileName(filename);
@@ -1454,7 +1715,11 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                         const cwProfilePhase phase = loadPhase(QStringLiteral("initializeRepository"));
                         initializeRepositoryForCurrentFile();
                     }
-                    setTemporary(false);
+                    //A crash between a delete and a close leaves trash entries
+                    //no undo stack can reach any more, so opening a project
+                    //empties the trash.
+                    d->sweepTrash(this);
+                    markDurableHome();
 
                     setSaveEnabled(false);
 
@@ -1465,11 +1730,19 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     d->lastLoadMaxFileVersion = loadData.maxFileVersion;
                     d->saveBlockedWarningEmitted = false;
                     emit dataRootChanged();
+                    //Before the region, so the first scan of its attachments
+                    //already sees where they came from.
+                    emit externalSourceRecordsLoaded(loadData.externalSources);
 
                     {
                         const cwProfilePhase phase = loadPhase(QStringLiteral("setData"));
                         d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
                     }
+
+                    //What is on disk is what the project was just loaded from,
+                    //so the rewrite pass starts from the file version the load
+                    //saw rather than from a previously opened project's.
+                    seedStampedVersion();
 
                     // Clear the undo stack so old objects from
                     // clearCaves()/addCaves() commands are freed.
@@ -1503,18 +1776,69 @@ QFuture<ResultBase> cwSaveLoad::saveFlushImpl()
 {
     return AsyncFuture::observe(completeSaveJobs())
             .context(this, [this]() {
-        const QString pendingErrors = d->takePendingSaveJobErrors();
-        emit saveFlushCompleted();
-        if (!pendingErrors.isEmpty()) {
-            return ResultBase(QStringLiteral("Save flush failed:\n%1").arg(pendingErrors));
-        }
-        return ResultBase();
+        return finishSaveFlush();
     })
             .future();
 }
 
+QFuture<Result<cwSaveLoad::SaveReceipt>> cwSaveLoad::saveFlushWithReceipt()
+{
+    return AsyncFuture::observe(completeSaveJobs())
+            .context(this, [this]() -> Result<SaveReceipt> {
+        // A mutation that queued no job (a watcher-reported edit) ends no
+        // drain, so an idle queue stamps here: every counted mutation's job,
+        // if it had one, is on disk.
+        if (d->m_pendingJobs.isEmpty() && d->m_pendingJobsDeferred.future().isFinished()) {
+            d->drainedEpoch = d->localMutationEpoch;
+        }
+        // Read before saveFlushCompleted, whose slots may mutate. A job
+        // enqueued since the drain ended leaves drainedEpoch alone until
+        // its own drain ends, so the stamp is this flush's.
+        const SaveReceipt receipt{d->drainedEpoch};
+        const ResultBase flushResult = finishSaveFlush();
+        if (flushResult.hasError()) {
+            return Result<SaveReceipt>(flushResult.errorMessage(), flushResult.errorCode());
+        }
+        return Result<SaveReceipt>(receipt);
+    })
+            .future();
+}
+
+QFuture<ResultBase> cwSaveLoad::enqueueSyncFlush(const std::shared_ptr<ReconcileAttemptState>& attemptState)
+{
+    return d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this, attemptState]() {
+        return saveFlushWithReceipt().then([attemptState](const Result<SaveReceipt>& flushResult) -> ResultBase {
+            if (!flushResult.hasError()) {
+                attemptState->flushEpoch = flushResult.value().mutationEpoch;
+            }
+            return flushResult;
+        });
+    });
+}
+
+void cwSaveLoad::publishSyncFlushStamp(const ReconcileAttemptState& attemptState)
+{
+    // The flushed tree is committed, so the stamp answers whether the working
+    // tree holds every mutation even when a later step of the sync fails.
+    // The full report replaces this one once it is built.
+    SyncReport report;
+    report.mutationEpoch = attemptState.flushEpoch;
+    d->lastSyncReport = report;
+}
+
+ResultBase cwSaveLoad::finishSaveFlush()
+{
+    const QString pendingErrors = d->takePendingSaveJobErrors();
+    emit saveFlushCompleted();
+    if (!pendingErrors.isEmpty()) {
+        return ResultBase(QStringLiteral("Save flush failed:\n%1").arg(pendingErrors));
+    }
+    return ResultBase();
+}
+
 QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave(bool persistNoteDescriptors,
-                                                          bool persistLiDARNoteDescriptors)
+                                                          bool persistLiDARNoteDescriptors,
+                                                          bool persistProjectFile)
 {
     auto* region = d->m_regionTreeModel->cavingRegion();
     if (region == nullptr) {
@@ -1530,14 +1854,24 @@ QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave(bool persistNoteDescri
     // Avoid rewriting project metadata for every reconcile apply. This can create
     // unnecessary sync churn (for example, cavewhereVersion-only diffs) when the
     // reconcile only touches cave/trip/note payload paths.
-    if (d->pendingIdentityRepairSave) {
+    if (d->pendingIdentityRepairSave || persistProjectFile) {
         saveProject(projectRootDir(), region);
     }
     const bool persistAllDescriptors = d->pendingIdentityRepairSave;
     const bool persistNotes = persistAllDescriptors || persistNoteDescriptors;
     const bool persistLiDARNotes = persistAllDescriptors || persistLiDARNoteDescriptors;
 
-    for (cwCave* cave : region->caves()) {
+    //Every node of the tree, not only the root's own children: a nested node
+    //whose on-disk name has drifted needs its rename enqueued before
+    //cleanupStaleLoadedPaths runs at the end of this same function, or that
+    //cleanup removes its directory with nothing having moved the content out.
+    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
+    for (cwSurveyNode* node : nodes) {
+        auto* cave = qobject_cast<cwCave*>(node);
+        if (cave == nullptr) {
+            continue;
+        }
+
         d->enqueueRenameIfNeeded(this, cave);
         if (persistAllDescriptors) {
             save(cave);
@@ -1706,7 +2040,8 @@ QFuture<ResultBase> cwSaveLoad::enqueueFinalizePhase(const QFuture<ResultBase>& 
 
         auto repairFuture = persistIdentityRepairSave(
                     attemptState->reconcileOutcome->persistNoteDescriptors,
-                    attemptState->reconcileOutcome->persistLiDARNoteDescriptors);
+                    attemptState->reconcileOutcome->persistLiDARNoteDescriptors,
+                    attemptState->reconcileOutcome->persistProjectFile);
         return AsyncFuture::observe(repairFuture)
                 .context(this, [this, repairFuture, pushWithoutRetry, staleFromRemoteApplyGuard, syncGeneration, mode]() -> QFuture<ResultBase> {
             if (d->operationGeneration != syncGeneration || d->retiring) {
@@ -1844,11 +2179,84 @@ void cwSaveLoad::saveProject(const QDir &dir, const cwCavingRegion *region)
     saveProtoMessage(toProtoProject(region), region);
 }
 
+void cwSaveLoad::seedStampedVersion()
+{
+    auto region = d->m_regionTreeModel->cavingRegion();
+    d->stampedVersion = region == nullptr ? -1 : stampVersion(region);
+}
+
+void cwSaveLoad::restampProjectIfVersionChanged()
+{
+    auto region = d->m_regionTreeModel->cavingRegion();
+    if (region == nullptr) {
+        return;
+    }
+
+    if (!d->m_movingNodes.isEmpty()) {
+        //Halfway through a move the node is off the tree, so stampVersion would
+        //answer for a shape the project never has — and the rewrite it triggers
+        //cannot reach the subtree traveling with the node. The nodeMoved
+        //handler asks again once the node is back on the tree.
+        return;
+    }
+
+    const int version = stampVersion(region);
+    if (version == d->stampedVersion) {
+        return;
+    }
+
+    if (!d->saveEnabled || d->projectFileName.isEmpty()) {
+        //The version moved but nothing can be written yet, so it stays
+        //unrecorded and the next call that can write does the rewrite.
+        return;
+    }
+
+    d->stampedVersion = version;
+
+    //Every file of a project carries the same FileVersion, so the whole project
+    //is rewritten the moment the format it needs changes — the first hierarchy
+    //appearing, or the last of it going away. That keeps the stamp an honest
+    //answer to "can the previous build open this?" instead of a record of what
+    //each file happened to be written beside.
+    saveProject(projectRootDir(), region);
+
+    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
+    for (cwSurveyNode* node : nodes) {
+        if (auto cave = qobject_cast<cwCave*>(node)) {
+            save(cave);
+        }
+    }
+
+    const QList<cwTrip*> trips = region->rootNode()->allTrips();
+    for (cwTrip* trip : trips) {
+        save(trip);
+
+        const QList<cwNote*> notes = trip->notes()->notes();
+        for (cwNote* note : notes) {
+            save(note);
+        }
+
+        const QList<QObject*> lidarNotes = trip->notesLiDAR()->notes();
+        for (QObject* note : lidarNotes) {
+            if (auto lidar = qobject_cast<cwNoteLiDAR*>(note)) {
+                save(lidar);
+            }
+        }
+
+        const QList<QObject*> sketches = trip->notesSketch()->notes();
+        for (QObject* sketch : sketches) {
+            if (auto sketchObject = qobject_cast<cwSketch*>(sketch)) {
+                save(sketchObject);
+            }
+        }
+    }
+}
+
 std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavingRegion *region)
 {
     auto protoProject = std::make_unique<CavewhereProto::Project>();
     auto fileVersion = protoProject->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersion(region));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     if (region != nullptr) {
@@ -1883,6 +2291,7 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
         // its own.
         const auto* geoReference = region->geoReference();
         if (!geoReference->localCoordinateSystem().isEmpty()
+            || geoReference->state() == cwGeoReference::LocalGrid
             || !geoReference->verticalDatum().isEmpty()) {
             auto protoGeoReference = protoMetadata->mutable_georeference();
             protoGeoReference->set_state(
@@ -1902,6 +2311,14 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
                 cwProtoUtils::saveString(protoGeoReference->mutable_verticaldatum(),
                                          geoReference->verticalDatum());
             }
+        }
+
+        for (const cwEquate& equate : region->equates()->equates()) {
+            cwProtoUtils::saveEquate(protoProject->add_equates(), equate);
+        }
+
+        for (const cwExternalSource& source : region->externalSources()->sources()) {
+            cwProtoUtils::saveExternalSource(protoProject->add_external_sources(), source);
         }
     }
 
@@ -1923,7 +2340,7 @@ void cwSaveLoad::saveCavingRegion(const cwCavingRegion *region)
 std::unique_ptr<CavewhereProto::CavingRegion> cwSaveLoad::toProtoCavingRegion(const cwCavingRegion *region)
 {
     auto protoRegion = std::make_unique<CavewhereProto::CavingRegion>();
-    protoRegion->set_version(cwRegionIOTask::protoVersion());
+    protoRegion->set_version(stampVersion(region));
     cwProtoUtils::saveString(protoRegion->mutable_cavewhereversion(), CavewhereVersion);
     cwProtoUtils::saveString(protoRegion->mutable_name(), region->name());
     return protoRegion;
@@ -1953,7 +2370,7 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
 {
     auto protoCave = std::make_unique<CavewhereProto::Cave>();
     auto fileVersion = protoCave->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersionFor(cave));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
     *(protoCave->mutable_name()) = cave->name().toStdString();
     if (!cave->id().isNull()) {
@@ -1967,9 +2384,24 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     }
 
     if (!cave->externalCenterline().isEmpty()) {
-        auto* protoExternal = protoCave->mutable_external_centerline();
-        *(protoExternal->mutable_entry_file()) =
-                cave->externalCenterline().entryFile().toStdString();
+        cwProtoUtils::saveExternalCenterline(protoCave->mutable_external_centerline(),
+                                             cave->externalCenterline());
+    }
+
+    //Survey-tree scalars. Each is written only when it differs from the default
+    //a file without it means, so a flat project's .cwcave is byte-identical to
+    //what the previous format wrote.
+    if (cave->kind() != cwSurveyNode::Kind::Cave) {
+        protoCave->set_kind(static_cast<CavewhereProto::SurveyNodeKind>(cave->kind()));
+    }
+    if (cave->isReadOnly()) {
+        protoCave->set_read_only(true);
+    }
+    if (!cave->sourceId().isNull()) {
+        *(protoCave->mutable_source_id()) = uuidToProtoString(cave->sourceId()).toStdString();
+    }
+    if (!cave->sourcePath().isEmpty()) {
+        *(protoCave->mutable_source_path()) = cave->sourcePath().toStdString();
     }
 
     return protoCave;
@@ -1980,7 +2412,7 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     //Copy trip data into proto, on the main thread
     auto protoTrip = std::make_unique<CavewhereProto::Trip>();
     auto fileVersion = protoTrip->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersionFor(trip));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     *(protoTrip->mutable_name()) = trip->name().toStdString();
@@ -2002,9 +2434,12 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     }
 
     if (!trip->externalCenterline().isEmpty()) {
-        auto* protoExternal = protoTrip->mutable_external_centerline();
-        *(protoExternal->mutable_entry_file()) =
-                trip->externalCenterline().entryFile().toStdString();
+        cwProtoUtils::saveExternalCenterline(protoTrip->mutable_external_centerline(),
+                                             trip->externalCenterline());
+    }
+
+    if (!trip->sourcePath().isEmpty()) {
+        *(protoTrip->mutable_source_path()) = trip->sourcePath().toStdString();
     }
 
     return protoTrip;
@@ -2303,18 +2738,24 @@ ResultBase cwSaveLoad::copyProjectTo(const QString& destinationFileUrl)
     return transferProjectTo(destinationFileUrl, ProjectTransferMode::Copy);
 }
 
-QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchivePath)
+QFuture<Result<cwSaveLoad::SaveReceipt>> cwSaveLoad::saveBundledArchive(const QString& targetArchivePath)
 {
     const QString normalizedTargetPath = cwGlobals::convertFromURL(targetArchivePath);
     if (normalizedTargetPath.isEmpty()) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Bundle target path is empty.")));
+        return AsyncFuture::completed(Result<SaveReceipt>(QStringLiteral("Bundle target path is empty.")));
     }
 
-    auto saveFlushFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this]() {
-        return saveFlushImpl();
+    // The flush's receipt outlives its operation so the bundle's result can
+    // report the drain it zipped.
+    auto flushReceiptFuture = std::make_shared<QFuture<Result<SaveReceipt>>>();
+    auto saveFlushFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this, flushReceiptFuture]() {
+        *flushReceiptFuture = saveFlushWithReceipt();
+        return flushReceiptFuture->then([](const Result<SaveReceipt>& flushResult) -> ResultBase {
+            return flushResult;
+        });
     });
 
-    return d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::BundlePackage, [this, saveFlushFuture, normalizedTargetPath]() {
+    auto bundleFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::BundlePackage, [this, saveFlushFuture, normalizedTargetPath]() {
         const auto flushResult = saveFlushFuture.result();
         if (flushResult.hasError()) {
             return AsyncFuture::completed(flushResult);
@@ -2327,7 +2768,16 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
 
         const QString workingProjectFile = fileName();
         const QString projectRootPath = QFileInfo(workingProjectFile).absolutePath();
-        const QStringList excludePatterns = readGitExcludePatterns(QDir(projectRootPath));
+        QStringList excludePatterns = readGitExcludePatterns(QDir(projectRootPath));
+        //Git leaves the machine-local store out, and the bundle carries it so a
+        //bundled project keeps its records across close and reopen.
+        excludePatterns.removeAll(kLocalDirPattern);
+        excludePatterns.removeAll(kLocalDirEntry);
+        if (!excludePatterns.contains(kTrashDirPattern)) {
+            //A bundle is a copy, and a copy carries none of what a delete took
+            //away — including for a project that has no git exclude file yet.
+            excludePatterns.append(kTrashDirPattern);
+        }
         auto packageFuture = QtConcurrent::run(&d->m_saveThreadPool, [projectRootPath, normalizedTargetPath, excludePatterns]() {
             return saveBundledArchiveAtomic(projectRootPath, normalizedTargetPath, excludePatterns);
         });
@@ -2336,22 +2786,53 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
             d->futureToken.addJob(packageFuture, QStringLiteral("Bundling project"));
         }
 
-        return packageFuture;
+        // A written archive is a durable home, so mark it just like
+        // load() and transferProjectTo() do. Leaving it
+        // stale after Save As to a bundle (issue #597) suppressed the
+        // region-rename handler, which silently dropped a post-Save-As
+        // rename from the next re-zip.
+        return AsyncFuture::observe(packageFuture)
+                .context(this, [this, packageFuture]() -> ResultBase {
+            const auto packageResult = packageFuture.result();
+            if (!packageResult.hasError()) {
+                markDurableHome();
+            }
+            return packageResult;
+        }).future();
     });
+
+    return AsyncFuture::observe(bundleFuture)
+            .context(this, [bundleFuture, flushReceiptFuture]() -> Result<SaveReceipt> {
+        const auto bundleResult = bundleFuture.result();
+        if (bundleResult.hasError()) {
+            return Result<SaveReceipt>(bundleResult.errorMessage(), bundleResult.errorCode());
+        }
+        return flushReceiptFuture->result();
+    })
+            .future();
 }
 
-QFuture<ResultBase> cwSaveLoad::enqueueFlushAndCommit()
+QFuture<Result<cwSaveLoad::SaveReceipt>> cwSaveLoad::enqueueFlushAndCommit()
 {
-    auto flushFuture = saveFlushImpl();
+    auto flushFuture = saveFlushWithReceipt();
     return AsyncFuture::observe(flushFuture)
-            .context(this, [this, flushFuture]() -> ResultBase {
+            .context(this, [this, flushFuture]() -> Result<SaveReceipt> {
         const auto flushResult = flushFuture.result();
         if (flushResult.hasError()) {
             return flushResult;
         }
-        return commitProjectChanges();
+        const auto commitResult = commitProjectChanges();
+        if (commitResult.hasError()) {
+            return Result<SaveReceipt>(commitResult.errorMessage(), commitResult.errorCode());
+        }
+        return flushResult;
     })
             .future();
+}
+
+quint64 cwSaveLoad::localMutationEpoch() const
+{
+    return d->localMutationEpoch;
 }
 
 void cwSaveLoad::setOwnedTempDir(const QString& path)
@@ -2436,7 +2917,7 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
     //Copy trip data into proto, on the main thread
     auto protoNote = std::make_unique<CavewhereProto::Note>();
     auto fileVersion = protoNote->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersionFor(note));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     cwProtoUtils::saveImage(protoNote->mutable_image(), note->image());
@@ -2467,7 +2948,7 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
     //Copy trip data into proto, on the main thread
     auto protoNote = std::make_unique<CavewhereProto::NoteLiDAR>();
     auto fileVersion = protoNote->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersionFor(note));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     *(protoNote->mutable_name()) = note->name().toStdString();
@@ -2502,7 +2983,7 @@ std::unique_ptr<CavewhereProto::Sketch> cwSaveLoad::toProtoSketch(const cwSketch
 {
     auto protoSketch = std::make_unique<CavewhereProto::Sketch>();
     auto fileVersion = protoSketch->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersionFor(sketch));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     cwProtoUtils::saveSketch(protoSketch.get(), sketch->data());
@@ -2525,7 +3006,9 @@ std::unique_ptr<CavewhereProto::LazLayer> cwSaveLoad::toProtoLazLayer(const cwLa
 {
     auto proto = std::make_unique<CavewhereProto::LazLayer>();
     auto fileVersion = proto->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    //A GIS layer belongs to the project rather than to a node, so it holds no
+    //hierarchy and takes the flat stamp whatever the survey tree looks like.
+    fileVersion->set_version(kFlatProjectVersion);
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
     if (!layer->id().isNull()) {
         *(proto->mutable_id()) = uuidToProtoString(layer->id()).toStdString();
@@ -2571,10 +3054,9 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
             // AsyncFuture::Deferred<ResultBase> noteDeferred;
 
-            cwSaveLoadPrivate::Job saveImageJob;
-            saveImageJob.objectId = note;
-            saveImageJob.kind = cwSaveLoadPrivate::Job::Kind::File;
-            saveImageJob.action = cwSaveLoadPrivate::Job::Action::Custom;
+            cwSaveLoadPrivate::Job saveImageJob(note,
+                                                cwSaveLoadPrivate::Job::Kind::File,
+                                                cwSaveLoadPrivate::Job::Action::Custom);
             saveImageJob.payload = cwSaveLoadPrivate::Job::CustomPayload{[protoVersion, projectFileName, dataRootDir, noteData, imageIndex, noteDir, updatedNoteData]() {
                 cwImageProvider provider;
                 provider.setProjectPath(projectFileName);
@@ -2710,19 +3192,126 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
     saveProject(dir, &region);
 
 
-    //Go through all the caves
+    //Go through the whole node tree, pre-order: a node's own files, then its
+    //trips, then the sub/ directory below it.
+    const auto saveNode = [this, makeDir, saveTrips](const QDir& nodeDir, const cwCave* node, auto&& self) -> void {
+        makeDir(nodeDir);
+        save(node);
+        saveTrips(nodeDir, node);
+        for(const cwSurveyNode* child : node->childNodes()) {
+            auto childCave = qobject_cast<const cwCave*>(child);
+            if(childCave != nullptr) {
+                self(nodeDirHelper(nodeDir, childCave), childCave, self);
+            }
+        }
+    };
+
     for(const auto cave : project->cavingRegion()->caves()) {
-        const QDir caveDir = makeDir(caveDirHelper(dataRootDir, cave));
-        save(cave);
-        saveTrips(caveDir, cave);
+        saveNode(caveDirHelper(dataRootDir, cave), cave, saveNode);
     }
 
-    return AsyncFuture::observe(d->m_pendingJobsDeferred.future())
+    return AsyncFuture::observe(pendingJobsFinished())
             .context(this, [this, newProjectFilename]() {
         return ResultString(newProjectFilename);
     })
             .future();
 }
+
+namespace {
+
+//! The single descriptor ending in \a suffix directly inside \a dir, or an empty string.
+QString ownDescriptor(const QDir& dir, const QString& suffix)
+{
+    const QStringList descriptors = dir.entryList({QStringLiteral("*.") + suffix}, QDir::Files);
+    if (descriptors.size() == 1) {
+        return QDir::cleanPath(dir.absoluteFilePath(descriptors.first()));
+    }
+    return QString();
+}
+
+//! The descriptor at \a path with its name cleared, so the two sides of a rename
+//! compare equal when the name is all that differs.
+template<typename ProtoType>
+std::optional<ProtoType> unnamedDescriptor(const QString& path)
+{
+    const auto loaded = loadMessage<ProtoType>(path);
+    if (loaded.hasError()) {
+        return std::nullopt;
+    }
+    ProtoType proto = loaded.value();
+    proto.clear_name();
+    proto.clear_legacy_name();
+    return proto;
+}
+
+bool sameFileContent(const QString& path, const QString& otherPath)
+{
+    QFile file(path);
+    QFile otherFile(otherPath);
+    if (file.open(QIODevice::ReadOnly) && otherFile.open(QIODevice::ReadOnly)) {
+        return file.size() == otherFile.size() && file.readAll() == otherFile.readAll();
+    }
+    return false;
+}
+
+//! True when every file under \a orphanDir besides \a orphanDescriptor has an
+//! identical copy at the same relative path under \a winnerDir.
+bool winnerHoldsEveryFile(const QDir& orphanDir, const QString& orphanDescriptor, const QDir& winnerDir)
+{
+    QDirIterator it(orphanDir.absolutePath(),
+                    QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString path = QDir::cleanPath(it.next());
+        if (path != orphanDescriptor
+            && !sameFileContent(path, winnerDir.absoluteFilePath(orphanDir.relativeFilePath(path)))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template<typename ProtoType>
+bool siblingCoversOrphan(const QDir& orphanDir, const QString& suffix)
+{
+    const QString orphanDescriptor = ownDescriptor(orphanDir, suffix);
+    if (orphanDescriptor.isEmpty()) {
+        return false;
+    }
+    const auto orphanProto = unnamedDescriptor<ProtoType>(orphanDescriptor);
+    if (!orphanProto.has_value() || orphanProto->id().empty()) {
+        return false;
+    }
+
+    const QString orphanPath = QDir::cleanPath(orphanDir.absolutePath());
+    const QFileInfoList siblings = QFileInfo(orphanPath).dir().entryInfoList(QDir::Dirs
+                                                                            | QDir::NoDotAndDotDot);
+    return std::any_of(siblings.cbegin(), siblings.cend(), [&](const QFileInfo& sibling) {
+        if (sibling.isSymLink() || QDir::cleanPath(sibling.absoluteFilePath()) == orphanPath) {
+            return false;
+        }
+        const QDir winnerDir(sibling.absoluteFilePath());
+        const QString winnerDescriptor = ownDescriptor(winnerDir, suffix);
+        if (winnerDescriptor.isEmpty()) {
+            return false;
+        }
+        const auto winnerProto = unnamedDescriptor<ProtoType>(winnerDescriptor);
+        return winnerProto.has_value()
+               && google::protobuf::util::MessageDifferencer::Equals(*orphanProto, *winnerProto)
+               && winnerHoldsEveryFile(orphanDir, orphanDescriptor, winnerDir);
+    });
+}
+
+//! True when a sibling of \a orphanDir holds the same node or trip under its other
+//! name, with every file of the orphan's subtree identical, so removing the orphan
+//! leaves out nothing a load of the sibling misses.
+bool siblingCoversOrphan(const QDir& orphanDir)
+{
+    return siblingCoversOrphan<CavewhereProto::Cave>(orphanDir, QStringLiteral("cwcave"))
+           || siblingCoversOrphan<CavewhereProto::Trip>(orphanDir, QStringLiteral("cwtrip"));
+}
+
+} // namespace
 
 template<typename ProtoType>
 static std::optional<cwError> checkEntityVersion(const ProtoType& proto, const QString& filename, int& maxFileVersion)
@@ -2750,185 +3339,324 @@ static std::optional<cwError> checkEntityVersion(const ProtoType& proto, const Q
 QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QString &filename)
 {
     return cwConcurrent::run([filename]() {
-        auto projectResult = loadProject(filename);
+        return loadAllSkipping(filename, {});
+    });
+}
 
-        return projectResult.then([filename](Result<ProjectLoadData> result) {
-            ProjectLoadData loadData = result.value();
+Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadAllSkipping(const QString& filename,
+                                                                     const QStringList& skippedDirectories)
+{
+    auto projectResult = loadProject(filename);
 
-            QDir projectRootDir = projectRootDirForFile(filename);
-            QDir regionDir = QDir(projectRootDir.absoluteFilePath(loadData.metadata.dataRoot));
+    return projectResult.then([filename, &skippedDirectories](Result<ProjectLoadData> result) {
+        ProjectLoadData loadData = result.value();
 
-            auto filePathLess = [](const QFileInfo& a, const QFileInfo& b) {
-                return a.absoluteFilePath() < b.absoluteFilePath();
-            };
+        QDir projectRootDir = projectRootDirForFile(filename);
+        QDir regionDir = QDir(projectRootDir.absoluteFilePath(loadData.metadata.dataRoot));
 
-            // Find all caves (*.cwcave)
-            QFileInfoList caveFiles;
-            QDirIterator it(regionDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-            while (it.hasNext()) {
-                it.next();
-                QDir caveDir(it.filePath());
+        QSet<QString> skippedDirPaths;
+        for (const QString& skippedDirectory : skippedDirectories) {
+            skippedDirPaths.insert(QDir::cleanPath(projectRootDir.absoluteFilePath(skippedDirectory)));
+        }
 
-                QFileInfoList files = caveDir.entryInfoList(QStringList() << "*.cwcave", QDir::Files);
-                if (!files.isEmpty()) {
-                    caveFiles.append(files);
+        auto filePathLess = [](const QFileInfo& a, const QFileInfo& b) {
+            return a.absoluteFilePath() < b.absoluteFilePath();
+        };
+
+        // Every descriptor of one suffix under the data root, pruning the
+        // content directories the layout puts a node's or a trip's payload
+        // in. The prune is positional (childScanRole), so a node or trip the
+        // user happened to name "trips" or "notes" is still walked into.
+        // Symlinked directories stay out of the walk: a link to another
+        // project's data root would hand this project that project's nodes
+        // and trips, and a link that points at an ancestor would loop.
+        // Symlinked descriptor files are still read, so a survey tracked as
+        // a link keeps loading.
+        const auto scanForFiles = [&skippedDirPaths](const QDir& rootDir,
+                                     const QString& suffix,
+                                     bool scanTrips)
+        {
+            QFileInfoList found;
+            const auto walk = [&](const QDir& dir, ScanRole role, auto&& self) -> void {
+                const QFileInfoList entries = dir.entryInfoList(QDir::Dirs
+                                                               | QDir::Files
+                                                               | QDir::NoDotAndDotDot);
+                for (const QFileInfo& entry : entries) {
+                    if (entry.isDir()) {
+                        if (entry.isSymLink()
+                            || skippedDirPaths.contains(QDir::cleanPath(entry.absoluteFilePath()))) {
+                            continue;
+                        }
+                        const auto childRole = childScanRole(role, entry.fileName(), scanTrips);
+                        if (childRole.has_value()) {
+                            self(QDir(entry.absoluteFilePath()), *childRole, self);
+                        }
+                        continue;
+                    }
+                    if (entry.suffix().compare(suffix, Qt::CaseInsensitive) == 0) {
+                        found.append(entry);
+                    }
                 }
+            };
+            walk(rootDir, ScanRole::DataRoot, walk);
+            return found;
+        };
+
+        const auto parentDirPathOf = [](const QString& path) {
+            return QDir::cleanPath(QFileInfo(path).absoluteDir().absolutePath());
+        };
+
+        // A node and its children are separate files, so the tree is grown
+        // out of these entries and folded into cwCaveData::nodes at the end:
+        // a cwCaveData* into a QList would dangle the moment the list grew.
+        struct NodeEntry {
+            cwCaveData data;
+            QList<NodeEntry*> children;
+        };
+
+        std::vector<std::unique_ptr<NodeEntry>> nodeEntries;
+        QHash<QString, NodeEntry*> nodeByDir;
+        QList<NodeEntry*> rootEntries;
+
+        const QString regionDirPath = QDir::cleanPath(regionDir.absolutePath());
+
+        QFileInfoList caveFiles = scanForFiles(regionDir, QStringLiteral("cwcave"), false);
+
+        // Sorted by directory path with a trailing separator, so a parent —
+        // whose directory, with that separator, is a prefix of every child's
+        // — is always placed before its children, whatever the descriptors
+        // themselves are named.
+        // Two descriptors in one directory fall back to the file path, so
+        // which of them is kept and which is reported stays the same on
+        // every open.
+        const auto caveDirPathLess = [](const QFileInfo& a, const QFileInfo& b) {
+            const auto dirKey = [](const QFileInfo& info) {
+                return QDir::cleanPath(info.absoluteDir().absolutePath()) + QLatin1Char('/');
+            };
+            const QString keyA = dirKey(a);
+            const QString keyB = dirKey(b);
+            if (keyA != keyB) {
+                return keyA < keyB;
+            }
+            return a.absoluteFilePath() < b.absoluteFilePath();
+        };
+        std::sort(caveFiles.begin(), caveFiles.end(), caveDirPathLess);
+
+        for (const QFileInfo &caveFileInfo : caveFiles) {
+            const QString cavePath = caveFileInfo.absoluteFilePath();
+            const QString caveDirPath = QDir::cleanPath(caveFileInfo.absoluteDir().absolutePath());
+
+            if (nodeByDir.contains(caveDirPath)) {
+                loadData.errors.append(cwError(
+                                           QStringLiteral("Ignoring \"%1\": its directory already holds another survey node.")
+                                           .arg(cavePath),
+                                           cwError::Fatal));
+                continue;
             }
 
-            std::sort(caveFiles.begin(), caveFiles.end(), filePathLess);
-
-            for (const QFileInfo &caveFileInfo : caveFiles) {
-                const QString cavePath = caveFileInfo.absoluteFilePath();
-                auto caveProtoResult = loadMessage<CavewhereProto::Cave>(cavePath);
-                if (caveProtoResult.hasError()) {
+            // The loader never guesses a parent: a descriptor sits either in
+            // the data root or in a node's sub/ directory, and anything
+            // else is reported and skipped.
+            NodeEntry* parentEntry = nullptr;
+            const QString parentPath = parentDirPathOf(caveDirPath);
+            if (parentPath != regionDirPath) {
+                const bool inSubNodeDir = QFileInfo(parentPath).fileName().compare(kSubNodeDirName, Qt::CaseInsensitive) == 0;
+                const auto parentIt = inSubNodeDir ? nodeByDir.constFind(parentDirPathOf(parentPath))
+                                                   : nodeByDir.constEnd();
+                if (parentIt == nodeByDir.constEnd()) {
                     loadData.errors.append(cwError(
-                                               QStringLiteral("Could not load cave \"%1\": %2")
-                                               .arg(caveFileInfo.fileName(), caveProtoResult.errorMessage()),
+                                               QStringLiteral("Ignoring \"%1\": it is not in the project's data root or in a survey node's \"%2\" directory.")
+                                               .arg(cavePath, kSubNodeDirName),
                                                cwError::Fatal));
                     continue;
                 }
-
-                const auto& caveProto = caveProtoResult.value();
-                auto caveVersionWarning = checkEntityVersion(caveProto, cavePath, loadData.maxFileVersion);
-                if (caveVersionWarning) {
-                    loadData.errors.append(*caveVersionWarning);
-                }
-
-                cwCaveData cave;
-                if(caveProto.has_name()) {
-                    cave.name = QString::fromStdString(caveProto.name());
-                }
-                if (caveProto.has_id()) {
-                    cave.id = cwProtoUtils::toUuid(caveProto.id());
-                }
-                cave.lengthUnit = caveProto.has_lengthunit()
-                        ? static_cast<cwUnits::LengthUnit>(caveProto.lengthunit())
-                        : cwUnits::Meters;
-                cave.depthUnit = caveProto.has_depthunit()
-                        ? static_cast<cwUnits::LengthUnit>(caveProto.depthunit())
-                        : cwUnits::Meters;
-
-                cave.fixStations.reserve(caveProto.fixstations_size());
-                for (const auto& protoFix : caveProto.fixstations()) {
-                    cave.fixStations.append(cwProtoUtils::fromProtoFixStation(protoFix));
-                }
-
-                // Load all trips for this cave
-                QDir caveDir = caveFileInfo.absoluteDir();
-                QDir tripsDir(caveDir.filePath("trips"));
-                if (tripsDir.exists()) {
-                    QFileInfoList tripFiles;
-                    QDirIterator tripIt(tripsDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-                    while (tripIt.hasNext()) {
-                        tripIt.next();
-                        QDir tripDir(tripIt.filePath());
-
-                        QFileInfoList dirTripFiles = tripDir.entryInfoList(QStringList() << "*.cwtrip",
-                                                                           QDir::Files,
-                                                                           QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
-                        tripFiles.append(dirTripFiles);
-                    }
-
-                    std::sort(tripFiles.begin(), tripFiles.end(), filePathLess);
-
-                    for (const QFileInfo &tripFileInfo : tripFiles) {
-                        const QString tripPath = tripFileInfo.absoluteFilePath();
-                        auto tripProtoResult = loadMessage<CavewhereProto::Trip>(tripPath);
-
-                        if (tripProtoResult.hasError()) {
-                            loadData.errors.append(cwError(
-                                                       QStringLiteral("Could not load trip \"%1\": %2")
-                                                       .arg(tripFileInfo.fileName(), tripProtoResult.errorMessage()),
-                                                       cwError::Fatal));
-                            continue;
-                        }
-
-                        const auto& tripProto = tripProtoResult.value();
-                        auto tripVersionWarning = checkEntityVersion(tripProto, tripPath, loadData.maxFileVersion);
-                        if (tripVersionWarning) {
-                            loadData.errors.append(*tripVersionWarning);
-                        }
-
-                        cwTripData trip = cwSaveLoad::tripDataFromProtoTrip(tripProto);
-
-                        QDir tripDir = tripFileInfo.absoluteDir();
-
-                        auto loadObjectsFromNotesDir = [tripDir, &filePathLess, &loadData](const QString& fileSuffix,
-                                auto&& loadProtoFunc,
-                                auto&& convertFunc,
-                                auto& destinationList)
-                        {
-                            QDir notesDir = tripDir.filePath("notes");
-                            if (!notesDir.exists()) {
-                                return;
-                            }
-
-                            QFileInfoList files = notesDir.entryInfoList(QStringList() << ("*" + fileSuffix),
-                                                                         QDir::Files,
-                                                                         QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
-                            std::sort(files.begin(), files.end(), filePathLess);
-                            for (const QFileInfo& fileInfo : files) {
-                                const QString notePath = fileInfo.absoluteFilePath();
-                                auto protoResult = loadProtoFunc(notePath);
-                                if (protoResult.hasError()) {
-                                    loadData.errors.append(cwError(
-                                                               QStringLiteral("Could not load \"%1\": %2")
-                                                               .arg(fileInfo.fileName(), protoResult.errorMessage()),
-                                                               cwError::Fatal));
-                                    continue;
-                                }
-
-                                auto versionWarning = checkEntityVersion(protoResult.value(), notePath, loadData.maxFileVersion);
-                                if (versionWarning) {
-                                    loadData.errors.append(*versionWarning);
-                                }
-
-                                destinationList.append(convertFunc(protoResult.value(), notePath));
-                            }
-                        };
-
-                        //Load 2D notes
-                        loadObjectsFromNotesDir(QStringLiteral("cwnote"),
-                                                [](const QString& path) {
-                            return loadMessage<CavewhereProto::Note>(path);
-                        },
-                        [](const CavewhereProto::Note& proto, const QString& path) {
-                            return cwSaveLoad::noteDataFromProtoNote(proto, path);
-                        },
-                        trip.noteModel.notes);
-
-                        //Load 3D lidar notes
-                        loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
-                                                [](const QString& path) {
-                            return loadMessage<CavewhereProto::NoteLiDAR>(path);
-                        },
-                        [](const CavewhereProto::NoteLiDAR& proto, const QString& path) {
-                            return cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(proto, path);
-                        },
-                        trip.noteLiDARModel.notes);
-
-                        //Load sketches
-                        loadObjectsFromNotesDir(QStringLiteral("cwsketch"),
-                                                [](const QString& path) {
-                            return loadMessage<CavewhereProto::Sketch>(path);
-                        },
-                        [](const CavewhereProto::Sketch& proto, const QString& path) {
-                            return cwSaveLoad::sketchDataFromProtoSketch(proto, path);
-                        },
-                        trip.sketchModel.notes);
-
-                        cave.trips.append(trip);
-                    }
-                }
-
-                loadData.region.caves.append(cave);
+                parentEntry = parentIt.value();
             }
 
-            repairTopLevelIds(loadData);
-            repairNestedScrapIds(loadData);
-            repairNameCollisions(loadData);
-            return Result(loadData);
-        });
+            auto caveProtoResult = loadMessage<CavewhereProto::Cave>(cavePath);
+            if (caveProtoResult.hasError()) {
+                loadData.errors.append(cwError(
+                                           QStringLiteral("Could not load cave \"%1\": %2")
+                                           .arg(caveFileInfo.fileName(), caveProtoResult.errorMessage()),
+                                           cwError::Fatal));
+                continue;
+            }
+
+            const auto& caveProto = caveProtoResult.value();
+            auto caveVersionWarning = checkEntityVersion(caveProto, cavePath, loadData.maxFileVersion);
+            if (caveVersionWarning) {
+                loadData.errors.append(*caveVersionWarning);
+            }
+
+            nodeEntries.push_back(std::make_unique<NodeEntry>());
+            NodeEntry* entry = nodeEntries.back().get();
+            entry->data = caveDataFromProtoCave(caveProto);
+            nodeByDir.insert(caveDirPath, entry);
+            if (parentEntry != nullptr) {
+                parentEntry->children.append(entry);
+            } else {
+                rootEntries.append(entry);
+            }
+        }
+
+        const auto loadTripData = [&loadData, &filePathLess](const QFileInfo& tripFileInfo) -> std::optional<cwTripData> {
+            const QString tripPath = tripFileInfo.absoluteFilePath();
+            auto tripProtoResult = loadMessage<CavewhereProto::Trip>(tripPath);
+
+            if (tripProtoResult.hasError()) {
+                loadData.errors.append(cwError(
+                                           QStringLiteral("Could not load trip \"%1\": %2")
+                                           .arg(tripFileInfo.fileName(), tripProtoResult.errorMessage()),
+                                           cwError::Fatal));
+                return std::nullopt;
+            }
+
+            const auto& tripProto = tripProtoResult.value();
+            auto tripVersionWarning = checkEntityVersion(tripProto, tripPath, loadData.maxFileVersion);
+            if (tripVersionWarning) {
+                loadData.errors.append(*tripVersionWarning);
+            }
+
+            cwTripData trip = cwSaveLoad::tripDataFromProtoTrip(tripProto);
+
+            QDir tripDir = tripFileInfo.absoluteDir();
+
+            auto loadObjectsFromNotesDir = [tripDir, &filePathLess, &loadData](const QString& fileSuffix,
+                    auto&& loadProtoFunc,
+                    auto&& convertFunc,
+                    auto& destinationList)
+            {
+                QDir notesDir = tripDir.filePath("notes");
+                if (!notesDir.exists()) {
+                    return;
+                }
+
+                QFileInfoList files = notesDir.entryInfoList(QStringList() << ("*" + fileSuffix),
+                                                             QDir::Files,
+                                                             QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
+                std::sort(files.begin(), files.end(), filePathLess);
+                for (const QFileInfo& fileInfo : files) {
+                    const QString notePath = fileInfo.absoluteFilePath();
+                    auto protoResult = loadProtoFunc(notePath);
+                    if (protoResult.hasError()) {
+                        loadData.errors.append(cwError(
+                                                   QStringLiteral("Could not load \"%1\": %2")
+                                                   .arg(fileInfo.fileName(), protoResult.errorMessage()),
+                                                   cwError::Fatal));
+                        continue;
+                    }
+
+                    auto versionWarning = checkEntityVersion(protoResult.value(), notePath, loadData.maxFileVersion);
+                    if (versionWarning) {
+                        loadData.errors.append(*versionWarning);
+                    }
+
+                    destinationList.append(convertFunc(protoResult.value(), notePath));
+                }
+            };
+
+            //Load 2D notes
+            loadObjectsFromNotesDir(QStringLiteral("cwnote"),
+                                    [](const QString& path) {
+                return loadMessage<CavewhereProto::Note>(path);
+            },
+            [](const CavewhereProto::Note& proto, const QString& path) {
+                return cwSaveLoad::noteDataFromProtoNote(proto, path);
+            },
+            trip.noteModel.notes);
+
+            //Load 3D lidar notes
+            loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
+                                    [](const QString& path) {
+                return loadMessage<CavewhereProto::NoteLiDAR>(path);
+            },
+            [](const CavewhereProto::NoteLiDAR& proto, const QString& path) {
+                return cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(proto, path);
+            },
+            trip.noteLiDARModel.notes);
+
+            //Load sketches
+            loadObjectsFromNotesDir(QStringLiteral("cwsketch"),
+                                    [](const QString& path) {
+                return loadMessage<CavewhereProto::Sketch>(path);
+            },
+            [](const CavewhereProto::Sketch& proto, const QString& path) {
+                return cwSaveLoad::sketchDataFromProtoSketch(proto, path);
+            },
+            trip.sketchModel.notes);
+
+            return trip;
+        };
+
+        // Every trip descriptor, matched to the node that holds it. A
+        // .cwtrip whose nearest node ancestor is not its own trips/ parent
+        // is an orphan (a peer moved the node while this side added the
+        // trip): it attaches to that nearest node and is reported, so no
+        // survey is ever dropped on load.
+        QFileInfoList tripFiles = scanForFiles(regionDir,
+                                               QStringLiteral("cwtrip"),
+                                               true);
+        std::sort(tripFiles.begin(), tripFiles.end(), filePathLess);
+
+        for (const QFileInfo& tripFileInfo : tripFiles) {
+            NodeEntry* owner = nullptr;
+            bool inOwnTripsDir = false;
+            QString candidate = QDir::cleanPath(tripFileInfo.absoluteDir().absolutePath());
+            QString segmentBelow;
+            while (candidate.startsWith(regionDirPath)) {
+                const auto ownerIt = nodeByDir.constFind(candidate);
+                if (ownerIt != nodeByDir.constEnd()) {
+                    owner = ownerIt.value();
+                    inOwnTripsDir = segmentBelow.compare(kTripsDirName, Qt::CaseInsensitive) == 0;
+                    break;
+                }
+                if (candidate == regionDirPath) {
+                    break;
+                }
+                segmentBelow = QFileInfo(candidate).fileName();
+                candidate = parentDirPathOf(candidate);
+            }
+
+            if (owner == nullptr) {
+                loadData.errors.append(cwError(
+                                           QStringLiteral("Ignoring \"%1\": it belongs to no survey node.")
+                                           .arg(tripFileInfo.absoluteFilePath()),
+                                           cwError::Fatal));
+                continue;
+            }
+
+            auto tripData = loadTripData(tripFileInfo);
+            if (!tripData.has_value()) {
+                continue;
+            }
+
+            if (!inOwnTripsDir) {
+                loadData.errors.append(cwError(
+                                           QStringLiteral("Trip \"%1\" was found outside a \"trips\" directory and was loaded into \"%2\".")
+                                           .arg(tripFileInfo.absoluteFilePath(), owner->data.name),
+                                           cwError::Warning));
+            }
+
+            owner->data.trips.append(tripData.value());
+        }
+
+        const auto foldNodeTree = [](NodeEntry* entry, auto&& self) -> cwCaveData {
+            cwCaveData data = std::move(entry->data);
+            data.nodes.reserve(entry->children.size());
+            for (NodeEntry* child : entry->children) {
+                data.nodes.append(self(child, self));
+            }
+            return data;
+        };
+
+        loadData.region.caves.reserve(rootEntries.size());
+        for (NodeEntry* rootEntry : rootEntries) {
+            loadData.region.caves.append(foldNodeTree(rootEntry, foldNodeTree));
+        }
+        repairTopLevelIds(loadData);
+        repairNestedScrapIds(loadData);
+        repairNameCollisions(loadData);
+        return Result(loadData);
     });
 }
 
@@ -3002,6 +3730,13 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
             loadData.metadata.dataRoot = cwSaveLoadPrivate::defaultDataRoot(loadData.region.name);
         }
 
+        loadData.region.equates.reserve(projectProto.equates_size());
+        for (const auto& protoEquate : projectProto.equates()) {
+            loadData.region.equates.append(cwProtoUtils::fromProtoEquate(protoEquate));
+        }
+
+        loadData.region.externalSources = cwProtoUtils::fromProtoExternalSources(projectProto.external_sources());
+
         return Result(loadData);
     });
 }
@@ -3009,22 +3744,49 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
 Monad::Result<cwCaveData> cwSaveLoad::loadCave(const QString &filename)
 {
     auto caveResult = loadMessage<CavewhereProto::Cave>(filename);
-    return Monad::mbind(caveResult, [](const Result<CavewhereProto::Cave>& result)
-    {
-        auto caveProto = result.value();
-        cwCaveData caveData;
-        if(caveProto.has_name()) {
-            caveData.name = QString::fromStdString(caveProto.name());
-        }
-        if (caveProto.has_id()) {
-            caveData.id = cwProtoUtils::toUuid(caveProto.id());
-        }
-        if (caveProto.has_external_centerline()) {
-            caveData.externalCenterline = cwExternalCenterline(
-                        QString::fromStdString(caveProto.external_centerline().entry_file()));
-        }
-        return Result(caveData);
+    return Monad::mbind(caveResult, [](const Result<CavewhereProto::Cave>& result) {
+        return Result(caveDataFromProtoCave(result.value()));
     });
+}
+
+cwCaveData cwSaveLoad::caveDataFromProtoCave(const CavewhereProto::Cave& caveProto)
+{
+    cwCaveData cave;
+    if (caveProto.has_name()) {
+        cave.name = QString::fromStdString(caveProto.name());
+    }
+    if (caveProto.has_id()) {
+        cave.id = cwProtoUtils::toUuid(caveProto.id());
+    }
+    cave.lengthUnit = caveProto.has_lengthunit()
+            ? static_cast<cwUnits::LengthUnit>(caveProto.lengthunit())
+            : cwUnits::Meters;
+    cave.depthUnit = caveProto.has_depthunit()
+            ? static_cast<cwUnits::LengthUnit>(caveProto.depthunit())
+            : cwUnits::Meters;
+
+    if (caveProto.has_kind()) {
+        cave.kind = cwSurveyNodeKind::fromSavedValue(caveProto.kind());
+    }
+    if (caveProto.has_read_only()) {
+        cave.readOnly = caveProto.read_only();
+    }
+    if (caveProto.has_source_id()) {
+        cave.sourceId = cwProtoUtils::toUuid(caveProto.source_id());
+    }
+    if (caveProto.has_source_path()) {
+        cave.sourcePath = QString::fromStdString(caveProto.source_path());
+    }
+    if (caveProto.has_external_centerline()) {
+        cave.externalCenterline =
+            cwProtoUtils::fromProtoExternalCenterline(caveProto.external_centerline());
+    }
+
+    cave.fixStations.reserve(caveProto.fixstations_size());
+    for (const auto& protoFix : caveProto.fixstations()) {
+        cave.fixStations.append(cwProtoUtils::fromProtoFixStation(protoFix));
+    }
+    return cave;
 }
 
 Monad::Result<cwTripData> cwSaveLoad::loadTrip(const QString &filename)
@@ -3069,8 +3831,12 @@ cwTripData cwSaveLoad::tripDataFromProtoTrip(const CavewhereProto::Trip& tripPro
     tripData.chunks = cwSaveLoadPrivate::fromProtoSurveyChunks(tripProto.chunks());
 
     if (tripProto.has_external_centerline()) {
-        tripData.externalCenterline = cwExternalCenterline(
-                    QString::fromStdString(tripProto.external_centerline().entry_file()));
+        tripData.externalCenterline =
+            cwProtoUtils::fromProtoExternalCenterline(tripProto.external_centerline());
+    }
+
+    if (tripProto.has_source_path()) {
+        tripData.sourcePath = QString::fromStdString(tripProto.source_path());
     }
 
     return tripData;
@@ -3287,42 +4053,74 @@ void cwSaveLoad::discardChanges()
 
     setSaveEnabled(false);
 
-    // Capture the in-flight saves future before replacing the deferred so that
-    // waitForFinished() (which calls completeSaveJobs()) will wait for the
-    // discard operation itself, not just the now-drained save queue.
-    auto saveFlushed = completeSaveJobs();
+    // `git reset --hard HEAD` + cleanUntracked rewrites project files the
+    // external-centerline watcher is armed on. Their events land after
+    // discardCompleted has already cleared cwProject::modified(), so
+    // without this window a discard would immediately re-dirty the project
+    // it just cleaned.
+    d->selfWrite.begin();
 
-    // Replace the pending-jobs deferred so the discard pipeline is what
-    // waitForFinished() waits on from this point forward.
-    d->m_pendingJobsDeferred = {};
+    // Run the discard as a queued operation, the same shape sync() uses.
+    // Operations are FIFO, so any in-flight or scheduled save flush drains
+    // before the reset rewrites the tree, and waitForFinished() covers the
+    // discard through the queue's idle future. Replacing m_pendingJobsDeferred
+    // here instead would cancel a mid-flight drain future, and AsyncFuture
+    // propagates that cancellation through this chain and the active flush
+    // operation — silently dropping the reset and jamming the queue.
+    d->ensureSaveFlushScheduled(this);
 
-    auto resetFuture = AsyncFuture::observe(saveFlushed)
-            .context(this, [repo]() -> QFuture<Monad::ResultBase> {
-                         return repo->reset(QStringLiteral("HEAD"),
-                         QQuickGit::GitRepository::ResetMode::Hard);
-                     })
-            .future();
+    auto discardFuture = d->enqueueOperation(
+                this,
+                cwSaveLoadPrivate::Operation::Type::DiscardChanges,
+                [this, repo]() -> QFuture<ResultBase> {
+        auto resetFuture = repo->reset(QStringLiteral("HEAD"),
+                                       QQuickGit::GitRepository::ResetMode::Hard);
+        return AsyncFuture::observe(resetFuture)
+                .context(this, [repo, resetFuture]() {
+                    const auto result = resetFuture.result();
+                    if (!result.hasError()) {
+                        repo->cleanUntracked();
+                    }
+                    return result;
+                })
+                .future();
+    });
 
-    d->futureToken.addJob(resetFuture,
+    d->futureToken.addJob(discardFuture,
                           QStringLiteral("Discarding changes"));
 
-    AsyncFuture::observe(resetFuture).context(this, [this, repo, resetFuture]() {
-        const auto result = resetFuture.result();
+    // The operation deferred settles with an error Result on every
+    // cancellation path, so this observer always runs and the self-write
+    // window always closes.
+    AsyncFuture::observe(discardFuture).context(this, [this, discardFuture]() {
+        d->selfWrite.end();
+        const auto result = discardFuture.result();
         if (result.hasError()) {
             qWarning() << "discardChanges: git reset --hard HEAD failed:"
                        << result.errorMessage();
-            d->m_pendingJobsDeferred.complete();
+            // The discard didn't take, so the project stays live: saves must
+            // keep flowing to disk (the success path re-enables via the
+            // reload discardCompleted triggers, which never happens here),
+            // and the LAZ model resyncs with whatever a partial reset left
+            // on disk — libgit2 checks files out one at a time, so an abort
+            // can land after some of "GIS Layers/" was already rewritten.
+            setSaveEnabled(true);
             emit discardFailed(result.errorMessage());
+            rescanLazLayersAfterGitWrite();
             return;
         }
-        repo->cleanUntracked();
-        d->m_pendingJobsDeferred.complete();
         emit discardCompleted();
     });
 }
 
 void cwSaveLoad::disconnectTreeModel()
 {
+    // Runs this→this, so the region disconnect below leaves it. Torn down here
+    // rather than inside the region guard because it outlives the region, and
+    // each reconnect cycle would otherwise add another.
+    disconnect(this, &cwSaveLoad::discardCompleted,
+               this, &cwSaveLoad::rescanLazLayersAfterGitWrite);
+
     // Disconnect from the region directly. cwCavingRegion is NOT included in the
     // cwRegionTreeModel::all<QObject*> iteration (the root item uses an invalid index
     // which returns QVariant() for ObjectRole), so disconnectObjects() below will not
@@ -3332,13 +4130,22 @@ void cwSaveLoad::disconnectTreeModel()
         // lazLayers is a child of region and its connections survive
         // disconnectObjects(); each reconnect cycle would otherwise
         // accumulate duplicate rowsAboutToBeRemoved / rowsRemoved handlers.
-        // Tear down both directions: lazLayers→this for the model-change
-        // observers, and this→lazLayers for the discardCompleted→rescan
-        // hookup added in connectTreeModel.
         if (auto* lazLayers = region->lazLayers()) {
             disconnect(lazLayers, nullptr, this, nullptr);
-            disconnect(this, &cwSaveLoad::discardCompleted,
-                       lazLayers, &cwLazLayerModel::rescan);
+        }
+        // geoReference and the equate and source models are children of region too, so their
+        // this-bound saveMetadata connections (wired in connectTreeModel) survive
+        // the disconnect(region, ...) above. Each reconcile disconnects then
+        // reconnects the tree, so without an explicit teardown they accumulate a
+        // duplicate saveProject per cycle.
+        if (auto* geoReference = region->geoReference()) {
+            disconnect(geoReference, nullptr, this, nullptr);
+        }
+        if (auto* equateModel = region->equates()) {
+            disconnect(equateModel, nullptr, this, nullptr);
+        }
+        if (auto* sourceModel = region->externalSources()) {
+            disconnect(sourceModel, nullptr, this, nullptr);
         }
     }
 
@@ -3365,18 +4172,26 @@ void cwSaveLoad::connectTreeModel()
     //Connect when region has changed
     connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsInserted,
             this, [this](const QModelIndex &parent, int first, int last) {
+        bool nodeInserted = false;
         for(int i = first; i <= last; i++) {
             auto index = d->m_regionTreeModel->index(i, 0, parent);
             switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
             case cwRegionTreeModel::CaveType: {
                 auto cave = d->m_regionTreeModel->cave(index);
                 connectCave(cave);
+                //An undone delete re-announces the row, and the subtree it
+                //names is sitting in the trash: move it back before the
+                //descriptor write, which by itself would leave the note
+                //images and attachments behind.
+                d->restoreDirectoryFromTrash(this, cave);
                 save(cave);
+                nodeInserted = true;
                 break;
             }
             case cwRegionTreeModel::TripType: {
                 auto trip = d->m_regionTreeModel->trip(index);
                 connectTrip(trip);
+                d->restoreDirectoryFromTrash(this, trip);
                 save(trip);
                 break;
             }
@@ -3408,20 +4223,29 @@ void cwSaveLoad::connectTreeModel()
                 break;
             }
         }
+
+        //Only a node can move the format the project needs, so the walk
+        //stampVersion does stays off the note and scrap rows a load pours in.
+        if (nodeInserted) {
+            restampProjectIfVersionChanged();
+        }
+    });
+
+    connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsRemoved,
+            this, [this](const QModelIndex& parent, int, int) {
+        //Only a node's disappearance can move the format the project needs. The
+        //removed rows are already gone by now, so the cheap test is the parent:
+        //a trip removal shares it and costs one short-circuiting stampVersion
+        //walk, while the note and scrap rows a load pours out are skipped.
+        const bool underNode = !parent.isValid()
+                || parent.data(cwRegionTreeModel::TypeRole).toInt() == cwRegionTreeModel::CaveType;
+        if (underNode) {
+            restampProjectIfVersionChanged();
+        }
     });
 
     connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsAboutToBeRemoved,
             this, [this](const QModelIndex &parent, int first, int last) {
-
-        auto removeDirectory = [this](const QObject* object) {
-            d->addFileSystemJob(cwSaveLoadPrivate::Job
-                                {
-                                    object,
-                                    cwSaveLoadPrivate::Job::Kind::Directory,
-                                    cwSaveLoadPrivate::Job::Action::Remove
-                                },
-                                this);
-        };
 
         auto removeFile = [this](const QObject* object) {
             d->addFileSystemJob(cwSaveLoadPrivate::Job
@@ -3449,17 +4273,24 @@ void cwSaveLoad::connectTreeModel()
             auto index = d->m_regionTreeModel->index(i, 0, parent);
             auto object = index.data(cwRegionTreeModel::ObjectRole).value<QObject*>();
 
+            //A move announces the whole subtree's rows as removed and then
+            //re-inserts them, so every one of these rows would otherwise be
+            //read as a deletion — taking the trips' directories and the note
+            //images with it. One Directory Move, queued from
+            //parentNodeChanged, is what carries them instead.
+            if (d->isInsideMovingNode(object)) {
+                continue;
+            }
+
             switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
             case cwRegionTreeModel::CaveType: {
                 auto cave = d->m_regionTreeModel->cave(index);
-                // auto caveDir = dir(cave);
-                removeDirectory(cave);
+                d->moveDirectoryToTrash(this, cave, cave->id());
                 break;
             }
             case cwRegionTreeModel::TripType: {
                 auto trip = d->m_regionTreeModel->trip(index);
-                // auto tripDir = dir(trip);
-                removeDirectory(trip);
+                d->moveDirectoryToTrash(this, trip, trip->id());
                 break;
             }
             case cwRegionTreeModel::NoteType: {
@@ -3489,32 +4320,41 @@ void cwSaveLoad::connectTreeModel()
                 d->connectionChecker.remove(object);
             }
 
+            //That disconnect names this as the receiver, which is what the
+            //destruction watch connects to, so it takes the watch down with
+            //it. Without the watch back up, the object's death goes unheard
+            //and its trashed directory stays on disk for good.
+            d->rewatchObjectLifetime(object, this);
         }
 
-        if (!d->suppressLocalMutationTracking) {
-            emit localMutationOccurred();
-        }
+        d->noteLocalMutation(this);
     });
 
     connectObjects();
 
     // React to project name changes: rename the dataRoot directory and .cwproj descriptor
     // on disk when the region name is edited by the user. Uses the same watch pattern as
-    // cave/trip nameChanged handlers. Re-entrancy is suppressed because transferProjectTo
-    // always sets d->projectMetadata.dataRoot to the new name before calling region->setName(),
-    // so the early-out fires and the handler does nothing.
+    // cave/trip nameChanged handlers. transferProjectTo sets d->projectMetadata.dataRoot to
+    // the new name before the caller calls region->setName(), so that rename takes the
+    // matching-dataRoot path and only rewrites the project file with the new display name.
     //
     // The actual filesystem renames are queued as Custom jobs so they run on the background
     // thread via the job queue, matching the async pattern used for cave/trip renames.
     if (auto* region = d->m_regionTreeModel->cavingRegion()) {
-        connect(region, &cwCavingRegion::nameChanged, this, [this, region]() {
-            if (d->isTemporary) {
+        const auto saveMetadata = [this, region]() {
+            saveProject(projectRootDir(), region);
+        };
+
+        connect(region, &cwCavingRegion::nameChanged, this, [this, region, saveMetadata]() {
+            if (!d->hasDurableHome) {
                 return;
             }
 
             const QString newName = region->name();
             const QString sanitizedName = sanitizeFileName(newName);
-            if (sanitizedName.isEmpty() || d->projectMetadata.dataRoot == sanitizedName) {
+            if (d->projectMetadata.dataRoot == sanitizedName) {
+                // Only the display name changed, so the project file is the one thing to rewrite.
+                saveMetadata();
                 return;
             }
 
@@ -3540,15 +4380,21 @@ void cwSaveLoad::connectTreeModel()
             }
 
             // Queue a background job to rename the dataRoot directory.
-            d->addExplicitFileSystemJob(
-                        cwSaveLoadPrivate::Job(nullptr, cwSaveLoadPrivate::Job::Kind::Directory, cwSaveLoadPrivate::Job::Action::Custom,
+            cwSaveLoadPrivate::Job moveJob(nullptr, cwSaveLoadPrivate::Job::Kind::Directory, cwSaveLoadPrivate::Job::Action::Custom,
                                   [oldDataRootPath, newDataRootPath]() -> Monad::ResultBase {
                 if (!QFileInfo::exists(oldDataRootPath) || QFileInfo::exists(newDataRootPath)) {
                     return Monad::ResultBase();
                 }
                 return cwSaveLoadPrivate::moveDirectoryRobust(oldDataRootPath, newDataRootPath);
-            }),
-                        this);
+            });
+            // The emit above fired before the tree moved, so listeners that
+            // re-derive paths from disk (the external-centerline watcher, the
+            // image provider binder) saw the new root empty. Announce again
+            // once the move has landed; onDone runs on the main thread.
+            moveJob.onDone = [this](const Monad::ResultBase&) {
+                emit dataRootChanged();
+            };
+            d->addExplicitFileSystemJob(std::move(moveJob), this);
 
             // Queue a background job to rename the .cwproj descriptor file.
             if (currentFile != newDescriptorPath) {
@@ -3568,12 +4414,8 @@ void cwSaveLoad::connectTreeModel()
                             this);
             }
 
-            saveProject(projectRootDir(), region);
+            saveMetadata();
         });
-
-        const auto saveMetadata = [this, region]() {
-            saveProject(projectRootDir(), region);
-        };
 
         // The local projection lives in the project metadata file and is the one
         // piece of geo-reference state that is *not* recomputable from the data
@@ -3588,6 +4430,22 @@ void cwSaveLoad::connectTreeModel()
         // needs the same handler — without it a units change made in the UI never
         // reaches disk or flips the dirty bit, and is dropped on close.
         connect(region, &cwCavingRegion::unitSystemChanged, this, saveMetadata);
+
+        // Every equate persists in the same region top-level file (the
+        // Project message), so an equate added/removed on the region must flush
+        // it, exactly like a units or CS change. These connections are wired
+        // before the region is populated, so WatchReset::No is mandatory here:
+        // setEquates() (the bulk load path) resets the model, and saving then
+        // would overwrite the on-disk project with a half-built one mid-load.
+        connectListModelSaveTrigger(region->equates(), WatchReset::No, saveMetadata);
+
+        // The external sources share that file, and setSources() is their bulk
+        // load path, so the same WatchReset::No reasoning applies. A source
+        // counts toward stampVersion, so the first one restamps the project.
+        connectListModelSaveTrigger(region->externalSources(), WatchReset::No, [this, saveMetadata]() {
+            saveMetadata();
+            restampProjectIfVersionChanged();
+        });
 
         // LAZ layers live in "GIS Layers/" inside the project root and are
         // discovered by directory scan, so adds go through cwProject::addFiles
@@ -3648,10 +4506,9 @@ void cwSaveLoad::connectTreeModel()
 
                 if (!oldSourcePath.isEmpty() && !newSourcePath.isEmpty()
                         && oldSourcePath != newSourcePath) {
-                    cwSaveLoadPrivate::Job sourceMove;
-                    sourceMove.objectId = layer;
-                    sourceMove.kind = cwSaveLoadPrivate::Job::Kind::File;
-                    sourceMove.action = cwSaveLoadPrivate::Job::Action::Move;
+                    cwSaveLoadPrivate::Job sourceMove(layer,
+                                                      cwSaveLoadPrivate::Job::Kind::File,
+                                                      cwSaveLoadPrivate::Job::Action::Move);
                     sourceMove.tag = QStringLiteral("source");
                     sourceMove.oldPath = oldSourcePath;
                     sourceMove.path = newSourcePath;
@@ -3668,8 +4525,10 @@ void cwSaveLoad::connectTreeModel()
             // Bookkeeping: drop the m_objectStates entry for every removed
             // layer regardless of cause (user remove OR rescan-driven
             // file-vanished removal). File-kind Remove jobs don't clean it
-            // up themselves (only Directory-kind Remove does), and the
-            // layer pointer becomes dangling once deleteLater fires.
+            // up themselves (only Directory-kind Remove does), and a layer
+            // can outlive its row (a project transfer keeps layers alive),
+            // so the destroyed-based cleanup alone would leave the entry
+            // stale for as long as the object lives.
             //
             // Either cause is a user-visible mutation of the project's
             // on-disk shape, so emit localMutationOccurred — this is what
@@ -3686,9 +4545,7 @@ void cwSaveLoad::connectTreeModel()
                         d->m_objectStates.remove(layer);
                     }
                 }
-                if (!d->suppressLocalMutationTracking) {
-                    emit localMutationOccurred();
-                }
+                d->noteLocalMutation(this);
             });
             connect(lazLayers, &QAbstractItemModel::rowsRemoved, this, saveMetadata);
 
@@ -3704,8 +4561,14 @@ void cwSaveLoad::connectTreeModel()
                 }
                 const QString metadataPath = absolutePathPrivate(layer);
                 if (!metadataPath.isEmpty()) {
-                    d->seedStatePathFromLoaded(layer, metadataPath);
-                    if (!QFileInfo::exists(metadataPath)) {
+                    d->seedStatePathFromLoaded(this, layer, metadataPath);
+                    // Write the .cwlaz only while the .laz it describes is
+                    // still there. A reconcile re-wires rows in the window
+                    // between git deleting a layer's files and the rescan
+                    // dropping its row, and writing then resurrects the .cwlaz
+                    // as an orphan the next commit picks up.
+                    if (!QFileInfo::exists(metadataPath)
+                            && QFileInfo::exists(layer->sourcePath())) {
                         save(layer);
                     }
                 }
@@ -3725,23 +4588,52 @@ void cwSaveLoad::connectTreeModel()
             }
 
             // Re-rescan after a Git-driven on-disk mutation. discardChanges
-            // restores deleted .laz files via `git reset --hard HEAD`; the
-            // model needs a kick to re-discover them and re-pair with any
+            // restores deleted .laz files via `git reset --hard HEAD` and
+            // deletes uncommitted ones via cleanUntracked; the model needs a
+            // kick to re-discover the restored ones and re-pair with any
             // orphan .cwlaz sibling so the original UUID + enabled bit are
             // adopted. Queued so the rescan runs after discardCompleted's
             // observers have settled (the project's modified bit clears
             // first, then we repopulate).
             connect(this, &cwSaveLoad::discardCompleted,
-                    lazLayers, &cwLazLayerModel::rescan,
+                    this, &cwSaveLoad::rescanLazLayersAfterGitWrite,
                     Qt::QueuedConnection);
         }
     }
 }
 
+void cwSaveLoad::rescanLazLayersAfterGitWrite()
+{
+    const auto* region = cavingRegion();
+    if (region == nullptr) {
+        return;
+    }
+
+    auto* lazLayers = region->lazLayers();
+    if (lazLayers == nullptr) {
+        return;
+    }
+
+    // Dropping a row still has to run — the rowsAboutToBeRemoved handler is
+    // what releases the m_objectStates entry of a layer that outlives its
+    // row. Only its localMutationOccurred emit is unwanted, and rescan()
+    // emits its row signals synchronously, so the rollback covers exactly the
+    // rows this scan touches.
+    QScopedValueRollback<bool> suppressTracking(d->suppressLocalMutationTracking, true);
+
+    lazLayers->rescan();
+}
+
 void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
                                           const QString& newDescriptorPath)
 {
-    if (d->isTemporary) {
+    // Still gated on hasDurableHome, unlike the enqueueExternalCenterline* jobs.
+    // These mutate the project's durable on-disk identity (the .cwproj
+    // descriptor and dataRoot directory name), which doesn't exist until the
+    // first save - Save As renames it as part of the move. The external-
+    // centerline jobs write inside the dataRoot tree, which a temp project
+    // already has, so they don't wait. Same reasoning at the two cleanups below.
+    if (!d->hasDurableHome) {
         return;
     }
 
@@ -3800,7 +4692,9 @@ void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
 
 void cwSaveLoad::enqueueConflictingProjectCleanup(const QString& conflictingDescriptorRelPath)
 {
-    if (d->isTemporary || conflictingDescriptorRelPath.isEmpty()) {
+    // Durable-home-gated - see enqueueProjectRenameJobs for why the durable-identity
+    // jobs wait for the first save while the external-centerline jobs don't.
+    if (!d->hasDurableHome || conflictingDescriptorRelPath.isEmpty()) {
         return;
     }
 
@@ -3845,7 +4739,8 @@ void cwSaveLoad::enqueueConflictingProjectCleanup(const QString& conflictingDesc
 
 void cwSaveLoad::enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath)
 {
-    if (d->isTemporary || orphanDirRelPath.isEmpty()) {
+    // Durable-home-gated - see enqueueProjectRenameJobs.
+    if (!d->hasDurableHome || orphanDirRelPath.isEmpty()) {
         return;
     }
 
@@ -3880,15 +4775,46 @@ void cwSaveLoad::enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath)
 void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
                                                       const QString& destinationPath)
 {
-    if (d->isTemporary || sourcePath.isEmpty() || destinationPath.isEmpty()) {
+    enqueueExternalCenterlineCopy(sourcePath, destinationPath, true);
+}
+
+void cwSaveLoad::enqueueExternalCenterlineCopyOverwriting(const QString& sourcePath,
+                                                          const QString& destinationPath)
+{
+    enqueueExternalCenterlineCopy(sourcePath, destinationPath, false);
+}
+
+void cwSaveLoad::enqueueExternalCenterlineCopy(const QString& sourcePath,
+                                               const QString& destinationPath,
+                                               bool keepMatchingDestination)
+{
+    // Deliberately not gated on d->hasDurableHome, unlike the project-rename
+    // and cleanup jobs above. A temporary project already has a real root
+    // dir, and Save As moves or re-zips that whole tree, so an attachment
+    // copied in before the first save travels with it.
+    if (sourcePath.isEmpty() || destinationPath.isEmpty()) {
         return;
     }
 
+    // An external-centerline copy mutates the project's on-disk shape
+    // (an attach or a Replace landing mid-session), so flip
+    // cwProject::modified() via localMutationOccurred — otherwise the
+    // copy is silently lost in a bundled .cw on quit-without-save.
+    // Under CopyPolicy::SkipUpToDate reconcile()'s planner skips
+    // up-to-date destinations, so a no-op reconcile never reaches this
+    // and the bit stays untouched.
+    d->noteLocalMutation(this);
+
+    // Whether the job body mutated the destination, set on the worker and
+    // read by onDone on the main thread — the job future's completion orders
+    // the two.
+    auto wroteDestination = std::make_shared<bool>(false);
     cwSaveLoadPrivate::Job job(
                 nullptr,
                 cwSaveLoadPrivate::Job::Kind::File,
                 cwSaveLoadPrivate::Job::Action::Custom,
-                [sourcePath, destinationPath]() -> Monad::ResultBase {
+                [sourcePath, destinationPath, keepMatchingDestination,
+                 wroteDestination]() -> Monad::ResultBase {
         if (sourcePath == destinationPath) {
             // Identical paths is almost certainly a caller bug, but removing
             // and re-copying the same file would silently delete it. Treat
@@ -3899,7 +4825,7 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
         const QFileInfo srcInfo(sourcePath);
         if (!srcInfo.exists() || !srcInfo.isFile()) {
             return Monad::ResultBase(
-                        QStringLiteral("copyIfNewer: missing source: %1")
+                        QStringLiteral("externalCenterlineCopy: missing source: %1")
                         .arg(sourcePath));
         }
 
@@ -3907,14 +4833,17 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
         if (dstInfo.exists()) {
             const bool sameSize = srcInfo.size() == dstInfo.size();
             const bool srcOlderOrEqual = srcInfo.lastModified() <= dstInfo.lastModified();
-            if (sameSize && srcOlderOrEqual) {
+            if (keepMatchingDestination && sameSize && srcOlderOrEqual) {
                 return Monad::ResultBase();
             }
             if (!QFile::remove(destinationPath)) {
                 return Monad::ResultBase(
-                            QStringLiteral("copyIfNewer: failed to remove stale destination: %1")
+                            QStringLiteral("externalCenterlineCopy: failed to remove stale destination: %1")
                             .arg(destinationPath));
             }
+            // The delete is itself a write the watcher sees, even if the
+            // copy below then fails.
+            *wroteDestination = true;
         }
 
         const auto ensureResult = cwSaveLoadPrivate::ensurePathForFile(destinationPath);
@@ -3924,11 +4853,28 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
 
         if (!QFile::copy(sourcePath, destinationPath)) {
             return Monad::ResultBase(
-                        QStringLiteral("copyIfNewer: failed to copy %1 -> %2")
+                        QStringLiteral("externalCenterlineCopy: failed to copy %1 -> %2")
                         .arg(sourcePath, destinationPath));
         }
+        *wroteDestination = true;
         return Monad::ResultBase();
     });
+    // The copy lands on a path the external-centerline watcher is armed on,
+    // and the watcher reads our own write exactly as it reads a user's edit
+    // in a text editor. The mutation above already covers this write, so the
+    // echo would be a second report of one change — and one that can arrive
+    // after the following save has cleared the dirty bit, leaving the project
+    // asking to be saved with nothing to write. Open the settle tail when the
+    // bytes land so reportProjectFileChangedOnDisk() skips the echo. A job
+    // that skipped the copy (destination already newer, same path, dropped
+    // before running) wrote nothing, so it has no echo to skip — and the
+    // window is global, so opening it anyway would swallow a genuine editor
+    // save to any attachment inside the tail.
+    job.onDone = [this, wroteDestination](const ResultBase&) {
+        if (*wroteDestination) {
+            d->selfWrite.noteWriteCompleted();
+        }
+    };
     // Set path for diagnostics + scheduling; ensureInsideRoot isn't enforced
     // for Action::Custom, so this is informational rather than a precondition.
     job.path = destinationPath;
@@ -3938,28 +4884,96 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
 
 void cwSaveLoad::enqueueExternalCenterlineRemoveFile(const QString& path)
 {
-    if (d->isTemporary || path.isEmpty()) {
+    if (path.isEmpty()) {
         return;
     }
+
+    // GC of a stranded attachment file is a project mutation too; see
+    // enqueueExternalCenterlineCopyIfNewer (including why this runs on
+    // temporary projects).
+    d->noteLocalMutation(this);
 
     cwSaveLoadPrivate::Job job(nullptr,
                                cwSaveLoadPrivate::Job::Kind::File,
                                cwSaveLoadPrivate::Job::Action::Remove);
+    // Deleting a watched file notifies the watcher too; see
+    // enqueueExternalCenterlineCopyIfNewer for why the echo is skipped.
+    job.onDone = [this](const ResultBase&) {
+        d->selfWrite.noteWriteCompleted();
+    };
     job.oldPath = path;
     d->addExplicitFileSystemJob(std::move(job), this);
 }
 
 void cwSaveLoad::enqueueExternalCenterlineRemoveTree(const QString& path)
 {
-    if (d->isTemporary || path.isEmpty()) {
+    if (path.isEmpty()) {
         return;
     }
+
+    // Removing an attachment dir (detach) is a project mutation too; see
+    // enqueueExternalCenterlineCopyIfNewer (including why this runs on
+    // temporary projects).
+    d->noteLocalMutation(this);
 
     cwSaveLoadPrivate::Job job(nullptr,
                                cwSaveLoadPrivate::Job::Kind::Directory,
                                cwSaveLoadPrivate::Job::Action::Remove);
+    // Every watched file under the tree notifies on the way out; see
+    // enqueueExternalCenterlineCopyIfNewer for why the echo is skipped.
+    job.onDone = [this](const ResultBase&) {
+        d->selfWrite.noteWriteCompleted();
+    };
     job.oldPath = path;
     d->addExplicitFileSystemJob(std::move(job), this);
+}
+
+QString cwSaveLoad::externalSourceRecordPath(const QUuid& ownerId) const
+{
+    return externalSourceRecordsDir(projectRootDir())
+        .filePath(cwExternalSourceRecord::recordFileName(ownerId));
+}
+
+// The record is bookkeeping about the copy an attach, Replace or Reload made,
+// and those already dirtied the project, so neither job reports a mutation.
+// Nothing watches .cw_local, so neither notes a self-write either.
+void cwSaveLoad::enqueueExternalSourceRecordWrite(const QUuid& ownerId,
+                                                  const cwExternalSourceRecord::Record& record)
+{
+    if (ownerId.isNull() || d->projectFileName.isEmpty()) {
+        return;
+    }
+
+    const QString path = externalSourceRecordPath(ownerId);
+    cwSaveLoadPrivate::Job job(nullptr,
+                               cwSaveLoadPrivate::Job::Kind::File,
+                               cwSaveLoadPrivate::Job::Action::Custom,
+                               [path, record]() {
+        return cwExternalSourceRecord::writeRecord(path, record);
+    });
+    job.path = path;
+    d->addExplicitFileSystemJob(std::move(job), this);
+}
+
+void cwSaveLoad::enqueueExternalSourceRecordRemove(const QUuid& ownerId)
+{
+    if (ownerId.isNull() || d->projectFileName.isEmpty()) {
+        return;
+    }
+
+    cwSaveLoadPrivate::Job job(nullptr,
+                               cwSaveLoadPrivate::Job::Kind::File,
+                               cwSaveLoadPrivate::Job::Action::Remove);
+    job.oldPath = externalSourceRecordPath(ownerId);
+    d->addExplicitFileSystemJob(std::move(job), this);
+}
+
+void cwSaveLoad::reportProjectFileChangedOnDisk()
+{
+    if (d->selfWrite.isOpen()) {
+        return;
+    }
+    d->noteLocalMutation(this);
 }
 
 void cwSaveLoad::disconnectObjects()
@@ -4051,6 +5065,21 @@ void cwSaveLoad::connectObjects()
 
 }
 
+void cwSaveLoad::connectListModelSaveTrigger(QAbstractItemModel* model,
+                                             WatchReset watchReset,
+                                             const std::function<void()>& onChanged)
+{
+    if (model == nullptr) {
+        return;
+    }
+    connect(model, &QAbstractItemModel::rowsInserted, this, onChanged);
+    connect(model, &QAbstractItemModel::rowsRemoved, this, onChanged);
+    connect(model, &QAbstractItemModel::dataChanged, this, onChanged);
+    if (watchReset == WatchReset::Yes) {
+        connect(model, &QAbstractItemModel::modelReset, this, onChanged);
+    }
+}
+
 void cwSaveLoad::connectCave(cwCave *cave)
 {
     if (cave == nullptr) {
@@ -4073,12 +5102,39 @@ void cwSaveLoad::connectCave(cwCave *cave)
     };
     connect(cave->length(), &cwUnitValue::unitChanged, this, saveCave);
     connect(cave->depth(), &cwUnitValue::unitChanged, this, saveCave);
+    connect(cave, &cwCave::externalCenterlineChanged, this, saveCave);
+    //A node's kind or source is part of what decides the project's file format,
+    //so these rewrite the whole project when they move it (§6.8).
+    const auto saveCaveAndRestamp = [saveCave, this]() {
+        saveCave();
+        restampProjectIfVersionChanged();
+    };
+    connect(cave, &cwCave::kindChanged, this, saveCaveAndRestamp);
+    connect(cave, &cwCave::sourceChanged, this, saveCaveAndRestamp);
 
-    cwFixStationModel* fixModel = cave->fixStations();
-    connect(fixModel, &QAbstractItemModel::rowsInserted, this, saveCave);
-    connect(fixModel, &QAbstractItemModel::rowsRemoved, this, saveCave);
-    connect(fixModel, &QAbstractItemModel::modelReset, this, saveCave);
-    connect(fixModel, &QAbstractItemModel::dataChanged, this, saveCave);
+    //A move reaches the tree model as a row removal and a row insertion, and a
+    //row removal is otherwise this node's directory being deleted (§6.5). The
+    //node says which of the two is happening, and the Move itself is queued from
+    //parentNodeChanged — inside the insert, while the object state still names
+    //the old directory and dirPrivate() already names the new one.
+    connect(cave, &cwCave::beginMoveNode, this, [cave, this]() {
+        d->m_movingNodes.insert(cave);
+    });
+    connect(cave, &cwCave::parentNodeChanged, this, [cave, this]() {
+        d->moveDirectory(this, cave);
+    });
+    connect(cave, &cwCave::nodeMoved, this, [cave, this]() {
+        d->m_movingNodes.remove(cave);
+        //The node is back on the tree, so the shape the stamp answers for is
+        //final: a move that nests the last flat node, or frees the last nested
+        //one, changes the format the whole project needs (§6.8).
+        restampProjectIfVersionChanged();
+    });
+
+    // connectCave runs after the cave's data is loaded, so watching modelReset
+    // is safe here (the load-time setFixStations() reset fires before these
+    // connections exist).
+    connectListModelSaveTrigger(cave->fixStations(), WatchReset::Yes, saveCave);
 }
 
 
@@ -4140,6 +5196,14 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
 
     // Trip-level changes
     connect(trip, &cwTrip::dateChanged, this, saveTrip);
+    connect(trip, &cwTrip::externalCenterlineChanged, this, saveTrip);
+    //A trip's stored source path is part of what decides the project's file
+    //format, so it rewrites the whole project when it appears (§6.8).
+    const auto saveTripAndRestamp = [saveTrip, this]() {
+        saveTrip();
+        restampProjectIfVersionChanged();
+    };
+    connect(trip, &cwTrip::sourcePathChanged, this, saveTripAndRestamp);
     // connect(trip, &cwTrip::numberOfChunksChanged, this, saveTrip);
     connect(trip, &cwTrip::chunksAboutToBeRemoved, this, saveTrip);
     connect(trip, &cwTrip::chunksRemoved, this, saveTrip);
@@ -4431,12 +5495,22 @@ void cwSaveLoad::connectSketch(cwSketch *sketch)
 }
 
 
-void cwSaveLoad::setTemporary(bool isTemp)
+void cwSaveLoad::markDurableHome()
 {
-    if(d->isTemporary != isTemp) {
-        d->isTemporary = isTemp;
-        emit isTemporaryProjectChanged();
+    if (d->hasDurableHome) {
+        return;
     }
+    d->hasDurableHome = true;
+    emit hasDurableHomeChanged();
+}
+
+void cwSaveLoad::markTemporaryHome()
+{
+    if (!d->hasDurableHome) {
+        return;
+    }
+    d->hasDurableHome = false;
+    emit hasDurableHomeChanged();
 }
 
 QString cwSaveLoad::randomName() const
@@ -4495,11 +5569,79 @@ QFuture<void> cwSaveLoad::completeSaveJobs()
 
 QFuture<void> cwSaveLoad::pendingJobsFinished()
 {
-    return completeSaveJobs();
+    // Shielded because the drain future is shared project-wide state:
+    // AsyncFuture propagates cancel() upstream through context chains,
+    // so an unshielded caller canceling its derived chain would cancel
+    // m_pendingJobsDeferred's future underneath the re-arm polls in
+    // cwSaveLoadPrivate and every sibling observer, starving the queue.
+    // Note the shielded future settles via the event loop, so it is
+    // never already-finished at return - observe it, don't poll it.
+    return AsyncFuture::shield(completeSaveJobs());
 }
 
 QString cwSaveLoad::sanitizeFileName(QString input) {
     return cwNameUtils::sanitizeFileName(std::move(input));
+}
+
+QString cwSaveLoad::relativeNodeDir(const QStringList& nodePath)
+{
+    QString relativeDir;
+    for (const QString& name : nodePath) {
+        if (!relativeDir.isEmpty()) {
+            relativeDir += QLatin1Char('/') + kSubNodeDirName + QLatin1Char('/');
+        }
+        relativeDir += sanitizeFileName(name);
+    }
+    return relativeDir;
+}
+
+int cwSaveLoad::stampVersion(const cwCavingRegion* region)
+{
+    if (region == nullptr) {
+        return kFlatProjectVersion;
+    }
+
+    const cwSurveyNode* root = region->rootNode();
+    if (root == nullptr) {
+        return kFlatProjectVersion;
+    }
+
+    //Every field the writer can store for a node in the tree counts toward the
+    //stamp: a file that carries one is a file an older build would drop on its
+    //next save. Only a cwCave's trips reach disk, so the walk below asks this
+    //of the caves it visits and the root's own trips stay out of it.
+    const auto holdsTripSourcePath = [](const cwSurveyNode* node) {
+        const QList<cwTrip*> trips = node->trips();
+        for (const cwTrip* trip : trips) {
+            if (!trip->sourcePath().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    //Stops at the first node that needs the tree format: this runs once per
+    //file a save writes, so it walks no more of the region than it has to. A
+    //child of a node that is not the root is already at depth two.
+    const auto holdsHierarchy = [holdsTripSourcePath](const cwSurveyNode* node, auto&& self) -> bool {
+        const QList<cwSurveyNode*> children = node->childNodes();
+        for (const cwSurveyNode* child : children) {
+            const bool needsTree = !node->isRoot()
+                    || child->kind() != cwSurveyNode::Kind::Cave
+                    || child->isReadOnly()
+                    || !child->sourceId().isNull()
+                    || !child->sourcePath().isEmpty()
+                    || holdsTripSourcePath(child);
+            if (needsTree || self(child, self)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const bool needsTree = region->externalSources()->count() > 0
+            || holdsHierarchy(root, holdsHierarchy);
+    return needsTree ? cwRegionIOTask::protoVersion() : kFlatProjectVersion;
 }
 
 
@@ -4588,10 +5730,14 @@ QString cwSaveLoad::absolutePathPrivate(const cwCave* cave) const
 
 QDir cwSaveLoad::dirPrivate(const cwCave* cave) const
 {
-    if (cave->parentRegion()) {
-        return caveDirHelper(dataRootDir(), cave);
+    if (cave == nullptr || cave->parentRegion() == nullptr) {
+        return QDir();
     }
-    return QDir();
+
+    //cwSurveyNode::path() is the walk up to the root, and relativeNodeDir turns
+    //it into the sub/ layout: the root's own children are the data root's
+    //directories, and everything deeper sits in its parent's sub/.
+    return QDir(dataRootDir().absoluteFilePath(relativeNodeDir(cave->path())));
 }
 
 QString cwSaveLoad::fileNamePrivate(const cwTrip* trip) const
@@ -4749,7 +5895,7 @@ QDir cwSaveLoad::dirPrivate(const cwSketch* sketch) const
 }
 
 void cwSaveLoad::saveProtoMessage(std::unique_ptr<const google::protobuf::Message> message,
-                                  const void* objectId)
+                                  const QObject* objectId)
 {
     Q_ASSERT(message);
     d->saveProtoMessage(this,
@@ -4762,6 +5908,11 @@ QDir cwSaveLoad::caveDirHelper(const QDir &projectDir, const cwCave *cave)
 {
     QString caveDirName = sanitizeFileName(cave->name());
     return QDir(projectDir.absoluteFilePath(caveDirName));
+}
+
+QDir cwSaveLoad::nodeDirHelper(const QDir &parentNodeDir, const cwCave *node)
+{
+    return QDir(parentNodeDir.absoluteFilePath(kSubNodeDirName + QLatin1Char('/') + sanitizeFileName(node->name())));
 }
 
 QDir cwSaveLoad::tripDirHelper(const QDir &caveDir, const cwTrip *trip)
@@ -4795,9 +5946,9 @@ QDir cwSaveLoad::externalCenterlineDir(const cwTrip *trip) const
     return externalCenterlineDirHelper(dirPrivate(trip));
 }
 
-bool cwSaveLoad::isTemporaryProject() const
+bool cwSaveLoad::hasDurableHome() const
 {
-    return d->isTemporary;
+    return d->hasDurableHome;
 }
 
 QString cwSaveLoad::dataRoot() const
@@ -4987,6 +6138,12 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
     const QString repoPath = repo->directory().absolutePath();
     const quint64 syncGeneration = d->operationGeneration;
 
+    // A pull writes a teammate's edits straight into the working tree,
+    // where the watcher sees them. cwProject re-asserts the dirty bit from
+    // the sync report when the sync ends, so a watcher event arriving after
+    // that would contradict a decision made with the full picture.
+    d->selfWrite.begin();
+
     auto syncDeferred = std::make_shared<AsyncFuture::Deferred<ResultBase>>();
     auto scheduleAttempt = std::make_shared<std::function<void(int)>>();
     // Preserved across retries so each sync report's diff spans from the
@@ -5005,11 +6162,12 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
             return;
         }
 
+        // A retry's report stays absent until its own commit lands, so a
+        // failed retry commit leaves the project modified.
+        d->lastSyncReport.reset();
         auto attemptState = std::make_shared<ReconcileAttemptState>();
 
-        auto saveFlushFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this]() {
-            return saveFlushImpl();
-        });
+        auto saveFlushFuture = enqueueSyncFlush(attemptState);
 
         auto syncPrepareFuture = d->enqueueOperation(
                     this,
@@ -5030,6 +6188,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
             if (commitResult.hasError()) {
                 return AsyncFuture::completed(commitResult);
             }
+            publishSyncFlushStamp(*attemptState);
             const auto postCommitHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
 
             if (!hasRemoteConfigured(repo)) {
@@ -5113,6 +6272,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                     }
 
                     attemptState->report = reportFuture.result();
+                    attemptState->report->mutationEpoch = attemptState->flushEpoch;
                     d->lastSyncReport = attemptState->report;
                     if (!attemptState->report.has_value()) {
                         return ResultBase(QStringLiteral("Sync report is unavailable."));
@@ -5172,6 +6332,12 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
         });
     };
 
+    // Retries re-enter scheduleAttempt, so the window closes on the
+    // deferred rather than on any one attempt.
+    AsyncFuture::observe(syncDeferred->future()).context(this, [this]() {
+        d->selfWrite.end();
+    });
+
     (*scheduleAttempt)(0);
 
     cwTaskTrace::traceOperation(QStringLiteral("sync"), syncDeferred->future(), this);
@@ -5201,9 +6367,11 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
     const quint64 syncGeneration = d->operationGeneration;
     auto attemptState = std::make_shared<ReconcileAttemptState>();
 
-    auto saveFlushFuture = d->enqueueOperation(this, cwSaveLoadPrivate::Operation::Type::SaveFlush, [this]() {
-        return saveFlushImpl();
-    });
+    // Checkout, branch reset, and restore-to-commit all rewrite the working
+    // tree; see the window in sync().
+    d->selfWrite.begin();
+
+    auto saveFlushFuture = enqueueSyncFlush(attemptState);
 
     auto checkoutPrepareFuture = d->enqueueOperation(
                 this,
@@ -5224,6 +6392,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
             return AsyncFuture::completed(ResultBase(
                                               QStringLiteral("Working directory must be clean before checkout and reconcile.")));
         }
+        publishSyncFlushStamp(*attemptState);
 
         const auto beforeHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
         if (beforeHeadResult.hasError()) {
@@ -5285,6 +6454,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
                 attemptState->report = reportFuture.result();
                 if (attemptState->report.has_value()) {
                     attemptState->report->diagnostics.append(operationLabel);
+                    attemptState->report->mutationEpoch = attemptState->flushEpoch;
                 }
                 d->lastSyncReport = attemptState->report;
                 if (!attemptState->report.has_value()) {
@@ -5313,6 +6483,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& o
     AsyncFuture::observe(finalizeFuture)
             .context(this, [this, finalizeFuture, checkoutDeferred]() {
         d->remoteApplyGuard.end();
+        d->selfWrite.end();
         checkoutDeferred->complete(finalizeFuture.result());
     });
 
@@ -5445,6 +6616,13 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         auto reconnectGuard = qScopeGuard([this, previousSaveEnabled]() {
             setSaveEnabled(previousSaveEnabled);
             connectTreeModel();
+            // loadAll never enumerates "GIS Layers/", so loadData carries
+            // nothing about LAZ layers for a merge handler to diff — the model
+            // would keep a row whose file is gone, and its stale point cloud,
+            // until something else happened to rescan. Runs after
+            // connectTreeModel so the row handlers are live to release each
+            // removed layer's m_objectStates entry.
+            rescanLazLayersAfterGitWrite();
         });
 
         const auto& loadData = loadResult.value();
@@ -5457,8 +6635,10 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         bool requiresPersistence = false;
         bool persistNoteDescriptors = false;
         bool persistLiDARNoteDescriptors = false;
+        bool persistProjectFile = false;
         QString reconcileDiagnostic;
         QStringList mergeDiagnostics;
+        QStringList applyDiagnostics;
         SyncReport handlerReport = report;
         const cwReconcileMergeContext mergeContext {
             this,
@@ -5473,6 +6653,33 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         const cwReconcileMergeResult mergeResult = cwSyncMergeRegistry::instance().reconcile(mergeContext);
         const bool fullReloadApplied = (mergeResult.outcome != cwReconcileMergeResult::Outcome::Applied);
         if (!fullReloadApplied) {
+            // A subtree a local change won whole is written back only once the registry
+            // settled on Applied: a later handler's full reload discards this result, and
+            // files already written would outlive that decision while the model went back
+            // to the loaded data.
+            for (const cwRestoreFilesFromCommit& restore : mergeResult.filesToRestore) {
+                const auto restoreOutcome = restoreFilesFromCommit(projectRootDir(),
+                                                                   restore.commit,
+                                                                   restore.relativePaths,
+                                                                   d->repository != nullptr
+                                                                   ? d->repository->lfsStore()
+                                                                   : nullptr);
+                applyDiagnostics.append(QStringLiteral("restore from %1 wrote %2 files")
+                                          .arg(restore.commit)
+                                          .arg(restoreOutcome.writtenFileCount));
+                if (!restoreOutcome.skippedPaths.isEmpty()) {
+                    applyDiagnostics.append(QStringLiteral("restore from %1 could not write: %2")
+                                              .arg(restore.commit,
+                                                   restoreOutcome.skippedPaths.join(QStringLiteral(", "))));
+                }
+            }
+
+            // Orphan removals are queued here rather than by the handler that found them,
+            // so the full-reload branch below can load the project without them first.
+            for (const QString& orphanDir : mergeResult.orphanDirectoriesToRemove) {
+                enqueueOrphanDirectoryCleanup(orphanDir);
+            }
+
             for (QObject* object : mergeResult.objectsPathReady) {
                 if (object != nullptr) {
                     emit objectPathReady(object);
@@ -5494,23 +6701,64 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                     mergeResult.diskAlreadySynchronized || gitPlacedAllFiles;
 
             requiresPersistence = (mergeResult.modelMutated && !effectiveDiskAlreadySynchronized)
-                    || mergeResult.pendingConflictCleanup;
-            if (mergeResult.handlerName == QStringLiteral("cwNoteSyncMergeHandler")) {
-                persistNoteDescriptors = mergeResult.modelMutated;
-            } else if (mergeResult.handlerName == QStringLiteral("cwNoteLiDARSyncMergeHandler")) {
-                persistLiDARNoteDescriptors = mergeResult.modelMutated;
-            }
+                    || mergeResult.pendingConflictCleanup
+                    || mergeResult.persistProjectFile;
+            persistNoteDescriptors = mergeResult.persistNoteDescriptors;
+            persistProjectFile = mergeResult.persistProjectFile;
+            persistLiDARNoteDescriptors = mergeResult.persistLiDARNoteDescriptors;
             reconcileDiagnostic = QStringLiteral("reconcile handler %1 applied (%2)")
                     .arg(mergeResult.handlerName,
                          modelMutated
                          ? QStringLiteral("mutated")
                          : QStringLiteral("projection-only"));
         } else {
-            region->setData(loadData.region);
+            // The Applied path merges a change found only inside an orphan into its
+            // winner; the reload has no such merge, so an orphan holding anything its
+            // winner lacks stays and loads as a node of its own.
+            QStringList orphanDirs;
+            QStringList keptOrphanDirs;
+            const QDir rootDir = projectRootDir();
+            for (const QString& orphanDir : mergeResult.orphanDirectoriesToRemove) {
+                if (siblingCoversOrphan(QDir(rootDir.absoluteFilePath(orphanDir)))) {
+                    orphanDirs.append(orphanDir);
+                } else {
+                    keptOrphanDirs.append(orphanDir);
+                }
+            }
+            if (!keptOrphanDirs.isEmpty()) {
+                applyDiagnostics.append(QStringLiteral("full reload kept orphan directories holding changes of their own: %1")
+                                          .arg(keptOrphanDirs.join(QStringLiteral(", "))));
+            }
+
+            if (orphanDirs.isEmpty()) {
+                region->setData(loadData.region);
+            } else {
+                // loadData was read before the handlers ran, so it holds each orphan's
+                // node beside its winner, and identity repair minted that copy a fresh
+                // id. Reloading without the orphans leaves one node per id and nothing
+                // for identity repair to mint. The reload runs here on the UI thread:
+                // the tree model is disconnected and the model half merged, so yielding
+                // to the event loop before setData would expose that state.
+                const auto reloadResult = loadAllSkipping(d->projectFileName, orphanDirs);
+                if (reloadResult.hasError()) {
+                    return Monad::Result<ReconcileExternalResult>(reloadResult.errorMessage(),
+                                                                  reloadResult.errorCode());
+                }
+                const ProjectLoadData& reloadData = reloadResult.value();
+                d->projectMetadata = reloadData.metadata;
+                d->pendingIdentityRepairSave = reloadData.identityRepair.required;
+                region->setData(reloadData.region);
+                for (const QString& orphanDir : orphanDirs) {
+                    enqueueOrphanDirectoryCleanup(orphanDir);
+                }
+                applyDiagnostics.append(QStringLiteral("full reload left out orphan directories: %1")
+                                          .arg(orphanDirs.join(QStringLiteral(", "))));
+            }
+            seedStampedVersion();
             modelMutated = true;
             // Full-reload fallback applies merged commit content from disk directly into
-            // the model. Unless identity repair is required, there is nothing to persist.
-            requiresPersistence = false;
+            // the model. Only identity repair or a removed orphan leaves something to persist.
+            requiresPersistence = !orphanDirs.isEmpty();
             persistNoteDescriptors = false;
             persistLiDARNoteDescriptors = false;
 
@@ -5523,6 +6771,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         }
 
         mergeDiagnostics = mergeResult.diagnostics;
+        mergeDiagnostics.append(applyDiagnostics);
 
         if (!reconcileDiagnostic.isEmpty() && d->lastSyncReport.has_value()) {
             d->lastSyncReport->diagnostics.append(reconcileDiagnostic);
@@ -5549,6 +6798,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                 : ReconcileExternalResult::Outcome::NoOp;
         reconcileResult.persistNoteDescriptors = persistNoteDescriptors;
         reconcileResult.persistLiDARNoteDescriptors = persistLiDARNoteDescriptors;
+        reconcileResult.persistProjectFile = persistProjectFile;
         return Monad::Result<ReconcileExternalResult>(reconcileResult);
     })
             .future();
@@ -5556,42 +6806,43 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
 
 QFuture<void> cwSaveLoad::retire()
 {
-    if (d->retiring) {
-        return d->retireFuture;
+    if (!d->retiring) {
+        d->retiring = true;
+        d->cancelPendingOperations(QStringLiteral("Project is retiring."));
+        setSaveEnabled(false);
+        disconnectTreeModel();
+        d->m_regionTreeModel->setCavingRegion(nullptr);
+
+        auto saveJobsFuture = completeSaveJobs();
+
+        QFuture<void> retireFuture;
+        if (!d->m_ownedTempDirs.isEmpty()) {
+            const QStringList capturedTempDirs = d->m_ownedTempDirs;
+            d->m_ownedTempDirs.clear();  // Prevent destructor double-cleanup
+            retireFuture = AsyncFuture::observe(saveJobsFuture)
+                .context(this, [this, capturedTempDirs]() {
+                    return QtConcurrent::run(&d->m_saveThreadPool, [capturedTempDirs]() {
+                        for (const QString& dir : capturedTempDirs) {
+                            removeTemporaryProjectDir(dir);
+                        }
+                    });
+                }).future();
+        } else {
+            retireFuture = saveJobsFuture;
+        }
+
+        d->retireFuture = retireFuture;
+        d->futureToken.addJob(d->retireFuture,
+                              QStringLiteral("Finishing saves"));
+
+        AsyncFuture::observe(d->retireFuture)
+                .context(this, [this]() {
+            deleteLater();
+        });
     }
 
-    d->retiring = true;
-    d->cancelPendingOperations(QStringLiteral("Project is retiring."));
-    setSaveEnabled(false);
-    disconnectTreeModel();
-    d->m_regionTreeModel->setCavingRegion(nullptr);
-
-    auto saveJobsFuture = completeSaveJobs();
-
-    QFuture<void> retireFuture;
-    if (!d->m_ownedTempDirs.isEmpty()) {
-        const QStringList capturedTempDirs = d->m_ownedTempDirs;
-        d->m_ownedTempDirs.clear();  // Prevent destructor double-cleanup
-        retireFuture = AsyncFuture::observe(saveJobsFuture)
-            .context(this, [this, capturedTempDirs]() {
-                return QtConcurrent::run(&d->m_saveThreadPool, [capturedTempDirs]() {
-                    for (const QString& dir : capturedTempDirs) {
-                        removeTemporaryProjectDir(dir);
-                    }
-                });
-            }).future();
-    } else {
-        retireFuture = saveJobsFuture;
-    }
-
-    d->retireFuture = retireFuture;
-    d->futureToken.addJob(d->retireFuture,
-                          QStringLiteral("Finishing saves"));
-
-    AsyncFuture::observe(d->retireFuture)
-            .context(this, [this]() {
-        deleteLater();
-    });
-
-    return d->retireFuture;
+    // Shielded per caller: retireFuture chains on the shared save-job
+    // drain, and the tempdir-cleanup + deleteLater observers watch the
+    // same future, so a consumer cancel must reach neither.
+    return AsyncFuture::shield(d->retireFuture);
 }

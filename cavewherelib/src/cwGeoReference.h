@@ -32,11 +32,13 @@
  * region-specific plumbing stays on the region: pushing the frame into the LAZ
  * layer model happens there and drives this slice through its public setters.
  *
- * There is no separate scene offset. The LDP is a transverse Mercator centered
- * on the project's anchor with x_0 = y_0 = 0, so a point's LDP coordinates
- * already are its scene coordinates — there is nothing left to subtract, and
- * nothing that can disagree about how much was subtracted. See
- * plans/LDP_AUTO_COORDINATE_SYSTEM_PLAN.html.
+ * The scene has no offset of its own. The LDP is a transverse Mercator
+ * centered on the project's anchor with x_0 = y_0 = 0, so a point's LDP
+ * coordinates already are its scene coordinates. The one translation is an
+ * attached file's whose fixes name no system: the solve reads that file in a
+ * system that moves its first bare fix onto the origin
+ * (cwLocalProjection::translated), in the LDP or, with no geography at all, in
+ * the LocalGrid state. See plans/LDP_AUTO_COORDINATE_SYSTEM_PLAN.html.
  */
 class CAVEWHERE_LIB_EXPORT cwGeoReference : public QObject
 {
@@ -70,7 +72,12 @@ public:
         Anchored,
         //! An LDP with no anchor left to follow. It moves only when the user
         //! asks for it explicitly.
-        Frozen
+        Frozen,
+        //! No LDP and no geography: the attached files' bare fixes are a local
+        //! grid, each file translated so its first bare fix sits at the origin.
+        //! The project has no geography; the solve runs in
+        //! cwLocalProjection::localGridSystem().
+        LocalGrid
     };
     Q_ENUM(State)
 
@@ -79,14 +86,18 @@ public:
      * question the lifecycle asks is "was the thing just edited the anchor?",
      * and a coordinate can't answer that about itself.
      *
-     * Both kinds carry a persisted UUID (cwFixStation::id, cwLazLayer::id), so
-     * the identity survives save/load and outlives any rename.
+     * Every kind carries a persisted UUID (cwFixStation::id, cwLazLayer::id,
+     * the attachment owner's cwSurveyNode::id or cwTrip::id), so the identity
+     * survives save/load and outlives any rename.
      */
     struct Anchor {
         enum Kind {
             None,
             FixStation,
-            LazLayer
+            LazLayer,
+            //! An attachment's bare fix read in its chosen system; the id is
+            //! the attachment owner's (node or trip).
+            Attachment
         };
 
         Kind kind = None;
@@ -102,10 +113,10 @@ public:
     //! points can be placed in a real-world CRS (true/magnetic north, WGS84,
     //! export). Consumers should ask this rather than re-deriving the rule from
     //! the state or the string.
-    bool hasCoordinateSystem() const { return state() != Ungeoreferenced; }
+    bool hasCoordinateSystem() const { return state() == Anchored || state() == Frozen; }
 
     //! The project's derived local projection as a PROJ string, or "" in
-    //! Ungeoreferenced. Always the stored string — never re-derived on read, so
+    //! Ungeoreferenced and LocalGrid. Always the stored string — never re-derived on read, so
     //! two machines with different PROJ data can't disagree about where the
     //! project is (cwLocalProjection).
     QString localCoordinateSystem() const { return m_localProjection.coordinateSystem; }
@@ -142,6 +153,10 @@ public:
     //! Back to Ungeoreferenced — every georeferenced input is gone, so the
     //! frame it implied is too.
     void clear();
+
+    //! To LocalGrid: nothing georeferenced places the project, but an attached
+    //! file's bare fixes do, each file centered on its own first one.
+    void useLocalGrid();
 
     //! Restore persisted state wholesale, repairing any combination that can't
     //! be true (an anchor with no string, a state naming an anchor it doesn't

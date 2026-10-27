@@ -1,0 +1,6 @@
+; The same tree with a houping that names its own *cs out and fixes its
+; entrance under a *cs, while sanqiao's *fix still names none. Run on its
+; own, cavern refuses sanqiao's fix: the output projection is set but the
+; input projection isn't.
+*include houping_utm
+*include ../sanqiao/sanqiao

@@ -1,0 +1,6 @@
+; West Cave fixes its own entrance; W2.SRV continues from W3.
+#DATE 2010-06-02
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+#FIX W1 500.0 0.0 100.0
+W1	W2	10.0	0	0
+W2	W3	10.0	270	0

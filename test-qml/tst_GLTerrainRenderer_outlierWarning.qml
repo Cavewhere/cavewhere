@@ -160,7 +160,7 @@ MainWindowTest {
             // open the Fix Stations page, and landing on the cave page instead
             // leaves the user to find it (#627).
             tryVerify(() => RootData.pageSelectionModel.currentPageAddress
-                              === "Source/Data/Cave=OutlierCave/Fix Stations",
+                              === "Source/Data/Node=OutlierCave/Fix Stations",
                       1000,
                       "the link routes to the offending cave's fix stations: "
                       + RootData.pageSelectionModel.currentPageAddress)
@@ -192,7 +192,7 @@ MainWindowTest {
             mouseClick(label, p.x, p.y)
 
             tryVerify(() => RootData.pageSelectionModel.currentPageAddress
-                              === "Source/Data/Cave=OutlierCave/Fix Stations",
+                              === "Source/Data/Node=OutlierCave/Fix Stations",
                       1000,
                       "clicking the link routes to the fix stations: "
                       + RootData.pageSelectionModel.currentPageAddress)

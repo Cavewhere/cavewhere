@@ -16,28 +16,36 @@ QQ.Rectangle {
     required property int columnWidth;
 
     required property int sortRole; //: -1
-    property int sortMode: TableStaticHeaderColumn.Sort.None
-
     required property var model
+
+    //! Shows a grip on the right edge whose drag asks for a new width
+    //! through resizeRequested(); the page owns the width and stores it.
+    property bool resizable: false
 
     property SortFilterProxyModel _sortModel: model as SortFilterProxyModel
 
+    // Derived from the model rather than stored here: the header delegates
+    // are recreated whenever the table is torn down (an empty cave, a
+    // narrow/wide flip), and a stored mode would come back cleared while
+    // the proxy carried on sorting.
+    readonly property int sortMode: {
+        if(_sortModel === null || _sortModel.sortRole !== sortRole) {
+            return TableStaticHeaderColumn.Sort.None
+        }
+        return _sortModel.sortOrder === Qt.DescendingOrder
+                ? TableStaticHeaderColumn.Sort.Descending
+                : TableStaticHeaderColumn.Sort.Ascending
+    }
+
     // Qt6: add cellPadding (and font etc) as public API in headerview
     readonly property real cellPadding: 2
+
+    signal resizeRequested(int newWidth)
 
     implicitWidth: columnWidth
     implicitHeight: textId.implicitHeight + (cellPadding * 2)
     color: Theme.chrome
     border.color: Theme.borderSubtle
-
-    QQ.Connections {
-        target: delegate._sortModel
-        function onSortRoleChanged() {
-            if(delegate._sortModel.sortRole != delegate.sortRole) {
-                delegate.sortMode = TableStaticHeaderColumn.Sort.None
-            }
-        }
-    }
 
     QQ.Item {
         width: delegate.width
@@ -72,30 +80,18 @@ QQ.Rectangle {
     QQ.MouseArea {
         anchors.fill: parent
         anchors.leftMargin: 5
-        anchors.rightMargin: 5
+        anchors.rightMargin: delegate.resizable ? resizeGripId.width : 5
         onClicked: {
             if(delegate.sortRole >= 0) {
-                if(delegate.sortMode == TableStaticHeaderColumn.Sort.None) {
-                    delegate.sortMode = TableStaticHeaderColumn.Sort.Ascending
-                } else if(delegate.sortMode == TableStaticHeaderColumn.Sort.Ascending) {
-                    delegate.sortMode = TableStaticHeaderColumn.Sort.Descending
-                } else {
-                    //Descending
-                    delegate.sortMode = TableStaticHeaderColumn.Sort.Ascending
-                }
-
                 //Assume that this is a sort proxy mode
-                let sortModel = delegate.model as SortFilterProxyModel
                 if(delegate._sortModel) {
+                    // Only a column already sorted ascending flips to
+                    // descending; every other click starts over ascending.
+                    let nextOrder = delegate.sortMode === TableStaticHeaderColumn.Sort.Ascending
+                            ? Qt.DescendingOrder
+                            : Qt.AscendingOrder
                     delegate._sortModel.sortRole = delegate.sortRole
-                    switch(delegate.sortMode) {
-                    case TableStaticHeaderColumn.Sort.Ascending:
-                            delegate._sortModel.sort(Qt.AscendingOrder)
-                        break
-                    case TableStaticHeaderColumn.Sort.Descending:
-                            delegate._sortModel.sort(Qt.DescendingOrder)
-                        break
-                    }
+                    delegate._sortModel.sort(nextOrder)
                 } else {
                     console.warn("TableStaticHeaderColumn model isn't a cwSortFilterProxyModel, sorting will not work")
                 }
@@ -103,5 +99,18 @@ QQ.Rectangle {
                 console.warn("Delegate has no sortRole")
             }
         }
+    }
+
+    ColumnResizeGrip {
+        id: resizeGripId
+        objectName: "columnResizeGrip." + delegate.text
+
+        visible: delegate.resizable
+        columnWidth: delegate.columnWidth
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+
+        onResizeRequested: (newWidth) => delegate.resizeRequested(newWidth)
     }
 }

@@ -106,9 +106,6 @@ private slots:
     void liDARRowsInserted(const QModelIndex& parent, int begin, int end);
     void liDARRowsAboutToBeRemoved(const QModelIndex& parent, int begin, int end);
 
-    // Centerline triggers (if bound via line plot or elsewhere)
-    void stationPositionsChangedForCave(cwCave* cave);
-
     // Bookkeeping
     void noteDestroyed(QObject* noteObj);
 

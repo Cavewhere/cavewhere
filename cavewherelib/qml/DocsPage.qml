@@ -372,7 +372,7 @@ StandardPage {
             icon.color: Theme.text
 
             QC.ToolTip.text: qsTr("Next match") + " (" + findNextShortcutId.nativeText + ")"
-            QC.ToolTip.delay: 500
+            QC.ToolTip.delay: Theme.toolTipDelay
             QC.ToolTip.visible: hovered
 
             onClicked: finderId.findNext()
@@ -390,7 +390,7 @@ StandardPage {
             icon.color: Theme.text
 
             QC.ToolTip.text: qsTr("Previous match") + " (" + findPreviousShortcutId.nativeText + ")"
-            QC.ToolTip.delay: 500
+            QC.ToolTip.delay: Theme.toolTipDelay
             QC.ToolTip.visible: hovered
 
             onClicked: finderId.findPrevious()
@@ -476,7 +476,7 @@ StandardPage {
         icon.color: Theme.text
 
         QC.ToolTip.text: qsTr("Find in page") + " (" + findShortcutId.nativeText + ")"
-        QC.ToolTip.delay: 500
+        QC.ToolTip.delay: Theme.toolTipDelay
         QC.ToolTip.visible: hovered
 
         onClicked: docsPageId.openFind()

@@ -52,6 +52,24 @@ class cwSaveLoad;
 namespace cwExternalCenterlineSync {
 
 /**
+ * What a reconcile does with a destination file that already looks
+ * like its source.
+ *
+ * - SkipUpToDate: keep a destination of the same size whose mtime is
+ *   the source's or newer. This is the cheap, idempotent pass.
+ * - Overwrite: copy every dependency, so the source's bytes win.
+ *   Attach and Replace use this: the user picked a file and expects
+ *   its contents in the project, and an edit to the project's copy
+ *   that keeps the byte size (a "5.2" turned into "5.3") reads as
+ *   up to date under the SkipUpToDate test, which would silently
+ *   keep the edit across the swap.
+ */
+enum class CopyPolicy {
+    SkipUpToDate,
+    Overwrite
+};
+
+/**
  * The set of operations reconcile would submit to cwSaveLoad for a
  * given (ScanResult, attachmentDir) pair. Returned by computePlan
  * and consumed by reconcile.
@@ -66,22 +84,32 @@ namespace cwExternalCenterlineSync {
  *   reconcile completes (the union of copies' destinations plus
  *   destinations whose source matches and was skipped). Phase 2's
  *   QFileSystemWatcher wiring uses this as its watch set.
- * - warnings: dependency entries that could not be planned (e.g.
- *   a dep whose relative path escapes attachmentDir via ../). The
- *   scan itself was not failed; the dep is simply omitted.
+ * - baseDir: the directory the mirror layout is taken relative to —
+ *   the dependencies' common ancestor. The entry's own path relative
+ *   to it is what attach persists as cwExternalCenterline::entryFile.
+ *   Empty when the scan carried no dependencies or a guard refused
+ *   the layout.
+ * - warnings: why the layout was refused — the dependencies share no
+ *   common folder, or their ancestor sits too far above the entry.
+ *   A plan refused by either guard carries the warning alone - no
+ *   copies, removes or expectedFiles - and since B7 the attach fails
+ *   on any warning, so a refused layout leaves both the disk and the
+ *   model untouched.
  */
 struct ReconcilePlan {
     QList<std::pair<QString, QString>> copies;
     QStringList removes;
     QStringList expectedFiles;
     QStringList warnings;
+    QString baseDir;
 
     bool operator==(const ReconcilePlan& other) const
     {
         return copies == other.copies
             && removes == other.removes
             && expectedFiles == other.expectedFiles
-            && warnings == other.warnings;
+            && warnings == other.warnings
+            && baseDir == other.baseDir;
     }
     bool operator!=(const ReconcilePlan& other) const { return !(*this == other); }
 };
@@ -90,16 +118,26 @@ struct ReconcilePlan {
  * Builds the reconcile plan for `scan` against `attachmentDir`.
  *
  * The plan layout under attachmentDir mirrors the source layout
- * relative to the entry file's directory (scan.dependencies[0]),
- * so the entry's *include paths still resolve after the copy
- * lands in the project. Dependencies whose relative path escapes
- * attachmentDir (cross-format includes pointing at siblings of
- * the entry's dir) are dropped from the plan with a warning.
+ * relative to the dependencies' common ancestor directory (the
+ * plan's baseDir), so a relative *include still resolves after the
+ * copy lands in the project — including the ordinary
+ * *include "../shared.svx" that reaches above the entry file.
+ * Every dependency sits at or below its own ancestor, so every one
+ * of them lands inside attachmentDir.
  *
- * Existing files inside attachmentDir that match a source by size
- * and have a same-or-newer mtime are kept (no copy enqueued).
+ * Two layouts are refused, each with a warning and an otherwise
+ * empty plan (so the attach fails before anything is written): the
+ * dependencies share no common folder (different Windows volumes),
+ * or their ancestor sits more than kMaxRebaseClimb levels above the
+ * entry's own directory, which means the entry is a scattered
+ * project's driver rather than the file that owns its includes.
+ *
+ * Under CopyPolicy::SkipUpToDate, existing files inside
+ * attachmentDir that match a source by size and have a
+ * same-or-newer mtime are kept (no copy enqueued); under
+ * CopyPolicy::Overwrite every dependency is planned as a copy.
  * Files inside attachmentDir not part of the closure are slated
- * for removal.
+ * for removal either way.
  *
  * computePlan does not mutate the filesystem. It returns an empty
  * plan when scan.dependencies is empty (the caller's scan failed
@@ -107,17 +145,19 @@ struct ReconcilePlan {
  */
 CAVEWHERE_LIB_EXPORT ReconcilePlan computePlan(
     const cwExternalCenterlineScanner::ScanResult& scan,
-    const QString& attachmentDir);
+    const QString& attachmentDir,
+    CopyPolicy copyPolicy = CopyPolicy::SkipUpToDate);
 
 /**
  * Runs the reconcile plan through the cwSaveLoad job queue.
  *
- * Enqueues one copyIfNewer job per plan.copies entry and one
+ * Enqueues one copy job per plan.copies entry (an overwriting copy
+ * under CopyPolicy::Overwrite, an if-newer copy otherwise) and one
  * removeFile job per plan.removes entry; returns a future that
  * completes when the project's queued jobs drain (matching the
- * existing saveFlush primitive). On temporary / unsaved projects
- * the helper still returns a completed future - the underlying
- * enqueue methods are no-ops in that case.
+ * existing saveFlush primitive). Temporary / unsaved projects are
+ * reconciled like any other - they already have a real root dir, and
+ * Save As carries the attachment dir with it.
  *
  * Errors raised by individual filesystem jobs surface through the
  * existing cwSaveLoad error-collection channel; the returned
@@ -126,7 +166,48 @@ CAVEWHERE_LIB_EXPORT ReconcilePlan computePlan(
 CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> reconcile(
     cwSaveLoad* saveLoad,
     const cwExternalCenterlineScanner::ScanResult& scan,
-    const QString& attachmentDir);
+    const QString& attachmentDir,
+    CopyPolicy copyPolicy = CopyPolicy::SkipUpToDate);
+
+/**
+ * True when `path` resolves at or inside `boundaryDir`.
+ *
+ * This is the portability test for an in-project attachment: a
+ * dependency that resolves inside the project's data root exists on
+ * every machine that has the project, and one that resolves outside it
+ * exists only on the machine that authored it. It is a different
+ * question from the one computePlan asks — computePlan tests whether a
+ * dependency can be *written* under the attachment dir, and works on a
+ * relative path — so the two deliberately do not share a predicate.
+ *
+ * Both sides are canonicalized before comparison. That matters in two
+ * directions: a symlinked ancestor cannot be used to step out of the
+ * boundary, and a project living under a symlinked path (a QTemporaryDir
+ * under macOS's /tmp -> /private/tmp) still matches the scanner's
+ * canonical dependency paths. A path that does not exist is compared
+ * with its nearest existing ancestor canonicalized, so a missing file
+ * still answers the question its location asks.
+ *
+ * Returns false when either argument is empty.
+ */
+CAVEWHERE_LIB_EXPORT bool isContainedIn(const QString& path, const QString& boundaryDir);
+
+/**
+ * Longest common directory prefix of the files in `canonicalPaths`,
+ * compared component by component.
+ *
+ * Precondition: every input is a QFileInfo::canonicalFilePath() result
+ * (which is what the scanner records). Canonical paths carry the case
+ * the filesystem itself stores, so the same directory always spells
+ * itself the same way, and a case-sensitive comparison implements each
+ * platform's case rules by construction — while a case-insensitive one
+ * would merge two genuinely distinct directories on a case-sensitive
+ * volume.
+ *
+ * Returns "/" when the paths share only the root, and an empty string
+ * when even their first components differ (different Windows volumes).
+ */
+CAVEWHERE_LIB_EXPORT QString commonAncestorDir(const QStringList& canonicalPaths);
 
 } // namespace cwExternalCenterlineSync
 

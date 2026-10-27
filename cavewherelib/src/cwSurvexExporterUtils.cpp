@@ -10,6 +10,7 @@
 #include "cwClinoReading.h"
 #include "cwCompassReading.h"
 #include "cwDistanceReading.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwGridConvergence.h"
 #include "cwShot.h"
 #include "cwStation.h"
@@ -74,6 +75,12 @@ void CsScope::ensure(QTextStream& stream, const QString& cs)
     m_current = trimmed;
 }
 
+void CsScope::writeFileOutputSystem(QTextStream& stream, const QString& system)
+{
+    cwSurvexExporterUtils::writeFileOutputSystem(stream, system);
+    m_current = system.trimmed();
+}
+
 std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStation>& fixes)
 {
     // "Mark Station as Fixed" creates a row before the user types anything, and
@@ -95,8 +102,6 @@ std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStatio
     return std::nullopt;
 }
 
-namespace {
-
 void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx, CsScope& scope)
 {
     // The fixes above may have left a different system in scope: this context
@@ -106,26 +111,6 @@ void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx, Cs
     stream << "*declination auto ";
     writeCoordTriplet(stream, ctx.easting, ctx.northing, ctx.elevation);
     stream << Qt::endl;
-}
-
-} // namespace
-
-bool writeBlockDeclinationAuto(QTextStream& stream,
-                               const QList<cwFixStation>& fixes,
-                               bool anyTripUsesAuto,
-                               CsScope& scope)
-{
-    if (!anyTripUsesAuto) {
-        return false;
-    }
-
-    const auto ctx = makeDeclinationContext(fixes);
-    if (!ctx) {
-        return false;
-    }
-
-    writeDeclinationAuto(stream, *ctx, scope);
-    return true;
 }
 
 bool writeStandaloneTripHeader(QTextStream& stream,
@@ -184,6 +169,17 @@ void writeDeclinationCalibration(QTextStream& stream,
 
     writeCalibrationLine(stream, QStringLiteral("DECLINATION"), declination - gridConvergence, 1.0,
                          /*skipZero*/ !autoDeclinationInScope);
+}
+
+void writeDeclinationReset(QTextStream& stream)
+{
+    writeCalibrationLine(stream, QStringLiteral("DECLINATION"), 0.0, 1.0, /*skipZero*/ false);
+}
+
+void writeFileOutputSystem(QTextStream& stream, const QString& system)
+{
+    stream << "*cs out " << system << Qt::endl;
+    stream << "*cs " << system << Qt::endl;
 }
 
 double gridConvergenceForBlock(const std::optional<DeclinationContext>& ctx,
@@ -257,12 +253,19 @@ QString verticalClinoText(const cwClinoReading& reading)
 // (cwFixStation::refresh() zeroes them before it branches), so exporting one
 // would anchor the station at the origin and move the whole cave there.
 // Dropping it with a message is the only honest option — a coordinate we can't
-// read is not a coordinate at 0, 0, 0.
+// read is not a coordinate at 0, 0, 0. A Valid fix outside its own system's
+// domain is dropped too: cwLocalProjectionManager leaves it out of the frame, so
+// writing it would put a *cs in a solve whose *cs out the frame never named.
 QString fixUnusableReason(const cwFixStation& fix)
 {
     switch (fix.state()) {
     case cwFixStation::Valid:
-        return QString();
+        if (cwFixStationDiagnostics::isDomainValid(fix)) {
+            return QString();
+        }
+        return QStringLiteral("Fix on station \"%1\" has a coordinate outside the valid range "
+                              "for its coordinate system")
+            .arg(fix.stationName());
     case cwFixStation::Empty:
         return QStringLiteral("Fix on station \"%1\" has no coordinate")
             .arg(fix.stationName());
@@ -307,6 +310,16 @@ QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
     return kept;
 }
 
+QSet<QString> scopedStationKeys(const QString& scope, const QStringList& stations)
+{
+    QSet<QString> keys;
+    keys.reserve(stations.size());
+    for (const QString& station : stations) {
+        keys.insert(cwStation::canonicalKey(scope + station));
+    }
+    return keys;
+}
+
 void writeFixStations(QTextStream& stream,
                       const QList<cwFixStation>& fixes,
                       const QString& fallbackFirstStation,
@@ -347,6 +360,14 @@ bool stationHasLrudData(const cwStation& station)
         || station.right().state() == cwDistanceReading::State::Valid
         || station.up().state()    == cwDistanceReading::State::Valid
         || station.down().state()  == cwDistanceReading::State::Valid;
+}
+
+bool isQuotableIncludePath(const QString& path)
+{
+    return !path.contains(QLatin1Char('"'))
+        && !path.contains(QLatin1Char('\n'))
+        && !path.contains(QLatin1Char('\r'))
+        && !path.contains(QLatin1Char('\032'));
 }
 
 } // namespace cwSurvexExporterUtils

@@ -246,7 +246,12 @@ cwSurveyChunk::~cwSurveyChunk()
   \brief Checks if the survey Chunk is valid
   */
 bool cwSurveyChunk::isValid() const {
-    return (d.stations.size() - 1) == d.shots.size() && !d.stations.empty() && !d.shots.empty();
+    return isValid(d);
+}
+
+bool cwSurveyChunk::isValid(const cwSurveyChunkData& data)
+{
+    return (data.stations.size() - 1) == data.shots.size() && !data.stations.empty() && !data.shots.empty();
 }
 
 /**
@@ -923,11 +928,16 @@ void cwSurveyChunk::moveStationSplays(cwSurveyChunk *from, int fromStation,
  */
 bool cwSurveyChunk::isStationAndShotsEmpty() const
 {
-    if(!isValid()) {
+    return isStationAndShotsEmpty(d);
+}
+
+bool cwSurveyChunk::isStationAndShotsEmpty(const cwSurveyChunkData& data)
+{
+    if(!isValid(data)) {
         return true;
     }
 
-    foreach(cwStation station, d.stations) {
+    for(const cwStation& station : data.stations) {
         if(!station.name().isEmpty() ||
             station.left().state() != cwDistanceReading::State::Empty ||
             station.right().state() != cwDistanceReading::State::Empty ||
@@ -938,7 +948,7 @@ bool cwSurveyChunk::isStationAndShotsEmpty() const
         }
     }
 
-    foreach(cwShot shot, d.shots) {
+    for(const cwShot& shot : data.shots) {
         if(shot.distance().state() != cwDistanceReading::State::Empty ||
                 shot.backCompass().state() != cwCompassReading::State::Empty ||
                 shot.compass().state() != cwCompassReading::State::Empty ||

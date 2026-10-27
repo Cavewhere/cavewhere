@@ -1,0 +1,9 @@
+; Lat/long block - 2 stations, l1 fixed in longitude and latitude on
+; zone 16N's central meridian, so it lands at easting 500000.
+*cs out EPSG:32616
+*begin latlong
+*cs LONG-LAT
+*fix l1 -87.0 36.0 200
+*data normal from to tape compass clino
+l1 l2 10.0 0 0
+*end latlong

@@ -1,0 +1,105 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+#ifndef CWATTACHEDFIXMODEL_H
+#define CWATTACHEDFIXMODEL_H
+
+//Qt includes
+#include <QAbstractListModel>
+#include <QList>
+#include <QQmlEngine>
+
+//Our includes
+#include "cwExternalCenterline.h"
+#include "cwGlobals.h"
+
+/**
+ * The stations a survey node's attached files fix themselves, one read-only row
+ * per cwAttachedFix, in the order cwSurveyNode::setAttachedFixes() lists them.
+ *
+ * cwSurveyNode::fixStationTable concatenates this after the node's own
+ * cwFixStationDiagnosticsModel, so a single Fix Stations delegate binds both.
+ * The shared roles therefore reuse cwFixStationModel's role ids, and every
+ * cwFixStationDiagnosticsModel role answers with its empty value, so a
+ * delegate's required properties are defined on an attached row too.
+ *
+ * A row whose coordinate reads as a grid position (cwAttachedFix::gridPosition)
+ * answers the easting, northing and elevation roles with its numbers (the
+ * horizontals in its system's units, the elevation in meters), so the page formats it in the project's units; a lat/long row or one whose
+ * text does not parse answers NaN and shows its text.
+ *
+ * The rows come from the attach scan and the file is their source of truth, so
+ * flags() leaves out Qt::ItemIsEditable and setData() refuses every edit.
+ */
+class CAVEWHERE_LIB_EXPORT cwAttachedFixModel : public QAbstractListModel
+{
+    Q_OBJECT
+    QML_NAMED_ELEMENT(AttachedFixModel)
+    QML_UNCREATABLE("Owned by SurveyNode; access via node.attachedFixes")
+
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
+
+public:
+    //! Numbered clear of cwFixStationModel's Qt::UserRole + 1… block and
+    //! cwFixStationDiagnosticsModel's Qt::UserRole + 100… block: the
+    //! concatenated table merges all three into one role hash.
+    enum Roles {
+        //! The attached entry file's name.
+        SourceFileRole = Qt::UserRole + 200,
+        //! Whether a file, not the user, owns the row: always true here, false
+        //! on the node's own rows (cwFixStationDiagnosticsModel answers it).
+        ReadOnlyRole,
+        //! cwAttachedFix::readInWarning(): where the solve reads a fix the file
+        //! gives no coordinate system, and which line left it without one.
+        //! Empty on every other row, the node's own included.
+        ReadInWarningRole,
+        //! cwAttachedFix::reference: the file marks the fix as a reference point.
+        ReferenceRole,
+        //! cwAttachedFix::readInSystem: the system the solve reads a fix the
+        //! file gives no coordinate system in; empty when none is chosen, and on
+        //! every other row.
+        ReadInSystemRole
+    };
+    Q_ENUM(Roles)
+
+    explicit cwAttachedFixModel(QObject* parent = nullptr);
+
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override;
+    Q_INVOKABLE QModelIndex index(int row, int column = 0, const QModelIndex& parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex& index, int role) const override;
+    Qt::ItemFlags flags(const QModelIndex& index) const override;
+    QHash<int, QByteArray> roleNames() const override;
+
+    int count() const { return static_cast<int>(m_fixes.size()); }
+
+    const QList<cwAttachedFix>& attachedFixes() const { return m_fixes; }
+    //! Replaces every row, resetting the model when the list differs.
+    void setAttachedFixes(const QList<cwAttachedFix>& fixes);
+
+    //! Row of the first fix the solve reads in no coordinate system: it names
+    //! none, and none is chosen for it (cwAttachedFix::readInSystem is empty).
+    //! -1 when every fix has a system.
+    int firstFixWithoutReadInSystem() const;
+
+    //! How many of the fixes in \a ownerId's attached file name no coordinate
+    //! system.
+    Q_INVOKABLE int bareFixCount(const QUuid& ownerId) const;
+
+signals:
+    void countChanged();
+
+private:
+    QList<cwAttachedFix> m_fixes;
+    //! cwAttachedFix::gridPosition() of each row, NaN where it has none, read
+    //! once per setAttachedFixes: a coordinate sort asks for the numbers on
+    //! every comparison.
+    QList<cwGeoPoint> m_gridPositions;
+
+    void readGridPositions();
+};
+
+#endif // CWATTACHEDFIXMODEL_H

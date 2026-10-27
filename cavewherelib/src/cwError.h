@@ -13,6 +13,7 @@
 #include <QSharedDataPointer>
 #include <QObject>
 #include <QQmlEngine>
+#include <QUuid>
 
 //Our includes
 class cwErrorData;
@@ -46,7 +47,13 @@ enum class cwErrorTypeId : int {
     SurveyMissingBackClino = 11,
     SurveyCompassDisagreement = 12, //!< on the frontsight compass cell
     SurveyClinoDisagreement = 13,   //!< on the frontsight clino cell
-    SurveyEmptyShot = 14,           //!< on the distance cell of an empty shot inside a chunk
+
+    UnconnectedStations = 14,       //!< a trip's or attached file's stations that the solve could not tie to the cave
+    AttachedFileUnfixed = 15,       //!< an attached file that fixes no station, placed at the origin in a georeferenced project
+    AttachedFileDefaultDatum = 16,  //!< an attached Compass .mak that names a UTM zone but no datum, read in North American 1927
+    AttachedFileFixWithoutCS = 17,  //!< an attachment with fixes that name no coordinate system and no system chosen for them, placed with its first such fix at the project origin
+    AttachedFileReadWarnings = 18,  //!< advisories the scan of an attached file raised: a missing *include, a case-fallback match, an encoding fallback, a value it could not parse
+    SurveyEmptyShot = 19,           //!< on the distance cell of an empty shot inside a chunk
 };
 
 /**
@@ -69,6 +76,8 @@ class CAVEWHERE_LIB_EXPORT cwError
     Q_PROPERTY(bool suppressed READ suppressed WRITE setSupressed)
     Q_PROPERTY(int errorTypeId READ errorTypeId WRITE setErrorTypeId)
     Q_PROPERTY(QString message READ message WRITE setMessage)
+    Q_PROPERTY(QString detail READ detail WRITE setDetail)
+    Q_PROPERTY(QUuid targetId READ targetId WRITE setTargetId)
     Q_PROPERTY(ErrorType type READ type WRITE setType)
 
 public:
@@ -96,6 +105,16 @@ public:
 
     QString message() const;
     void setMessage(QString message);
+
+    //! Supporting text a view shows beneath the message, such as the station
+    //! names a warning counts. Empty when the message says everything.
+    QString detail() const;
+    void setDetail(QString detail);
+
+    //! The id of the object the user edits to resolve this error: a fix
+    //! station, a trip, or a survey node. Null when no single object does.
+    QUuid targetId() const;
+    void setTargetId(const QUuid& targetId);
 
     bool operator==(const cwError& error) const;
     bool operator!=(const cwError& error) const;

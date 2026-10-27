@@ -1,0 +1,11 @@
+{
+ "lengthUnit": "Meters",
+ "depthUnit": "Meters",
+ "name": "Kentucky field seasons",
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-682-g3e0c437b"
+ },
+ "id": "eadb4e72-782b-49db-8a65-cfbaab684b47",
+ "kind": "NODE_FOLDER"
+}

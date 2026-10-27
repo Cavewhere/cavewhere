@@ -12,6 +12,7 @@
 #include <QFuture>
 #include <QSignalSpy>
 #include <QVector>
+#include <QStandardItemModel>
 
 
 //Std includes
@@ -380,4 +381,44 @@ TEST_CASE("cwKeywordGroupByKeyModel survives extension destruction during filter
 
     CHECK(groupedModel.rowCount() >= 1);
     CHECK(keywordItemModel.rowCount() == 1);
+}
+
+TEST_CASE("cwKeywordGroupByKeyModel takes a source range insert in one pass",
+          "[cwKeywordGroupByKeyModel][MainThreadBudget]")
+{
+    constexpr int kRangeCount = 50;
+
+    QObject owner;
+    QStandardItemModel source;
+    cwKeywordGroupByKeyModel groupBy;
+    groupBy.setSourceModel(&source);
+
+    QList<QStandardItem*> rows;
+    for (int i = 0; i < kRangeCount; ++i) {
+        auto* row = new QStandardItem();
+        row->setData(QVariant::fromValue<QObject*>(new QObject(&owner)), cwKeywordItemModel::ObjectRole);
+        row->setData(QVariant::fromValue(QVector<cwKeyword>({cwKeyword(QStringLiteral("type"), QStringLiteral("line"))})),
+                     cwKeywordItemModel::KeywordsRole);
+        rows.append(row);
+    }
+
+    QSignalSpy groupChanged(&groupBy, &QAbstractItemModel::dataChanged);
+    QSignalSpy acceptedInserted(groupBy.acceptedModel(), &QAbstractItemModel::rowsInserted);
+
+    source.invisibleRootItem()->appendRows(rows);
+
+    const int otherRow = groupBy.otherIndex().row();
+    int otherChanges = 0;
+    for (const QList<QVariant>& arguments : std::as_const(groupChanged)) {
+        const QModelIndex topLeft = arguments.at(0).value<QModelIndex>();
+        const QModelIndex bottomRight = arguments.at(1).value<QModelIndex>();
+        if (topLeft.row() <= otherRow && otherRow <= bottomRight.row()) {
+            ++otherChanges;
+        }
+    }
+
+    CHECK(otherChanges == 1);
+    CHECK(acceptedInserted.count() == 1);
+    CHECK(groupBy.otherIndex().data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt() == kRangeCount);
+    CHECK(groupBy.acceptedModel()->rowCount() == kRangeCount);
 }

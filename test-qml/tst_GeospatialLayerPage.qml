@@ -11,10 +11,7 @@ MainWindowTest {
         when: windowShown
 
         function init() {
-            if (GlobalShadowTextInput.coreClickInput !== null) {
-                GlobalShadowTextInput.coreClickInput.closeEditor()
-            }
-            GlobalShadowTextInput.enabled = false
+            rootId.closeAnyOpenEditor()
 
             RootData.futureManagerModel.waitForFinished()
             RootData.newProject()

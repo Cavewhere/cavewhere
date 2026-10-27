@@ -15,7 +15,7 @@ MainWindowTest {
         name: "TripSwitchNotePages"
         when: windowShown
 
-        readonly property string caveAddress: "Source/Data/Cave=Jaws of the Beast"
+        readonly property string caveAddress: "Source/Data/Node=Jaws of the Beast"
         readonly property string trip1Address: caveAddress + "/Trip=2019c154_-_party_fault"
         readonly property string trip2Address: caveAddress + "/Trip=Test Trip 2"
 
@@ -33,7 +33,7 @@ MainWindowTest {
             })
 
             let cavePage = RootData.pageView.currentPageItem
-            let cave = cavePage.currentCave
+            let cave = cavePage.currentNode
             verify(cave !== null, "Cave should exist")
             cave.addTrip()
             let lastIndex = cave.index(cave.rowCount() - 1)

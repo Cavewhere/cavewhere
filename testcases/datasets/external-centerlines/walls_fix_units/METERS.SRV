@@ -1,0 +1,4 @@
+; A benchmark written north first, its elevation in feet.
+#UNITS Meters ORDER=NEU
+#FIX M1 4040000.00 520000.00 766.19F /Invented benchmark
+M1	M2	10.0	0	0

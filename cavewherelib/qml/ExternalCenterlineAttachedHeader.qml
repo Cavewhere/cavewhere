@@ -1,0 +1,246 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+import QtQuick as QQ
+import QtQuick.Controls as QC
+import QtQuick.Layouts
+import cavewherelib
+
+// Attached-mode header for an external-centerline owner — a trip or a
+// node, both of which expose externalCenterline and id: the entry file
+// name and the provenance line ("Copied from: <path>" or
+// "Copied from an unknown location (this machine)"), which names where
+// the copy came from. Each line has a right-click menu that leads with
+// Reload and Replace…, then reveals or opens that line's own file: the
+// copy inside the project, or the source. The verbs only raise signals —
+// the panel owns the manager wiring.
+ColumnLayout {
+    id: root
+    objectName: "attachedHeader"
+
+    property QQ.QtObject owner: null
+    property ExternalSourceSettings externalSourceSettings: null
+    property bool actionsEnabled: true
+
+    // Absolute on-disk path of entryFile, resolved by the host against
+    // the owner's attachment directory. Empty when there is nothing to
+    // resolve, which leaves the file-name context menu disabled.
+    property string entryFilePath: ""
+
+    // Refreshed each time the file-name context menu opens: the in-project
+    // copy can be deleted (the missing-copy case) long after
+    // entryFilePath was resolved, and opening a file that is gone would
+    // do nothing at all.
+    property bool entryFileExists: false
+
+    // Refreshed imperatively: breadcrumbsChanged is a plain signal, so
+    // a declarative binding can't observe it.
+    property string rememberedSourcePath: ""
+
+    // Refreshed each time the source context menu opens: the source sits
+    // outside the project, where it can move or vanish between menus.
+    property bool sourceFileExists: false
+
+    // Whether the remembered source can be re-copied into the project.
+    // Only the manager knows the answer, so the panel writes it back on
+    // sourceEligibilityRefreshRequested and the header stays manager-free.
+    property bool sourceReloadable: false
+
+    // Whether the file this copy came from has moved on since the copy
+    // was taken. The answer lives in the manager's status model, so the
+    // panel resolves it and writes it here — the header stays
+    // manager-free.
+    property bool sourceChangedSinceCopy: false
+
+    // Whether the breadcrumb still names where the copy came from. An
+    // unknown origin has no path to spell out, reveal, or reload.
+    readonly property bool sourceKnown: rememberedSourcePath.length > 0
+
+    // An unknown origin names no file to have changed, so it stays on the
+    // plain line.
+    readonly property bool showChangedSuffix: sourceKnown && sourceChangedSinceCopy
+
+    readonly property string entryFile: owner !== null ? owner.externalCenterline.entryFile : ""
+    readonly property string fileName: entryFile.substring(entryFile.lastIndexOf("/") + 1)
+    readonly property bool attached: entryFile.length > 0
+
+    spacing: Theme.tightSpacing
+
+    signal replaceRequested()
+    signal reloadFromSourceRequested()
+    signal sourceEligibilityRefreshRequested()
+
+    function refreshSourceState() {
+        sourceFileExists = sourceKnown && RootData.pathExists(rememberedSourcePath)
+        sourceEligibilityRefreshRequested()
+    }
+
+    function refreshEntryFileExists() {
+        entryFileExists = entryFilePath.length > 0 && RootData.pathExists(entryFilePath)
+    }
+
+    function updateRememberedSource() {
+        if (owner === null || externalSourceSettings === null) {
+            rememberedSourcePath = ""
+            return
+        }
+        rememberedSourcePath = externalSourceSettings.breadcrumbPath(owner.id)
+    }
+
+    onOwnerChanged: updateRememberedSource()
+    onExternalSourceSettingsChanged: updateRememberedSource()
+    QQ.Component.onCompleted: updateRememberedSource()
+
+    QQ.Connections {
+        target: root.externalSourceSettings
+        function onBreadcrumbsChanged() {
+            root.updateRememberedSource()
+        }
+    }
+
+    QQ.Item {
+        objectName: "attachedHeaderFileRow"
+        Layout.fillWidth: true
+        implicitWidth: fileRowLayoutId.implicitWidth
+        implicitHeight: fileRowLayoutId.implicitHeight
+
+        RowLayout {
+            id: fileRowLayoutId
+            anchors.fill: parent
+            spacing: Theme.tightSpacing
+
+            QC.Label {
+                objectName: "attachedFileLabel"
+                Layout.maximumWidth: parent.width
+                elide: QC.Label.ElideMiddle
+                font.bold: true
+                text: root.fileName
+
+                // The row shows a bare file name and elides it; hovering names
+                // the whole path of the copy inside the project, which is the
+                // file every verb on this header acts on.
+                QC.ToolTip.visible: fileHoverId.hovered && root.entryFilePath.length > 0
+                QC.ToolTip.text: root.entryFilePath
+                QC.ToolTip.delay: Theme.toolTipDelay
+
+                QQ.HoverHandler {
+                    id: fileHoverId
+                }
+            }
+
+            QQ.Item { Layout.fillWidth: true }
+        }
+
+        // Right-click anywhere on the row reaches the file itself — the copy
+        // inside the project, which is the file this panel is showing.
+        ContextMenuArea {
+            objectName: "attachedFileContextMenu"
+            anchors.fill: parent
+
+            onAboutToShow: {
+                root.refreshEntryFileExists()
+                root.refreshSourceState()
+            }
+
+            QC.MenuItem {
+                objectName: "reloadFromSourceAction"
+                text: qsTr("Reload")
+                enabled: root.actionsEnabled && root.sourceReloadable
+                onTriggered: root.reloadFromSourceRequested()
+            }
+
+            QC.MenuItem {
+                objectName: "replaceAction"
+                text: qsTr("Replace…")
+                enabled: root.attached && root.actionsEnabled
+                onTriggered: root.replaceRequested()
+            }
+
+            QC.MenuSeparator {}
+
+            RevealInFileManagerMenuItem {
+                objectName: "showInFileManagerAction"
+                filePath: root.entryFilePath
+            }
+
+            QC.MenuItem {
+                objectName: "openFileAction"
+                text: qsTr("Open")
+                enabled: root.entryFileExists
+                onTriggered: FileRevealer.openFile(root.entryFilePath)
+            }
+        }
+    }
+
+    QC.Label {
+        objectName: "sourceModeLabel"
+        Layout.fillWidth: true
+        elide: QC.Label.ElideMiddle
+        font.pixelSize: Theme.fontSizeSmall
+
+        // A quiet hint, one step out of the subtle gray the line normally
+        // reads in: the source having moved on is news the user can act on
+        // through Reload in this line's menu, and never an error.
+        color: root.showChangedSuffix ? Theme.textSecondary : Theme.textSubtle
+        text: root.sourceKnown
+              ? (root.showChangedSuffix
+                 ? qsTr("Copied from: %1 — changed since copied")
+                 : qsTr("Copied from: %1")).arg(root.rememberedSourcePath)
+              : qsTr("Copied from an unknown location (this machine)")
+
+        // The line elides, and this path is the one that differs from the
+        // project copy above, so hovering spells the source out in full.
+        // An unknown origin names no path, so it offers no tooltip.
+        QC.ToolTip.visible: sourceHoverId.hovered && root.sourceKnown
+        QC.ToolTip.text: root.rememberedSourcePath
+        QC.ToolTip.delay: Theme.toolTipDelay
+
+        QQ.HoverHandler {
+            id: sourceHoverId
+        }
+
+        // Right-click reaches the source itself — this menu's reveal and
+        // open act on the original rather than the copy. It needs a path to
+        // act on, so an unknown origin offers no menu; Replace… stays on the
+        // file row's menu there.
+        ContextMenuArea {
+            objectName: "sourceContextMenu"
+            anchors.fill: parent
+            visible: root.sourceKnown
+
+            onAboutToShow: root.refreshSourceState()
+
+            QC.MenuItem {
+                objectName: "reloadFromSourceAction"
+                text: qsTr("Reload")
+                enabled: root.actionsEnabled && root.sourceReloadable
+                onTriggered: root.reloadFromSourceRequested()
+            }
+
+            QC.MenuItem {
+                objectName: "replaceAction"
+                text: qsTr("Replace…")
+                enabled: root.attached && root.actionsEnabled
+                onTriggered: root.replaceRequested()
+            }
+
+            QC.MenuSeparator {}
+
+            RevealInFileManagerMenuItem {
+                objectName: "showSourceInFileManagerAction"
+                filePath: root.rememberedSourcePath
+            }
+
+            QC.MenuItem {
+                objectName: "openSourceAction"
+                text: qsTr("Open")
+                enabled: root.sourceFileExists
+                onTriggered: FileRevealer.openFile(root.rememberedSourcePath)
+            }
+        }
+    }
+}

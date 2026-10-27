@@ -6,6 +6,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwCaptureCenterline.h"
+#include "SurveyTreeTestHelper.h"
 #include "cwCaptureLabelPlacer.h"
 #include "cwProjection.h"
 #include "cwStationPositionLookup.h"
@@ -270,6 +271,7 @@ TEST_CASE("cwCaptureCenterline keeps caves that share station names apart",
     constexpr qreal PositionTolerance = 1e-3;
 
     auto addCave = [](cwCavingRegion& region,
+                      const QString& name,
                       const QList<QPair<QString, float>>& stations) {
         cwSurveyNetwork network;
         cwStationPositionLookup lookup;
@@ -281,14 +283,15 @@ TEST_CASE("cwCaptureCenterline keeps caves that share station names apart",
             }
         }
         auto* cave = new cwCave();
-        cave->setSurveyNetwork(network);
-        cave->setStationPositionLookup(lookup);
+        cave->setName(name);
         region.addCave(cave);
+        SurveyTreeTestHelper::setScopedNetwork(cave, network);
+        SurveyTreeTestHelper::setScopedPositions(cave, lookup);
     };
 
     cwCavingRegion region;
-    addCave(region, {{"a1", Cave1A1X}, {"a2", 20.0f}, {"a3", 30.0f}});
-    addCave(region, {{"a1", Cave2A1X}, {"b2", 80.0f}, {"b3", 70.0f}});
+    addCave(region, QStringLiteral("Cave1"), {{"a1", Cave1A1X}, {"a2", 20.0f}, {"a3", 30.0f}});
+    addCave(region, QStringLiteral("Cave2"), {{"a1", Cave2A1X}, {"b2", 80.0f}, {"b3", 70.0f}});
 
     cwCamera camera;
     camera.setViewport(TestViewport);

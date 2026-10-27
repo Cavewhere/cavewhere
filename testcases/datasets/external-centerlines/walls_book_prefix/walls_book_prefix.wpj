@@ -1,0 +1,9 @@
+;WALLS Project file
+.BOOK	Book Prefix Cave
+.NAME	BOOK-PREFIX-CAVE
+.OPTIONS	prefix=BK
+.STATUS	8
+.SURVEY	Prefixed Book Passage
+.NAME	OPTSRV
+.STATUS	8
+.ENDBOOK

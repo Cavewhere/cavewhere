@@ -44,6 +44,8 @@
 #include "cwMath.h"
 #include "cwUpdateCoordinator.h"
 #include "cwProject.h"
+#include "SurveyTreeTestHelper.h"
+#include "LiDARTestHelpers.h"
 #include "cwThreadCountRestorer.h"
 #include "LimitedRunTestHelper.h"
 
@@ -71,7 +73,7 @@ TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation",
     auto* trip = cave->trip(0);
     auto* lidarModel = trip->notesLiDAR();
     REQUIRE(lidarModel != nullptr);
-    REQUIRE(cave->stationPositionLookup().positions().size() == 10);
+    REQUIRE(cave->scopedPositions().positions().size() == 10);
 
     const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
     REQUIRE_FALSE(lidarFile.isEmpty());
@@ -107,7 +109,7 @@ TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation",
     }
 
     // Dispatch queued startRun so triangulation begins on the thread pool
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return manager->updateState() == cwUpdatable::State::Working; }));
 
     // Simulate opening a new file while triangulation is in flight.
     // newProject() clears caves and the undo stack, which queues
@@ -118,12 +120,11 @@ TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation",
     // the triangulation future is still in flight. Without the fix,
     // the callback accesses the freed cwNoteLiDAR* pointers (ASan
     // heap-buffer-overflow).
-    QCoreApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     manager->waitForFinish();
     root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(pumpUntilLiDARSettles(root.get(), manager));
 
     CHECK(region->caveCount() == 0);
 }
@@ -270,7 +271,7 @@ TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry access
     auto* lidarModel = trip->notesLiDAR();
     REQUIRE(lidarModel != nullptr);
 
-    REQUIRE(cave->stationPositionLookup().positions().size() == 10);
+    REQUIRE(cave->scopedPositions().positions().size() == 10);
 
     const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
     REQUIRE_FALSE(lidarFile.isEmpty());
@@ -336,8 +337,7 @@ TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry access
     root->futureManagerModel()->waitForFinished();
 
     // Allow queued signals to flush if any were emitted during waitForFinish
-    QCoreApplication::processEvents();
-    CHECK(triangulatedSpy.count() > 0);
+    REQUIRE(waitUntil([&] { return triangulatedSpy.count() > 0; }));
 
     REQUIRE(note->stations().size() == 3);
     CHECK(transform->northUp() == Catch::Approx(272.7).margin(0.2));
@@ -348,7 +348,7 @@ TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry access
     auto* renderItems = root->regionSceneManager()->items();
     REQUIRE(renderItems != nullptr);
 
-    const cwStationPositionLookup lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup lookup = cave->scopedPositions();
 
     const QList<cwNoteLiDARStation> stations = note->stations();
     for (const StationInput& input : inputs) {
@@ -428,7 +428,7 @@ TEST_CASE("cwNoteLiDARManager reuses render ids when re-triangulating a note", "
     REQUIRE(trip != nullptr);
     auto* lidarModel = trip->notesLiDAR();
     REQUIRE(lidarModel != nullptr);
-    REQUIRE(cave->stationPositionLookup().positions().size() == 10);
+    REQUIRE(cave->scopedPositions().positions().size() == 10);
 
     const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
     REQUIRE_FALSE(lidarFile.isEmpty());
@@ -464,7 +464,7 @@ TEST_CASE("cwNoteLiDARManager reuses render ids when re-triangulating a note", "
         root->linePlotManager()->waitToFinish();
         manager->waitForFinish();
         root->futureManagerModel()->waitForFinished();
-        QCoreApplication::processEvents();
+        REQUIRE(pumpUntilLiDARSettles(root.get(), manager));
     };
 
     settle();
@@ -624,7 +624,7 @@ TEST_CASE("Each LiDAR note reaches the render items as it finishes", "[cwNoteLiD
     root->linePlotManager()->waitToFinish();
     manager->waitForFinish();
     root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&] { return deliveredNoteCount() == notes.size(); }));
 
     // Every note ended up delivered, exactly one set of render items each.
     CHECK(deliveredNoteCount() == notes.size());
@@ -720,7 +720,7 @@ TEST_CASE("A LiDAR note deleted mid-run never reaches the render items", "[cwNot
     root->linePlotManager()->waitToFinish();
     manager->waitForFinish();
     root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
+    REQUIRE(pumpUntilLiDARSettles(root.get(), manager));
 
     CHECK(lidarModel->rowCount() == kNoteCount - 1);
     CHECK_FALSE(manager->renderItemIds(notes.at(0)).isEmpty());
@@ -790,7 +790,7 @@ TEST_CASE("A restarted LiDAR batch delivers only the new run's results", "[cwNot
         root->linePlotManager()->waitToFinish();
         manager->waitForFinish();
         root->futureManagerModel()->waitForFinished();
-        QCoreApplication::processEvents();
+        REQUIRE(pumpUntilLiDARSettles(root.get(), manager));
     };
 
     settle();
@@ -898,8 +898,7 @@ TEST_CASE("Deleting the last dirty LiDAR note announces the pipeline is clean",
     // Settle to Clean so the dirty set holds exactly what this test puts in it.
     manager->waitForFinish();
     root->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-    REQUIRE(manager->updateState() == cwUpdatable::State::Clean);
+    REQUIRE(pumpUntilLiDARSettles(root.get(), manager));
 
     coordinator->setAutomaticUpdate(false);
 
@@ -923,11 +922,15 @@ TEST_CASE("Deleting the last dirty LiDAR note announces the pipeline is clean",
     // ask for them explicitly to get the note actually destroyed inside the test.
     lidarModel->removeNote(0);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    QCoreApplication::processEvents();
 
     CHECK(manager->updateState() == cwUpdatable::State::Clean);
     CHECK(pipelineSpy.count() == 1);
     CHECK_FALSE(coordinator->needsUpdate());
+    CHECK(aggregateSpy.count() == 1);
+
+    // A queued follow-up announcement would land behind the fence
+    REQUIRE(waitForQueuedEvents());
+    CHECK(pipelineSpy.count() == 1);
     CHECK(aggregateSpy.count() == 1);
 }
 
@@ -1050,29 +1053,6 @@ namespace {
         QObject m_context;
     };
 
-    //Pumps the event loop until the pipeline is done and its row has gone, and
-    //says whether it got there. The detail line is polled on a timer, so a run
-    //has to be watched, never waited out in a nested loop.
-    [[nodiscard]] bool pumpUntilLiDARSettles(cwRootData* rootData, cwNoteLiDARManager* manager)
-    {
-        //A cold run's texture encode alone can outlast two minutes under CPU load
-        constexpr int kRunTimeoutMs = 600000;
-        constexpr int kPollWaitMs = 2;
-
-        const auto settled = [rootData, manager]() {
-            return manager->updateState() == cwUpdatable::State::Clean
-                   && rootData->futureManagerModel()->rowCount() == 0;
-        };
-
-        QElapsedTimer timer;
-        timer.start();
-        while(timer.elapsed() < kRunTimeoutMs && !settled()) {
-            QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
-                                            kPollWaitMs);
-        }
-        return settled();
-    }
-
     constexpr int kOneNote = 1;
 
     //A loaded project with noteCount freshly copied scans, one per LiDAR note
@@ -1122,6 +1102,7 @@ namespace {
             REQUIRE(manager() != nullptr);
         }
 
+        cwRootData* rootData() const { return m_rootData.get(); }
         cwCave* cave() const { return m_cave; }
         cwNoteLiDAR* note() const { return m_notes.first(); }
         const QList<cwNoteLiDAR*>& notes() const { return m_notes; }
@@ -1223,6 +1204,58 @@ TEST_CASE("A LiDAR rerun off a warm texture cache still reaches full",
     CHECK_FALSE(warmRun.detailNames.contains(QStringLiteral("Compressing texture")));
 }
 
+TEST_CASE("Renaming a cave re-runs the LiDAR notes of trips in its nested nodes",
+          "[cwNoteLiDARManager][objectPathReady]")
+{
+    // A cave rename moves its whole directory, sub/ included, so the glTF files
+    // of every descendant trip move too and their notes have to be re-run.
+    LiDARProject project;
+
+    // A note with no stations has nothing to triangulate, so it never runs
+    cwNoteLiDARStation station;
+    station.setName(QStringLiteral("6"));
+    station.setPositionOnNote(QVector3D(0.19147f, -0.720703f, -2.15723f));
+    project.note()->addStation(station);
+    project.pumpUntilSettled();
+
+    cwRootData* rootData = project.rootData();
+    cwCavingRegion* region = rootData->region();
+    cwCave* nested = project.cave();
+
+    cwCave* outer = SurveyTreeTestHelper::addNode(region, nullptr, cwSurveyNode::Kind::Cave,
+                                                  QStringLiteral("Outer"));
+    region->moveNode(nested, outer, 0);
+    REQUIRE(nested->parentNode() == outer);
+    REQUIRE(outer->trips().isEmpty());
+
+    SurveyTreeTestHelper::flushSaves(rootData);
+    project.pumpUntilSettled();
+
+    bool noteWasUpdated = false;
+    QObject context;
+    QObject::connect(project.manager(), &cwNoteLiDARManager::liDARNotesUpdated, &context,
+                     [&](const QList<cwNoteLiDAR*>& notes) {
+                         noteWasUpdated = noteWasUpdated || notes.contains(project.note());
+                     });
+
+    outer->setName(QStringLiteral("Outer renamed"));
+    SurveyTreeTestHelper::flushSaves(rootData);
+
+    // The directory move reports its path once it lands, which can be after the
+    // save queue has drained, so wait on the outcome rather than on the queue.
+    constexpr int kUpdateTimeoutMs = 30000;
+    constexpr int kPollWaitMs = 2;
+    QElapsedTimer timer;
+    timer.start();
+    while (!noteWasUpdated && timer.elapsed() < kUpdateTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
+                                        kPollWaitMs);
+    }
+
+    CHECK(noteWasUpdated);
+    project.pumpUntilSettled();
+}
+
 TEST_CASE("A LiDAR run reaches completion on a one-thread pool", "[cwNoteLiDARManager]")
 {
     // The one-thread invariant: a pool worker never waits on its own pool's work
@@ -1238,7 +1271,6 @@ TEST_CASE("A LiDAR run reaches completion on a one-thread pool", "[cwNoteLiDARMa
 
     REQUIRE(project.pumpUntilSettled());
     project.manager()->waitForFinish();
-    QCoreApplication::processEvents();
 
     CHECK_FALSE(project.manager()->renderItemIds(project.note()).isEmpty());
 }

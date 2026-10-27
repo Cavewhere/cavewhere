@@ -1,0 +1,10 @@
+{
+ "lengthUnit": "Meters",
+ "depthUnit": "Meters",
+ "name": "Side Cave",
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-682-g3e0c437b"
+ },
+ "id": "badf1ea8-a7e4-4014-ba57-d2be1b19aa09"
+}

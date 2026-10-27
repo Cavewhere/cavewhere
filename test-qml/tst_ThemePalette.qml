@@ -140,6 +140,16 @@ MainWindowTest {
             toolTip.close()
         }
 
+        // Tooltips quote user-supplied names, so the style shows markup as
+        // the characters typed.
+        function test_toolTipShowsMarkupLiterally() {
+            const toolTip = createObject("QC.ToolTip { text: \"A<b>B</b>\" }")
+            toolTip.open()
+            tryVerify(() => toolTip.opened)
+            compare(toolTip.contentItem.textFormat, Text.PlainText)
+            toolTip.close()
+        }
+
         // The test window is a plain view that MainWindowTest hands the palette.
         function test_harnessControlFollowsTheme() {
             verifyFollowsTheme(createObject("QC.TextField {}").palette, "a new text field")

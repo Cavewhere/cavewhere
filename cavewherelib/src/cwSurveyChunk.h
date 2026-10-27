@@ -77,6 +77,7 @@ public:
     void setId(const QUuid id) { d.id = id; }
 
     bool isValid() const;
+    static bool isValid(const cwSurveyChunkData& data);
     bool canAddShot(const cwStation& fromStation, const cwStation& toStation);
 
     void setParentTrip(cwTrip* trip);
@@ -99,6 +100,7 @@ public:
     void setStation(cwStation station, int index);
 
     Q_INVOKABLE bool isStationAndShotsEmpty() const;
+    static bool isStationAndShotsEmpty(const cwSurveyChunkData& data);
 
     cwErrorModel* errorModel() const;
 

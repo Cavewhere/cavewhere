@@ -33,16 +33,19 @@
 #include "cwSketchManager.h"
 #include "cwTripLinePlotTask.h"
 #include "asyncfuture.h"
+#include "TestHelper.h"
 
 
 namespace {
 
-// Drain pending queued signals/events so cwSketch's queued dataChanged
-// coalescer and any AsyncFuture .context(this, ...) continuations have a
-// chance to fire.
-void drainEventLoop() {
-    QCoreApplication::sendPostedEvents();
-    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+// True once the sketch's 2D geometry source has finished a result without an
+// error that carries stations.
+bool geometryReady(cwSketch *sketch) {
+    auto future = sketch->survey2DGeometry()->geometryResult();
+    return future.isFinished()
+           && future.resultCount() > 0
+           && !future.result().hasError()
+           && !future.result().value().stations.isEmpty();
 }
 
 // Waits for the sketch's 2D geometry source to produce a non-empty result.
@@ -68,7 +71,6 @@ TEST_CASE("cwLinePlotManager exposes region-wide cwSurveyNetworkSource", "[cwSke
     linePlotManager.setFutureManagerToken(futureManager.token());
     linePlotManager.setRegion(region);
     linePlotManager.waitToFinish();
-    drainEventLoop();
 
     auto *networkSource = linePlotManager.surveyNetworkSource();
     REQUIRE(networkSource != nullptr);
@@ -130,7 +132,6 @@ TEST_CASE("cwSketch produces 2D geometry from the shared survey network source",
     linePlotManager.setFutureManagerToken(futureManager.token());
     linePlotManager.setRegion(region);
     linePlotManager.waitToFinish();
-    drainEventLoop();
 
     // Attach a fresh sketch to the region's first cave's first trip. The
     // sketch defaults to Plan view (iteration 1 only supports Plan).
@@ -146,7 +147,7 @@ TEST_CASE("cwSketch produces 2D geometry from the shared survey network source",
     REQUIRE(sketch.survey2DGeometry() != nullptr);
 
     sketch.setSurveyNetworkSource(linePlotManager.surveyNetworkSource());
-    drainEventLoop();
+    REQUIRE(waitUntil([&]() { return geometryReady(&sketch); }));
 
     const cwSurvey2DGeometry geometry = waitForGeometry(&sketch);
     CHECK_FALSE(geometry.stations.isEmpty());
@@ -164,11 +165,10 @@ TEST_CASE("cwCenterlineSketchPainterModel populates three rows from survey2DGeom
     linePlotManager.setFutureManagerToken(futureManager.token());
     linePlotManager.setRegion(region);
     linePlotManager.waitToFinish();
-    drainEventLoop();
 
     cwSketch sketch;
     sketch.setSurveyNetworkSource(linePlotManager.surveyNetworkSource());
-    drainEventLoop();
+    REQUIRE(waitUntil([&]() { return geometryReady(&sketch); }));
     waitForGeometry(&sketch); // ensure the builder has settled
 
     cwCenterlineSketchPainterModel centerline;
@@ -395,17 +395,6 @@ MiniRegion buildRegionWithTrip()
     return mr;
 }
 
-// Spin the event loop until `predicate` returns true or timeout elapses.
-bool waitFor(std::function<bool()> predicate, int timeoutMs = 10000)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (!predicate() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
-    }
-    return predicate();
-}
-
 } // namespace
 
 
@@ -416,9 +405,9 @@ TEST_CASE("cwSketchManager acquireLinePlot creates a pipeline entry and populate
     CHECK(manager.latestLinePlot(mr.trip).isEmpty()); // no pipeline yet
 
     manager.acquireLinePlot(mr.trip);
-    REQUIRE(waitFor([&](){
+    REQUIRE(waitUntil([&](){
         return !manager.latestLinePlot(mr.trip).isEmpty();
-    }));
+    }, 10000));
 
     const auto components = manager.latestLinePlot(mr.trip);
     REQUIRE(components.size() == 1);
@@ -434,9 +423,9 @@ TEST_CASE("cwSketchManager re-emits linePlotUpdated after a chunk edit", "[cwSke
     cwSketchManager manager;
 
     manager.acquireLinePlot(mr.trip);
-    REQUIRE(waitFor([&](){
+    REQUIRE(waitUntil([&](){
         return !manager.latestLinePlot(mr.trip).isEmpty();
-    }));
+    }, 10000));
 
     QSignalSpy spy(&manager, &cwSketchManager::linePlotUpdated);
 
@@ -444,7 +433,7 @@ TEST_CASE("cwSketchManager re-emits linePlotUpdated after a chunk edit", "[cwSke
     auto *chunk = mr.trip->chunks().first();
     chunk->appendShot(named("a3"), named("a4"), simpleShot(10.0));
 
-    REQUIRE(waitFor([&](){ return spy.count() >= 1; }));
+    REQUIRE(waitUntil([&](){ return spy.count() >= 1; }, 10000));
 
     const auto components = manager.latestLinePlot(mr.trip);
     REQUIRE(components.size() == 1);
@@ -460,9 +449,9 @@ TEST_CASE("cwSketchManager refcounts shared acquisitions", "[cwSketchManager][Tr
     manager.acquireLinePlot(mr.trip);
     manager.acquireLinePlot(mr.trip); // second consumer
 
-    REQUIRE(waitFor([&](){
+    REQUIRE(waitUntil([&](){
         return !manager.latestLinePlot(mr.trip).isEmpty();
-    }));
+    }, 10000));
 
     manager.releaseLinePlot(mr.trip);
     // Still held by the second consumer.

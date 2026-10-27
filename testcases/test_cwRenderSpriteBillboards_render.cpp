@@ -26,6 +26,7 @@
 #include "cwRhiViewer.h"
 #include "cwScene.h"
 #include "cwSpriteBillboardHandle.h"
+#include "TestHelper.h"
 
 //Qt includes
 #include <QColor>
@@ -114,23 +115,7 @@ constexpr int kDarkChannel = 64;
 constexpr int kMaxChannel = 255;
 
 constexpr int kWaitTimeoutMs = 30000;
-constexpr int kPollIntervalMs = 2;
 constexpr int kSettleFrames = 5;
-
-template <typename Predicate>
-bool waitFor(Predicate predicate, int timeoutMs = kWaitTimeoutMs)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents();
-        if (predicate()) {
-            return true;
-        }
-        QThread::msleep(kPollIntervalMs);
-    }
-    return predicate();
-}
 
 // Keeps render-backend warnings so the test can require a clean frame. Other
 // messages pass through to the previous handler.
@@ -389,7 +374,7 @@ TEST_CASE("cwRenderSpriteBillboards renders one instanced, silhouette-depth spri
                      [&framesSwapped]() { framesSwapped++; }, Qt::DirectConnection);
 
     window.show();
-    REQUIRE(waitFor([&]() { return window.isExposed() && framesSwapped > 0; }));
+    REQUIRE(waitUntil([&]() { return window.isExposed() && framesSwapped > 0; }, kWaitTimeoutMs));
 
     if (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software) {
         SKIP("needs a QRhi-backed scene graph");
@@ -397,10 +382,10 @@ TEST_CASE("cwRenderSpriteBillboards renders one instanced, silhouette-depth spri
 
     const auto framesFrom = [&](int count) {
         const int target = framesSwapped + count;
-        return waitFor([&]() {
+        return waitUntil([&]() {
             viewer->update();
             return framesSwapped >= target;
-        });
+        }, kWaitTimeoutMs);
     };
 
     const auto renderImage = [&](const QMatrix4x4& projection, float devicePixelRatio = 1.0f) {
@@ -411,10 +396,10 @@ TEST_CASE("cwRenderSpriteBillboards renders one instanced, silhouette-depth spri
         parameters.devicePixelRatio = devicePixelRatio;
         parameters.backgroundColor = QColor::fromRgbF(0.0, 0.0, 0.0, 1.0);
         QFuture<QImage> future = scene.renderOffscreen(parameters);
-        const bool finished = waitFor([&]() {
+        const bool finished = waitUntil([&]() {
             viewer->update();
             return future.isFinished();
-        });
+        }, kWaitTimeoutMs);
         REQUIRE(finished);
         REQUIRE(future.resultCount() == 1);
         const QImage image = future.result().convertToFormat(QImage::Format_ARGB32);

@@ -9,20 +9,26 @@
 #define CWFINDUNCONNECTEDSURVEYCHUNKS_H
 
 #include "CaveWhereLibExport.h"
-#include "Monad/Result.h"
-#include "cwCaveData.h"
+#include "cwCavingRegionData.h"
 #include "cwError.h"
 
+#include <QHash>
 #include <QList>
+#include <QSet>
+#include <QUuid>
 
 /**
- * \brief Find survey chunks that aren't connected to the cave's main network.
+ * \brief Find the survey chunks the region solve cannot place.
  *
- * An unconnected survey chunk is a survey leg that is floating in the cave
- * and isn't reachable from the cave's first valid chunk via shared station
- * names (case-insensitive). Empty chunks are skipped.
+ * A chunk is connected when it reaches an anchor: through a station name it
+ * shares with another chunk in the same scope (case-insensitive), through a
+ * region equate across scopes, or through a chunk that does. The anchors are
+ * the ones the driver gives cavern: every fixed station, every station of an
+ * attached file, and, for a node with no fix of its own, the first station of
+ * its first valid chunk, where the driver puts its origin fix. Empty chunks
+ * are skipped, and a sourced node's subtree holds no native chunk to check.
  *
- * Pure compute — operates on the value-snapshot \a cave; safe to call from
+ * Pure compute — operates on the value snapshot \a region; safe to call from
  * any thread.
  */
 class CAVEWHERE_LIB_EXPORT cwFindUnconnectedSurveyChunks
@@ -33,9 +39,8 @@ public:
     /**
      * \brief One unconnected-chunk record produced by find().
      *
-     * Identifies a survey chunk (by trip index + chunk-within-trip index)
-     * that was not reachable from the cave's first valid chunk via shared
-     * station names.
+     * Identifies a survey chunk by trip index among its node's own trips and
+     * chunk index within that trip.
      */
     class Result {
     public:
@@ -48,7 +53,12 @@ public:
         cwError Error;
     };
 
-    static Monad::Result<QList<Result>> find(const cwCaveData& cave);
+    //! The unconnected chunks of \a region, keyed by the id of the node whose
+    //! own trips hold them. A node with none has no entry. Equates and
+    //! attachments of \a excludedExternalOwners are left out, as the driver
+    //! leaves them out.
+    static QHash<QUuid, QList<Result>> find(const cwCavingRegionData& region,
+                                            const QSet<QUuid>& excludedExternalOwners = {});
 };
 
 #endif // CWFINDUNCONNECTEDSURVEYCHUNKS_H

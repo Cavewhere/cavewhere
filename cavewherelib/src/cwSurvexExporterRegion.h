@@ -11,18 +11,23 @@
 #include "CaveWhereLibExport.h"
 #include "Monad/Result.h"
 #include "cwCavingRegionData.h"
+#include "cwGeoPoint.h"
 #include "cwSurvexExporterUtils.h"
 
 #include <QHash>
+#include <QSet>
 #include <QString>
+#include <QStringList>
 #include <QUuid>
 
 /**
  * \brief Writes a survex (.svx) file for the entire caving region.
  *
- * Iterates the region's caves and emits a *begin / *end block per cave using
- * cwSurvexExporterCaveTask::writeCave under the hood. Pure compute on the
- * provided value-snapshot \a region; safe to call from any thread.
+ * Walks the region's node tree and emits a nested *begin / *end block per
+ * native node (cwSurvexExporterCaveTask::writeNode), then every region equate
+ * fully qualified at region scope. Labels come from one cwScopeLabels built
+ * from \a region. Pure compute on the provided value-snapshot \a region; safe
+ * to call from any thread.
  */
 class CAVEWHERE_LIB_EXPORT cwSurvexExporterRegion
 {
@@ -55,10 +60,59 @@ public:
      * back to a native-emission path that logs an error for the cave
      * (the user-facing exporter never runs in this state; commit 10's
      * \c canExport gate stops it before it gets here).
+     *
+     * \c tripInjectedDeclinations maps \c cwTrip::id() to the
+     * CaveWhere-resolved declination (degrees, east-positive) for
+     * external trips whose file carries no declination of its own. The
+     * exporter emits it as \c *calibrate \c DECLINATION inside the
+     * \c *begin block before \c *include, where cavern applies it
+     * to the included legs. An absent key means the file owns
+     * declination (or ownership is unknown) and nothing is emitted —
+     * the file's own directive would override an injected value anyway
+     * (cavern-verified, master plan §8.8 q7).
+     *
+     * \c excludedExternalOwners lists caves and trips that carry an
+     * \c externalCenterline the solve cannot read: dependencies reaching
+     * outside the project's data root, so the attachment cannot travel with
+     * the project, or an in-project copy that is gone from disk, which
+     * cavern would fatal on. The exporter emits no \c *include for them and
+     * no \c *begin wrapper around it, and keeps writing the rest of the
+     * region, so one broken attachment costs its own survey and leaves every
+     * other survey solvable. When it was the region's only data the driver
+     * comes out empty and cavern still fails the run with "No survey data" —
+     * the same way an all-empty region already fails today.
+     *
+     * A trip owner is told why through the file-error banner (containment)
+     * or the missing-copy banner; a cave owner reads the reason from its
+     * attached-centerlines row.
+     *
+     * \c externalFixedStations maps a cave or trip owner to the stations its
+     * file fixes itself, in the file's namespace. A node fix naming one of
+     * them is dropped with an error rather than written: cavern rejects a
+     * second fix at different coordinates (error 46) and fails the whole run.
+     *
+     * \c externalOutputSystems maps a cave or trip owner whose file fixes
+     * stations with no input \c *cs, and names a \c *cs \c out of its own, to
+     * that output system as the file writes it. In a run whose project names no frame, the file's \c *cs \c out is the
+     * run's output system; under the project's frame it is the input system
+     * at the file's \c *include alone (see
+     * cwSurvexExporterCaveTask::writeIncludeSystem).
+     *
+     * \c externalBareFixOrigins maps a cave or trip owner whose file fixes
+     * stations with no input \c *cs to the first of those fixes, as the file
+     * writes its numbers. Under an output system, an owner with no system
+     * chosen and none of its file's own is read in the output system
+     * translated so that fix lands on the origin
+     * (cwLocalProjection::translated). Only the working-frame solve passes it.
      */
     struct CAVEWHERE_LIB_EXPORT Options {
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
+        QHash<QUuid, double> tripInjectedDeclinations;
+        QSet<QUuid> excludedExternalOwners;
+        QHash<QUuid, QStringList> externalFixedStations;
+        QHash<QUuid, QString> externalOutputSystems;
+        QHash<QUuid, cwGeoPoint> externalBareFixOrigins;
         OutputCSPolicy outputCSPolicy = OutputCSPolicy::Shareable;
     };
 

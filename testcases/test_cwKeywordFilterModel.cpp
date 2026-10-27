@@ -11,6 +11,7 @@
 
 //Qt includes
 #include <QMetaMethod>
+#include <QSet>
 #include <QStandardItemModel>
 
 //Std includes
@@ -72,7 +73,7 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
         spyChecker.checkSpies();
     }
 
-    SECTION("Add multiple rows and make sure they're sorted") {
+    SECTION("Add multiple rows and map each one both ways") {
 
         QVector<int> indexes = {0, 9, 4, 7};
         for(auto i : indexes) {
@@ -82,32 +83,25 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
             spyChecker[aboutToBeInsertedspy]++;
         }
 
+        // Row order is the filter's own; only membership and the mapping are pinned.
         auto checkIndexesWithModel = [&filter, &indexes](cwKeywordItemModel* model) {
-            auto sourceIndexes = [&indexes, model]() {
-                QVector<QPersistentModelIndex> sourceIndexes;
-                for(int i : indexes) {
-                    sourceIndexes.append(model->index(i, 0, QModelIndex()));
-                }
-
-                std::sort(sourceIndexes.begin(), sourceIndexes.end(), [](const QModelIndex& left, const QModelIndex& right)
-                {
-                    auto obj = [](const QModelIndex& index) {
-                        return index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                    };
-
-                    return obj(left) < obj(right);
-                });
-                return sourceIndexes;
-            }();
+            QSet<QPersistentModelIndex> sourceIndexes;
+            for(int i : indexes) {
+                sourceIndexes.insert(model->index(i, 0, QModelIndex()));
+            }
 
             REQUIRE(sourceIndexes.size() == filter->rowCount());
 
+            QSet<QPersistentModelIndex> mapped;
             for(int i = 0; i < filter->rowCount(); i++) {
                 auto filterIndex = filter->index(i);
-                INFO("Filter to Source:" << filter->mapToSource(filterIndex) << " source:" << sourceIndexes.at(i));
-                CHECK(filter->mapToSource(filterIndex) == sourceIndexes.at(i));
-                CHECK(filter->mapFromSource(sourceIndexes.at(i)) == filterIndex);
+                const QPersistentModelIndex sourceIndex = filter->mapToSource(filterIndex);
+                INFO("Filter to Source:" << filter->mapToSource(filterIndex));
+                CHECK(sourceIndexes.contains(sourceIndex));
+                CHECK(filter->mapFromSource(sourceIndex) == filterIndex);
+                mapped.insert(sourceIndex);
             }
+            CHECK(mapped == sourceIndexes);
         };
 
         auto checkIndexes = [checkIndexesWithModel, &model](){
@@ -289,4 +283,29 @@ TEST_CASE("cwKeywordFilterModel drops its destroyed connection with the row", "[
         doomed.reset();
         CHECK(filter.rowCount() == 0);
     }
+}
+
+TEST_CASE("cwKeywordFilterModel empties when its source resets",
+          "[cwKeywordFilterModel][MainThreadBudget]")
+{
+    constexpr int kSourceRows = 5;
+
+    QObject owner;
+    QStandardItemModel source;
+    for (int i = 0; i < kSourceRows; ++i) {
+        auto* row = new QStandardItem();
+        row->setData(QVariant::fromValue<QObject*>(new QObject(&owner)), cwKeywordItemModel::ObjectRole);
+        source.appendRow(row);
+    }
+
+    cwKeywordFilterModel filter;
+    filter.setSourceModel(&source);
+    for (int i = 0; i < kSourceRows; ++i) {
+        filter.insert(source.index(i, 0));
+    }
+    REQUIRE(filter.rowCount() == kSourceRows);
+
+    source.clear();
+
+    CHECK(filter.rowCount() == 0);
 }

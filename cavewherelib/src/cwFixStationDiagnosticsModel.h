@@ -16,12 +16,12 @@
 //Our includes
 #include "cwGlobals.h"
 
-class cwCave;
+class cwSurveyNode;
 class cwFixStation;
 class cwFixStationModel;
 
 /**
- * Adds the read-only, computed error roles on top of a cave's cwFixStationModel.
+ * Adds the read-only, computed error roles on top of a survey node's cwFixStationModel.
  *
  * The verdicts are cwFixStationDiagnostics'; this class only decides which role
  * carries which one, and when to re-emit it.
@@ -43,7 +43,7 @@ class CAVEWHERE_LIB_EXPORT cwFixStationDiagnosticsModel : public QIdentityProxyM
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(FixStationDiagnosticsModel)
-    QML_UNCREATABLE("Owned by Cave; access via cave.fixStationDiagnostics")
+    QML_UNCREATABLE("Owned by SurveyNode; access via node.fixStationDiagnostics")
 
 public:
     //! Numbered clear of cwFixStationModel's Qt::UserRole + 1… block: roleNames()
@@ -93,9 +93,11 @@ public:
         //! Read-only: a message when this fix's station reference is broken,
         //! empty otherwise. Two ways it breaks, both of which survex silently
         //! drops: the name matches no station in the owning cave's network, or
-        //! there is no name at all. A cave whose network hasn't been computed yet
-        //! never flags a *named* fix (nothing to check against); an empty name is
-        //! flagged regardless.
+        //! there is no name at all. While the cave's network is empty, a *named*
+        //! fix is flagged when the node has nothing to solve and otherwise waits
+        //! for the first solve; an empty name is flagged regardless. A sound name is still flagged when the export
+        //! drops the fix for its station: an attached file fixes the station
+        //! itself, or an earlier row already fixes it.
         StationErrorRole,
         //! Read-only QStringList: the datum codes the row's coordinate could
         //! sensibly be on, WGS84 first, for the picker's datum combo to offer.
@@ -125,11 +127,11 @@ public:
     };
     Q_ENUM(Roles)
 
-    //! Proxies the cave's own cwFixStationModel and resolves StationErrorRole
-    //! against the cave's survey network. The cave is the parent and is fixed
-    //! for the proxy's lifetime — cwCave constructs exactly one of these and
-    //! never re-points it, so there is no wiring to tear down.
-    explicit cwFixStationDiagnosticsModel(cwCave* cave);
+    //! Proxies the node's own cwFixStationModel and resolves StationErrorRole
+    //! against the node's survey network. The node is the parent and is fixed
+    //! for the proxy's lifetime — cwSurveyNode constructs exactly one of these
+    //! and never re-points it, so there is no wiring to tear down.
+    explicit cwFixStationDiagnosticsModel(cwSurveyNode* node);
     ~cwFixStationDiagnosticsModel() override;
 
     //! Overridden only for the column default QAbstractItemModel::index lacks,
@@ -152,10 +154,15 @@ private:
     //! Emit dataChanged over every row for the given derived roles.
     void refreshRoles(const QList<int>& roles);
 
-    //! StationErrorRole's message for one fix, resolved against m_cave's network.
-    //! Empty when the reference is Ok (or there is no cave); distinct messages
-    //! for an Unknown name and a missing one.
-    QString stationErrorMessage(const cwFixStation& fix) const;
+    //! StationErrorRole's message for one row, resolved against m_node's
+    //! network, then against the node's other fixes on the same station.
+    //! Empty when the row is fine; distinct messages for an Unknown name, a
+    //! missing one, a station an attached file fixes, and a duplicate row.
+    QString stationErrorMessage(int row) const;
+
+    //! The conflict half of stationErrorMessage(): empty when no other fix
+    //! claims the row's station.
+    QString stationConflictMessage(const QList<cwFixStation>& fixes, int row) const;
 
     //! The source row's fix, or null when there is no source model or the index
     //! is out of range.
@@ -167,9 +174,9 @@ private:
     //! path to this model even though our own reads of it are const.
     cwFixStationModel* const m_fixStations;
 
-    //! The owning cave, for StationErrorRole's network lookup and the region CS
-    //! fallback. Never null, never re-pointed, and only ever read through.
-    const cwCave* const m_cave;
+    //! The owning node, for StationErrorRole's network lookup. Never null, never
+    //! re-pointed, and only ever read through.
+    const cwSurveyNode* const m_node;
 };
 
 #endif // CWFIXSTATIONDIAGNOSTICSMODEL_H

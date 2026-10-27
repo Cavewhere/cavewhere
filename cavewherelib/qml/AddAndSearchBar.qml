@@ -1,26 +1,54 @@
 import QtQuick as QQ
 import QtQuick.Layouts
 import QtQuick.Controls as QC
+import cavewherelib
 
 RowLayout {
     id: controlBarId
 
-    property alias addButtonText: addButtonId.text
+    // Optional split-button menu: when set, a chevron appears next to
+    // the add button and clicking it pops this menu. The add button
+    // itself always fires add() directly.
+    property QC.Menu menu: null
+
+    property alias addButtonText: splitButtonId.text
+    property alias menuToolTip: splitButtonId.menuToolTip
+
+    property bool addEnabled: true
+    //! Shown on hover over the add button in either state; empty shows none.
+    property string addToolTip: ""
 
     signal add();
 
-    QC.Button {
-        id: addButtonId
-        objectName: "addButton"
-
-        icon.source: "qrc:/twbs-icons/icons/plus.svg"
-        icon.width: Theme.iconSizeButton
-        icon.height: Theme.iconSizeButton
-
+    // The wrapper carries the hover and the tooltip because a disabled button
+    // reports no hover of its own.
+    QQ.Item {
+        implicitWidth: splitButtonId.implicitWidth
+        implicitHeight: splitButtonId.implicitHeight
         Layout.alignment: Qt.AlignLeft
 
-        onClicked: {
-            controlBarId.add();
+        QQ.HoverHandler {
+            id: addHoverId
+        }
+
+        QC.ToolTip {
+            objectName: "addToolTip"
+            text: controlBarId.addToolTip
+            delay: Theme.toolTipDelay
+            visible: addHoverId.hovered && controlBarId.addToolTip !== ""
+        }
+
+        SplitButton {
+            id: splitButtonId
+
+            buttonObjectName: "addButton"
+            iconSource: "qrc:/twbs-icons/icons/plus.svg"
+            menu: controlBarId.menu
+            enabled: controlBarId.addEnabled
+
+            onClicked: {
+                controlBarId.add();
+            }
         }
     }
 

@@ -32,6 +32,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFileInfo>
 #include <QTemporaryDir>
 
 #include "cwCavingRegion.h"
@@ -46,6 +47,7 @@
 #include "cwScene.h"
 
 #include "LazFixtureHelper.h"
+#include "TestHelper.h"
 
 namespace {
 
@@ -83,7 +85,21 @@ struct RescanVisibilityFixture {
         const QString filePath = gisLayersDir.filePath(QStringLiteral("%1.laz").arg(tag));
         REQUIRE(!writeMinimalLaz(filePath).isEmpty());
         region.lazLayers()->rescan();
-        QCoreApplication::processEvents();
+        const QString fileName = QFileInfo(filePath).fileName();
+        REQUIRE(waitUntil([this, &fileName]() {
+            const cwLazLayerModel* layers = region.lazLayers();
+            bool hasNewLayer = false;
+            for (int i = 0; i < layers->count(); ++i) {
+                cwLazLayer* layer = layers->layerAt(i);
+                if (node.pointCloudForLayer(layer) == nullptr) {
+                    return false;
+                }
+                if (QFileInfo(layer->sourcePath()).fileName() == fileName) {
+                    hasNewLayer = true;
+                }
+            }
+            return hasNewLayer;
+        }));
         return filePath;
     }
 };

@@ -465,13 +465,6 @@ void cwCompassImporter::Worker::parseSurveyTeam(QFile *file)
     m_lineCount++;
     if(!isFileGood(file, "survey team")) { return; }
 
-    if(surveyTeam.size() > 100) {
-        m_messages.append(QStringLiteral("I found the team to be longer than 100 characters. I'm trimming it to 100 characters, in %1 on line %2")
-                        .arg(m_currentFilename)
-                        .arg(m_lineCount));
-        surveyTeam.resize(100);
-    }
-
     QRegularExpression delimiter;
     if (surveyTeam.contains(';')) {
         delimiter = QRegularExpression("\\s*;\\s*");

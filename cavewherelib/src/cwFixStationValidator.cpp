@@ -9,6 +9,7 @@
 #include "cwFixStationValidator.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwSurveyNode.h"
 #include "cwCoordinateTransform.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
@@ -17,8 +18,10 @@
 #include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
+#include "cwStation.h"
 
 //Qt includes
+#include <QScopedValueRollback>
 #include <QStringList>
 
 //Std includes
@@ -54,8 +57,8 @@ namespace {
 // LDP recipe described there — change the recipe and this needs rereading.
 constexpr double kMaxDistanceFromFrameMeters = 400000.0;
 
-// A cave's warning nests two levels of joining, and they are not interchangeable:
-// station names are listed inside one sentence, while a cave with more than one
+// A node's warning nests two levels of joining, and they are not interchangeable:
+// station names are listed inside one sentence, while a node with more than one
 // kind of problem gets one sentence per kind.
 constexpr QLatin1String kFragmentSeparator(", ");
 constexpr QLatin1String kSentenceSeparator(" ");
@@ -78,6 +81,22 @@ double distanceFromFrameOrigin(const cwGeoPoint& p)
 
 } // namespace
 
+cwFixStationWarning::cwFixStationWarning(cwSurveyNode* node, const QString& message) :
+    m_node(node),
+    m_message(message)
+{
+}
+
+cwSurveyNode* cwFixStationWarning::node() const
+{
+    return m_node.data();
+}
+
+bool cwFixStationWarning::operator==(const cwFixStationWarning& other) const
+{
+    return m_node == other.m_node && m_message == other.m_message;
+}
+
 cwFixStationValidator::cwFixStationValidator(cwCavingRegion* region) :
     QObject(region),
     m_region(region)
@@ -86,16 +105,36 @@ cwFixStationValidator::cwFixStationValidator(cwCavingRegion* region) :
         return;
     }
 
-    // A cave joining or leaving the region rewires the per-cave fix-station
-    // connections and re-attributes. The frame moving reprojects every fix, so
-    // an outlier under the old frame may cease to be one under the new.
-    connect(m_region, &cwCavingRegion::caveCountChanged,
-            this, [this] { syncCaveConnections(); revalidate(); });
+    // A node joining or leaving anywhere in the tree rewires the per-node fix-station
+    // connections and re-attributes, once per event-loop turn. The frame moving
+    // reprojects every fix, so an outlier under the old frame may cease to be
+    // one under the new.
+    connect(m_region->rootNode(), &cwSurveyNode::subtreeChanged,
+            this, &cwFixStationValidator::markNodeConnectionsStale);
     connect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
             this, &cwFixStationValidator::revalidate);
+    // The network decides which fix references are broken. These two signals
+    // are the only sources of cwSurveyNode::scopedNetworkChanged, which the
+    // region relays to every node, so listening here runs one pass per change.
+    connect(m_region, &cwCavingRegion::networkChanged,
+            this, &cwFixStationValidator::revalidate);
+    connect(m_region, &cwCavingRegion::memberViewsChanged,
+            this, &cwFixStationValidator::revalidate);
 
-    syncCaveConnections();
+    syncNodeConnections();
     revalidate();
+}
+
+QStringList cwFixStationValidator::fixStationWarningMessagesUnder(cwSurveyNode* node) const
+{
+    QStringList messages;
+    for (int i = 0; i < m_fixStationWarnings.size(); ++i) {
+        const cwSurveyNode* warningNode = m_fixStationWarnings.at(i).node();
+        if (warningNode != nullptr && warningNode->isSelfOrDescendantOf(node)) {
+            messages.append(m_fixStationWarningMessages.at(i));
+        }
+    }
+    return messages;
 }
 
 QList<int> cwFixStationValidator::fixStationErrorTypeIds()
@@ -153,14 +192,14 @@ cwFixStationValidator::gatherCandidates() const
     // coordinates — degrees against meters — so Part B waits for the project to
     // be georeferenced. Part A needs no frame, and is the very reason a project
     // whose only fix is a typo has none: that fix may not anchor one.
-    const bool hasFrame = m_region->geoReference()->hasCoordinateSystem();
     const QString frameCS = m_region->geoReference()->localCoordinateSystem();
 
-    for (cwCave* cave : m_region->caves()) {
-        if (cave == nullptr || cave->fixStations() == nullptr) {
+    const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
+    for (cwSurveyNode* node : nodes) {
+        if (node == nullptr || node->fixStations() == nullptr) {
             continue;
         }
-        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
+        for (const cwFixStation& fix : node->fixStations()->fixStations()) {
             // Only a Valid fix has components — every other state reads 0,
             // because cwFixStation::refresh() zeroes them before it branches.
             // A row that carries a coordinate system but no coordinate yet is
@@ -176,32 +215,29 @@ cwFixStationValidator::gatherCandidates() const
                 continue;
             }
 
-            const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
-
             // Part A: does the raw coordinate even belong to its own CS? This is
-            // independent of the project's frame, so it still judges the fix the
-            // frame was derived from — the one Part B always measures at zero.
-            const bool domainValid = cwFixStationDiagnostics::isDomainValid(fix);
+            // independent of the project's frame, so it also judges a fix the
+            // frame and the survex export both leave out.
+            if (!cwFixStationDiagnostics::isDomainValid(fix)) {
+                candidates.append(FixCandidate{node, fix.id(), cwGeoPoint(), false});
+                continue;
+            }
 
-            if (!hasFrame) {
-                // classifyCandidates() files a domain-bad fix before it reads
-                // the position, so the unprojected point is never measured.
-                if (!domainValid) {
-                    candidates.append(FixCandidate{cave, fix.id(), cwGeoPoint(), domainValid});
-                }
+            if (frameCS.isEmpty()) {
                 continue;
             }
 
             // The memoizing form matters here: frameCS is the derived local
             // projection, which no fix's inputCS ever equals, so every fix in
-            // every cave needs a real transform — and revalidate() runs on each
+            // every node needs a real transform — and revalidate() runs on each
             // fix-station edit and each solve.
+            const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
             const std::optional<cwGeoPoint> global =
                 cwCoordinateTransform::transformPoint(inputCS, frameCS, p);
             if (!global.has_value()) {
                 continue;
             }
-            candidates.append(FixCandidate{cave, fix.id(), *global, domainValid});
+            candidates.append(FixCandidate{node, fix.id(), *global, true});
         }
     }
     return candidates;
@@ -221,101 +257,217 @@ QString namedCaveWarning(const QStringList& parts,
         : plural.arg(parts.join(kFragmentSeparator));
 }
 
-QString stationNameFor(cwCave* cave, const QUuid& fixId)
+//! One node's offending fixes of one kind: a quoted fragment per fix, and the
+//! first fix's id, which is where a click on the warning takes the user.
+struct NamedFixes
 {
-    if (cave == nullptr || cave->fixStations() == nullptr) {
+    QStringList parts;
+    QUuid firstFixId;
+
+    void add(const QUuid& fixId, const QString& part)
+    {
+        if (parts.isEmpty()) {
+            firstFixId = fixId;
+        }
+        parts.append(part);
+    }
+};
+
+QString stationNameFor(cwSurveyNode* node, const QUuid& fixId)
+{
+    if (node == nullptr || node->fixStations() == nullptr) {
         return QString();
     }
-    const int row = cave->fixStations()->indexOf(fixId);
-    return row < 0 ? QString() : cave->fixStations()->fixStationAt(row).stationName();
+    const int row = node->fixStations()->indexOf(fixId);
+    return row < 0 ? QString() : node->fixStations()->fixStationAt(row).stationName();
 }
 
 } // namespace
 
+cwCave* cwFixStationValidator::firstOutlierCave() const
+{
+    return m_firstOutlierCave.data();
+}
+
 void cwFixStationValidator::revalidate()
+{
+    m_revalidatePending = false;
+    // A direct pass in the stale window covers the queued one, so it must see
+    // the live tree too.
+    if (m_nodeConnectionsStale) {
+        syncNodeConnections();
+    }
+    {
+        const QScopedValueRollback revalidating(m_isRevalidating, true);
+        revalidateNodes();
+    }
+    rebuildFixStationWarnings();
+}
+
+void cwFixStationValidator::scheduleRevalidate()
+{
+    if (m_revalidatePending) {
+        return;
+    }
+    m_revalidatePending = true;
+    QMetaObject::invokeMethod(this, &cwFixStationValidator::runPendingRevalidate,
+                              Qt::QueuedConnection);
+}
+
+void cwFixStationValidator::runPendingRevalidate()
+{
+    if (m_revalidatePending) {
+        revalidate();
+    }
+}
+
+void cwFixStationValidator::markNodeConnectionsStale()
+{
+    m_nodeConnectionsStale = true;
+    m_treeChangedSinceRebuild = true;
+    scheduleRevalidate();
+}
+
+void cwFixStationValidator::forgetNode(QObject* node)
+{
+    const auto isDestroyedNode = [node](const cwSurveyNode* tracked) {
+        return static_cast<const QObject*>(tracked) == node;
+    };
+    m_connectedNodes.removeIf(isDestroyedNode);
+    m_nodesWithWarning.removeIf(isDestroyedNode);
+}
+
+void cwFixStationValidator::rebuildFixStationWarnings()
+{
+    if (m_isRevalidating || m_region == nullptr) {
+        return;
+    }
+    // A move keeps every line the same but changes which ones sit under a
+    // node, so fixStationWarningMessagesUnder() readers need the signal too.
+    const bool treeChanged = m_treeChangedSinceRebuild;
+    m_treeChangedSinceRebuild = false;
+    if (m_nodesWithWarning.isEmpty() && m_fixStationWarnings.isEmpty()) {
+        return;
+    }
+
+    const QList<int> typeIds = fixStationErrorTypeIds();
+    QList<cwFixStationWarning> warnings;
+    QStringList messages;
+    const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
+    for (cwSurveyNode* node : nodes) {
+        if (!m_nodesWithWarning.contains(node)) {
+            continue;
+        }
+        const QString name = node->name();
+        const QStringList nodeMessages = node->errorModel()->errors()->warningMessagesForTypeIds(typeIds);
+        for (const QString& message : nodeMessages) {
+            warnings.append(cwFixStationWarning(node, message));
+            messages.append(name.isEmpty() ? message : QStringLiteral("%1: %2").arg(name, message));
+        }
+    }
+
+    if (m_fixStationWarnings == warnings && m_fixStationWarningMessages == messages
+        && !treeChanged) {
+        return;
+    }
+    m_fixStationWarnings = warnings;
+    m_fixStationWarningMessages = messages;
+    emit fixStationWarningsChanged();
+}
+
+void cwFixStationValidator::revalidateNodes()
 {
     const Classification classification = currentClassification();
 
     // Distance messages (Part B): one "«station» (~N km)" fragment list per
-    // offending cave. The distance is measured from the frame origin, which the
+    // offending node. The distance is measured from the frame origin, which the
     // rest of the survey sits on — so it is also the gap the user would see
     // between the bad station and everything else.
-    QHash<cwCave*, QStringList> distantParts;
+    QHash<cwSurveyNode*, NamedFixes> distantFixes;
     for (const auto& c : classification.outliers) {
-        if (c.cave == nullptr) {
+        if (c.node == nullptr) {
             continue;
         }
-        const QString name = stationNameFor(c.cave, c.fixId);
+        const QString name = stationNameFor(c.node, c.fixId);
         const double km = distanceFromFrameOrigin(c.global) / 1000.0;
-        distantParts[c.cave].append(QStringLiteral("\"%1\" (~%2 km)").arg(name).arg(km, 0, 'f', 0));
+        distantFixes[c.node].add(c.fixId, QStringLiteral("\"%1\" (~%2 km)").arg(name).arg(km, 0, 'f', 0));
     }
 
-    QHash<cwCave*, QString> distantMessages;
-    for (auto it = distantParts.constBegin(); it != distantParts.constEnd(); ++it) {
-        distantMessages.insert(it.key(),
-            namedCaveWarning(it.value(),
+    QHash<cwSurveyNode*, NodeWarning> distantWarnings;
+    for (auto it = distantFixes.constBegin(); it != distantFixes.constEnd(); ++it) {
+        distantWarnings.insert(it.key(), NodeWarning{
+            namedCaveWarning(it.value().parts,
                 QStringLiteral("Fix station %1 is far from the rest of the survey — "
                                "check the coordinate system, UTM zone, and value."),
                 QStringLiteral("Fix stations %1 are far from the rest of the survey — "
-                               "check the coordinate system, UTM zone, and value.")));
+                               "check the coordinate system, UTM zone, and value.")),
+            it.value().firstFixId});
     }
 
     // Domain-outlier messages (Part A): fixes outside their own CS's valid range.
-    QHash<cwCave*, QStringList> domainParts;
+    QHash<cwSurveyNode*, NamedFixes> domainFixes;
     for (const auto& c : classification.domainOutliers) {
-        if (c.cave == nullptr) {
+        if (c.node == nullptr) {
             continue;
         }
-        domainParts[c.cave].append(QStringLiteral("\"%1\"").arg(stationNameFor(c.cave, c.fixId)));
+        domainFixes[c.node].add(c.fixId, QStringLiteral("\"%1\"").arg(stationNameFor(c.node, c.fixId)));
     }
 
-    QHash<cwCave*, QString> domainMessages;
-    for (auto it = domainParts.constBegin(); it != domainParts.constEnd(); ++it) {
-        domainMessages.insert(it.key(),
-            namedCaveWarning(it.value(),
+    QHash<cwSurveyNode*, NodeWarning> domainWarnings;
+    for (auto it = domainFixes.constBegin(); it != domainFixes.constEnd(); ++it) {
+        domainWarnings.insert(it.key(), NodeWarning{
+            namedCaveWarning(it.value().parts,
                 QStringLiteral("Fix station %1 has a coordinate outside the valid range for its "
                                "coordinate system — check for a transposed digit or the wrong CS/zone."),
                 QStringLiteral("Fix stations %1 have coordinates outside the valid range for their "
-                               "coordinate system — check for a transposed digit or the wrong CS/zone.")));
+                               "coordinate system — check for a transposed digit or the wrong CS/zone.")),
+            it.value().firstFixId});
     }
 
     // Reference messages: fixes whose station name matches no survey station in
-    // the owning cave, plus fixes with no name at all (both are anchors survex
+    // the owning node, plus fixes with no name at all (both are anchors survex
     // silently drops). Independent of the project frame and the distance/domain
-    // math, so it runs even before the project is georeferenced. A cave whose
-    // network hasn't been computed yet is skipped for its *named* fixes.
-    const QHash<cwCave*, QString> referenceMessages = referenceWarnings();
+    // math, so it runs even before the project is georeferenced. A node whose
+    // network hasn't been computed yet is skipped for its *named* fixes, unless
+    // it has nothing to solve and so never gets one.
+    const QHash<cwSurveyNode*, NodeWarning> referenceWarningsByNode = referenceWarnings();
 
-    // Reconcile every warning kind against every cave that has or had one, so a
+    // Reconcile every warning kind against every node that has or had one, so a
     // correction clears the old warning.
-    QSet<cwCave*> caves(m_connectedCaves);
-    caves.unite(m_cavesWithWarning);
-    for (cwCave* cave : caves) {
-        setCaveWarning(cave, cwErrorTypeId::FixStationOutlier, distantMessages.value(cave));
-        setCaveWarning(cave, cwErrorTypeId::FixStationDomain, domainMessages.value(cave));
-        setCaveWarning(cave, cwErrorTypeId::FixStationReference, referenceMessages.value(cave));
+    QSet<cwSurveyNode*> nodes(m_connectedNodes);
+    nodes.unite(m_nodesWithWarning);
+    for (cwSurveyNode* node : nodes) {
+        setNodeWarning(node, cwErrorTypeId::FixStationOutlier, distantWarnings.value(node));
+        setNodeWarning(node, cwErrorTypeId::FixStationDomain, domainWarnings.value(node));
+        setNodeWarning(node, cwErrorTypeId::FixStationReference, referenceWarningsByNode.value(node));
     }
 
     // Region-wide summary for the render-view overlay. A domain-bad fix is the
     // most certain error, so it names the culprit first; otherwise the first
-    // distance outlier in region order (both lists follow caves() order). The
-    // message stays generic so it covers either kind.
-    cwCave* firstOffender = nullptr;
-    for (const auto& c : classification.domainOutliers) {
-        if (c.cave != nullptr) {
-            firstOffender = c.cave;
-            break;
-        }
-    }
-    if (firstOffender == nullptr) {
-        for (const auto& c : classification.outliers) {
-            if (c.cave != nullptr) {
-                firstOffender = c.cave;
+    // distance outlier in region order (both lists follow the tree's pre-order). The
+    // message stays generic so it covers either kind. Without a frame nothing is
+    // off-screen: the cave sits at the fallback origin and the per-node warning
+    // says everything.
+    const bool hasFrame = m_region != nullptr && m_region->geoReference()->hasCoordinateSystem();
+    cwSurveyNode* firstOffender = nullptr;
+    int total = 0;
+    if (hasFrame) {
+        for (const auto& c : classification.domainOutliers) {
+            if (c.node != nullptr) {
+                firstOffender = c.node;
                 break;
             }
         }
+        if (firstOffender == nullptr) {
+            for (const auto& c : classification.outliers) {
+                if (c.node != nullptr) {
+                    firstOffender = c.node;
+                    break;
+                }
+            }
+        }
+        total = int(classification.domainOutliers.size() + classification.outliers.size());
     }
-    const int total = int(classification.domainOutliers.size() + classification.outliers.size());
     QString summary;
     if (firstOffender != nullptr) {
         summary = QStringLiteral("Part of your survey is off-screen — a fix-station "
@@ -325,29 +477,64 @@ void cwFixStationValidator::revalidate()
     setSummary(summary, total, firstOffender);
 }
 
-QHash<cwCave*, QString> cwFixStationValidator::referenceWarnings() const
+QHash<cwSurveyNode*, cwFixStationValidator::NodeWarning> cwFixStationValidator::referenceWarnings() const
 {
-    QHash<cwCave*, QString> messages;
+    QHash<cwSurveyNode*, NodeWarning> warnings;
     if (m_region == nullptr) {
-        return messages;
+        return warnings;
     }
 
-    for (cwCave* cave : m_region->caves()) {
-        if (cave == nullptr || cave->fixStations() == nullptr) {
+    const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
+    for (cwSurveyNode* node : nodes) {
+        // Skipping a fix-less node spares building its member network.
+        if (node == nullptr || node->fixStations() == nullptr
+            || node->fixStations()->count() == 0) {
             continue;
         }
-        const cwSurveyNetwork network = cave->network();
+        const cwSurveyNetwork network = node->scopedNetwork();
+        const auto surveyData = network.isEmpty()
+            ? cwFixStationDiagnostics::classifySurveyData(*node)
+            : cwFixStationDiagnostics::SurveyData::Stations;
+        const QHash<QString, QString> fileFixedStations = node->fileFixedStations();
+        const QList<cwFixStation>& fixes = node->fixStations()->fixStations();
         QStringList unknownNames;
         int emptyCount = 0;
-        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network)) {
+        QStringList collisions;
+        QStringList duplicateNames;
+        QUuid firstBrokenFix;
+        for (qsizetype row = 0; row < fixes.size(); ++row) {
+            const cwFixStation& fix = fixes.at(row);
+            const QString station = fix.stationName().trimmed();
+            const auto markBroken = [&]() {
+                if (firstBrokenFix.isNull()) {
+                    firstBrokenFix = fix.id();
+                }
+            };
+            switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network,
+                                                                      surveyData)) {
             case cwFixStationDiagnostics::StationReference::Unknown:
-                unknownNames.append(QStringLiteral("\"%1\"").arg(fix.stationName().trimmed()));
-                break;
+                markBroken();
+                unknownNames.append(QStringLiteral("\"%1\"").arg(station));
+                continue;
             case cwFixStationDiagnostics::StationReference::Empty:
+                markBroken();
                 ++emptyCount;
-                break;
+                continue;
             case cwFixStationDiagnostics::StationReference::Ok:
+                break;
+            }
+            switch (cwFixStationDiagnostics::classifyStationConflict(fixes, row, fileFixedStations)) {
+            case cwFixStationDiagnostics::StationConflict::FixedByFile:
+                markBroken();
+                collisions.append(cwFixStationDiagnostics::fileFixCollisionMessage(
+                                      fileFixedStations.value(cwStation::canonicalKey(station)), station)
+                                  + QLatin1Char('.'));
+                break;
+            case cwFixStationDiagnostics::StationConflict::Duplicate:
+                markBroken();
+                duplicateNames.append(QStringLiteral("\"%1\"").arg(station));
+                break;
+            case cwFixStationDiagnostics::StationConflict::None:
                 break;
             }
         }
@@ -373,47 +560,57 @@ QHash<cwCave*, QString> cwFixStationValidator::referenceWarnings() const
                                  "you enter the survey stations they fix.")
                       .arg(emptyCount));
         }
+        parts.append(collisions);
+        if (!duplicateNames.isEmpty()) {
+            parts.append(namedCaveWarning(duplicateNames,
+                QStringLiteral("Station %1 is fixed twice — only the first fix counts."),
+                QStringLiteral("Stations %1 are fixed twice — only the first fix of each counts.")));
+        }
         if (parts.isEmpty()) {
             continue;
         }
-        messages.insert(cave, parts.join(kSentenceSeparator));
+        warnings.insert(node, NodeWarning{parts.join(kSentenceSeparator), firstBrokenFix});
     }
-    return messages;
+    return warnings;
 }
 
-void cwFixStationValidator::syncCaveConnections()
+void cwFixStationValidator::syncNodeConnections()
 {
-    const QList<cwCave*> current = m_region ? m_region->caves() : QList<cwCave*>();
-    const QSet<cwCave*> currentSet(current.begin(), current.end());
+    m_nodeConnectionsStale = false;
+    const QList<cwSurveyNode*> current = m_region ? m_region->rootNode()->allNodes() : QList<cwSurveyNode*>();
+    const QSet<cwSurveyNode*> currentSet(current.begin(), current.end());
 
-    // Caves that left the region: still alive here (a removed cave outlives its
-    // removal via the undo command), so tear down its connection and clear its
-    // warning before it can be destroyed.
-    for (auto it = m_connectedCaves.begin(); it != m_connectedCaves.end();) {
-        cwCave* cave = *it;
-        if (!currentSet.contains(cave)) {
-            if (cave != nullptr) {
-                disconnect(cave, nullptr, this, nullptr);
-                if (cave->fixStations() != nullptr) {
-                    disconnect(cave->fixStations(), nullptr, this, nullptr);
+    // Nodes that left the region: every node still in m_connectedNodes is alive,
+    // because forgetNode() drops destroyed ones, so tear down its connection and
+    // clear its warning here.
+    for (auto it = m_connectedNodes.begin(); it != m_connectedNodes.end();) {
+        cwSurveyNode* node = *it;
+        if (!currentSet.contains(node)) {
+            if (node != nullptr) {
+                disconnect(node, nullptr, this, nullptr);
+                if (node->fixStations() != nullptr) {
+                    disconnect(node->fixStations(), nullptr, this, nullptr);
                 }
+                disconnect(node->errorModel()->errors(), nullptr, this, nullptr);
             }
-            setCaveWarning(cave, cwErrorTypeId::FixStationOutlier, QString());
-            setCaveWarning(cave, cwErrorTypeId::FixStationDomain, QString());
-            setCaveWarning(cave, cwErrorTypeId::FixStationReference, QString());
-            it = m_connectedCaves.erase(it);
+            setNodeWarning(node, cwErrorTypeId::FixStationOutlier, NodeWarning());
+            setNodeWarning(node, cwErrorTypeId::FixStationDomain, NodeWarning());
+            setNodeWarning(node, cwErrorTypeId::FixStationReference, NodeWarning());
+            it = m_connectedNodes.erase(it);
         } else {
             ++it;
         }
     }
 
-    // New caves: an edit to any of their fix stations should re-attribute.
-    for (cwCave* cave : current) {
-        if (cave == nullptr || cave->fixStations() == nullptr
-            || m_connectedCaves.contains(cave)) {
+    // New nodes: an edit to any of their fix stations should re-attribute.
+    for (cwSurveyNode* node : current) {
+        if (node == nullptr || node->fixStations() == nullptr
+            || m_connectedNodes.contains(node)) {
             continue;
         }
-        cwFixStationModel* model = cave->fixStations();
+        connect(node, &QObject::destroyed,
+                this, &cwFixStationValidator::forgetNode, Qt::UniqueConnection);
+        cwFixStationModel* model = node->fixStations();
         connect(model, &cwFixStationModel::countChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
         connect(model, &cwFixStationModel::dataChanged,
@@ -421,75 +618,48 @@ void cwFixStationValidator::syncCaveConnections()
         connect(model, &cwFixStationModel::modelReset,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
 
-        // The render-view summary interpolates the offending cave's name, so a
-        // rename must re-run to refresh the banner (the per-cave errorModel
+        // The render-view summary interpolates the offending node's name, so a
+        // rename must re-run to refresh the banner (the per-node errorModel
         // message carries no name and is unaffected).
-        connect(cave, &cwCave::nameChanged,
+        connect(node, &cwSurveyNode::nameChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
-        // The survey network decides which fix references are broken, so a
-        // recompute (a station appearing/disappearing) must re-attribute.
-        connect(cave, &cwCave::surveyNetworkChanged,
-                this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
-        m_connectedCaves.insert(cave);
+        // The stations the node's attached files fix themselves decide
+        // collisions, so a change to them must re-attribute.
+        connect(node, &cwSurveyNode::attachedFixesChanged,
+                this, &cwFixStationValidator::scheduleRevalidate, Qt::UniqueConnection);
+        connect(node->errorModel()->errors(), &cwErrorListModel::warningMessagesChanged,
+                this, &cwFixStationValidator::rebuildFixStationWarnings, Qt::UniqueConnection);
+        m_connectedNodes.insert(node);
     }
 }
 
-void cwFixStationValidator::setCaveWarning(cwCave* cave, cwErrorTypeId errorTypeId, const QString& message)
+void cwFixStationValidator::setNodeWarning(cwSurveyNode* node, cwErrorTypeId errorTypeId, const NodeWarning& warning)
 {
-    if (cave == nullptr || cave->errorModel() == nullptr) {
+    if (node == nullptr || node->errorModel() == nullptr) {
         return;
     }
-    cwErrorListModel* errors = cave->errorModel()->errors();
-    const int errorTypeIdValue = static_cast<int>(errorTypeId);
-
-    // Find our warning by its stable errorTypeId, not by value equality: the user
-    // can suppress it, and cwError::operator== includes the suppressed flag, so a
-    // stored value copy would stop matching the row the moment it is suppressed.
-    int row = -1;
-    for (int i = 0; i < errors->size(); ++i) {
-        if (errors->at(i).errorTypeId() == errorTypeIdValue) {
-            row = i;
-            break;
-        }
-    }
-
-    if (message.isEmpty()) {
-        if (row >= 0) {
-            errors->remove(row);
-        }
-    } else if (row >= 0) {
-        // Text-only change: update the row in place so the cave-list badge, any
-        // open delegate, the user's suppression, and warningCount all survive.
-        if (errors->at(row).message() != message) {
-            errors->setData(errors->index(row), message,
-                            static_cast<int>(cwErrorListModel::ErrorRoles::MessageRole));
-        }
-    } else {
-        cwError error(message, cwError::Warning);
-        error.setErrorTypeId(errorTypeIdValue);
-        errors->append(error);
-    }
-
-    updateWarningTracking(cave, errors);
+    cwErrorListModel* errors = node->errorModel()->errors();
+    errors->setTypedWarning(errorTypeId, warning.message, QString(), warning.fixId);
+    updateWarningTracking(node, errors);
 }
 
-void cwFixStationValidator::updateWarningTracking(cwCave* cave, cwErrorListModel* errors)
+void cwFixStationValidator::updateWarningTracking(cwSurveyNode* node, cwErrorListModel* errors)
 {
-    // A cave stays tracked while it carries either warning kind, so reconcile
+    // A node stays tracked while it carries either warning kind, so reconcile
     // still visits it to clear the last one; it drops out once both are gone.
     for (int i = 0; i < errors->size(); ++i) {
         const int id = errors->at(i).errorTypeId();
         if (id == static_cast<int>(cwErrorTypeId::FixStationOutlier)
             || id == static_cast<int>(cwErrorTypeId::FixStationDomain)
             || id == static_cast<int>(cwErrorTypeId::FixStationReference)) {
-            m_cavesWithWarning.insert(cave);
+            m_nodesWithWarning.insert(node);
             return;
         }
     }
-    m_cavesWithWarning.remove(cave);
+    m_nodesWithWarning.remove(node);
 }
 
-void cwFixStationValidator::setSummary(const QString& message, int count, cwCave* cave)
+void cwFixStationValidator::setSummary(const QString& message, int count, cwSurveyNode* node)
 {
     if (m_warningMessage != message) {
         m_warningMessage = message;
@@ -499,7 +669,8 @@ void cwFixStationValidator::setSummary(const QString& message, int count, cwCave
         m_outlierCount = count;
         emit outlierCountChanged();
     }
-    if (m_firstOutlierCave != cave) {
+    auto* cave = qobject_cast<cwCave*>(node);
+    if (m_firstOutlierCave.data() != cave) {
         m_firstOutlierCave = cave;
         emit firstOutlierCaveChanged();
     }

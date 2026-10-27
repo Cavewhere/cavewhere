@@ -99,7 +99,7 @@ MainWindowTest {
         // with no matter what the trip does.
         function test_tripDistanceUnitRelabelsAnAutoScale() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
 
@@ -160,7 +160,7 @@ MainWindowTest {
         // since the last use gets the new one.
         function test_scaleToolStartsInTripDistanceUnit() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
 

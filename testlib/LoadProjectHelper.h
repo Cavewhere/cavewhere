@@ -14,6 +14,7 @@
 #include <QString>
 #include <QVariantMap>
 #include <QObject>
+#include <QDir>
 #include <QTemporaryDir>
 #include <QQmlEngine>
 #include <QCoreApplication>
@@ -40,6 +41,8 @@
 namespace QQuickGit {
 class GitRepository;
 }
+
+class cwCave;
 
 /**
  * Returns the shared temp root directory for this test process.
@@ -94,6 +97,11 @@ int CAVEWHERE_TESTLIB_EXPORT initBareRepo(const QString& path);
  * event loop.
  */
 bool CAVEWHERE_TESTLIB_EXPORT isProjectModified(cwProject* project);
+
+/**
+ * Counts the .cwtrip files under \a root, skipping the project's .cw_trash/.
+ */
+qsizetype CAVEWHERE_TESTLIB_EXPORT tripFileCountUnder(const QDir& root);
 
 /**
  * @brief fileToProject
@@ -256,6 +264,23 @@ public:
     Q_INVOKABLE QString projectHeadCommitOid(cwProject* project) const;
     Q_INVOKABLE QString projectHeadCommitMessage(cwProject* project) const;
     Q_INVOKABLE int projectModifiedFileCount(cwProject* project) const;
+
+    // Absolute path of `fileName` inside `trip`'s external-centerline
+    // attachment directory. The directory is derived from the project's
+    // data root and the owner's sanitized name, which QML cannot compute —
+    // tests that need to touch an in-project copy on disk ask for it here.
+    Q_INVOKABLE QString externalCenterlineCopyPath(cwProject* project,
+                                                   cwTrip* trip,
+                                                   const QString& fileName) const;
+    // The cave-owner twin of externalCenterlineCopyPath. A distinct name
+    // rather than an overload: QML resolves overloads on QObject-pointer
+    // arguments unreliably.
+    Q_INVOKABLE QString externalCenterlineCaveCopyPath(cwProject* project,
+                                                       cwCave* cave,
+                                                       const QString& fileName) const;
+    // Writes `contents` to `path`, so a test can edit an in-project copy the
+    // way a user's editor would.
+    Q_INVOKABLE bool writeTextFile(const QString& path, const QString& contents) const;
     Q_INVOKABLE void waitForProjectSaveToFinish(cwProject* project) const;
     Q_INVOKABLE void waitForFutureManagerToFinish(cwFutureManagerModel* model) const;
     Q_INVOKABLE QString checkoutProjectRef(cwProject* project,
@@ -323,6 +348,13 @@ public:
 
     Q_INVOKABLE QString testcasesDatasetPath(const QString& relativePath) const {
         return ::testcasesDatasetPath(relativePath);
+    }
+    //! The in-source dataset path, with no copy. A fixture whose siblings
+    //! matter - a survey file that *includes its neighbors - has to be read
+    //! where its neighbors are; testcasesDatasetPath copies the one file it
+    //! is given.
+    Q_INVOKABLE QString testcasesDatasetSourcePath(const QString& relativePath) const {
+        return ::testcasesDatasetSourcePath(relativePath);
     }
     Q_INVOKABLE QString qmlTestDatasetPath(const QString& relativePath) const {
         return ::qmlTestDatasetPath(relativePath);

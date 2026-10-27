@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fix Stations — grouped list vs TreeView</title>
+<style>
+  :root {
+    --background: #f2f2f2;
+    --surface: #ffffff;
+    --surface-muted: #f6f6f6;
+    --text: #1a1a1a;
+    --text-secondary: #33363a;
+    --text-subtle: #616469;
+    --text-link: #1d4d77;
+    --accent: #2f6fb0;
+    --success: #4caf50;
+    --warning: #FF9C14;
+    --danger: #FF6736;
+    --info: #85c1f4;
+    --highlight: #a5cdff;
+    --border: #d3d3d3;
+    --chrome: #e8e8e8;
+    --shadow: rgba(0,0,0,.25);
+    --chip: #e3ecf7;
+    --chip-text: #1d4d77;
+    --warning-text: #1a1a1a;
+    --danger-text: #c2410c;
+    --danger-badge-text: #ffffff;
+    --info-text: #102b45;
+  }
+  [data-theme="dark"] {
+    --background: #14171c;
+    --surface: #1f232a;
+    --surface-muted: #292d35;
+    --text: #e8ebf0;
+    --text-secondary: #cdd2db;
+    --text-subtle: #9fa6b1;
+    --text-link: #85c1f4;
+    --accent: #6aa5dd;
+    --success: #76e596;
+    --warning: #6b643e;
+    --danger: #6f312e;
+    --info: #1f3f61;
+    --highlight: #314f78;
+    --border: #4a4f58;
+    --chrome: #262b33;
+    --shadow: rgba(0,0,0,.6);
+    --chip: #2a3b50;
+    --chip-text: #9cc7f2;
+    --warning-text: #f3e6b0;
+    --danger-text: #f47067;
+    --danger-badge-text: #ffd9d2;
+    --info-text: #cfe3f7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 14px;
+    background: var(--background); color: var(--text); padding: 24px; line-height: 1.45; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .doc-sub { color: var(--text-subtle); margin-bottom: 12px; max-width: 900px; }
+  code, .mono { font-family: "Courier Prime", "Courier New", monospace; font-size: 12px; }
+  .theme-toggle { font-size: 12px; padding: 4px 10px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--chrome); color: var(--text); cursor: pointer; }
+
+  .topbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 8px 0 14px; }
+  .topbar .spacer { flex: 1; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+  .seg button { font-size: 13px; padding: 5px 14px; border: none; background: var(--surface);
+    color: var(--text); cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.active { background: var(--accent); color: #fff; font-weight: 700; }
+  .field { font-size: 13px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); color: var(--text); }
+  .field.small { font-size: 12px; padding: 1px 4px; }
+  .btn { font-size: 13px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); color: var(--text); cursor: pointer; }
+  .btn:hover { background: var(--chrome); }
+  .btn.small { font-size: 12px; padding: 3px 9px; }
+  .btn.icon { padding: 0 6px; font-size: 12px; border-color: transparent; background: transparent; color: var(--text-subtle); }
+  .btn.icon:hover { border-color: var(--border); background: var(--chrome); color: var(--danger-text); }
+  a.link { color: var(--text-link); cursor: pointer; text-decoration: none; white-space: nowrap; }
+  a.link:hover { text-decoration: underline; }
+  .hint { color: var(--text-subtle); font-size: 12px; }
+
+  .layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+  .appwin { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex: 1 1 640px; max-width: 900px;
+    background: var(--background); box-shadow: 0 4px 18px var(--shadow); min-width: 0; }
+  .titlebar { background: var(--chrome); padding: 6px 12px; font-size: 12px; color: var(--text-subtle);
+    border-bottom: 1px solid var(--border); display: flex; gap: 6px; align-items: center; }
+  .dots span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+  .dots .r { background: #ff5f57; } .dots .y { background: #febc2e; } .dots .g { background: #28c840; }
+  .page { padding: 12px; }
+  .page-nav { display: flex; gap: 6px; margin-bottom: 6px; font-size: 12px; flex-wrap: wrap; align-items: center; }
+  .page-nav .here { color: var(--text-subtle); }
+  .page-nav .sep { color: var(--text-subtle); }
+  .page h2 { font-size: 20px; margin-bottom: 8px; }
+  .toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; min-height: 26px; }
+  .toolbar .spacer { flex: 1; }
+
+  .chip { display: inline-block; background: var(--chip); color: var(--chip-text); border-radius: 10px;
+    padding: 1px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .chip.native { background: var(--chrome); color: var(--text-subtle); font-weight: 400; }
+  .chip.count { background: transparent; border: 1px solid var(--border); color: var(--text-subtle); font-weight: 400; }
+  .chip.flag { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); font-weight: 400; font-size: 10px; padding: 0 6px; }
+  .chip.jump { cursor: pointer; font-weight: 400; }
+  .chip.jump:hover { background: var(--highlight); }
+  .badge { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .badge.warn { background: var(--warning); color: var(--warning-text); }
+  .badge.danger { background: var(--danger); color: var(--danger-badge-text); }
+  .badge.info { background: var(--info); color: var(--info-text); font-weight: 400; }
+  .badge.wrap { white-space: normal; font-weight: 400; }
+  .lock { font-size: 11px; cursor: help; }
+  .kicon { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+  .unset { color: var(--danger-text); font-weight: 700; }
+  .arrow { color: var(--text-subtle); }
+
+  /* One grid for every fix row in both layouts, so the numeric and CS columns line up at any depth. */
+  .scrollframe { --cols: minmax(160px, 1fr) 104px 104px 76px 200px 150px; --colhead-h: 30px;
+    max-height: 560px; overflow: auto; position: relative; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--surface); }
+  .grow { display: grid; grid-template-columns: var(--cols); align-items: center; min-width: 794px;
+    border-bottom: 1px solid var(--border); font-size: 13px; }
+  .grow > div { padding: 3px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grow .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .grow .raw { font-family: "Courier Prime", "Courier New", monospace; font-size: 12px; color: var(--text-secondary); }
+  .grow .badges { display: flex; gap: 4px; align-items: center; justify-content: flex-end; white-space: normal; flex-wrap: wrap; }
+  .grow.fix:hover { background: var(--surface-muted); }
+  .grow .editable { cursor: text; border-radius: 3px; }
+  .grow .editable:hover { outline: 1px dashed var(--border); }
+  .grow input.field { width: 100%; text-align: right; padding: 1px 4px; }
+  .grow .station { display: flex; align-items: center; gap: 4px; }
+  .colhead { position: sticky; top: 0; z-index: 3; height: var(--colhead-h); background: var(--chrome);
+    font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+  .empty-row { min-width: 794px; padding: 6px 8px; font-style: italic; color: var(--text-subtle);
+    border-bottom: 1px solid var(--border); font-size: 13px; }
+
+  .nhead { min-width: 794px; background: var(--surface-muted); border-bottom: 1px solid var(--border);
+    padding: 5px 8px; font-size: 13px; }
+  .nhead .line1 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .nhead .line2 { margin-top: 3px; font-size: 12px; color: var(--text-secondary); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .nhead .crumb { font-weight: 700; }
+  .nhead .crumb .sep { color: var(--text-subtle); font-weight: 400; margin: 0 3px; }
+  .nhead .spacer { flex: 1; }
+  .section > .nhead { position: sticky; top: var(--colhead-h); z-index: 2; box-shadow: 0 1px 0 var(--border); }
+
+  .tnode { background: var(--surface); }
+  .tnode .crumb { font-weight: 700; }
+  .caret { display: inline-block; width: 16px; text-align: center; color: var(--text-subtle);
+    cursor: pointer; user-select: none; font-size: 11px; }
+  .caret.fixed { cursor: default; opacity: .35; }
+
+  .jumpstrip { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+
+  .notes { flex: 0 1 300px; font-size: 13px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); padding: 12px 14px; }
+  .notes h3 { font-size: 15px; margin: 10px 0 4px; }
+  .notes h3:first-child { margin-top: 0; }
+  .notes h4 { font-size: 13px; margin: 8px 0 2px; color: var(--text-secondary); }
+  .notes li { margin: 3px 0 3px 18px; }
+  details.design { max-width: 1220px; margin-top: 20px; font-size: 13px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--surface); padding: 10px 14px; }
+  details.design summary { cursor: pointer; font-weight: 700; }
+  details.design ul { margin-top: 6px; }
+  details.design li { margin: 3px 0 3px 18px; }
+  @media (max-width: 700px) { body { padding: 16px; } }
+</style>
+</head>
+<body data-theme="light">
+
+<h1>Fix Stations — grouped list vs TreeView</h1>
+<p class="doc-sub">
+  The Fix Stations page lists the fixed stations of a node and of its whole subtree, so the project root's page
+  holds every fix in the project. Both layouts below run on the same synthetic data and share one state:
+  edits, coordinate-system choices, and collapsed nodes carry over when you switch.
+</p>
+
+<div class="topbar">
+  <span class="seg" role="group" aria-label="Layout">
+    <button id="seg-list" onclick="setLayout('list')">Grouped list</button>
+    <button id="seg-tree" onclick="setLayout('tree')">TreeView</button>
+  </span>
+  <label class="hint">Page for:
+    <select class="field" id="nodepicker" onchange="openPage(this.value)"></select>
+  </label>
+  <span class="spacer"></span>
+  <button class="btn small" onclick="resetDemo()">Reset demo</button>
+  <button class="theme-toggle" onclick="toggleTheme()">Toggle dark mode</button>
+</div>
+
+<div class="layout">
+  <div class="appwin">
+    <div class="titlebar"><span class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></span>
+      CaveWhere — Caney Fork.cwproj — Fix Stations</div>
+    <div class="page">
+      <div class="page-nav" id="pagenav"></div>
+      <h2>Fix Stations</h2>
+      <div class="toolbar" id="toolbar"></div>
+      <div class="scrollframe" id="frame"></div>
+      <p class="hint" style="margin-top:6px">Click a number on a native row to edit it. 🔒 rows come from an attached file.</p>
+    </div>
+  </div>
+
+  <aside class="notes">
+    <h3>What to compare</h3>
+    <ul>
+      <li>Open the page for <b>Caney Fork Project</b>, then for <b>North Ridge › ridge_survey.svx</b>: both layouts re-root to that subtree.</li>
+      <li>In TreeView, collapse <b>North Ridge</b> and <b>quarry.mak</b>; in the grouped list, scroll and watch the sticky headers hand off.</li>
+      <li>On <b>ridge_survey.svx</b>, set "Read fixes with no coordinate system as" to EPSG:32616 and watch every bare row under it, including <b>entrances.svx</b>, switch from "→ unset" to "→ EPSG:32616".</li>
+      <li>Look at <b>QUARRY2.DAT</b>: an empty node, shown in both layouts.</li>
+      <li>Edit an Easting on <b>Blue Spring Cave</b> and change its system; then hover a 🔒 row.</li>
+      <li>Click "Open page →" on <b>entrances.svx</b>, then use its ↑ link to return to the owner.</li>
+      <li>Compare the numeric columns at depth 1 and depth 3 in TreeView: they share one grid.</li>
+      <li>Toggle dark mode and check the badge colors in both layouts.</li>
+    </ul>
+    <h3>Trade-offs</h3>
+    <h4>Grouped list</h4>
+    <ul>
+      <li>Each header carries its full relative path, so a scrolled-to row always shows where it lives.</li>
+      <li>Everything is visible at once; the jump strip reaches any node in one click.</li>
+      <li>One flat header style keeps owner controls readable at full width.</li>
+    </ul>
+    <h4>TreeView</h4>
+    <ul>
+      <li>Indentation shows the hierarchy at a glance and matches the Data page tree.</li>
+      <li>Collapsing a branch shortens a large project page to the parts in focus.</li>
+      <li>Short names leave more room for chips and badges on each node row.</li>
+    </ul>
+  </aside>
+</div>
+
+<details class="design">
+  <summary>Design notes</summary>
+  <ul>
+    <li>A fix shows on the node whose file holds it: <code>entrances.svx</code>'s fixes sit under <code>entrances.svx</code>, never on the owner.</li>
+    <li>A node's page shows that node and its whole subtree, in depth-first order; the project root's page shows every fix in the project.</li>
+    <li>Nodes with no fixes still appear, labeled "No fixed stations", so the subtree shape matches the Data page.</li>
+    <li>The attachment owner (the root of an attached file tree) holds one choice: the system used to read fixes whose file names none. It applies to every bare fix in the attachment.</li>
+    <li>Child headers inside an attachment show the owner's choice read-only, with ↑ to the owner's page. Native folders and the project root carry no such control.</li>
+    <li>Cavern rejects a bare fix under an output projection until a system is named, so an unset owner shows "→ unset" in the danger color and a "⚠ N without coordinate system" badge on every header above it.</li>
+    <li>A fix whose file names its own system shows that system as plain text; the owner's choice leaves it alone.</li>
+    <li>Native rows are editable in place (coordinates, system, delete). Attached rows are locked and show the file's raw coordinate text; the 🔒 tooltip names the file to edit.</li>
+  </ul>
+</details>
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function toggleTheme() {
+  const b = document.body;
+  b.dataset.theme = b.dataset.theme === 'dark' ? 'light' : 'dark';
+}
+
+/* ---------- synthetic sample data ---------- */
+const nfix = (id, station, e, n, z, cs, warning) => ({ id, station, native: true, e, n, z, cs, warning });
+const afix = (id, station, raw, cs, flags) => ({ id, station, native: false, raw, cs, flags: flags || [] });
+
+const TREE = {
+  id: 'root', name: 'Caney Fork Project', kind: 'project', children: [
+    { id: 'blue', name: 'Blue Spring Cave', kind: 'cave', fixes: [
+      nfix('bs1', 'BS1', 612031.42, 3987512.08, 288.4, 'EPSG:32616'),
+      nfix('bs2', 'BS-ENT2', 612288.10, 3987390.55, 301.2, 'EPSG:32616', 'Fix is 212 m from the solved position') ] },
+    { id: 'north', name: 'North Ridge', kind: 'folder', children: [
+      { id: 'pit', name: 'Ridge Pit', kind: 'cave', fixes: [
+        nfix('rp1', 'P1', -85.61237, 36.01884, 402.0, 'WGS84 lat/long') ] },
+      { id: 'rsvx', name: 'ridge_survey.svx', kind: 'survex', owner: true, file: 'ridge_survey.svx', fixes: [
+        afix('rs1', 'ridge.top', '0612455 3987120 512', null) ], children: [
+        { id: 'ent', name: 'entrances.svx', kind: 'file', file: 'entrances.svx', fixes: [
+          afix('e1', 'ent.e1', '0612501 3987044 498', null, ['reference']),
+          afix('e2', 'ent.e2', '0612588 3987101 503', null, ['reference']),
+          afix('e3', 'ent.e3', '0612640 3987213 509', null) ] },
+        { id: 'lower', name: 'deep/lower.svx', kind: 'file', file: 'deep/lower.svx', fixes: [
+          afix('l1', 'lower.sump', '0612702 3987260 377', 'UTM16N') ] } ] } ] },
+    { id: 'quarry', name: 'quarry.mak', kind: 'compass', owner: true, file: 'quarry.mak', children: [
+      { id: 'q1', name: 'QUARRY1.DAT', kind: 'file', file: 'QUARRY1.DAT', fixes: [
+        afix('q1a', 'Q1', '614210.4 3985002.1 498.0', 'NAD27 / UTM 16', ['datum defaulted']),
+        afix('q1b', 'Q14', '614377.9 3984960.6 486.5', 'NAD27 / UTM 16', ['datum defaulted']) ] },
+      { id: 'q2', name: 'QUARRY2.DAT', kind: 'file', file: 'QUARRY2.DAT' } ] },
+    { id: 'swallet', name: 'swallet.wpj', kind: 'walls', owner: true, file: 'swallet.wpj', children: [
+      { id: 'booka', name: 'book A', kind: 'book', file: 'swallet.wpj', children: [
+        { id: 'a1', name: 'a1.srv', kind: 'file', file: 'a1.srv', fixes: [
+          afix('a1f', 'A1', '612980 3986410 455', null) ] },
+        { id: 'a2', name: 'a2.srv', kind: 'file', file: 'a2.srv', fixes: [
+          afix('a2f', 'A20', '613044.5 3986377.0 462.5', 'WGS84 UTM 16 N') ] } ] } ] },
+  ] };
+
+const NODES = {};
+function indexTree(n, parent) {
+  n.parent = parent;
+  n.fixes = n.fixes || [];
+  n.children = n.children || [];
+  NODES[n.id] = n;
+  for (const c of n.children) indexTree(c, n);
+}
+indexTree(TREE, null);
+
+const KINDS = {
+  project: 'Project', cave: 'Cave', folder: 'Folder', survex: 'Survex', compass: 'Compass',
+  walls: 'Walls', file: 'file', book: 'book',
+};
+const ICONS = {
+  cave: '<svg class="kicon" viewBox="0 0 16 16"><path d="M1.5 14V8.5A6.5 6.5 0 0 1 14.5 8.5V14H10.5V10.5a2.5 2.5 0 0 0-5 0V14Z"/></svg>',
+  folder: '<svg class="kicon" viewBox="0 0 16 16"><path d="M1.5 3.5h4l1.5 1.5h7.5v8h-13Z"/></svg>',
+};
+const NATIVE_CS = ['EPSG:32616', 'UTM16N', 'WGS84 lat/long', 'NAD27 / UTM 16'];
+const OWNER_CS = ['EPSG:32616', 'UTM16N', 'WGS84 lat/long'];
+
+/* ---------- shared state ---------- */
+const state = {
+  pageNodeId: 'root',
+  layout: 'list',
+  ownerChoices: {},   // ownerId -> cs string; absent means unset
+  nativeEdits: {},    // fixId -> { e, n, z, cs, deleted }
+  collapsed: new Set(),
+};
+
+function resetDemo() {
+  state.ownerChoices = {};
+  state.nativeEdits = {};
+  state.collapsed = new Set();
+  openPage('root');
+}
+
+/* ---------- model helpers ---------- */
+const isAttached = n => !!ownerOf(n);
+function ownerOf(n) {
+  for (let x = n; x; x = x.parent) if (x.owner) return x;
+  return null;
+}
+function pathFromRoot(n) {
+  const path = [];
+  for (let x = n; x; x = x.parent) path.unshift(x);
+  return path;
+}
+function relativePath(page, n) {
+  if (n === page) return [n];
+  const full = pathFromRoot(n);
+  return full.slice(full.indexOf(page) + 1);
+}
+// Depth-first list of the page node and every descendant, with depth relative to the page.
+function buildSubtree(n, depth = 0, out = []) {
+  out.push({ node: n, depth });
+  for (const c of n.children) buildSubtree(c, depth + 1, out);
+  return out;
+}
+function fixValue(fix) {
+  return Object.assign({}, fix, state.nativeEdits[fix.id] || {});
+}
+const liveFixes = n => n.fixes.map(fixValue).filter(f => !f.deleted);
+const subtreeFixCount = n => buildSubtree(n).reduce((sum, x) => sum + liveFixes(x.node).length, 0);
+
+// How a fix's coordinate system reads: native, named by its own file, or bare and resolved through the owner.
+function resolveCs(fix, n) {
+  if (fix.native) return { kind: 'native', cs: fix.cs };
+  if (fix.cs) return { kind: 'own', cs: fix.cs };
+  const owner = ownerOf(n);
+  return { kind: 'bare', cs: state.ownerChoices[owner.id] || null, owner };
+}
+function bareStats(n) {
+  const stats = { unset: 0, readAs: new Map() };
+  for (const { node } of buildSubtree(n)) {
+    for (const fix of liveFixes(node)) {
+      const r = resolveCs(fix, node);
+      if (r.kind !== 'bare') continue;
+      if (r.cs) stats.readAs.set(r.cs, (stats.readAs.get(r.cs) || 0) + 1);
+      else stats.unset++;
+    }
+  }
+  return stats;
+}
+const bareTotal = s => s.unset + [...s.readAs.values()].reduce((a, b) => a + b, 0);
+
+/* ---------- actions ---------- */
+function openPage(id) {
+  state.pageNodeId = id;
+  render(true);
+}
+function setLayout(layout) {
+  state.layout = layout;
+  render(true);
+}
+function toggleCollapsed(id) {
+  if (state.collapsed.has(id)) state.collapsed.delete(id);
+  else state.collapsed.add(id);
+  render();
+}
+function setAllCollapsed(collapse) {
+  const page = NODES[state.pageNodeId];
+  for (const { node } of buildSubtree(page)) {
+    if (node === page || node.children.length + node.fixes.length === 0) continue;
+    if (collapse) state.collapsed.add(node.id); else state.collapsed.delete(node.id);
+  }
+  render();
+}
+function setNative(fixId, key, value) {
+  state.nativeEdits[fixId] = Object.assign({}, state.nativeEdits[fixId], { [key]: value });
+  render();
+}
+function setOwnerChoice(ownerId, value) {
+  if (value === '__custom') {
+    const custom = window.prompt('Coordinate system for fixes with none (for example EPSG:26916):', '');
+    if (custom && custom.trim()) state.ownerChoices[ownerId] = custom.trim();
+  } else if (value) {
+    state.ownerChoices[ownerId] = value;
+  } else {
+    delete state.ownerChoices[ownerId];
+  }
+  render();
+}
+function editCell(cell, fixId, key) {
+  if (cell.querySelector('input')) return;
+  const fix = fixValue(findFix(fixId));
+  const input = document.createElement('input');
+  input.className = 'field';
+  input.value = fix[key];
+  let canceled = false;
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { canceled = true; input.blur(); }
+  };
+  input.onblur = () => {
+    const value = parseFloat(input.value);
+    if (canceled || isNaN(value)) render();
+    else setNative(fixId, key, value);
+  };
+  cell.textContent = '';
+  cell.appendChild(input);
+  input.focus();
+  input.select();
+}
+function findFix(fixId) {
+  for (const id in NODES) for (const f of NODES[id].fixes) if (f.id === fixId) return f;
+  return null;
+}
+function jumpTo(id) {
+  const frame = el('frame');
+  const section = el('sec-' + id);
+  const colHead = frame.querySelector('.colhead');
+  frame.scrollTop = section.offsetTop - colHead.offsetHeight;
+}
+
+/* ---------- rendering: shared pieces ---------- */
+function kindChip(n) {
+  const icon = ICONS[n.kind] || '';
+  const cls = isAttached(n) ? 'chip' : 'chip native';
+  return `<span class="${cls}">${icon}${KINDS[n.kind]}</span>`;
+}
+function countChip(n) {
+  const own = liveFixes(n).length;
+  const total = subtreeFixCount(n);
+  const label = `${own} fix${own === 1 ? '' : 'es'}`;
+  const below = n.children.length && total !== own ? ` · ${total} with children` : '';
+  return `<span class="chip count">${label}${below}</span>`;
+}
+function warningBadges(n) {
+  const stats = bareStats(n);
+  let html = '';
+  if (stats.unset) {
+    html += `<span class="badge danger" title="Cavern rejects these fixes until a coordinate system is named">⚠ ${stats.unset} without coordinate system</span>`;
+  }
+  for (const [cs, count] of stats.readAs) {
+    html += `<span class="badge info">${count} read as ${esc(cs)}</span>`;
+  }
+  return html;
+}
+function ownerControl(n) {
+  const choice = state.ownerChoices[n.id] || '';
+  const options = choice && !OWNER_CS.includes(choice) ? [...OWNER_CS, choice] : OWNER_CS;
+  const opts = [`<option value=""${choice ? '' : ' selected'}>unset</option>`]
+    .concat(options.map(cs => `<option${cs === choice ? ' selected' : ''}>${esc(cs)}</option>`))
+    .concat(['<option value="__custom">Custom…</option>']).join('');
+  return `<span>Read fixes with no coordinate system as</span>
+    <select class="field small" onchange="setOwnerChoice('${n.id}', this.value)">${opts}</select>`;
+}
+function inheritedLine(n, owner) {
+  const choice = state.ownerChoices[owner.id];
+  const value = choice ? `<b>${esc(choice)}</b>` : '<span class="unset">unset</span>';
+  return `<span>Coordinate system for bare fixes: ${value} (set on ${esc(owner.name)})</span>
+    <a class="link" title="Open ${esc(owner.name)}'s page" onclick="openPage('${owner.id}')">↑</a>`;
+}
+// Second header line: the owner holds the choice; descendants with bare fixes show it read-only.
+function headerLine2(n) {
+  if (n.owner) return ownerControl(n);
+  const owner = ownerOf(n);
+  if (owner && bareTotal(bareStats(n)) > 0) return inheritedLine(n, owner);
+  return '';
+}
+function crumbHtml(page, n) {
+  return relativePath(page, n).map(x => esc(x.name)).join('<span class="sep">›</span>');
+}
+
+// mode 'list': flat header with relative breadcrumb; mode 'tree': chevron, indentation, bare name.
+function renderHeader(n, depth, mode) {
+  const page = NODES[state.pageNodeId];
+  let lead;
+  if (mode === 'tree') {
+    const expandable = n.children.length + n.fixes.length > 0;
+    const isRoot = n === page;
+    const open = isRoot || !state.collapsed.has(n.id);
+    const caret = isRoot || !expandable
+      ? `<span class="caret fixed">▼</span>`
+      : `<span class="caret" title="${open ? 'Collapse' : 'Expand'}" onclick="toggleCollapsed('${n.id}')">${open ? '▼' : '▶'}</span>`;
+    lead = `${caret}${kindChip(n)}<span class="crumb">${esc(n.name)}</span>`;
+  } else {
+    lead = `${kindChip(n)}<span class="crumb">${crumbHtml(page, n)}</span>`;
+  }
+  const open = n === page ? '' : `<a class="link" onclick="openPage('${n.id}')">Open page →</a>`;
+  const line2 = headerLine2(n);
+  const indent = mode === 'tree' ? `style="padding-left:${8 + depth * 20}px"` : '';
+  const line2Indent = mode === 'tree' ? 'style="padding-left:20px"' : '';
+  return `<div class="nhead${mode === 'tree' ? ' tnode' : ''}" ${indent}>
+    <div class="line1">${lead}${countChip(n)}${warningBadges(n)}<span class="spacer"></span>${open}</div>
+    ${line2 ? `<div class="line2" ${line2Indent}>${line2}</div>` : ''}
+  </div>`;
+}
+
+function renderCsCell(fix, n) {
+  const r = resolveCs(fix, n);
+  if (r.kind === 'native') {
+    const opts = NATIVE_CS.map(cs => `<option${cs === fix.cs ? ' selected' : ''}>${esc(cs)}</option>`).join('');
+    return `<div><select class="field small" onchange="setNative('${fix.id}', 'cs', this.value)">${opts}</select></div>`;
+  }
+  if (r.kind === 'own') return `<div title="Named in ${esc(n.file)}">${esc(r.cs)}</div>`;
+  if (r.cs) {
+    return `<div title="Read as ${esc(r.cs)}, set on ${esc(r.owner.name)}"><span class="badge warn">none</span> <span class="arrow">→</span> ${esc(r.cs)}</div>`;
+  }
+  return `<div title="Cavern will reject this fix until ${esc(r.owner.name)} names a system"><span class="badge warn">none</span> <span class="unset">→ unset</span></div>`;
+}
+
+function renderRow(fix, n, depth) {
+  const nameIndent = `style="padding-left:${8 + depth * 20}px"`;
+  let coords;
+  let badges;
+  if (fix.native) {
+    coords = ['e', 'n', 'z'].map(key =>
+      `<div class="num editable" title="Click to edit" onclick="editCell(this, '${fix.id}', '${key}')">${fix[key]}</div>`).join('');
+    badges = (fix.warning ? `<span class="badge warn wrap" title="${esc(fix.warning)}">⚠ ${esc(fix.warning)}</span>` : '') +
+      `<button class="btn icon" title="Delete this fix" onclick="setNative('${fix.id}', 'deleted', true)">✕</button>`;
+  } else {
+    const parts = fix.raw.split(/\s+/);
+    coords = parts.map(p => `<div class="num raw">${esc(p)}</div>`).join('');
+    badges = fix.flags.map(f => `<span class="chip flag">${esc(f)}</span>`).join('') +
+      `<span class="lock" title="Fixed by ${esc(n.file)}. Edit that file to change this fix.">🔒</span>`;
+  }
+  return `<div class="grow fix">
+    <div class="station" ${nameIndent}>${esc(fix.station)}</div>
+    ${coords}${renderCsCell(fix, n)}<div class="badges">${badges}</div>
+  </div>`;
+}
+function renderEmpty(depth) {
+  return `<div class="empty-row" style="padding-left:${8 + depth * 20}px">No fixed stations</div>`;
+}
+function renderColumnHeader() {
+  return `<div class="grow colhead"><div>Station</div><div class="num">Easting · Lon</div>
+    <div class="num">Northing · Lat</div><div class="num">Elevation</div><div>Coordinate system</div><div></div></div>`;
+}
+
+/* ---------- Layout A: grouped list ---------- */
+function renderList(page) {
+  const sections = buildSubtree(page).map(({ node }) => {
+    const fixes = liveFixes(node);
+    const rows = fixes.length ? fixes.map(f => renderRow(f, node, 0)).join('') : renderEmpty(0);
+    return `<div class="section" id="sec-${node.id}">${renderHeader(node, 0, 'list')}${rows}</div>`;
+  });
+  return renderColumnHeader() + sections.join('');
+}
+function renderJumpStrip(page) {
+  const chips = buildSubtree(page).map(({ node }) =>
+    `<span class="chip native jump" onclick="jumpTo('${node.id}')">${esc(node.name)}</span>`).join('');
+  return `<span class="hint">Jump to:</span>${chips}`;
+}
+
+/* ---------- Layout B: TreeView ---------- */
+function renderTree(page) {
+  const out = [renderColumnHeader()];
+  const walk = (n, depth) => {
+    out.push(renderHeader(n, depth, 'tree'));
+    if (n !== page && state.collapsed.has(n.id)) return;
+    const fixes = liveFixes(n);
+    for (const f of fixes) out.push(renderRow(f, n, depth + 1));
+    if (fixes.length === 0) out.push(renderEmpty(depth + 1));
+    for (const c of n.children) walk(c, depth + 1);
+  };
+  walk(page, 0);
+  return out.join('');
+}
+
+/* ---------- page chrome ---------- */
+function renderPicker() {
+  const picker = el('nodepicker');
+  picker.innerHTML = buildSubtree(TREE).map(({ node }) =>
+    `<option value="${node.id}"${node.id === state.pageNodeId ? ' selected' : ''}>${esc(pathFromRoot(node).map(x => x.name).join(' › '))}</option>`).join('');
+}
+function renderPageNav(page) {
+  el('pagenav').innerHTML = pathFromRoot(page).map(n => n === page
+    ? `<span class="here">${esc(n.name)}</span>`
+    : `<a class="link" onclick="openPage('${n.id}')">${esc(n.name)}</a><span class="sep">›</span>`).join('');
+}
+function renderToolbar(page) {
+  if (state.layout === 'list') {
+    el('toolbar').innerHTML = `<div class="jumpstrip">${renderJumpStrip(page)}</div>`;
+  } else {
+    el('toolbar').innerHTML = `<span class="hint">${esc(page.name)} is the tree's root row and stays expanded.</span>
+      <span class="spacer"></span>
+      <button class="btn small" onclick="setAllCollapsed(false)">Expand all</button>
+      <button class="btn small" onclick="setAllCollapsed(true)">Collapse all</button>`;
+  }
+}
+function render(resetScroll) {
+  const page = NODES[state.pageNodeId];
+  const frame = el('frame');
+  const scroll = frame.scrollTop;
+  el('seg-list').classList.toggle('active', state.layout === 'list');
+  el('seg-tree').classList.toggle('active', state.layout === 'tree');
+  renderPicker();
+  renderPageNav(page);
+  renderToolbar(page);
+  frame.innerHTML = state.layout === 'list' ? renderList(page) : renderTree(page);
+  frame.scrollTop = resetScroll ? 0 : scroll;
+}
+
+render(true);
+</script>
+</body>
+</html>

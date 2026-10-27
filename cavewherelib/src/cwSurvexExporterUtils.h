@@ -13,6 +13,7 @@
 //Our includes
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwGeoPoint.h"
 #include "cwSurvexCS.h"
 
@@ -55,6 +56,22 @@ void writeDeclinationCalibration(QTextStream& stream,
                                  double gridConvergence = 0.0);
 
 /**
+ * Emit `*calibrate DECLINATION 0.00`, which replaces an enclosing
+ * `*declination auto` with a declination of zero for the rest of the block.
+ * An attached file is written for a scope with no declination in force, so
+ * this restores that scope before its *include; a directive of the file's own
+ * still overrides it.
+ */
+void writeDeclinationReset(QTextStream& stream);
+
+/**
+ * Emit `*cs out <system>` then `*cs <system>` ahead of the *include of a file
+ * that names \a system as its own *cs out and fixes stations with no *cs: the
+ * run outputs in \a system either way, and the file's bare fixes read in it.
+ */
+void writeFileOutputSystem(QTextStream& stream, const QString& system);
+
+/**
  * The *cs in scope in the block being written.
  *
  * Cavern scopes *cs to its *begin block (cmd_begin copies proj_str into the
@@ -74,6 +91,12 @@ public:
     //! A CS-less request leaves the scope alone, matching cavern: a fix with no
     //! system of its own doesn't un-declare the enclosing one.
     void ensure(QTextStream& stream, const QString& cs);
+
+    //! writeFileOutputSystem(), with \a system recorded as the one in scope.
+    void writeFileOutputSystem(QTextStream& stream, const QString& system);
+
+    //! The system in scope, empty for none.
+    const QString& system() const { return m_current; }
 
 private:
     cwSurvexCS::SidecarWriter& m_sidecars;
@@ -111,20 +134,15 @@ double gridConvergenceForBlock(const std::optional<DeclinationContext>& ctx,
                                const QString& outputCS);
 
 /**
- * Emit the cave block's `*declination auto X Y Z`, preceded by a `*cs` when
- * \a scope doesn't already name the system the coordinate is in. Returns
- * whether one is now in scope for the trips inside the block.
+ * Emit `*declination auto X Y Z` at \a ctx's location, preceded by a `*cs`
+ * when \a scope doesn't already name the system the coordinate is in.
  *
- * Written once per cave, not once per trip. Cavern converts the location to
- * WGS84 at parse time and stores it on the settings stack, so every enclosed
- * *begin block inherits it, and re-evaluates IGRF from that block's own *date.
- * \a anyTripUsesAuto keeps caves that never ask for auto byte-identical to what
- * they exported before.
+ * Cavern converts the location to WGS84 at parse time and stores it on the
+ * settings stack, so every enclosed *begin block inherits it, and re-evaluates
+ * IGRF from that block's own *date. The location, like the *cs written for
+ * it, ends at the *end of the block it is written in.
  */
-bool writeBlockDeclinationAuto(QTextStream& stream,
-                               const QList<cwFixStation>& fixes,
-                               bool anyTripUsesAuto,
-                               CsScope& scope);
+void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx, CsScope& scope);
 
 /**
  * The `*cs out` + `*declination auto` preamble for a trip exported on its own,
@@ -159,11 +177,15 @@ enum class OutputCSPolicy {
 };
 
 //! The CS a fix can contribute to a file that leaves the project: the WGS84 UTM
-//! zone containing it, or a projected CS as it stands. A fix that places
-//! nothing contributes nothing — cwFixStation::hasPlacedCoordinate.
+//! zone containing it, or a projected CS as it stands. Only a fix the export
+//! writes contributes: one that places a coordinate
+//! (cwFixStation::hasPlacedCoordinate) inside its system's domain
+//! (cwFixStationDiagnostics::isDomainValid).
 inline QString shareableCSForFix(const cwFixStation& fix)
 {
-    if (!fix.hasPlacedCoordinate()) {
+    const bool isWritten = fix.hasPlacedCoordinate()
+        && cwFixStationDiagnostics::isDomainValid(fix);
+    if (!isWritten) {
         return QString();
     }
     // Empty for a system PROJ can't read, and for one it can read but whose
@@ -182,6 +204,24 @@ inline QString shareableCSForFixes(const QList<cwFixStation>& fixes)
 {
     for (const cwFixStation& fix : fixes) {
         const QString cs = shareableCSForFix(fix);
+        if (!cs.isEmpty()) {
+            return cs;
+        }
+    }
+    return QString();
+}
+
+//! The first fix in \a nodes' subtrees, pre-order, that yields a shareable CS,
+//! or empty when none does. A fix belongs to the node that owns its station,
+//! so a nested node's fixes count as much as a top-level one's.
+template <typename Node>
+QString shareableCSForNodes(const QList<Node>& nodes)
+{
+    for (const auto& node : nodes) {
+        QString cs = shareableCSForFixes(node.fixStations);
+        if (cs.isEmpty()) {
+            cs = shareableCSForNodes(node.nodes);
+        }
         if (!cs.isEmpty()) {
             return cs;
         }
@@ -209,7 +249,7 @@ inline QString shareableCSForFixes(const QList<cwFixStation>& fixes)
  * UTM zone containing it.
  *
  * Takes a cwCavingRegionData. It stays a template because it needs only
- * `.caves`, each with `.fixStations`, so it can live here beside
+ * `.caves`, each with `.fixStations` and `.nodes`, so it can live here beside
  * shareableCSForFixes instead of pulling the region header in.
  */
 template <typename Region>
@@ -221,13 +261,7 @@ QString resolveOutputCS(const Region& region, const QString& frameCS, OutputCSPo
         return frameCS;
     }
 
-    for (const auto& cave : region.caves) {
-        const QString cs = shareableCSForFixes(cave.fixStations);
-        if (!cs.isEmpty()) {
-            return cs;
-        }
-    }
-    return QString();
+    return shareableCSForNodes(region.caves);
 }
 
 //! Valid survex *team role keywords (must match role_tab in
@@ -257,10 +291,19 @@ QString fixUnusableReason(const cwFixStation& fix);
  * - A fix whose coordinate can't be read — no CS to read it under, unreadable
  *   text, or no text at all — is dropped with what's wrong with it. Its
  *   components are 0, so writing it would silently relocate the cave.
+ * - A fix whose coordinate lies outside its own CS's domain
+ *   (cwFixStationDiagnostics::isDomainValid) is dropped, matching the
+ *   project frame, which leaves the same fix out.
  */
 QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
                                         const QSet<QString>& stationNamesLower,
                                         QStringList& errors);
+
+/**
+ * The validateFixStations keys of \a stations, each named under \a scope
+ * (an empty scope, or a trip's scopePrefix such as "trip1.").
+ */
+QSet<QString> scopedStationKeys(const QString& scope, const QStringList& stations);
 
 /**
  * Emit the per-cave *cs / *fix block.
@@ -302,6 +345,14 @@ bool stationHasLrudData(const cwStation& station);
 inline QString passageDataHeader() {
     return QStringLiteral("*data passage station left right up down ignoreall");
 }
+
+//! True when the path can appear inside a quoted survex *include. The syntax
+//! has no escape for an embedded double quote, and cavern treats '\n', '\r'
+//! and '\032' alike as end of line (datain.c's SPECIAL_EOL table), so a path
+//! carrying any of them would either produce a syntactically broken driver or
+//! smuggle in a second *include token. Callers refuse such paths before
+//! emitting.
+bool isQuotableIncludePath(const QString& path);
 
 } // namespace cwSurvexExporterUtils
 

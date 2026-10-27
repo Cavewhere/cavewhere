@@ -1,0 +1,10 @@
+; A block whose one fix names no coordinate system, and no *cs anywhere.
+; cavern solves it on its own; under a *cs out (a georeferenced project)
+; it fails with "The output projection is set but the input projection
+; isn't" until the attachment names the system to read the fix in.
+*begin bare
+*fix A 500000 3000000 100
+*data normal from to tape compass clino
+A B 10 90 0
+B C 10 0 0
+*end bare

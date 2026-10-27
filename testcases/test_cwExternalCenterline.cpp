@@ -6,14 +6,19 @@
 **************************************************************************/
 
 // Catch
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 // Our
 #include "cwCave.h"
 #include "cwExternalCenterline.h"
+#include "cwExternalCenterlineScanner.h"
 #include "cwSaveLoad.h"
 #include "cwTrip.h"
 #include "cavewhere.pb.h"
+
+// Test helpers
+#include "LoadProjectHelper.h"
 
 // Qt
 #include <QSignalSpy>
@@ -22,10 +27,73 @@
 // Protobuf
 #include <google/protobuf/util/json_util.h>
 
+// Std
+#include <algorithm>
+#include <optional>
+
 namespace {
 
 constexpr const char* kEntryFile = "mycave.svx";
 constexpr const char* kAlternateEntryFile = "branches/passage.svx";
+
+// A row's meter text keeps a millionth of a meter, its degree text a billionth
+// of a degree.
+constexpr double kMeterTextMargin = 1e-6;
+constexpr double kDegreeTextMargin = 1e-9;
+constexpr double kMinutesPerDegree = 60.0;
+constexpr double kSecondsPerDegree = 3600.0;
+
+double degrees(double wholeDegrees, double minutes, double seconds)
+{
+    return wholeDegrees + minutes / kMinutesPerDegree + seconds / kSecondsPerDegree;
+}
+
+//! The row the manager lists for \a scanned, as far as placement reads it.
+cwAttachedFix attachedFixFrom(const cwExternalCenterlineScanner::ScannedFix& scanned)
+{
+    cwAttachedFix fix;
+    fix.station = scanned.station;
+    fix.coordinate = scanned.coordinate;
+    fix.coordinateSystem = scanned.coordinateSystem;
+    fix.placementSystem = scanned.placementSystem;
+    return fix;
+}
+
+//! Where an attached fix should land: the system and the point in its axis order.
+struct ExpectedPlacement
+{
+    QString station;
+    QString cs;
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+    double horizontalMargin = kMeterTextMargin;
+};
+
+void checkPlacements(const QString& entryFile, const QList<ExpectedPlacement>& expected)
+{
+    const auto scan = cwExternalCenterlineScanner::scan(entryFile);
+    INFO("scan: " << scan.errorMessage().toStdString());
+    REQUIRE_FALSE(scan.hasError());
+    for (const ExpectedPlacement& placementWanted : expected) {
+        INFO("station " << placementWanted.station.toStdString());
+        const auto& fixes = scan.value().fixes;
+        const auto scanned = std::find_if(fixes.cbegin(), fixes.cend(),
+                                          [&](const cwExternalCenterlineScanner::ScannedFix& fix) {
+                                              return fix.station == placementWanted.station;
+                                          });
+        REQUIRE(scanned != fixes.cend());
+        const cwAttachedFix fix = attachedFixFrom(*scanned);
+        INFO("coordinate " << fix.coordinate.toStdString() << ", solve system "
+                           << fix.solveSystem().toStdString());
+        const std::optional<cwAttachedFix::Placement> placement = fix.placementIn(fix.solveSystem());
+        REQUIRE(placement.has_value());
+        CHECK(placement->cs.toStdString() == placementWanted.cs.toStdString());
+        CHECK(placement->point.x == Catch::Approx(placementWanted.x).margin(placementWanted.horizontalMargin));
+        CHECK(placement->point.y == Catch::Approx(placementWanted.y).margin(placementWanted.horizontalMargin));
+        CHECK(placement->point.z == Catch::Approx(placementWanted.z).margin(kMeterTextMargin));
+    }
+}
 
 } // namespace
 
@@ -216,4 +284,44 @@ TEST_CASE("cwTrip::data() round-trips externalCenterline through setData",
     destination->setData(snapshot);
     CHECK(destination->externalCenterline().entryFile()
           == QString::fromLatin1(kAlternateEntryFile));
+}
+
+TEST_CASE("A Walls #FIX row places where cavern reads the fix",
+          "[ExternalCenterline][Walls][Attach]")
+{
+    // METERS.SRV writes north first with an F-suffixed elevation, FEET.SRV is
+    // in feet, LATLONG.SRV in degrees, minutes and seconds; a lat/long fix
+    // places longitude first, as cavern reads it.
+    const QString nad27Utm16 = QStringLiteral("EPSG:26716");
+    checkPlacements(testcasesDatasetSourcePath(
+                        QStringLiteral("external-centerlines/walls_fix_units/walls_fix_units.wpj")),
+                    {{QStringLiteral("M1"), nad27Utm16, 520000.0, 4040000.0, 233.534712},
+                     {QStringLiteral("F1"), nad27Utm16, 520293.6, 4040428.8, 304.8},
+                     {QStringLiteral("L1"), QStringLiteral("EPSG:4267"), -degrees(86.0, 57.0, 30.5),
+                      degrees(36.0, 31.0, 15.25), 120.0, kDegreeTextMargin}});
+}
+
+TEST_CASE("A Compass .mak row places in its datum and zone's code",
+          "[ExternalCenterline][Attach]")
+{
+    checkPlacements(testcasesDatasetSourcePath(
+                        QStringLiteral("external-centerlines/compass_zone_no_datum.mak")),
+                    {{QStringLiteral("compass_zone_no_datum.A1"), QStringLiteral("EPSG:26713"),
+                      478000.0092, 4429999.98936, 1655.00304}});
+}
+
+TEST_CASE("An attached fix solves in its placement system ahead of the name its row shows",
+          "[ExternalCenterline]")
+{
+    cwAttachedFix fix;
+    fix.coordinate = QStringLiteral("520000 4040000 233.534712");
+    fix.coordinateSystem = QStringLiteral("NAD27 CONUS, UTM zone 16N");
+    fix.placementSystem = QStringLiteral("EPSG:26716");
+    CHECK(fix.solveSystem().toStdString() == "EPSG:26716");
+
+    // A fix the file names no system for still solves in its read-in system.
+    cwAttachedFix bare;
+    bare.coordinate = QStringLiteral("0 0 0");
+    bare.readInSystem = QStringLiteral("EPSG:32616");
+    CHECK(bare.solveSystem().toStdString() == "EPSG:32616");
 }

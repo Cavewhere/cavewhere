@@ -1,0 +1,107 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+#ifndef CWATTACHEDCENTERLINESMODEL_H
+#define CWATTACHEDCENTERLINESMODEL_H
+
+//Our includes
+#include "cwGlobals.h"
+
+//Qt includes
+#include <QAbstractListModel>
+#include <QDateTime>
+#include <QString>
+#include <QUuid>
+#include <QVector>
+#include <QtQml/qqmlregistration.h>
+
+/**
+ * One row per source root or trip with an attached external centerline, owned
+ * and populated by cwLinePlotManager (rebuilt on every watch-set
+ * recompute, i.e. on attach / detach / attachment-dir changes).
+ * CavernOutputPage's attached-centerlines section binds to this.
+ *
+ * Rows arrive pre-sorted by (cave display name, then trip display name);
+ * setRows() diffs against the current rows by ownerId so pure removals
+ * emit rowsRemoved and pure insertions emit rowsInserted (reordering
+ * falls back to a model reset). lastSolved survives rebuilds — it is
+ * carried over by ownerId and only advanced by markSolved(), which the
+ * manager calls when a solve completes successfully.
+ */
+class CAVEWHERE_LIB_EXPORT cwAttachedCenterlinesModel : public QAbstractListModel
+{
+    Q_OBJECT
+    QML_NAMED_ELEMENT(AttachedCenterlinesModel)
+    QML_UNCREATABLE("Owned by LinePlotManager")
+
+public:
+    enum Roles {
+        OwnerNameRole = Qt::UserRole + 1,
+        OwnerKindRole,
+        EntryFileRole,
+        DepCountRole,
+        WarningCountRole,
+        LastSolvedRole,
+        ErrorRole,
+        KindLabelRole
+    };
+    Q_ENUM(Roles)
+
+    struct Row {
+        QUuid ownerId;
+        QString caveName;   // sort key only, not exposed as a role
+        QString ownerName;  // cave name for cave owners, trip name for trips
+        QString ownerKind;  // "Trip", or a source root's cwSurveyNodeKind name
+        // The owner's kind as the survey tree's chip names it.
+        QString kindLabel;
+        QString entryFile;
+        int depCount = 0;
+        int warningCount = 0;
+        QDateTime lastSolved;
+        // Why this owner was left out of the solve, in the user's words.
+        // Empty for an owner the solve reads. This is the only account a
+        // cave-level owner gets — cwTrip has externalStationsError, cwCave
+        // has no equivalent (plans/EXTERNAL_FILE_PHASE3.html, "a cave-level
+        // owner has nowhere to show a file error").
+        QString error;
+    };
+
+    explicit cwAttachedCenterlinesModel(QObject* parent = nullptr);
+
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex& index, int role) const override;
+    QHash<int, QByteArray> roleNames() const override;
+
+    // Replaces the row set with `rows` (already sorted by the manager).
+    // lastSolved is preserved for owners that persist across the rebuild.
+    void setRows(QVector<Row> rows);
+
+    // Stamps lastSolved on every current row. Rows attached after this
+    // call start with a null lastSolved until the next solve completes.
+    void markSolved(const QDateTime& when);
+
+    // The row's error by owner, for QML badges, which hold an owner rather
+    // than a row index. An owner with no row reads as clean: an empty
+    // error. It has no NOTIFY of its own — the model's own reset /
+    // rowsInserted / rowsRemoved / dataChanged signals fire on every row
+    // change, so QML re-reads on those.
+    Q_INVOKABLE QString errorFor(const QUuid& ownerId) const;
+
+private:
+    QVector<Row> m_rows;
+
+    static bool rowDataEqual(const Row& left, const Row& right);
+
+    // The row belonging to `ownerId`, or nullptr when no row does.
+    const Row* rowFor(const QUuid& ownerId) const;
+
+    // Copies changed row content from `rows` into m_rows and emits
+    // dataChanged per changed row. Precondition: same owners, same order.
+    void syncRowData(const QVector<Row>& rows);
+};
+
+#endif // CWATTACHEDCENTERLINESMODEL_H

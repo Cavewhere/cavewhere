@@ -13,6 +13,7 @@
 #include "cwPenStrokeModel.h"
 #include "cwSketch.h"
 #include "cwSketchPainterPathModel.h"
+#include "TestHelper.h"
 
 namespace {
 QPainterPath pathAt(const cwSketchPainterPathModel &model, int row) {
@@ -31,13 +32,6 @@ QColor colorAt(const cwSketchPainterPathModel &model, int row) {
     return model.index(row)
         .data(cwAbstractSketchPainterPathModel::StrokeColorRole)
         .value<QColor>();
-}
-
-// cwSketch defers dataChanged to a queued invocation, so tests must pump
-// the event loop before checking active-stroke state.
-void flush() {
-    QCoreApplication::sendPostedEvents();
-    QCoreApplication::processEvents();
 }
 } // namespace
 
@@ -65,7 +59,7 @@ TEST_CASE("cwSketchPainterPathModel active fixed-width stroke renders centerline
     sketch.appendPoint(row, cwPenPoint(QPointF(0, 0), 0.5));
     sketch.appendPoint(row, cwPenPoint(QPointF(10, 10), 0.5));
     sketch.appendPoint(row, cwPenPoint(QPointF(20, 20), 0.5));
-    flush();
+    REQUIRE(waitUntil([&]() { return !pathAt(model, 0).isEmpty(); }));
 
     REQUIRE(model.rowCount() == 1);
     const QPainterPath path = pathAt(model, 0);
@@ -91,7 +85,7 @@ TEST_CASE("cwSketchPainterPathModel active variable-width stroke tessellates pol
     sketch.appendPoint(row, cwPenPoint(QPointF(0, 0),  0.5));
     sketch.appendPoint(row, cwPenPoint(QPointF(10, 0), 0.7));
     sketch.appendPoint(row, cwPenPoint(QPointF(20, 0), 0.5));
-    flush();
+    REQUIRE(waitUntil([&]() { return !pathAt(model, 0).isEmpty(); }));
 
     REQUIRE(model.rowCount() == 1);
     const QPainterPath path = pathAt(model, 0);
@@ -112,14 +106,14 @@ TEST_CASE("cwSketchPainterPathModel finalizes stroke when active index moves on"
     const int a = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
     sketch.appendPoint(a, cwPenPoint(QPointF(0, 0), 0.5));
     sketch.appendPoint(a, cwPenPoint(QPointF(10, 10), 0.5));
-    flush();
+    REQUIRE(waitUntil([&]() { return !pathAt(model, 0).isEmpty(); }));
 
     // New stroke B becomes active, which should push A into a finished batch.
     model.setActiveStrokeIndex(sketch.strokeModel()->rowCount());
     const int b = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
     sketch.appendPoint(b, cwPenPoint(QPointF(100, 100), 0.5));
     sketch.appendPoint(b, cwPenPoint(QPointF(110, 110), 0.5));
-    flush();
+    REQUIRE(waitUntil([&]() { return model.rowCount() == 2 && !pathAt(model, 0).isEmpty() && !pathAt(model, 1).isEmpty(); }));
 
     REQUIRE(model.rowCount() == 2);
     CHECK_FALSE(pathAt(model, 0).isEmpty()); // active = B
@@ -138,7 +132,7 @@ TEST_CASE("cwSketchPainterPathModel batches finished strokes by width+color",
         sketch.appendPoint(r, cwPenPoint(QPointF(i * 50.0,  0.0), 0.5));
         sketch.appendPoint(r, cwPenPoint(QPointF(i * 50.0, 10.0), 0.5));
     }
-    flush();
+    REQUIRE(waitUntil([&]() { return model.rowCount() == 2; }));
 
     // Active row 0 (empty, no active stroke set) + 1 finished batch = 2 rows.
     REQUIRE(model.rowCount() == 2);
@@ -149,7 +143,7 @@ TEST_CASE("cwSketchPainterPathModel batches finished strokes by width+color",
     const int r = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::red);
     sketch.appendPoint(r, cwPenPoint(QPointF(0, 100), 0.5));
     sketch.appendPoint(r, cwPenPoint(QPointF(10, 110), 0.5));
-    flush();
+    REQUIRE(waitUntil([&]() { return model.rowCount() == 3; }));
 
     REQUIRE(model.rowCount() == 3);
     // Either batch can be at row 1 or row 2; check both colors are present.
@@ -162,7 +156,7 @@ TEST_CASE("cwSketchPainterPathModel batches finished strokes by width+color",
     const int r2 = sketch.beginStroke(cwPenStroke::Feature, 5.0, Qt::black);
     sketch.appendPoint(r2, cwPenPoint(QPointF(0, 200), 0.5));
     sketch.appendPoint(r2, cwPenPoint(QPointF(10, 210), 0.5));
-    flush();
+    REQUIRE(waitUntil([&]() { return model.rowCount() == 4; }));
 
     REQUIRE(model.rowCount() == 4);
 }
@@ -176,7 +170,7 @@ TEST_CASE("cwSketchPainterPathModel setStrokeModel(nullptr) clears state",
     const int r = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
     sketch.appendPoint(r, cwPenPoint(QPointF(0, 0), 0.5));
     sketch.appendPoint(r, cwPenPoint(QPointF(10, 10), 0.5));
-    flush();
+    REQUIRE(waitUntil([&]() { return model.rowCount() == 2; }));
 
     REQUIRE(model.rowCount() == 2);
 
@@ -194,7 +188,7 @@ TEST_CASE("cwSketchPainterPathModel modelReset rebuilds from source",
     const int r = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
     sketch.appendPoint(r, cwPenPoint(QPointF(0, 0), 0.5));
     sketch.appendPoint(r, cwPenPoint(QPointF(10, 10), 0.5));
-    flush();
+    REQUIRE(waitUntil([&]() { return model.rowCount() == 2; }));
 
     REQUIRE(model.rowCount() == 2);
 
@@ -219,7 +213,7 @@ TEST_CASE("cwSketchPainterPathModel dataChanged coalescing updates active path",
     for (int i = 0; i < 5; ++i) {
         sketch.appendPoint(r, cwPenPoint(QPointF(i * 2.0, i * 2.0), 0.5));
     }
-    flush();
+    REQUIRE(waitUntil([&]() { return pathAt(model, 0).elementCount() == 5; }));
 
     const QPainterPath path = pathAt(model, 0);
     // 5 points → 1 moveTo + 4 lineTo

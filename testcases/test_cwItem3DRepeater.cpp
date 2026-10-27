@@ -372,7 +372,6 @@ TEST_CASE("Item3DRepeater responds to rowsInserted and rowsRemoved", "[cwItem3DR
     // Remove row 0
     model.removeRowAt(0);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLaters
-    // QCoreApplication::processEvents();
     items = repeaterChildren(rep);
     REQUIRE(items.size() == 1);
 

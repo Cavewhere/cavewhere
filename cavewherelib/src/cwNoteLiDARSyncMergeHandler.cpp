@@ -6,6 +6,7 @@
 #include "cwNoteLiDARMergePlanBuilder.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwTrip.h"
+#include "cwTripData.h"
 #include "cwSaveLoad.h"
 #include "cwSyncPathResolver.h"
 #include "GitRepository.h"
@@ -71,7 +72,8 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
         return {};
     }
 
-    if (context.report->changedPaths.isEmpty()) {
+    const QStringList mergeablePaths = context.mergeablePaths();
+    if (mergeablePaths.isEmpty()) {
         return {};
     }
 
@@ -91,21 +93,15 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
                                                                                dataRootName,
                                                                                context.loadData->region);
 
-    QHash<QUuid, const cwTripData*> loadedTripsById;
-    for (const cwCaveData& caveData : context.loadData->region.caves) {
-        for (const cwTripData& tripData : caveData.trips) {
-            if (!tripData.id.isNull()) {
-                loadedTripsById.insert(tripData.id, &tripData);
-            }
-        }
-    }
+    const QHash<QUuid, const cwTripData*> loadedTripsById =
+        cwSyncPathResolver::buildLoadedTripsById(context.loadData->region).tripDataById;
 
     const QList<cwSyncPathResolver::TripChangeResolution> resolvedTripChanges =
         cwSyncPathResolver::resolveChangedNoteLiDARPaths(context.repoRoot,
                                                          dataRootName,
                                                          context.saveLoad,
                                                          context.region,
-                                                         context.report->changedPaths,
+                                                         mergeablePaths,
                                                          currentNoteIndex,
                                                          loadedNoteIndex);
     if (resolvedTripChanges.isEmpty()) {
@@ -219,6 +215,9 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
         result.modelMutated = true;
         result.objectsPathReady.append(update.trip);
     }
+
+    //A merged descriptor lives only in the model until the reconcile save writes it out.
+    result.persistLiDARNoteDescriptors = result.modelMutated;
 
     return result;
 }

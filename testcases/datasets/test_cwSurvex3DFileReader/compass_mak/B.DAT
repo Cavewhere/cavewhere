@@ -1,0 +1,12 @@
+B CAVE
+SURVEY NAME: B
+SURVEY DATE: 1 1 2000  COMMENT:regression fixture
+SURVEY TEAM:
+nobody
+DECLINATION: 0.00  FORMAT: DDDDLUDRADLN  CORRECTIONS: 0.00 0.00 0.00
+
+FROM TO LENGTH BEARING INC LEFT UP DOWN RIGHT
+
+       1       B2    10.00    90.00     0.00     0.00     0.00     0.00     0.00
+      B2       B3    10.00    90.00     0.00     0.00     0.00     0.00     0.00
+

@@ -42,11 +42,14 @@
 #define SORTFILTERPROXYMODEL_H
 
 //Our includes
+#include "cwGlobals.h"
+
+//Qt includes
 #include <QtCore/qsortfilterproxymodel.h>
 #include <QtQml/qjsvalue.h>
 #include <QQmlEngine>
 
-class cwSortFilterProxyModel : public QSortFilterProxyModel
+class CAVEWHERE_LIB_EXPORT cwSortFilterProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(SortFilterProxyModel)
@@ -55,7 +58,7 @@ class cwSortFilterProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(QObject *source READ source WRITE setSource)
 
     // Q_PROPERTY(QByteArray sortRole READ sortRole WRITE setSortRole)
-    Q_PROPERTY(Qt::SortOrder sortOrder READ sortOrder) // WRITE setSortOrder)
+    Q_PROPERTY(Qt::SortOrder sortOrder READ sortOrder NOTIFY sortOrderChanged) // WRITE setSortOrder)
 
     Q_PROPERTY(QByteArray filterRole READ filterRole WRITE setFilterRole)
     Q_PROPERTY(QString filterString READ filterString WRITE setFilterString)
@@ -101,6 +104,7 @@ public:
 
 signals:
     void countChanged();
+    void sortOrderChanged();
 
 protected:
     int roleKey(const QByteArray &role) const;

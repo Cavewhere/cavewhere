@@ -1,0 +1,5 @@
+; survey under a #PREFIX level, tied to ROOT.SRV through XY:P1
+#PREFIX XY
+#DATE 2025-01-02
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+P1	P2	12.0	90	0

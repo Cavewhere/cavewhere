@@ -23,6 +23,7 @@
 #include <QDir>
 #include <QSet>
 #include <QModelIndex>
+#include <QSignalSpy>
 #include <QMetaEnum>
 #include <QTextStream>
 #include <QVector2D>
@@ -52,6 +53,33 @@ inline bool waitUntil(const std::function<bool()>& condition, int timeoutMs = 50
         QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
     }
     return condition();
+}
+
+// Runs everything queued on the main thread before this call: posts a marker
+// behind it and waits for the marker. Posted events of equal priority run in
+// FIFO order, so this is deterministic and costs no wall-clock time. It drains
+// one generation; a pass that queues a follow-up pass needs a second fence.
+// Use it before asserting that a queued pass changed nothing, where
+// waitUntil(<state>) would pass before the pass even ran.
+inline bool waitForQueuedEvents(int timeoutMs = 5000)
+{
+    bool ran = false;
+    QMetaObject::invokeMethod(qApp, [&ran] { ran = true; }, Qt::QueuedConnection);
+    return waitUntil([&ran] { return ran; }, timeoutMs);
+}
+
+// Counts the rowsInserted emissions with an invalid parent. Item models whose
+// rows have children (cwKeywordItemModel's keyword rows) also forward child
+// inserts, which carry a valid parent.
+inline int topLevelRowsInserted(const QSignalSpy& rowsInsertedSpy)
+{
+    int count = 0;
+    for (const QList<QVariant>& arguments : rowsInsertedSpy) {
+        if (!arguments.at(0).value<QModelIndex>().isValid()) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {

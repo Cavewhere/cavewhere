@@ -14,9 +14,9 @@
 #include "cwExternalCenterlineScanner.h"
 #include "cwExternalCenterlineSync.h"
 #include "cwProject.h"
-#include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwTrip.h"
+#include "ExternalCenterlineTestHelpers.h"
 
 // AsyncFuture
 #include <asyncfuture.h>
@@ -28,7 +28,9 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointer>
 #include <QTemporaryDir>
+#include <QTest>
 
 namespace {
 
@@ -39,49 +41,10 @@ constexpr qint64 kFreshOffsetSeconds = 120;
 // in milliseconds.
 constexpr int kReconcileWaitMs = 5000;
 
-struct SavedProjectFixture {
-    QTemporaryDir tempDir;
-    std::unique_ptr<cwRootData> rootData;
-    cwProject* project = nullptr;
-    cwCave* cave = nullptr;
-    cwTrip* trip = nullptr;
-};
-
 std::unique_ptr<SavedProjectFixture> makeSavedProject(const QString& projectFileBase)
 {
-    auto fixture = std::make_unique<SavedProjectFixture>();
-    REQUIRE(fixture->tempDir.isValid());
-
-    fixture->rootData = std::make_unique<cwRootData>();
-    fixture->project = fixture->rootData->project();
-
-    auto region = fixture->project->cavingRegion();
-    region->addCave();
-    fixture->cave = region->cave(0);
-    fixture->cave->setName(QStringLiteral("SyncCave"));
-    fixture->cave->addTrip();
-    fixture->trip = fixture->cave->trip(0);
-    fixture->trip->setName(QStringLiteral("SyncTrip"));
-
-    const QString projectPath =
-        QDir(fixture->tempDir.path()).filePath(projectFileBase + QStringLiteral(".cwproj"));
-    REQUIRE(fixture->project->saveAs(projectPath));
-    fixture->project->waitSaveToFinish();
-    return fixture;
-}
-
-QString writeFile(const QString& path, const QByteArray& content, const QDateTime& mtime)
-{
-    REQUIRE(QDir().mkpath(QFileInfo(path).absolutePath()));
-    {
-        QFile f(path);
-        REQUIRE(f.open(QFile::WriteOnly));
-        f.write(content);
-    }
-    QFile f(path);
-    REQUIRE(f.open(QFile::ReadWrite));
-    REQUIRE(f.setFileTime(mtime, QFileDevice::FileModificationTime));
-    return path;
+    return makeSavedProject(projectFileBase,
+                            QStringLiteral("SyncCave"), QStringLiteral("SyncTrip"));
 }
 
 // Shared content for all generated dep files keeps file size and content
@@ -101,12 +64,12 @@ cwExternalCenterlineScanner::ScanResult makeScan(const QString& sourceRoot,
     cwExternalCenterlineScanner::ScanResult result;
     const QDir root(sourceRoot);
     const QString entryAbs = root.absoluteFilePath(entryRelative);
-    writeFile(entryAbs, QByteArray(kFakeContent), mtime);
+    writeFileWithMtime(entryAbs, QByteArray(kFakeContent), mtime);
     result.dependencies.append(QFileInfo(entryAbs).canonicalFilePath());
 
     for (const QString& sib : siblings) {
         const QString sibAbs = root.absoluteFilePath(sib);
-        writeFile(sibAbs, QByteArray(kFakeContent), mtime);
+        writeFileWithMtime(sibAbs, QByteArray(kFakeContent), mtime);
         result.dependencies.append(QFileInfo(sibAbs).canonicalFilePath());
     }
     return result;
@@ -154,6 +117,10 @@ TEST_CASE("computePlan copies every dep into an empty attachment dir",
     CHECK(plan.expectedFiles.size() == 3);
     CHECK(plan.removes.isEmpty());
     CHECK(plan.warnings.isEmpty());
+    // Every dep sits at or below the entry's own directory, so the
+    // common ancestor is that directory and the layout is the flat one
+    // trip-level attach has always produced.
+    CHECK(plan.baseDir == QFileInfo(srcRoot).canonicalFilePath());
 
     const QDir attachDirObj(attachmentDir);
     CHECK(plan.copies.at(0).second == attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")));
@@ -182,7 +149,7 @@ TEST_CASE("computePlan is a no-op when sources match destinations by size+mtime"
     for (const QString& dep : scan.dependencies) {
         const QString rel = QFileInfo(scan.dependencies.first()).absoluteDir().relativeFilePath(dep);
         const QString dest = attachDirObj.absoluteFilePath(rel);
-        writeFile(dest, QByteArray(kFakeContent), mtime); // same content+size as sources
+        writeFileWithMtime(dest, QByteArray(kFakeContent), mtime); // same content+size as sources
     }
 
     const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
@@ -191,6 +158,77 @@ TEST_CASE("computePlan is a no-op when sources match destinations by size+mtime"
     CHECK(plan.removes.isEmpty());
     CHECK(plan.expectedFiles.size() == 2);
     CHECK(plan.warnings.isEmpty());
+}
+
+TEST_CASE("computePlan under Overwrite copies destinations that already match",
+          "[Sync][Reconcile]")
+{
+    // Attach and replace run this policy: the user picked the file, so its
+    // bytes win over a destination that only looks current.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString srcRoot = QDir(tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                { QStringLiteral("sibling.svx") },
+                                mtime);
+
+    const QString attachmentDir = QDir(tempDir.path()).filePath(QStringLiteral("external"));
+    const QDir attachDirObj(attachmentDir);
+    for (const QString& dep : scan.dependencies) {
+        const QString rel = QFileInfo(scan.dependencies.first()).absoluteDir().relativeFilePath(dep);
+        // Same size as the source, mtime an hour ahead: the shape a local
+        // edit leaves behind.
+        writeFileWithMtime(attachDirObj.absoluteFilePath(rel),
+                           QByteArray(kFakeContent),
+                           mtime.addSecs(kOneHourSeconds));
+    }
+
+    const auto plan = cwExternalCenterlineSync::computePlan(
+        scan, attachmentDir, cwExternalCenterlineSync::CopyPolicy::Overwrite);
+
+    CHECK(plan.copies.size() == 2);
+    CHECK(plan.removes.isEmpty());
+    CHECK(plan.expectedFiles.size() == 2);
+    CHECK(plan.warnings.isEmpty());
+}
+
+TEST_CASE("reconcile under Overwrite replaces a same-size newer destination",
+          "[Sync][Reconcile]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("reconcile-overwrite"));
+    const QString attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                {},
+                                mtime);
+
+    const QDir attachDirObj(attachmentDir);
+    const QString destPath = attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"));
+    QByteArray editedContent(kFakeContent);
+    REQUIRE_FALSE(editedContent.isEmpty());
+    editedContent[0] = 'X';
+    REQUIRE(editedContent.size() == QByteArray(kFakeContent).size());
+    writeFileWithMtime(destPath, editedContent, mtime.addSecs(kOneHourSeconds));
+
+    auto future = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scan, attachmentDir,
+        cwExternalCenterlineSync::CopyPolicy::Overwrite);
+    fixture->project->waitSaveToFinish();
+    REQUIRE(AsyncFuture::waitForFinished(future, kReconcileWaitMs));
+
+    QFile landed(destPath);
+    REQUIRE(landed.open(QFile::ReadOnly));
+    CHECK(landed.readAll() == QByteArray(kFakeContent));
 }
 
 TEST_CASE("computePlan copies only the source whose mtime is newer than dest",
@@ -222,8 +260,8 @@ TEST_CASE("computePlan copies only the source whose mtime is newer than dest",
     // Plant identical-content but older-mtime files at both destinations.
     const QString entryDestPath = attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"));
     const QString sibDestPath = attachDirObj.absoluteFilePath(QStringLiteral("sibling.svx"));
-    writeFile(entryDestPath, QByteArray(kFakeContent), base);
-    writeFile(sibDestPath, QByteArray(kFakeContent), base);
+    writeFileWithMtime(entryDestPath, QByteArray(kFakeContent), base);
+    writeFileWithMtime(sibDestPath, QByteArray(kFakeContent), base);
 
     const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
 
@@ -253,11 +291,11 @@ TEST_CASE("computePlan garbage-collects files not in the new closure",
     const QDir attachDirObj(attachmentDir);
 
     // Plant the (still-current) entry and a stale file from a previous scan.
-    writeFile(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
-              QByteArray(kFakeContent),
-              mtime);
+    writeFileWithMtime(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
+                       QByteArray(kFakeContent),
+                       mtime);
     const QString stalePath = attachDirObj.absoluteFilePath(QStringLiteral("dropped.svx"));
-    writeFile(stalePath, QByteArrayLiteral("; dropped\n"), mtime);
+    writeFileWithMtime(stalePath, QByteArrayLiteral("; dropped\n"), mtime);
 
     const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
 
@@ -268,36 +306,97 @@ TEST_CASE("computePlan garbage-collects files not in the new closure",
     CHECK(plan.warnings.isEmpty());
 }
 
-TEST_CASE("computePlan warns when a dep escapes the attachment dir",
+TEST_CASE("computePlan rebases onto the common ancestor when a dep sits above the entry",
           "[Sync][Reconcile]")
 {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    const QString srcRoot = QDir(tempDir.path()).filePath(QStringLiteral("src/inner"));
-    REQUIRE(QDir().mkpath(srcRoot));
-    const QString outsideRoot = QDir(tempDir.path()).filePath(QStringLiteral("src"));
-    REQUIRE(QDir().mkpath(outsideRoot));
-
+    // The entry sits one level down from the sibling it includes, so its
+    // *include reads "../escaped.svx".
+    const QString srcRoot = QDir(tempDir.path()).filePath(QStringLiteral("src"));
     const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
-    cwExternalCenterlineScanner::ScanResult scan;
-    const QString entryAbs = QDir(srcRoot).filePath(QStringLiteral("entry.svx"));
-    writeFile(entryAbs, QByteArrayLiteral("; entry\n"), mtime);
-    scan.dependencies.append(QFileInfo(entryAbs).canonicalFilePath());
-
-    // Sibling lives in the parent dir of entry's parent: ../escaped.svx
-    const QString escapedAbs = QDir(outsideRoot).filePath(QStringLiteral("escaped.svx"));
-    writeFile(escapedAbs, QByteArrayLiteral("; escaped\n"), mtime);
-    scan.dependencies.append(QFileInfo(escapedAbs).canonicalFilePath());
+    const auto scan = makeScan(srcRoot,
+                               QStringLiteral("inner/entry.svx"),
+                               { QStringLiteral("escaped.svx") },
+                               mtime);
 
     const QString attachmentDir = QDir(tempDir.path()).filePath(QStringLiteral("external"));
     const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
 
-    REQUIRE(plan.copies.size() == 1);
-    CHECK(plan.copies.first().first == scan.dependencies.first());
+    // The ancestor of both deps is src/, so the whole closure lands
+    // inside the attachment with the shape the *include relies on.
+    CHECK(plan.baseDir == QFileInfo(srcRoot).canonicalFilePath());
+    CHECK(plan.warnings.isEmpty());
+
+    const QDir attachDirObj(attachmentDir);
+    REQUIRE(plan.copies.size() == 2);
+    CHECK(plan.copies.at(0).second
+          == attachDirObj.absoluteFilePath(QStringLiteral("inner/entry.svx")));
+    CHECK(plan.copies.at(1).second
+          == attachDirObj.absoluteFilePath(QStringLiteral("escaped.svx")));
+    CHECK(plan.expectedFiles.size() == 2);
+}
+
+TEST_CASE("computePlan refuses a closure whose ancestor climbs past the cap",
+          "[Sync][Reconcile]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // The shared file sits three levels above the entry - past
+    // kMaxRebaseClimb, so mirroring from their ancestor would drag the
+    // whole project tree into the attachment.
+    const QString srcRoot = QDir(tempDir.path()).filePath(QStringLiteral("src"));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                               QStringLiteral("a/b/c/entry.svx"),
+                               { QStringLiteral("shared.svx") },
+                               mtime);
+
+    const QString attachmentDir = QDir(tempDir.path()).filePath(QStringLiteral("external"));
+    const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
+
     REQUIRE(plan.warnings.size() == 1);
-    CHECK(plan.warnings.first().contains(QStringLiteral("escaped.svx")));
-    CHECK(plan.expectedFiles.size() == 1);
+    CHECK(plan.warnings.first().contains(QStringLiteral("spread more than 2 folders")));
+    // A refused plan carries nothing else, so the reconcile that runs it
+    // leaves the disk exactly as it found it.
+    CHECK(plan.copies.isEmpty());
+    CHECK(plan.expectedFiles.isEmpty());
+    CHECK(plan.removes.isEmpty());
+    CHECK(plan.baseDir.isEmpty());
+}
+
+TEST_CASE("computePlan mirrors a fixture whose entry includes a file one level up",
+          "[Sync][Reconcile]")
+{
+    const QString entry = fixturePath(QStringLiteral("updir_project/caves/dusk.svx"));
+    REQUIRE(QFileInfo::exists(entry));
+
+    const auto scanResult = cwExternalCenterlineScanner::scan(entry);
+    REQUIRE_FALSE(scanResult.hasError());
+    const auto scan = scanResult.value();
+    CHECK(scan.dependencies.size() == 2);
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString attachmentDir = QDir(tempDir.path()).filePath(QStringLiteral("external"));
+
+    const auto plan = cwExternalCenterlineSync::computePlan(scan, attachmentDir);
+
+    const QString projectRoot =
+        QFileInfo(fixturePath(QStringLiteral("updir_project"))).canonicalFilePath();
+    CHECK(plan.baseDir == projectRoot);
+    CHECK(plan.warnings.isEmpty());
+
+    // Copies follow the scan's dependency order: the entry, then what it
+    // includes.
+    const QDir attachDirObj(attachmentDir);
+    REQUIRE(plan.copies.size() == 2);
+    CHECK(plan.copies.at(0).second
+          == attachDirObj.absoluteFilePath(QStringLiteral("caves/dusk.svx")));
+    CHECK(plan.copies.at(1).second
+          == attachDirObj.absoluteFilePath(QStringLiteral("conventions.svx")));
 }
 
 TEST_CASE("computePlan returns empty plan when scan has no dependencies",
@@ -361,7 +460,7 @@ TEST_CASE("reconcile removes stranded files inside the attachment dir",
     const QDir attachDirObj(attachmentDir);
     REQUIRE(QDir().mkpath(attachmentDir));
     const QString stranded = attachDirObj.absoluteFilePath(QStringLiteral("ghost.svx"));
-    writeFile(stranded, QByteArrayLiteral("; ghost\n"), mtime);
+    writeFileWithMtime(stranded, QByteArrayLiteral("; ghost\n"), mtime);
     REQUIRE(QFileInfo::exists(stranded));
 
     auto future = cwExternalCenterlineSync::reconcile(
@@ -392,7 +491,7 @@ TEST_CASE("reconcile is a no-op when source and dest already match",
     // Plant matching dest before reconciling.
     const QDir attachDirObj(attachmentDir);
     const QString destPath = attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"));
-    writeFile(destPath, QByteArray(kFakeContent), mtime);
+    writeFileWithMtime(destPath, QByteArray(kFakeContent), mtime);
     const QDateTime destMtimeBefore = QFileInfo(destPath).lastModified();
 
     auto future = cwExternalCenterlineSync::reconcile(
@@ -451,6 +550,100 @@ TEST_CASE("two reconcile calls in sequence leave a consistent final state",
     CHECK(files.first() == attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")));
 }
 
+TEST_CASE("reconcile that copies files flips the project modified bit",
+          "[Sync][Reconcile]")
+{
+    // A live-link refresh landing mid-session mutates the project's
+    // on-disk shape; without the modified flip the refresh is silently
+    // lost in a bundled .cw on quit-without-save (master plan §5.4).
+    auto fixture = makeSavedProject(QStringLiteral("reconcile-dirty-copy"));
+    REQUIRE_FALSE(fixture->project->modified());
+
+    const QString attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                {},
+                                mtime);
+
+    auto future = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scan, attachmentDir);
+    fixture->project->waitSaveToFinish();
+    REQUIRE(AsyncFuture::waitForFinished(future, kReconcileWaitMs));
+
+    CHECK(fixture->project->modified());
+}
+
+TEST_CASE("no-op reconcile leaves the modified bit untouched",
+          "[Sync][Reconcile]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("reconcile-dirty-noop"));
+    REQUIRE_FALSE(fixture->project->modified());
+
+    const QString attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                {},
+                                mtime);
+
+    // Plant a matching destination so the plan has no copies and no removes.
+    const QDir attachDirObj(attachmentDir);
+    writeFileWithMtime(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
+                       QByteArray(kFakeContent),
+                       mtime);
+
+    auto future = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scan, attachmentDir);
+    fixture->project->waitSaveToFinish();
+    REQUIRE(AsyncFuture::waitForFinished(future, kReconcileWaitMs));
+
+    CHECK_FALSE(fixture->project->modified());
+}
+
+TEST_CASE("GC-only reconcile flips the project modified bit",
+          "[Sync][Reconcile]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("reconcile-dirty-gc"));
+    REQUIRE_FALSE(fixture->project->modified());
+
+    const QString attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                {},
+                                mtime);
+
+    // Matching entry (no copy needed) plus a stranded file from a previous
+    // scan, so the plan is removes-only.
+    const QDir attachDirObj(attachmentDir);
+    writeFileWithMtime(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
+                       QByteArray(kFakeContent),
+                       mtime);
+    const QString stranded = attachDirObj.absoluteFilePath(QStringLiteral("ghost.svx"));
+    writeFileWithMtime(stranded, QByteArrayLiteral("; ghost\n"), mtime);
+
+    auto future = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scan, attachmentDir);
+    fixture->project->waitSaveToFinish();
+    REQUIRE(AsyncFuture::waitForFinished(future, kReconcileWaitMs));
+
+    CHECK_FALSE(QFileInfo::exists(stranded));
+    CHECK(fixture->project->modified());
+}
+
 TEST_CASE("reconcile returns a failed future when saveLoad is null",
           "[Sync][Reconcile]")
 {
@@ -458,4 +651,97 @@ TEST_CASE("reconcile returns a failed future when saveLoad is null",
     auto future = cwExternalCenterlineSync::reconcile(nullptr, scan, QStringLiteral("/tmp/none"));
     REQUIRE(AsyncFuture::waitForFinished(future, kReconcileWaitMs));
     CHECK(future.result().hasError());
+}
+
+TEST_CASE("canceling a reconcile future does not poison the save-job drain",
+          "[SaveLoad][Shield]")
+{
+    // reconcile() chains on cwSaveLoad::pendingJobsFinished(), the
+    // project-wide drain future shared by every queued-job observer.
+    // AsyncFuture propagates cancel upstream through context chains, so
+    // without the shield in pendingJobsFinished() a consumer canceling
+    // its reconcile future would cancel the shared drain future
+    // underneath cwSaveLoad's re-arm polls and every sibling observer.
+    auto fixture = makeSavedProject(QStringLiteral("shield-cancel"));
+    const QString attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scanA = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                { QStringLiteral("childA.svx"),
+                                  QStringLiteral("childB.svx"),
+                                  QStringLiteral("childC.svx") },
+                                mtime);
+
+    auto canceledFuture = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scanA, attachmentDir);
+    // Guard the premise: if the future were already settled, cancel()
+    // would be a no-op and the barrier would go unexercised.
+    REQUIRE(!canceledFuture.isFinished());
+    canceledFuture.cancel();
+
+    // The canceled consumer stops observing, but the queue must still
+    // drain and land every copy.
+    fixture->project->waitSaveToFinish();
+    const QDir attachDirObj(attachmentDir);
+    CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"))));
+    CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("childC.svx"))));
+
+    // A fresh consumer chaining on the drain future must complete
+    // normally, and its GC pass must still act on the filesystem.
+    cwExternalCenterlineScanner::ScanResult scanB;
+    scanB.dependencies.append(scanA.dependencies.first());
+    auto futureB = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scanB, attachmentDir);
+    fixture->project->waitSaveToFinish();
+    REQUIRE(AsyncFuture::waitForFinished(futureB, kReconcileWaitMs));
+    REQUIRE_FALSE(futureB.isCanceled());
+    REQUIRE_FALSE(futureB.result().hasError());
+    CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"))));
+    CHECK_FALSE(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("childA.svx"))));
+}
+
+TEST_CASE("canceling a retire future does not poison the save-job drain",
+          "[SaveLoad][Shield]")
+{
+    // retire()'s internal cleanup/deleteLater observers and the shared
+    // save-job drain must both survive a consumer canceling its handle.
+    auto fixture = makeSavedProject(QStringLiteral("shield-retire"));
+    cwSaveLoad* saveLoad = fixture->project->saveLoad();
+    const QString attachmentDir =
+        saveLoad->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                               QStringLiteral("entry.svx"),
+                               { QStringLiteral("childA.svx"),
+                                 QStringLiteral("childB.svx"),
+                                 QStringLiteral("childC.svx") },
+                               mtime);
+
+    // Queue the copy jobs synchronously so retire has a pending drain.
+    cwExternalCenterlineSync::reconcile(saveLoad, scan, attachmentDir);
+
+    QPointer<cwSaveLoad> retired(saveLoad);
+    auto canceledRetire = saveLoad->retire();
+    REQUIRE(!canceledRetire.isFinished());
+    canceledRetire.cancel();
+
+    // Hand off the retiring saveLoad the way production does; the
+    // re-entrant retire() inside newProject() must still drain normally.
+    fixture->project->newProject();
+    fixture->project->waitSaveToFinish();
+
+    const QDir attachDirObj(attachmentDir);
+    CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"))));
+    CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("childC.svx"))));
+
+    // The internal chain must survive the consumer cancel all the way to
+    // deleteLater.
+    CHECK(QTest::qWaitFor([&]() { return retired.isNull(); }, kReconcileWaitMs));
 }

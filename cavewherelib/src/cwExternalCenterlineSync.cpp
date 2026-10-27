@@ -24,6 +24,13 @@ namespace {
 constexpr const char* kParentDir = "..";
 constexpr const char* kParentDirPrefix = "../";
 
+// How far above the entry file's own directory the mirror base may sit.
+// The measured Survex corpus climbs exactly one level (a shared error
+// model beside the cave master); a deeper climb means the entry's
+// includes are scattered across the project, and mirroring from their
+// ancestor would drag half the disk into the attachment.
+constexpr int kMaxRebaseClimb = 2;
+
 bool relativeEscapesAttachmentDir(const QString& rel)
 {
     // QDir::cleanPath collapses redundant separators and "./" segments
@@ -37,6 +44,17 @@ bool relativeEscapesAttachmentDir(const QString& rel)
         return true;
     }
     return false;
+}
+
+// Number of directory levels `dir` sits below `base`, which must be an
+// ancestor of (or equal to) `dir`.
+int climbFrom(const QString& base, const QString& dir)
+{
+    const QString relative = QDir(base).relativeFilePath(dir);
+    if (relative == QLatin1String(".")) {
+        return 0;
+    }
+    return static_cast<int>(relative.split(QLatin1Char('/'), Qt::SkipEmptyParts).size());
 }
 
 bool destinationMatchesSource(const QFileInfo& srcInfo, const QFileInfo& dstInfo)
@@ -53,6 +71,53 @@ bool destinationMatchesSource(const QFileInfo& srcInfo, const QFileInfo& dstInfo
         return false;
     }
     return srcInfo.lastModified() <= dstInfo.lastModified();
+}
+
+QString canonicalPathOrCleaned(const QString& path)
+{
+    const QFileInfo info(path);
+    const QString canonical = info.canonicalFilePath();
+    if (!canonical.isEmpty()) {
+        return canonical;
+    }
+
+    // Nothing on disk to canonicalize. Walk up to the nearest existing
+    // ancestor, canonicalize that, and re-append the tail, so a symlinked
+    // directory above a file that is not there still resolves to where the
+    // file would be.
+    //
+    // The walk leaves any ".." in place for the filesystem to resolve.
+    // Collapsing it textually first would step over a symlink the OS
+    // would have followed: with "<dir>/link" pointing elsewhere,
+    // "<dir>/link/../x" lexically reads as "<dir>/x" but really lives
+    // beside the link's target. That is also why the walk starts from the
+    // raw string rather than absoluteFilePath(), which does the collapsing
+    // itself. Walking with QFileInfo::path() keeps the loop off bare drive
+    // stubs like "C:", which name the current directory on that drive
+    // rather than its root.
+    const QString absolute = QDir::isAbsolutePath(path)
+        ? path
+        : QDir::current().filePath(path);
+
+    QFileInfo walk(absolute);
+    QString tail;
+    while (true) {
+        const QString parent = walk.path();
+        if (parent.isEmpty() || parent == walk.filePath()) {
+            // Reached the root without finding anything that exists.
+            return QDir::cleanPath(info.absoluteFilePath());
+        }
+        const QString name = walk.fileName();
+        tail = tail.isEmpty() ? name : name + QLatin1Char('/') + tail;
+
+        const QString ancestor = QFileInfo(parent).canonicalFilePath();
+        if (!ancestor.isEmpty()) {
+            return ancestor.endsWith(QLatin1Char('/'))
+                ? ancestor + tail
+                : ancestor + QLatin1Char('/') + tail;
+        }
+        walk = QFileInfo(parent);
+    }
 }
 
 QStringList enumerateFilesRecursively(const QString& dirPath)
@@ -80,7 +145,8 @@ namespace cwExternalCenterlineSync {
 
 ReconcilePlan computePlan(
     const cwExternalCenterlineScanner::ScanResult& scan,
-    const QString& attachmentDir)
+    const QString& attachmentDir,
+    CopyPolicy copyPolicy)
 {
     ReconcilePlan plan;
 
@@ -88,9 +154,29 @@ ReconcilePlan computePlan(
         return plan;
     }
 
-    const QString entryFile = scan.dependencies.first();
-    const QFileInfo entryInfo(entryFile);
-    const QDir entryDir = entryInfo.absoluteDir();
+    // Mirror from the dependencies' common ancestor rather than the
+    // entry's own directory, so an ordinary *include "../shared.svx"
+    // still lands inside the attachment.
+    const QString basePath = commonAncestorDir(scan.dependencies);
+    if (basePath.isEmpty()) {
+        plan.warnings.append(QStringLiteral("dependencies share no common folder"));
+        return plan;
+    }
+
+    const QString entryDirPath = QFileInfo(scan.dependencies.first()).absolutePath();
+    if (climbFrom(basePath, entryDirPath) > kMaxRebaseClimb) {
+        plan.warnings.append(
+            QStringLiteral("the files this entry includes are spread more than %1 folders "
+                           "above it — attach the file that owns them instead")
+                .arg(kMaxRebaseClimb));
+        return plan;
+    }
+
+    // commonAncestorDir joins canonical components, so the base is
+    // already absolute and clean.
+    const QDir base(basePath);
+    plan.baseDir = basePath;
+
     const QDir attachmentDirObj(attachmentDir);
     const QString attachmentAbs = attachmentDirObj.absolutePath();
 
@@ -98,7 +184,9 @@ ReconcilePlan computePlan(
     expectedSet.reserve(scan.dependencies.size());
 
     for (const QString& source : scan.dependencies) {
-        const QString rel = entryDir.relativeFilePath(source);
+        const QString rel = base.relativeFilePath(source);
+        // Defensive only: the base is an ancestor of every dependency by
+        // construction, so no relative path can climb out of it.
         if (rel.isEmpty() || relativeEscapesAttachmentDir(rel)) {
             plan.warnings.append(
                 QStringLiteral("dependency %1 is not reachable under attachment dir %2 - omitted")
@@ -112,7 +200,8 @@ ReconcilePlan computePlan(
 
         const QFileInfo srcInfo(source);
         const QFileInfo dstInfo(dest);
-        if (destinationMatchesSource(srcInfo, dstInfo)) {
+        if (copyPolicy == CopyPolicy::SkipUpToDate
+            && destinationMatchesSource(srcInfo, dstInfo)) {
             continue;
         }
         plan.copies.emplace_back(source, dest);
@@ -133,17 +222,22 @@ ReconcilePlan computePlan(
 QFuture<Monad::ResultBase> reconcile(
     cwSaveLoad* saveLoad,
     const cwExternalCenterlineScanner::ScanResult& scan,
-    const QString& attachmentDir)
+    const QString& attachmentDir,
+    CopyPolicy copyPolicy)
 {
     if (!saveLoad) {
         return AsyncFuture::completed(
             Monad::ResultBase(QStringLiteral("reconcile: cwSaveLoad is null")));
     }
 
-    const ReconcilePlan plan = computePlan(scan, attachmentDir);
+    const ReconcilePlan plan = computePlan(scan, attachmentDir, copyPolicy);
 
     for (const auto& [source, destination] : plan.copies) {
-        saveLoad->enqueueExternalCenterlineCopyIfNewer(source, destination);
+        if (copyPolicy == CopyPolicy::Overwrite) {
+            saveLoad->enqueueExternalCenterlineCopyOverwriting(source, destination);
+        } else {
+            saveLoad->enqueueExternalCenterlineCopyIfNewer(source, destination);
+        }
     }
     for (const QString& dead : plan.removes) {
         saveLoad->enqueueExternalCenterlineRemoveFile(dead);
@@ -159,6 +253,55 @@ QFuture<Monad::ResultBase> reconcile(
             return Monad::ResultBase();
         })
         .future();
+}
+
+QString commonAncestorDir(const QStringList& canonicalPaths)
+{
+    if (canonicalPaths.isEmpty()) {
+        return QString();
+    }
+
+    QStringList prefix = QFileInfo(canonicalPaths.first()).path().split(QLatin1Char('/'));
+    for (const QString& path : canonicalPaths) {
+        const QStringList components = QFileInfo(path).path().split(QLatin1Char('/'));
+        int shared = 0;
+        while (shared < prefix.size()
+               && shared < components.size()
+               && prefix.at(shared) == components.at(shared)) {
+            ++shared;
+        }
+        prefix = prefix.mid(0, shared);
+        if (prefix.isEmpty()) {
+            return QString();
+        }
+    }
+
+    if (prefix.size() == 1) {
+        // A single component is a root: the empty component of a Unix
+        // path, or a Windows drive stub. Both need the trailing slash -
+        // QDir reads a bare "C:" as relative to that drive's current
+        // directory rather than its root.
+        return prefix.first() + QLatin1Char('/');
+    }
+    return prefix.join(QLatin1Char('/'));
+}
+
+bool isContainedIn(const QString& path, const QString& boundaryDir)
+{
+    if (path.isEmpty() || boundaryDir.isEmpty()) {
+        return false;
+    }
+
+    const QString resolved = canonicalPathOrCleaned(path);
+    const QString boundary = canonicalPathOrCleaned(boundaryDir);
+    if (resolved == boundary) {
+        return true;
+    }
+
+    const QString prefix = boundary.endsWith(QLatin1Char('/'))
+        ? boundary
+        : boundary + QLatin1Char('/');
+    return resolved.startsWith(prefix);
 }
 
 } // namespace cwExternalCenterlineSync

@@ -1,0 +1,3 @@
+; A survey Walls processes on its own.
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+X1	X2	10.0	0	0

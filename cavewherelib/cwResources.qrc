@@ -103,6 +103,9 @@
         <file>twbs-icons/icons/chevron-right.svg</file>
         <file>twbs-icons/icons/sort-down.svg</file>
         <file>twbs-icons/icons/sort-up.svg</file>
+        <file>twbs-icons/icons/folder.svg</file>
+        <file>icons/svg/caveKind.svg</file>
+        <file>twbs-icons/icons/signpost-split.svg</file>
         <file>twbs-icons/icons/plus.svg</file>
         <file>icons/svg/station.svg</file>
         <file>twbs-icons/icons/caret-down-fill.svg</file>
@@ -141,12 +144,15 @@
         <file>twbs-icons/icons/lock-fill.svg</file>
         <file>twbs-icons/icons/unlock.svg</file>
         <file>twbs-icons/icons/arrows-angle-expand.svg</file>
+        <file>twbs-icons/icons/arrows-expand.svg</file>
+        <file>twbs-icons/icons/arrows-collapse.svg</file>
         <file>twbs-icons/icons/repeat.svg</file>
         <file>twbs-icons/icons/dash.svg</file>
         <file>twbs-icons/icons/file-earmark.svg</file>
         <file>twbs-icons/icons/chevron-double-down.svg</file>
         <file>twbs-icons/icons/chevron-double-right.svg</file>
         <file>twbs-icons/icons/list.svg</file>
+        <file>twbs-icons/icons/three-dots.svg</file>
         <file>twbs-icons/icons/search.svg</file>
         <file>twbs-icons/icons/chevron-up.svg</file>
         <file>twbs-icons/icons/chevron-down.svg</file>

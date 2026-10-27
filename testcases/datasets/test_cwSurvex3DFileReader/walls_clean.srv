@@ -1,0 +1,5 @@
+; Clean standalone Walls .srv: no #Prefix, so its stations are bare no
+; matter what an earlier run in the same process left behind.
+#Units Meters
+#Fix A1 0 0 0
+A1	A2	10.0	0	0

@@ -134,7 +134,7 @@ bool cwNoteLiDARManager::DirtyNote::isRunnable() const
         && !trip.isNull()
         && !cave.isNull()
         && note->rowCount() > 0
-        && !cave->stationPositionLookup().positions().isEmpty();
+        && !cave->scopedPositions().isEmpty();
 }
 
 cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :
@@ -238,17 +238,12 @@ void cwNoteLiDARManager::setLinePlotManager(cwLinePlotManager* linePlotManager)
     }
 
     if (m_linePlotManager != nullptr) {
-        // If you have a specific LiDAR-centered signal, connect/disconnect it here.
-        // Example (adjust to your actual signal):
-        // disconnect(m_linePlotManager, &cwLinePlotManager::stationPositionInLiDARChanged,
-        //            this, &cwNoteLiDARManager::stationPositionsChangedForCave);
         disconnect(m_linePlotManager, nullptr, this, nullptr);
     }
 
     m_linePlotManager = linePlotManager;
 
     if (m_linePlotManager != nullptr) {
-        // Example hookup (commented until such a signal exists):
         connect(m_linePlotManager, &cwLinePlotManager::stationPositionInTripsChanged,
                 this, [this](const QList<cwTrip*>& trips) {
 
@@ -333,7 +328,8 @@ void cwNoteLiDARManager::updateLiDARForCave(cwCave* cave)
     if (cave == nullptr) {
         return;
     }
-    for (cwTrip* trip : cave->trips()) {
+    const QList<cwTrip*> trips = cave->allTrips();
+    for (cwTrip* trip : trips) {
         updateLiDARForTrip(trip);
     }
 }
@@ -413,10 +409,9 @@ void cwNoteLiDARManager::handleRegionReset()
     }
 
     // Connect all existing trips
-    for (cwCave* cave : m_regionModel->cavingRegion()->caves()) {
-        for (cwTrip* trip : cave->trips()) {
-            connectTrip(trip);
-        }
+    const QList<cwTrip*> trips = m_regionModel->cavingRegion()->rootNode()->allTrips();
+    for (cwTrip* trip : trips) {
+        connectTrip(trip);
     }
 }
 
@@ -515,13 +510,6 @@ void cwNoteLiDARManager::liDARRowsAboutToBeRemoved(const QModelIndex& parent, in
     announceStateChange(previousState);
 }
 
-// ---------------------- Centerline trigger ----------------------
-
-void cwNoteLiDARManager::stationPositionsChangedForCave(cwCave* cave)
-{
-    updateLiDARForCave(cave);
-}
-
 // ---------------------- Bookkeeping ----------------------
 
 void cwNoteLiDARManager::noteDestroyed(QObject* noteObj)
@@ -560,7 +548,10 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     const cwTrip* trip = note->parentTrip();
     const cwCave* cave = trip ? trip->parentCave() : nullptr;
 
-    // Note stations
+    // Note stations resolve against the trip's own solved data (see
+    // mapScrapToTriangulateInData): native passes the cave lookup/network
+    // through, external presents the scope-relative tails the note carries, so
+    // the LiDAR station names are never rewritten.
     in.setNoteStations(note->stations());
 
     // Model matrix for lidar
@@ -581,10 +572,10 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     }
     in.setModelMatrix(modelMatrix);
 
-    // Station lookup and network from cave when available
-    if (cave != nullptr) {
-        in.setStationLookup(cave->stationPositionLookup());
-        in.setSurveyNetwork(cave->network());
+    // Station lookup and network in the trip's own local namespace.
+    if (trip != nullptr) {
+        in.setStationLookup(trip->solvedStationPositions());
+        in.setSurveyNetwork(trip->solvedNetwork());
     }
 
     // GLTF path (if the note exposes one via filename())

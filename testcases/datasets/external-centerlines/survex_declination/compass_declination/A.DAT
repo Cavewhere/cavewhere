@@ -1,0 +1,22 @@
+DeclCave
+SURVEY NAME: A1
+SURVEY DATE: 6 1 2020  COMMENT:First section
+SURVEY TEAM:
+Alice
+DECLINATION:    4.00  FORMAT: DDDDLRUDLAaDdCT  CORRECTIONS:  0.00 0.00 0.00  CORRECTIONS2:  0.00 0.00  DISCOVERY: 6 1 2020  PREFIX:
+
+                FROM                   TO   LENGTH  BEARING      INC     LEFT       UP     DOWN    RIGHT     AZM2     INC2   FLAGS  COMMENTS
+
+                  A1                   A2    10.00     0.00     0.00     1.00     1.00     1.00     1.00  -999.00  -999.00
+
+DeclCave
+SURVEY NAME: A2
+SURVEY DATE: 7 1 2021  COMMENT:Second section
+SURVEY TEAM:
+Bob
+DECLINATION:    5.50  FORMAT: DDDDLRUDLAaDdCT  CORRECTIONS:  0.00 0.00 0.00  CORRECTIONS2:  0.00 0.00  DISCOVERY: 7 1 2021  PREFIX:
+
+                FROM                   TO   LENGTH  BEARING      INC     LEFT       UP     DOWN    RIGHT     AZM2     INC2   FLAGS  COMMENTS
+
+                  A2                   A3    10.00    90.00     0.00     1.00     1.00     1.00     1.00  -999.00  -999.00
+

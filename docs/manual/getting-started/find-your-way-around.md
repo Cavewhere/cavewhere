@@ -25,7 +25,7 @@ sits empty, because no survey has gone into it yet.
 The window keeps the same frame wherever you go. The screenshot below shows a
 trip's page, which fills the breadcrumb with something worth reading.
 
-![The CaveWhere main window on a trip page. A sidebar runs down the left with File, View, Data and Map buttons and an Automatic Update toggle at the bottom; a bar across the top holds back and forward arrows, a breadcrumb reading "Source, Data, Cave=Phake Cave 3000, Trip=Release 0.08", and a sync button at the far right; the rest of the window is the trip's editor and its scanned notes.](../images/getting-started-tour.png)
+![The CaveWhere main window on a trip page. A sidebar runs down the left with File, View, Data and Map buttons and an Automatic Update toggle at the bottom; a bar across the top holds back and forward arrows, a breadcrumb reading "Source, All caves, Phake Cave 3000, Release 0.08", and a sync button at the far right; the rest of the window is the trip's editor and its scanned notes.](../images/getting-started-tour.png)
 *The three regions: the sidebar (left), the breadcrumb bar (top), and the page
 itself, which fills everything else.*
 
@@ -73,12 +73,13 @@ The breadcrumb across the top works as an address. Drilling into a trip's note
 builds up something like:
 
 ```
-Source / Data / Cave=Phake Cave 3000 / Trip=Release 0.08 / Note=001
+Source / All caves / Phake Cave 3000 / Release 0.08 / 001
 ```
 
 It reads left to right, outside in: the cave contains the trip, which contains
-the note. **Every crumb is a link.** Click **Cave=Phake Cave 3000** to jump
-straight back up to that cave without retracing your steps.
+the note. A cave inside a folder adds a crumb for the folder, and a section
+inside a cave one for the section. **Every crumb is a link.** Click **Phake Cave
+3000** to jump straight back up to that cave without retracing your steps.
 
 To its left sit **back** and **forward** arrows, which walk your history the way
 a browser's do. They earn their keep when the place you want sits outside the

@@ -1,0 +1,7 @@
+*cs out UTM48N
+*begin houping
+*cs UTM48N
+*fix h1 500000 3000000 100
+*data normal from to tape compass clino
+h1 h2 10.0 0 0
+*end houping

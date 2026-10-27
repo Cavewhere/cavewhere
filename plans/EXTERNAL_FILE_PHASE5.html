@@ -34,6 +34,29 @@
   <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p5b">&sect;9 Phase 5b</a>
   of the master plan. When each gets a full planning pass, the contents
   move here.
+  <br><br>
+  <strong>Implementation order:</strong> Phase 5 ships <em>before</em>
+  Phase 4 (equates) &mdash; station renames in the user's native tool
+  are the daily workflow, and orphan detection is what keeps them from
+  silently breaking scrap references. See the master plan &sect;9
+  implementation-order note.
+</div>
+
+<div class="note">
+  <strong>Prerequisite refactor &mdash; per-format strategy split in
+  <code>cwExternalCenterlineScanner</code>.</strong> The scanner
+  already carries three per-format axes side by side (dependency
+  walkers, metadata line-parsers, per-format regexes/comment
+  strippers) with format-dispatch switches duplicated in
+  <code>scanByFormat</code> and <code>parseSeededMetadata</code>.
+  Phase 5's station extraction from external files adds a fourth
+  axis. Before implementing it, restructure into per-format units
+  (a <code>FormatTraits</code>-style strategy, or per-format TUs
+  &mdash; cwSurvexFormat / cwCompassFormat / cwWallsFormat &mdash;
+  behind the existing namespace facade) so the duplicated switches
+  collapse and the file stops growing monolithically. Pure
+  mechanical restructure, zero behavior change; since Phase 5 ships
+  before Phase 4, this refactor lands here (Phase 4 inherits it).
 </div>
 
 <h2>Phase 5 &mdash; Orphan detection</h2>

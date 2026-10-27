@@ -1,0 +1,11 @@
+; A block with shots of its own beside a nested block. Each fix agrees
+; with the legs: c1 at the origin, i2 25 m north of it.
+*begin cave
+*fix c1 0 0 0
+c1 c2 10.0 0 0
+c2 inner.i1 5.0 0 0
+*begin inner
+*fix i2 0 25 0
+i1 i2 10.0 0 0
+*end inner
+*end cave

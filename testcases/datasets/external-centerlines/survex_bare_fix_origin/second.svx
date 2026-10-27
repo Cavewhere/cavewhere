@@ -1,0 +1,7 @@
+; A second local grid whose first bare fix sits far from origin.svx's.
+; Each file centers its own first fix on the project origin.
+*begin other
+*fix q1 640000 2950000 50
+*data normal from to tape compass clino
+q1 q2 15 0 0
+*end other

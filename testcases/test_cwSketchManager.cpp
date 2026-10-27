@@ -19,6 +19,7 @@
 #include "cwProject.h"
 #include "cwSketch.h"
 #include "cwSketchManager.h"
+#include "TestHelper.h"
 
 namespace {
 
@@ -243,19 +244,6 @@ TEST_CASE("cwSketchManager cache entry survives a manager restart",
 
 namespace {
 
-// Wait up to `timeoutMs` for `predicate` to return true; pumps the event loop
-// so queued slots and async observers fire. Returns the final truth value.
-template <typename P>
-bool spinUntil(P predicate, int timeoutMs = 3000)
-{
-    QElapsedTimer timer; timer.start();
-    while (!predicate() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
-        QTest::qWait(10);
-    }
-    return predicate();
-}
-
 } // namespace
 
 TEST_CASE("cwSketchManager: async render fires after idle window",
@@ -273,7 +261,7 @@ TEST_CASE("cwSketchManager: async render fires after idle window",
 
     addStroke(sketch, cwPenStroke::Wall, { {0, 0}, {10, 10}, {20, 0} });
 
-    const bool updated = spinUntil([&]() { return iconSpy.count() > 0; }, 3000);
+    const bool updated = waitUntil([&]() { return iconSpy.count() > 0; }, 3000);
     REQUIRE(updated);
     CHECK(!sketch.iconImagePath().isEmpty());
 
@@ -305,7 +293,7 @@ TEST_CASE("cwSketchManager: autoIconUpdates=false suppresses auto render",
     CHECK_FALSE(autoCacher.hasEntry(autoKey));
 
     manager.flushIconIfDirty(&sketch);
-    const bool updated = spinUntil([&]() { return iconSpy.count() > 0; }, 3000);
+    const bool updated = waitUntil([&]() { return iconSpy.count() > 0; }, 3000);
     REQUIRE(updated);
     CHECK(autoCacher.hasEntry(autoKey));
 }
@@ -327,7 +315,7 @@ TEST_CASE("cwSketchManager: flushIconIfDirty is a no-op when not dirty",
     // queued dataChanged that can bump dirtyEpoch after the initial flush
     // submits, so we may need to chase one trailing render.
     manager.flushIconIfDirty(&sketch);
-    REQUIRE(spinUntil([&]() { return !sketch.iconImagePath().isEmpty(); }, 3000));
+    REQUIRE(waitUntil([&]() { return !sketch.iconImagePath().isEmpty(); }, 3000));
     QTest::qWait(100);
     manager.flushIconIfDirty(&sketch);
     QTest::qWait(500); // let any trailing submit land
@@ -356,7 +344,7 @@ TEST_CASE("cwSketchManager: rapid edits coalesce into one write",
                   { QPointF(i, 0), QPointF(i + 1, 1) });
     }
 
-    REQUIRE(spinUntil([&]() { return iconSpy.count() > 0; }, 3000));
+    REQUIRE(waitUntil([&]() { return iconSpy.count() > 0; }, 3000));
     CHECK(iconSpy.count() <= 2);
 }
 
@@ -384,7 +372,7 @@ TEST_CASE("cwSketchManager: flushIconIfDirty is gated while actively drawing",
     sketch.endStroke();
 
     manager.flushIconIfDirty(&sketch);
-    REQUIRE(spinUntil([&]() { return iconSpy.count() > 0; }, 3000));
+    REQUIRE(waitUntil([&]() { return iconSpy.count() > 0; }, 3000));
 }
 
 TEST_CASE("cwSketchManager: teardown during in-flight render does not crash",

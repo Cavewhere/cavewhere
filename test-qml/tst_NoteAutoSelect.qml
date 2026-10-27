@@ -21,7 +21,7 @@ MainWindowTest {
         name: "NoteAutoSelect"
         when: windowShown
 
-        readonly property string tripAddress: "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
+        readonly property string tripAddress: "Source/Data/Node=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
         // Mid-width: the NotesGallery loader is active (isNarrow=false) and
         // the SurveyEditor note thumbnails are shown (showNotes = !isWide).

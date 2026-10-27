@@ -1,0 +1,4 @@
+; West Passage continues from A3.
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+A3	B1	10.0	0	0
+B1	B2	10.0	270	0

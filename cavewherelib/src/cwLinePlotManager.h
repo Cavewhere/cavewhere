@@ -10,7 +10,7 @@
 
 //Our includes
 class cwCavingRegion;
-class cwCave;
+class cwSurveyNode;
 class cwTrip;
 class cwSurveyChunk;
 class cwShot;
@@ -18,13 +18,17 @@ class cwScrap;
 class cwStationReference;
 class cwRenderLinePlot;
 class cwSurveyChunkSignaler;
+class cwEquateModel;
 class cwErrorListModel;
-class cwSaveLoad;
+class cwExternalCenterlineManager;
+class cwKeywordItem;
+class cwKeywordItemModel;
 class cwKeywordModel;
 class cwLinePlotTripVisibility;
+
+#include "cwFloatingSurveyModel.h"
 #include "cwKeywordItemRegistry.h"
 #include "cwLinePlotTask.h"
-#include "cwLocalSettings.h"
 #include "cwSurveyNetwork.h"
 #include "cwSurveyNetworkSource.h"
 #include "cwGlobals.h"
@@ -36,11 +40,7 @@ class cwLinePlotTripVisibility;
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
-#include <QSet>
-#include <QStringList>
 #include <QUuid>
-
-QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 
 //Async includes
 #include <asyncfuture.h>
@@ -53,20 +53,53 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject, public cwUpdatabl
     Q_OBJECT
     QML_NAMED_ELEMENT(LinePlotManager)
 
+    Q_PROPERTY(cwFloatingSurveyModel* floatingSurveyModel READ floatingSurveyModel CONSTANT FINAL)
     Q_PROPERTY(cwSurveyNetworkSource* surveyNetworkSource READ surveyNetworkSource CONSTANT)
     Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(QString solveErrorStep READ solveErrorStep NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(QString solveErrorSummary READ solveErrorSummary NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString cavernLog READ cavernLog NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString loopClosureStats READ loopClosureStats NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(QString driverSource READ driverSource NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(double lastSolveDuration READ lastSolveDuration NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(int lastSolveStationCount READ lastSolveStationCount NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(int lastSolveWarningCount READ lastSolveWarningCount NOTIFY cavernOutputChanged FINAL)
 
 public:
     explicit cwLinePlotManager(QObject *parent = 0);
     ~cwLinePlotManager();
 
+    // The most trips whose station labels one event-loop turn installs after a solve.
+    static constexpr int kLabelBatchSize = 64;
+
     bool hasSolveError() const { return m_lastSolveError.has_value(); }
     QString solveErrorMessage() const { return m_lastSolveError ? m_lastSolveError->message : QString(); }
+
+    // One-line form of the last solve error, for the Cavern page's status line.
+    QString solveErrorStep() const;
+    QString solveErrorSummary() const;
     QString cavernLog() const { return m_lastCavernLog; }
     QString loopClosureStats() const { return m_lastLoopClosureStats; }
+
+    // The driver .svx text the worker generated for the most recent solve,
+    // populated alongside cavernLog (present even when cavern itself
+    // failed; empty when the export step failed or nothing was solvable).
+    QString driverSource() const { return m_lastDriverSource; }
+
+    // Live stats for the most recent solve, surfaced by CavernOutputPage's
+    // status label. Duration is wall-clock seconds for the whole
+    // pipeline; negative means no solve has run yet ("not yet run").
+    double lastSolveDuration() const { return m_lastSolveDuration; }
+    int lastSolveStationCount() const { return m_lastStationCount; }
+    int lastSolveWarningCount() const { return m_lastWarningCount; }
+
+    // The external-centerline subsystem (watcher, async scan pipeline,
+    // attachment dirs, attached-centerlines model, stale/missing owners).
+    // Owned by the manager: its solveNeeded() chains into runSurvex and
+    // each solve's buildInput reads its dirs + declination flags.
+    // cwRootData exposes it to QML as externalCenterlineManager.
+    cwExternalCenterlineManager* externalCenterlineManager() const { return m_externalCenterlineManager; }
 
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setRenderLinePlot(cwRenderLinePlot* linePlot);
@@ -79,67 +112,40 @@ public:
     // note managers.
     void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
 
-    // Per-owner attachment directories (abs paths on disk) consumed by
-    // the line-plot driver's *include emission. Populated by the project
-    // wiring (commit 9) from cwSaveLoad::externalCenterlineDir(owner); the
-    // [Attach][...] tests call these setters directly. The maps are read
-    // by every subsequent runSurvex() call and baked into the cwLinePlotTask
-    // Input — change them while a solve is in flight and the in-flight
-    // solve still sees the old map (the Input copy is already made), and
-    // the next solve picks up the new one.
-    void setCaveAttachmentDirs(QHash<QUuid, QString> dirs);
-    void setTripAttachmentDirs(QHash<QUuid, QString> dirs);
-
-    // Per-machine state for live-link attachments. The manager re-runs the
-    // scanner over each entry whose ownerId appears here with a non-empty
-    // sourcePath, and a source-side fileChanged event triggers a
-    // reconcile-from-source through m_saveLoad before re-solving. Empty
-    // by default, in which case every attachment is treated as import-mode
-    // (no source-side watching).
-    void setLocalSettings(cwLocalSettings settings);
-    cwLocalSettings localSettings() const { return m_localSettings; }
-
-    // Optional cwSaveLoad used to enqueue reconcile copy/remove jobs when
-    // a live-link source changes on disk. Without it the source-side
-    // watcher path still re-solves but skips the reconcile; this
-    // is the test mode used by the simpler [Attach][Watcher] cases.
-    void setSaveLoad(cwSaveLoad* saveLoad);
-
-    // The current set of paths the QFileSystemWatcher is intended to watch
-    // (snapshot of the most recent recompute). Returned sorted, in a form
-    // tests can tryVerify against. Includes both in-project attachment-dir
-    // dependencies and live-link source-side dependencies.
-    QStringList watchedFiles() const;
-
-    // Owners (cave or trip id) whose local_settings.json sourcePath does
-    // not exist on disk at the most recent recompute. Surfaces the
-    // "Source not found" startup probe per §8.8 question 16 of the master
-    // plan. Empty when no live-link attachment is configured.
-    QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
-
     // Region-wide survey network source, updated whenever the line-plot
     // pipeline completes. Shared across every consumer (sketches today; future
     // 2D views). Always non-null after construction; its future may be
     // unstarted until the first line plot finishes.
     cwSurveyNetworkSource* surveyNetworkSource() const { return m_surveyNetworkSource; }
 
+    // Region-wide qualified survey network ("<caveLabel>.<tripLabel>.<station>"
+    // keys) parsed from cavern's .3d output on the most recent solve. Empty
+    // until the first solve completes. A plain snapshot accessor with no change
+    // signal of its own: surveyNetworkSource() is the channel consumers watch,
+    // and a trip's solved stations are pulsed by cwTrip::solvedStationsChanged.
+    cwSurveyNetwork regionNetwork() const { return m_lastPublishedNetwork; }
+
+    // Every survey the most recent run found floating — not joined to the rest
+    // of its cave — from both of the passes that can find one: the pre-solve
+    // native-chunk check and the post-solve topology check. One list so a
+    // consumer never has to know which pass answered, which is what lets a
+    // single banner speak for both. Empty until the first run completes.
+    QList<cwFindFloatingSurveys::Result> floatingSurveys() const { return m_floatingSurveys; }
+
+    //! The same answer as rows a view can bind to, with each record's cave and
+    //! trip resolved against the live region. Always non-null.
+    cwFloatingSurveyModel* floatingSurveyModel() const { return m_floatingSurveyModel; }
+
     void waitToFinish();
 
 signals:
-    void stationPositionInCavesChanged(QList<cwCave*>);
+    //! Carries every node whose solve result moved, at any depth.
+    void stationPositionInCavesChanged(QList<cwSurveyNode*>);
     void stationPositionInTripsChanged(QList<cwTrip*>);
     void stationPositionInScrapsChanged(QList<cwScrap*>);
     void updateStateChanged();
     void cavernOutputChanged();
-
-    // Emitted whenever the external-centerline watch set changes. Tests
-    // use this with a SignalSpy to wait for attach / detach to settle
-    // before asserting watchedFiles() contents.
-    void watchedFilesChanged();
-
-    // Emitted whenever the set of owners with a missing live-link source
-    // changes. The set itself is read via missingSourceOwners().
-    void missingSourceOwnersChanged();
+    void floatingSurveysChanged();
 
 public slots:
     //Marks the line plot dirty without running anything. Public so a "Solve"
@@ -163,36 +169,23 @@ private:
     cwSurveyNetworkSource* m_surveyNetworkSource;
     cwSurveyNetwork m_lastPublishedNetwork;
 
+    QList<cwFindFloatingSurveys::Result> m_floatingSurveys;
+    cwFloatingSurveyModel* m_floatingSurveyModel;
+
+    // The last post-solve answer for which stations cavern dropped, kept like
+    // the floating surveys' external half so a run that stops before the
+    // post-solve pass leaves it standing.
+    QList<cwLinePlotTask::LinePlotResultData::HangingStations> m_hangingStations;
+
     std::optional<cwLinePlotTask::SolveError> m_lastSolveError;
     QString m_lastCavernLog;
     QString m_lastLoopClosureStats;
+    QString m_lastDriverSource;
+    double m_lastSolveDuration = -1.0;
+    int m_lastStationCount = 0;
+    int m_lastWarningCount = 0;
 
-    QHash<QUuid, QString> m_caveAttachmentDirs;
-    QHash<QUuid, QString> m_tripAttachmentDirs;
-
-    cwLocalSettings m_localSettings;
-    QPointer<cwSaveLoad> m_saveLoad;
-
-    QFileSystemWatcher* m_watcher = nullptr;
-
-    // The full intended watch set (project-side + source-side deps), sorted
-    // and deduplicated. Compared against on every recompute to figure out
-    // which addPath/removePath calls to send. Paths that do not exist on
-    // disk are kept here too — they re-arm the next time recompute runs and
-    // they appear.
-    QStringList m_watchedFiles;
-
-    // Source path → owner id, for the source-side reconcile path. The
-    // mere presence of a path in this map is the "this is a source-side
-    // dep" signal that onWatchedFileChanged uses to route through
-    // reconcile instead of running a plain solve. Whichever owner's
-    // source-side scan first added a given path wins; duplicates between
-    // owners are rare in v1 (one source per owner) and the reconcile
-    // primitive is keyed by attachmentDir, not ownerId, so a
-    // first-write-wins map is sufficient.
-    QHash<QString, QUuid> m_sourceOwnerForPath;
-
-    QList<QUuid> m_missingSourceOwners;
+    cwExternalCenterlineManager* m_externalCenterlineManager = nullptr;
 
     // Per-trip line-plot keyword visibility, keyed by the live cwTrip* plus
     // the kind. Each trip carries a centerline item (Type="Line Plot") and,
@@ -211,29 +204,98 @@ private:
 
     bool m_needsUpdate = false;
 
+    // True from scheduleSolve() until startSolveAfterScan() hands the solve
+    // to m_restarter, so a burst of edits queues one start.
+    bool m_solveScheduled = false;
+
+    // True while a connectNodeInputs() pass is queued for this event-loop turn.
+    bool m_connectNodeInputsPending = false;
+
+    // The worker of the latest solve, canceled directly on teardown so cavern
+    // stops at its next phase without waiting for an event-loop turn.
+    QFuture<cwLinePlotTask::LinePlotResultData> m_solveWorker;
+
+    // The future the restarter tracks for the latest solve, and so the "Line
+    // plot" job: it finishes after the solve's last label batch, with one
+    // progress step per batch.
+    AsyncFuture::Deferred<cwLinePlotTask::LinePlotResultData> m_labelDrain;
+
+    // Trip stations still to hand to the region, by trip id, and trips whose
+    // stations are read live as they drain, after a solve whose member views
+    // went stale. A canceled drain leaves both for the next solve, which
+    // replaces them only when it moved stations itself.
+    QHash<QUuid, QList<QPair<QString, QVector3D>>> m_pendingLabels;
+    QList<QPointer<cwTrip>> m_pendingLiveLabels;
+
+    // True while a drainLabelBatch() is queued for this event-loop turn.
+    bool m_labelDrainPending = false;
+
+    // True once the region's member views moved after the in-flight solve
+    // took its snapshot, so the views and labels it computed are stale.
+    bool m_memberViewsMovedSinceSnapshot = false;
+
+    //! Starts the solve once the external scan in flight, if any, has applied.
+    void scheduleSolve();
+    void startSolveAfterScan();
+
     // Ends the run (Working -> Clean, or -> Dirty if re-edited mid-solve) and
     // emits updateStateChanged so the coordinator re-evaluates its staleness
     // aggregate. Finishing the run's future is what releases anyone waiting on
     // the solve, so every completion path has to reach here.
     void finishSolving();
 
-    void connectCaves(cwCavingRegion* region);
-    void connectFixStations(cwCave* cave);
+    //! Publishes a finished worker result and starts installing its labels
+    //! under \a drain, unless a restart already canceled \a drain.
+    void installSolve(AsyncFuture::Deferred<cwLinePlotTask::LinePlotResultData> drain,
+                      cwLinePlotTask::LinePlotResultData result);
 
-    void setCaveStationLookupAsStale(bool isStale);
-    void updateUnconnectedChunkErrors(cwCave *cave, const cwLinePlotTask::LinePlotCaveData& caveData);
+    void queueLabelBatch();
+
+    //! Hands the region up to kLabelBatchSize trips' stations, advancing the
+    //! job's progress, and queues the next batch or finishes the job.
+    void drainLabelBatch();
+
+    //! Finishes the current solve's job, and the run unless an edit during it
+    //! scheduled the next solve.
+    void completeLabelDrain();
+
+    //! Member sets moved without a solve: the label view relabels every trip
+    //! from the live views, so the pending batches are dropped.
+    void handleMemberViewsChanged();
+
+    void rerunIfStale(cwCavingRegion* region);
+    void connectFixStations(cwSurveyNode* node);
+
+    //! Hooks the fix stations of every node in the tree. Safe to repeat: each
+    //! connection is unique, so repeating it never stacks re-solves.
+    void connectNodeInputs();
+
+    //! Marks the plot dirty at once and hooks the new nodes' fix stations once
+    //! per event-loop turn: the hookup walks the whole tree, and the solve
+    //! snapshot is queued behind it anyway.
+    void handleSubtreeChanged();
+
+    //! Re-solve when the region's equate list changes. An equate is a survey
+    //! input like a shot or a fix — it is what joins two scopes cavern would
+    //! otherwise leave in separate frames — so declaring one has to reach the
+    //! plot the same way entering a shot does, or a tie the user just made
+    //! stays invisible.
+    void connectEquates(cwEquateModel* equates);
+
+    void updateUnconnectedChunkErrors(cwSurveyNode* node, const cwLinePlotTask::LinePlotCaveData& nodeData);
     void clearUnconnectedChunkErrors();
 
     void updateLinePlot(cwLinePlotTask::LinePlotResultData results);
 
     // Re-attaches the per-trip keyword items to the freshly-solved geometry:
-    // resolves each running id's UUID to a live cwTrip*, creates/removes keyword
+    // looks up each running id's UUID in liveByUuid, creates/removes keyword
     // items to match, re-binds each trip's visibility proxy to its new vertex
     // span, and re-seeds the render object's hidden trips. Identity (UUID)
     // keyed, so it is immune to list-order drift; trips deleted mid-solve simply
     // fail to resolve and are skipped. tripVertexRanges and
     // tripSplayVertexRanges are parallel to tripUuids (all running-id indexed).
-    void reconcileTripKeywordItems(const QVector<QUuid>& tripUuids,
+    void reconcileTripKeywordItems(const QHash<QUuid, cwTrip*>& liveByUuid,
+                                   const QVector<QUuid>& tripUuids,
                                    const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges,
                                    const QVector<cwLinePlotGeometry::VertexRange>& tripSplayVertexRanges);
     void removeTripKeywordItems(cwTrip* trip);
@@ -246,24 +308,38 @@ private:
     void publishResults(const cwLinePlotTask::LinePlotResultData& results);
     void publishCavernOutput(QString cavernLog,
                              QString loopClosureStats,
-                             std::optional<cwLinePlotTask::SolveError> solveError);
+                             QString driverSource,
+                             std::optional<cwLinePlotTask::SolveError> solveError,
+                             double solveDuration,
+                             int stationCount,
+                             int warningCount);
     void publishPerCaveErrors(const cwLinePlotTask::LinePlotResultData& results);
 
-    // Re-runs the scanner over every attachment (project-side, plus the
-    // source side for live-link entries), rebuilds m_watchedFiles and
-    // m_missingSourceOwners, and brings the QFileSystemWatcher in line by
-    // diffing against the previous set. Cheap: scanner walks are
-    // sub-millisecond per file and the test fixtures total ~3 files.
-    void recomputeWatchSetAndProbeSources();
+    //! Decided with the same fact as *cs out — whether the project has an
+    //! output system, a local grid's included — so it is set as each solve
+    //! starts. Each node gets one AttachedFileFixWithoutCS warning naming the
+    //! attached files (its own or its trips') that fix a station with no input
+    //! coordinate system, have no system chosen for those fixes
+    //! (cwExternalCenterline::fixCoordinateSystem) and no *cs out of their
+    //! own, with those stations; the driver places such a file with its first
+    //! bare fix at the project origin. Every other node has it cleared.
+    //!
+    //! Beside it, an AttachedFileUnfixed warning names each attached file the
+    //! driver fixes at the origin because the file fixes no station of its
+    //! own and no node fix places it, and an AttachedFileDefaultDatum warning
+    //! names each Compass .mak whose copy took Compass's default datum.
+    void publishAttachedFixWarnings(const cwLinePlotTask::ExternalCenterlineInputs& inputs);
+    void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys,
+                                bool externalScopesChecked);
 
-    // Re-arms the watcher for `path` (the file that just fired) so we
-    // continue to receive change events for it; on macOS the watcher
-    // implicitly drops a path after an atomic-write replace.
-    void rearmWatcher(const QString& path);
+    //! Writes one UnconnectedStations warning on each trip, and each node with
+    //! an attached file, holding stations that are not tied to the cave, and
+    //! clears it everywhere else. Reads the floating surveys and the hanging
+    //! stations, the same solve result the floating-survey banner shows.
+    void publishUnconnectedStationWarnings();
 
 private slots:
     void runSurvex();
-    void onWatchedFileChanged(const QString& path);
 };
 
 //This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot

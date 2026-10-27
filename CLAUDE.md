@@ -26,46 +26,27 @@ Run the application: `./build/<preset>/CaveWhere`
 Build and run tests:
 ```bash
 cmake --build build/<preset> --target cavewhere-test cavewhere-qml-test
-./build/<preset>/cavewhere-test -d yes 2>&1 | tee /tmp/cavewhere-test.log
-./build/<preset>/cavewhere-qml-test --platform offscreen 2>&1 | tee /tmp/cavewhere-qml-test.log
+./build/<preset>/cavewhere-test -d yes 2>&1 | tee /tmp/cavewhere-test-$$.log
+./build/<preset>/cavewhere-qml-test --platform offscreen 2>&1 | tee /tmp/cavewhere-qml-test-$$.log
 ```
 
-Always redirect test output to a log file so failures can be inspected without re-running. Run a single C++ test with Catch2 tags (`cavewhere-test "[TagName]"`); run a single QML test with `cavewhere-qml-test --platform offscreen -input test-qml/tst_YourTest.qml`. Always run both suites before pushing.
+Always redirect test output to a log file so failures can be inspected without re-running. Keep `$$` (the shell PID) in the log name: sibling checkouts and the nightly runner write to `/tmp` too, and a fixed path lets one run silently clobber another's log — producing a mixed-up log whose failures belong to a different working tree. Run a single C++ test with Catch2 tags (`cavewhere-test "[TagName]"`); run a single QML test with `cavewhere-qml-test --platform offscreen -input test-qml/tst_YourTest.qml`. Always run both suites before pushing.
 
 ## Architecture Overview
 
-### Entry Point and Root Singleton
+`main.cpp` exposes `cwRootData` as a QML singleton — the hub owning every major subsystem, and the place to start when looking for one.
 
-`main.cpp` sets up the QML engine and exposes `cwRootData` as a QML singleton — the central hub that owns and exposes all major subsystems to QML.
+Data model: `cwCavingRegion` → `cwSurveyNode` tree (`cwCave` is a thin node subclass; nested nodes live under `sub/`) → `cwTrip` → `cwSurveyChunk` → `cwShot` (+ splays) and `cwNote` (2D scan) → `cwScrap` (digitized outlines). Walk with `rootNode()->allNodes()` / `allTrips()`; `region->caves()` is only the root's children and `cave->trips()` only a node's direct trips. Post-solve station naming is `cwScopeLabels::resolve` + `cwTrip::scopePrefix` only.
 
-### Data Model Hierarchy
+**Persistence (`cwProject`)**: three formats — legacy `.cw` (JSON + SQLite, auto-converted on load), bundled `.cw` (zip, the default for single-file saves), and `.cwproj` directory (Git-backed, for collaboration). Serialization is Protocol Buffers (`cavewhere.proto`). Save/load is queued through `cwSaveLoad` so it never blocks the UI thread.
 
-```
-cwCavingRegion (root)
-└── cwCave (multiple)
-    └── cwTrip (multiple)
-        └── cwSurveyChunk (shots)
-            ├── cwShot (from/to station, distance/bearing/inclination)
-            └── cwNote (2D scanned image)
-                └── cwScrap (digitized outlines)
-```
+**Rendering**: Qt RHI, never OpenGL directly (`cwRhiScene`, `cwRhiItemRenderer`); 3D math lives in the `QMath3d` submodule.
 
-### Project Persistence (`cwProject`)
+**Import/export**: Compass, Survex, and Walls parsing goes through the `dewalls` submodule. Compass station names are exported uppercase — Compass is case-sensitive, CaveWhere is not. `cwSurveyNetwork` performs loop closure detection.
 
-Handles all file I/O and Git integration. Three formats: legacy `.cw` (JSON + SQLite, auto-converted on load), bundled `.cw` (zip archive, new default for single-file saves), and `.cwproj` directory (Git-backed for collaboration). Serialization uses Protocol Buffers (`cavewhere.proto`). Save/load operations are queued through `cwSaveLoad` to avoid blocking the UI thread.
+**Solve and georeferencing**: `cwSurvexExporter` writes Survex from `cwTripData` snapshots, with splays, each fix in its own CS via `cwSurvexCS`, and `*declination auto` once per located node. Pipelines are `cwUpdatable`s driven by `cwUpdateCoordinator`: mark one as needing an update, then run it (there is no `rerunSurvex`). `cwGeoReference` + `cwLocalProjectionManager` hold the project's local frame, which is stored and read back on load as is; `cwFixStationValidator` checks fixes against it, and per-fix diagnostics live on `cwSurveyNode::fixStationDiagnostics`.
 
-### Rendering
-
-Uses Qt's RHI (Rendering Hardware Interface).
-
-### Survey Import/Export
-
-`cwSurveyImportManager` handles Compass, Survex, and Walls formats via the `dewalls` submodule. `cwSurveyExportManager` outputs Survex and Compass; Compass station names are written in uppercase (Compass is case-sensitive; CaveWhere is not). `cwSurveyNetwork` performs loop closure detection.
-
-### UI Structure
-
-- **Page navigation**: `cwPageSelectionModel` manages multi-page routing
-- **Keyword filtering**: `cwKeywordItemModel` / `cwKeywordFilterPipelineModel` for hierarchical search
+**UI**: `cwPageSelectionModel` routes pages; `cwKeywordItemModel` / `cwKeywordFilterPipelineModel` drive hierarchical keyword search.
 
 ## Coding Conventions
 
@@ -78,6 +59,12 @@ Uses Qt's RHI (Rendering Hardware Interface).
 - Use function-pointer syntax for `connect`/`disconnect` (`connect(obj, &Class::signal, this, &Class::slot)`), never the `SIGNAL()`/`SLOT()` string macros
 - Address Sanitizer is enabled in macOS Debug builds
 - **No magic numbers.** Extract numeric/color literals (z-values, radii, offsets, font sizes, RGB tuples) to named `constexpr`/`const` constants, typically in an anonymous namespace at the top of the `.cpp`. Fix adjacent raw literals too rather than matching a bad sibling.
+- **Main-thread budget: one frame (16 ms) per event-loop turn.** Any work that scales with project size (nodes, trips, stations, fixes, keyword items) must fit it, in this order of preference:
+  1. **Cut.** Coalesce per-item observer work into one queued pass: set a dirty flag and schedule the pass once with `QMetaObject::invokeMethod(this, &Class::slot, Qt::QueuedConnection)` (a `QTimer` allocates a `QObject` for the same job). Insert ranges, never one row at a time: `beginInsertRows` over the range, `addNodes`/`addItems`, not N calls to `addNode`/`addItem`. A whole-tree walk connected to a per-item signal is quadratic.
+  2. **Move.** Run it on a worker and bring the result back with `AsyncFuture::observe(future).context(this, ...)`.
+  3. **Interleave.** Install a large result in bounded batches, one batch per event-loop turn, under a `cwFutureManagerToken` job so the task list shows progress.
+
+  Tests pin growth, not milliseconds: a 4x larger synthetic fixture may cost at most about 4x (measure the longest event-loop gap, or count `dataChanged`/`rowsInserted` with `QSignalSpy`). Absolute timing is for the owner in the app.
 - **`AsyncFuture::waitForFinished` is test-only.** It spins a nested `QEventLoop`, causing re-entrancy bugs (use-after-free, iterator invalidation). In production use `AsyncFuture::observe(future).context(this, callback)` (auto-disconnects on `this` destruction; destructors just call `future.cancel()`). Existing `waitForFinish()`/`waitToFinish()` helpers on managers exist solely for tests.
 - **Use `.at(i)` or a `const` reference for read-only access to `QList`/`QVector`, never non-const `operator[]`.** `operator[]` calls `detach()`, which reallocates when refcount > 1 — a data race from worker threads. This includes access through smart pointers: write `ptr->at(i)`, not `(*ptr)[i]`.
 - **Do not wrap `QList`/`QVector` in `std::shared_ptr`.** They are already implicitly-shared value types. To snapshot for a worker thread, `auto snap = m_container;` and capture by value; workers must stick to const access.
@@ -120,6 +107,7 @@ Uses Qt's RHI (Rendering Hardware Interface).
 
 #### C++ testing
 - Tests must be safe to run as **multiple concurrent processes** (nightly CI runs several in parallel). Never use hardcoded temp paths — include `QCoreApplication::applicationPid()` in the name or use `QTemporaryFile`/`QTemporaryDir`.
+- **Wait on a condition, never pump.** When a test needs a queued pass or a worker result to land, name the state it produces and wait for that: `REQUIRE(waitUntil([&] { return <state>; }))` from `testcases/TestHelper.h`, or `QSignalSpy::wait()`. A bare `QCoreApplication::processEvents()` asserts timing (one turn happened to be enough) where the test means to assert behavior; it is the C++ form of a fixed `wait()`.
 
 #### QML testing
 - Prefer `tryVerify()`/`tryCompare()` over fixed `wait()`. `QQ.Transition` with `QQ.ScriptAction` fires next frame, so `tryVerify` the side-effect rather than assuming the state change is enough.

@@ -60,7 +60,6 @@ private:
     static QString sanitizeFileName(QString input);
     static QString defaultDataRoot(const QString& projectName);
 
-    static QDir caveDirHelper(const QDir& projectDir, const cwCave* cave);
     static QDir tripDirHelper(const QDir& caveDir, const cwTrip* trip);
     static QDir noteDirHelper(const QDir& tripDir);
     static QDir externalCenterlineDirHelper(const QDir& ownerDir);

@@ -6,15 +6,12 @@ import cw.TestLib
 MainWindowTest {
     id: rootId
 
-    TestCase {
+    CWTestCase {
         name: "FixStationsRoundTrip"
         when: windowShown
 
         function init() {
-            if (GlobalShadowTextInput.coreClickInput !== null) {
-                GlobalShadowTextInput.coreClickInput.closeEditor()
-            }
-            GlobalShadowTextInput.enabled = false
+            rootId.closeAnyOpenEditor()
 
             RootData.futureManagerModel.waitForFinished()
             RootData.newProject()
@@ -29,13 +26,24 @@ MainWindowTest {
             RootData.newProject()
         }
 
+        //! Commits \a cs through row \a rowIndex's picker, which a double-click
+        //! on the row's system opens.
         function setInputCSViaPicker(rowIndex, cs) {
             const fixPage = RootData.pageView.currentPageItem
             let picker = null
+            let label = null
             tryVerify(() => {
                 picker = findChild(fixPage, "inputCSComboBox." + rowIndex)
-                return picker !== null
-            }, 5000, "row " + rowIndex + " inputCSComboBox should be reachable")
+                label = findChild(fixPage, "inputCSLabel." + rowIndex)
+                return picker !== null || (label !== null && label.visible)
+            }, 5000, "row " + rowIndex + " should show its coordinate system")
+            if (picker === null) {
+                doubleTap(label)
+                tryVerify(() => {
+                    picker = findChild(fixPage, "inputCSComboBox." + rowIndex)
+                    return picker !== null
+                }, 5000, "double-clicking row " + rowIndex + "'s system should open its picker")
+            }
             picker.committed(cs)
         }
 
@@ -44,7 +52,7 @@ MainWindowTest {
             const cave = RootData.region.cave(RootData.region.caveCount - 1)
             cave.name = "RoundTripCave"
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + String(cave.name) + "/Fix Stations"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000)
@@ -81,8 +89,9 @@ MainWindowTest {
             tryVerify(() => m.data(m.index(1), FixStationModel.StationNameRole) === "B1")
             tryVerify(() => m.data(m.index(1), FixStationModel.InputCSRole) === "EPSG:32612")
 
+            tryVerify(() => RootData.region.geoReference.localCoordinateSystem.length > 0, 5000,
+                      "the first fix must have anchored a frame")
             const frameBeforeSave = RootData.region.geoReference.localCoordinateSystem
-            verify(frameBeforeSave.length > 0, "the first fix must have anchored a frame")
 
             // tempDirectoryUrl() is PID-suffixed so parallel test processes don't collide.
             const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())

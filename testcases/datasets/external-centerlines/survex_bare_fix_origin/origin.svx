@@ -1,0 +1,11 @@
+; A local grid: two bare fixes and no *cs anywhere. CaveWhere places the
+; first fix, p1, at the project origin and translates the file with it,
+; so p9 keeps its offset from p1 and every leg keeps its shape.
+*begin grid
+*fix p1 812345.25 4123456.75 210
+*data normal from to tape compass clino
+p1 p2 25 45 -5
+p2 p3 30 120 10
+*fix p9 812400 4123400 200
+p9 p10 12 270 0
+*end grid

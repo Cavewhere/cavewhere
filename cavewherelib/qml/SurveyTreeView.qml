@@ -1,0 +1,1196 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+import QtQuick as QQ
+import QtCore as QtCore
+import QtQuick.Controls as QC
+import QtQuick.Layouts
+import QtQml.Models
+import cavewherelib
+import "Utils.js" as Utils
+
+// The survey tree: every cave, the nodes under it, and each node's trips as
+// leaves, in one table of eight columns. The Data page shows the whole region
+// and the cave page shows the same tree rooted at one cave — one view, one set
+// of rows, told apart by rootNode alone.
+//
+// The rows come from cwSurveyTreeModel through cwSurveyTreeFilterModel, and
+// TreeView flattens the tree into view rows itself. Expansion is view state
+// rather than model state, so everything this view knows about which rows are
+// open lives here: the helpers below translate between a view row
+// (expand/collapse/isExpanded) and a model index through
+// rowAtIndex/index and the proxy's mapToSource/mapFromSource.
+//
+// The rows stand in the order each node lists its children and trips in until
+// a header cell is clicked; the header is the one sort control, and the arrow
+// it carries says which column the rows are ordered by.
+ColumnLayout {
+    id: surveyTreeId
+
+    //The prompt a row's Remove goes through. The rows reach it through the
+    //view, since a TreeView delegate is handed nothing but its model roles.
+    property RemoveAskBox removeAskBox
+
+    //The banner an armed Move to… waits in, which lands the move or asks
+    //first. Only the whole-region tree picks a destination, so a node page's
+    //tree leaves it null and hands its moves to the Data page.
+    property SurveyMoveBanner moveBanner: null
+
+    //The node whose children the tree shows: null shows the whole region, a
+    //cave shows that cave's own rows. TreeView draws the CHILDREN of its
+    //rootIndex, so a cave here leaves the cave itself off and its trips as
+    //the view's top-level rows — which is what the cave page shows.
+    property SurveyNode rootNode: null
+
+    //The settings key of each column's stored width, in column order. Name
+    //takes the remainder, so it stores nothing.
+    readonly property list<string> columnWidthKeys: ["", "kindColumnWidth", "tripsColumnWidth",
+        "stationsColumnWidth", "lengthColumnWidth", "depthColumnWidth", "dateColumnWidth",
+        "declColumnWidth"]
+
+    //The rows the view draws right now, the rows under rootNode included only
+    //while their node is open.
+    readonly property int rowCount: treeViewId.rows
+
+    //The column the rows are ordered by, -1 while they stand in the order each
+    //node lists its children and trips in. The header is what moves it, and
+    //assigning -1 puts the rows back in their node's own order.
+    property alias sortColumn: filterModelId.sortColumn
+
+    //Which end of that column's values comes first, a Qt.SortOrder.
+    property alias sortOrder: filterModelId.sortOrder
+
+    //The rows the user picked. A verb on a row acts on the selection when the
+    //row is part of it, which is what tripsFor() decides.
+    readonly property ItemSelectionModel selectionModel: selectionModelId
+
+    //The cwSurveyNode or cwTrip the current row stands for, null when no row
+    //is current.
+    readonly property QQ.QtObject currentObject: surveyTreeId.objectAt(selectionModelId.currentIndex)
+
+    //What the Remove prompt is about to remove. The prompt carries a name and
+    //a message, so the row it stands for is held here until it answers.
+    property QQ.QtObject pendingRemoveObject: null
+
+    //What was open before the filter took over the rows. Kept by node id
+    //rather than by row, since filtering rebuilds every row.
+    property list<string> expansionBeforeFilter: []
+
+    //The source roots that arrived since the view last took rows in, opened
+    //one level once it has. Held by object, since the indexes move.
+    property list<SurveyNode> pendingSourceRoots: []
+
+    //The view row under the pointer, -1 for none. A move target draws its
+    //whole row hovered, and a row is one cell per column.
+    property int hoveredRow: -1
+
+    //Whether a row with rows of its own is closed, and whether any row has
+    //rows of its own at all. Kept by updateExpansionState().
+    property bool hasCollapsedRows: false
+    property bool hasCollapsibleRows: false
+
+    spacing: 0
+
+    //Asks the host page to open its Attach survey file dialog for \a node.
+    signal attachSurveyFileRequested(node: SurveyNode)
+
+    //The cwSurveyNode or cwTrip a proxy index stands for, null for a row that
+    //is gone. The model answers for source indexes, so every lookup goes
+    //through the filter first.
+    function objectAt(proxyIndex) : QQ.QtObject {
+        return RegionSurveyTree.objectFor(filterModelId.mapToSource(proxyIndex));
+    }
+
+    //The model index of the view row \a row, in the filter's coordinates.
+    function indexAtRow(row: int) : var {
+        return treeViewId.index(row, SurveyTreeModel.Name);
+    }
+
+    //The cwSurveyNode or cwTrip at a view row, null when the row is gone.
+    function objectAtRow(row: int) : QQ.QtObject {
+        return surveyTreeId.objectAt(surveyTreeId.indexAtRow(row));
+    }
+
+    //The row rootNode stands for, the invalid index for the whole region: the
+    //model answers an unknown object with an invalid index, so a null rootNode
+    //reads as the model's own root.
+    function rootProxyIndex() : var {
+        const sourceIndex = RegionSurveyTree.indexOf(surveyTreeId.rootNode);
+        //A rootNode assigned while this view is still being built arrives
+        //before the filter has its source model, and a mapping asked of the
+        //filter then is a mapping of another model's index. The root is
+        //applied again once the view is complete.
+        if(filterModelId.sourceModel !== RegionSurveyTree) {
+            return RegionSurveyTree.indexOf(null);
+        }
+        return filterModelId.mapFromSource(sourceIndex);
+    }
+
+    //Points the view back at rootNode's row whenever it has drifted off it. A
+    //reset throws every index away and the row can arrive after the tree was
+    //pointed at it, so every structural change of the model asks this. Whether
+    //the view still stands on rootNode is asked of the object the rootIndex
+    //names rather than of the index itself: an index left over from a model
+    //that has been reset still reads as valid while naming nothing.
+    function ensureRootIndex() {
+        if(surveyTreeId.objectAt(treeViewId.rootIndex) !== surveyTreeId.rootNode) {
+            surveyTreeId.applyRootIndex();
+        }
+    }
+
+    //Points the view at rootNode's row. The filter rebuilds its indexes on
+    //every filter change and on a reset, so the node is mapped afresh each
+    //time rather than a stored index being trusted.
+    function applyRootIndex() {
+        //An invalid rootIndex is the model's own root, so a root the filter
+        //has no row for would put the whole region on a cave's page. The view
+        //gives up its model instead and shows nothing until the row is back,
+        //which every structural change asks about through ensureRootIndex().
+        const rootIndex = surveyTreeId.rootNode !== null
+                        ? surveyTreeId.rootProxyIndex()
+                        : undefined;
+        const rowsAreShowable = surveyTreeId.rootNode === null || rootIndex.valid;
+
+        //Assigned only when it changes: handing TableView a model rebuilds
+        //every row, which throws away what the view has laid out.
+        surveyTreeId.setViewModel(rowsAreShowable ? filterModelId : null);
+        treeViewId.rootIndex = rowsAreShowable ? rootIndex : undefined;
+        treeViewId.forceLayout();
+    }
+
+    //Points the view at \a model, leaving it alone when it has that model
+    //already.
+    function setViewModel(model: QQ.QtObject) {
+        if(treeViewId.model !== model) {
+            treeViewId.model = model;
+        }
+    }
+
+    //The trips a row's verb acts on: the selected rows' trips when the row is
+    //one of them, and the row's own trip otherwise — the rule the cave page's
+    //trip table followed.
+    function tripsFor(object: QQ.QtObject) : list<Trip> {
+        const trip = object as Trip;
+        if(trip === null) {
+            return [];
+        }
+
+        const selected = surveyTreeId.selectedTrips();
+        if(selected.length > 1 && selected.indexOf(trip) >= 0) {
+            return selected;
+        }
+        return [trip];
+    }
+
+    //The calibrations of tripsFor(), which is what a calibration verb takes.
+    function tripCalibrationsFor(object: QQ.QtObject) : list<TripCalibration> {
+        return surveyTreeId.tripsFor(object).map(trip => trip.calibration);
+    }
+
+    //The trips of the selected rows. A row is selected one cell at a time, so
+    //the same trip arrives once per column and is counted once.
+    function selectedTrips() : list<Trip> {
+        let trips = [];
+        const indexes = selectionModelId.selectedIndexes;
+        for(let i = 0; i < indexes.length; i++) {
+            const trip = surveyTreeId.objectAt(indexes[i]) as Trip;
+            if(trip !== null && trips.indexOf(trip) < 0) {
+                trips.push(trip);
+            }
+        }
+        return trips;
+    }
+
+    //Makes the first top-level row current as soon as the tree has rows, the
+    //way the cave list this replaced made its first cave current: the page's
+    //export verbs read the current row.
+    function makeFirstRowCurrent() {
+        const parentIndex = surveyTreeId.rootProxyIndex();
+        if(selectionModelId.currentIndex.valid || filterModelId.rowCount(parentIndex) === 0) {
+            return;
+        }
+
+        selectionModelId.setCurrentIndex(filterModelId.index(0, SurveyTreeModel.Name, parentIndex),
+                                         ItemSelectionModel.NoUpdate);
+    }
+
+    //Opens every ancestor of \a object so its row is one of the view's rows.
+    function expandTo(object: QQ.QtObject) {
+        const sourceIndex = RegionSurveyTree.indexOf(object);
+        treeViewId.expandToIndex(filterModelId.mapFromSource(sourceIndex));
+        treeViewId.forceLayout();
+    }
+
+    //Opens the page a row stands for: a node's page, a trip's trip page.
+    //Both go through the page address, which walks and registers the parent
+    //pages on the way, so a trip opens before its cave page ever existed.
+    function openObject(object: QQ.QtObject) {
+        if(object === null) {
+            return;
+        }
+
+        const node = object as SurveyNode;
+        const link = node !== null
+                   ? linkGeneratorId.nodeLink(node)
+                   : linkGeneratorId.tripLink(object as Trip);
+        if(link !== "") {
+            RootData.pageSelectionModel.currentPageAddress = link;
+        }
+    }
+
+    //Asks before removing what the SurveyTreeRow \a row stands for. The row
+    //already carries its object and its name, so the prompt is filled in from
+    //the row itself. It opens over the spot \a x, \a y names in the row's
+    //coordinates.
+    function askRemove(row: QQ.Item, x: real, y: real) {
+        if(surveyTreeId.removeAskBox === null || row === null) {
+            return;
+        }
+
+        const position = row.mapToItem(surveyTreeId.removeAskBox.parent, x, y);
+        surveyTreeId.removeAskBox.x = position.x;
+        surveyTreeId.removeAskBox.y = position.y;
+        surveyTreeId.removeAskBox.removeName = row.name;
+        surveyTreeId.removeAskBox.message = surveyTreeId.removeMessage(row.object);
+        surveyTreeId.pendingRemoveObject = row.object;
+        surveyTreeId.removeAskBox.show();
+    }
+
+    //Every node under \a node, at any depth.
+    function descendantNodeCount(node: SurveyNode) : int {
+        if(node === null) {
+            return 0;
+        }
+
+        let count = node.childNodeCount;
+        for(let i = 0; i < node.childNodeCount; i++) {
+            count += surveyTreeId.descendantNodeCount(node.childNode(i));
+        }
+        return count;
+    }
+
+    //Every trip under \a node, at any depth, split into the trips its file
+    //derives and the trips the user added: { derived, native }.
+    function subtreeTripCounts(node: SurveyNode) : var {
+        let counts = { derived: 0, native: 0 };
+        for(let i = 0; i < node.tripCount; i++) {
+            if(node.trip(i).sourcePath !== "") {
+                counts.derived++;
+            } else {
+                counts.native++;
+            }
+        }
+        for(let i = 0; i < node.childNodeCount; i++) {
+            const childCounts = surveyTreeId.subtreeTripCounts(node.childNode(i));
+            counts.derived += childCounts.derived;
+            counts.native += childCounts.native;
+        }
+        return counts;
+    }
+
+    //The name of the file \a node's source root copied into the project,
+    //without its folder.
+    function sourceFileName(node: SurveyNode) : string {
+        const sourceRoot = node.sourceRoot();
+        return sourceRoot !== null ? RootData.fileName(sourceRoot.externalCenterline.entryFile) : "";
+    }
+
+    //"1 trip", "3 trips".
+    function countText(count: int, singular: string, plural: string) : string {
+        return count === 1 ? qsTr("1 %1").arg(singular)
+                           : qsTr("%1 %2").arg(count).arg(plural);
+    }
+
+    //What a source root's nodes are called in its prompt: the files of a
+    //Compass project, the blocks of a Survex file, the books of a Walls book.
+    function sourceNodeNoun(root: SurveyNode) : list<string> {
+        switch(root.kind) {
+        case SurveyNodeKind.CompassProject:
+        case SurveyNodeKind.CompassFile:
+            return [qsTr("file"), qsTr("files")];
+        case SurveyNodeKind.SurvexFile:
+        case SurveyNodeKind.SurvexBlock:
+            return [qsTr("block"), qsTr("blocks")];
+        default:
+            return [qsTr("book"), qsTr("books")];
+        }
+    }
+
+    //"3 derived trips and 1 native trip", the trips a source root's prompt
+    //names. Native trips are named only when there are some.
+    function sourcedTripsText(counts: var) : string {
+        const derived = surveyTreeId.countText(counts.derived, qsTr("derived trip"), qsTr("derived trips"));
+        return counts.native > 0
+                ? qsTr("%1 and %2").arg(derived)
+                      .arg(surveyTreeId.countText(counts.native, qsTr("native trip"), qsTr("native trips")))
+                : derived;
+    }
+
+    //What the prompt says. Deleting a source root takes its subtree and its
+    //copied file along; anything else is the ordinary delete, which counts
+    //the children and trips that go with it.
+    //Names go in as markup, so a name that holds markup characters stays literal.
+    function removeMessage(object: QQ.QtObject) : string {
+        const node = object as SurveyNode;
+        const trip = object as Trip;
+
+        if(trip !== null) {
+            return qsTr("Delete <b>%1</b>?").arg(Utils.escapeHtml(trip.name));
+        }
+
+        if(node === null) {
+            return "";
+        }
+
+        if(node.isSourceRoot) {
+            const noun = surveyTreeId.sourceNodeNoun(node);
+            const nodeCount = surveyTreeId.descendantNodeCount(node);
+            const tripsText = surveyTreeId.sourcedTripsText(surveyTreeId.subtreeTripCounts(node));
+            const parts = nodeCount > 0
+                    ? qsTr("%1, %2").arg(surveyTreeId.countText(nodeCount, noun[0], noun[1])).arg(tripsText)
+                    : tripsText;
+            return qsTr("Delete <b>%1</b>? Removes %2. The copied %3 is removed from the project.")
+                      .arg(Utils.escapeHtml(node.name))
+                      .arg(parts)
+                      .arg(Utils.escapeHtml(surveyTreeId.sourceFileName(node)));
+        }
+
+        const nodeCount = surveyTreeId.descendantNodeCount(node);
+        const counts = surveyTreeId.subtreeTripCounts(node);
+        const tripCount = counts.derived + counts.native;
+        let contents = [];
+        if(nodeCount > 0) {
+            contents.push(surveyTreeId.countText(nodeCount, qsTr("child"), qsTr("children")));
+        }
+        if(tripCount > 0) {
+            contents.push(surveyTreeId.countText(tripCount, qsTr("trip"), qsTr("trips")));
+        }
+
+        const subject = contents.length === 0
+                      ? qsTr("<b>%1</b>").arg(Utils.escapeHtml(node.name))
+                      : qsTr("<b>%1</b> and its %2").arg(Utils.escapeHtml(node.name)).arg(contents.join(qsTr(" and ")));
+        return qsTr("Delete %1?").arg(subject);
+    }
+
+    //Shows a node or trip one of the Add verbs just made. A trip directly
+    //under a top-level node opens its trip page, the way Add Trip on a cave
+    //page does; anything else has no page address yet, so its row is opened
+    //up to, made current and, for a node, put straight into its name editor.
+    function revealAdded(object: QQ.QtObject) {
+        if(object === null) {
+            return;
+        }
+
+        const trip = object as Trip;
+        if(trip !== null && RootData.region.indexOf(trip.parentNode as Cave) >= 0) {
+            surveyTreeId.openObject(trip);
+            return;
+        }
+
+        surveyTreeId.expandTo(object);
+        const proxyIndex = filterModelId.mapFromSource(RegionSurveyTree.indexOf(object));
+        const viewRow = treeViewId.rowAtIndex(proxyIndex);
+        if(viewRow < 0) {
+            return;
+        }
+
+        surveyTreeId.setCurrentRow(viewRow);
+        treeViewId.forceLayout();
+
+        const rowItem = treeViewId.itemAtCell(Qt.point(SurveyTreeModel.Name, viewRow));
+        if(rowItem !== null && rowItem.canRename) {
+            rowItem.startRename();
+        }
+    }
+
+    //Removes whatever the prompt asked about. A source root goes with its
+    //copied file and its source record. A top-level node is a row of the region,
+    //which is the undoable way to remove a cave; anything deeper is a row of
+    //its own parent.
+    function removePending() {
+        const object = surveyTreeId.pendingRemoveObject;
+        surveyTreeId.pendingRemoveObject = null;
+        if(object === null) {
+            return;
+        }
+
+        const node = object as SurveyNode;
+        const trip = object as Trip;
+
+        if(node !== null && node.isSourceRoot) {
+            RootData.deleteSourceRoot(node);
+            return;
+        }
+
+        if(node !== null) {
+            const cave = object as Cave;
+            const regionRow = cave !== null ? RootData.region.indexOf(cave) : -1;
+            if(regionRow >= 0) {
+                RootData.region.removeCave(regionRow);
+                return;
+            }
+
+            const parentNode = node.parentNode;
+            if(parentNode !== null) {
+                parentNode.removeNode(parentNode.indexOfNode(node));
+            }
+            return;
+        }
+
+        if(trip !== null && trip.parentNode !== null) {
+            trip.parentNode.removeTrip(trip.parentNode.indexOf(trip));
+        }
+    }
+
+    //Asks the host page to open its Attach survey file dialog with \a node as
+    //the place the file's subtree goes. The page owns the dialog because it
+    //can hide this tree, which takes the tree out of the window.
+    function attachSurveyFile(node: SurveyNode) {
+        surveyTreeId.attachSurveyFileRequested(node);
+    }
+
+    //Shows the source root an attach just built: opened up to, open one level,
+    //and current.
+    function revealAttached(sourceRoot: SurveyNode) {
+        if(sourceRoot === null) {
+            return;
+        }
+
+        surveyTreeId.revealObject(sourceRoot);
+        const proxyIndex = filterModelId.mapFromSource(RegionSurveyTree.indexOf(sourceRoot));
+        const viewRow = treeViewId.rowAtIndex(proxyIndex);
+        if(viewRow >= 0) {
+            treeViewId.expand(viewRow);
+            treeViewId.forceLayout();
+        }
+    }
+
+    //Opens the Replace dialog for \a sourceRoot.
+    function replaceSource(sourceRoot: SurveyNode) {
+        replaceDialogLoaderId.active = true;
+        const dialog = replaceDialogLoaderId.item as ReplaceCenterlineDialog;
+        dialog.owner = sourceRoot;
+        dialog.open();
+    }
+
+    //Arms Move to… for \a object. The whole-region tree is where a move picks
+    //its destination, so a node page's tree opens the Data page first.
+    function moveObject(object: QQ.QtObject) {
+        if(surveyTreeId.rootNode !== null) {
+            RootData.pageSelectionModel.currentPageAddress = linkGeneratorId.dataPageLink();
+        }
+        RegionSurveyTree.startMove(RegionSurveyTree.indexOf(object));
+    }
+
+    //A click on the row \a object stands for while a move is armed.
+    function requestMoveTo(object: QQ.QtObject) {
+        if(surveyTreeId.moveBanner !== null) {
+            surveyTreeId.moveBanner.requestMoveTo(object);
+        }
+    }
+
+    //Opens the tree down to \a object and makes its row current: where an
+    //armed move starts from, and where a landed move, or its undo, put it.
+    function revealObject(object: QQ.QtObject) {
+        //A deferred reveal can arrive after its object left the region.
+        const proxyIndex = filterModelId.mapFromSource(RegionSurveyTree.indexOf(object));
+        if(!proxyIndex.valid) {
+            return;
+        }
+
+        surveyTreeId.expandTo(object);
+        const viewRow = treeViewId.rowAtIndex(proxyIndex);
+        if(viewRow >= 0) {
+            surveyTreeId.setCurrentRow(viewRow);
+        }
+    }
+
+    //Takes the keyboard back after a menu closes, so the arrow keys keep
+    //moving the tree.
+    function focusTree() {
+        treeViewId.forceActiveFocus();
+    }
+
+    //Calls \a action on each top-level view row, last row first, so the rows
+    //an action adds or removes below a row leave the rows above it in place.
+    //TreeView's own whole-tree expandRecursively() starts at the model's
+    //root and opens nothing under a rootIndex, which a node page sets.
+    function forEachTopLevelRow(action: var) : void {
+        for(let row = treeViewId.rows - 1; row >= 0; row--) {
+            if(treeViewId.depth(row) === 0) {
+                action(row);
+            }
+        }
+        treeViewId.forceLayout();
+    }
+
+    //Opens every row of the tree, and every row those rows bring with them.
+    //A filter shows its matches by opening the rows that hold them.
+    function expandAll() {
+        surveyTreeId.forEachTopLevelRow((row) => treeViewId.expandRecursively(row));
+    }
+
+    //Closes every row of the tree.
+    function collapseAll() {
+        surveyTreeId.forEachTopLevelRow((row) => treeViewId.collapseRecursively(row));
+    }
+
+    //A closed row hides the rows under it, so a shown row with children that
+    //is closed is exactly a tree with rows left to open.
+    function updateExpansionState() : void {
+        let collapsible = false;
+        for(let row = 0; row < treeViewId.rows; row++) {
+            if(filterModelId.hasChildren(surveyTreeId.indexAtRow(row))) {
+                collapsible = true;
+                if(!treeViewId.isExpanded(row)) {
+                    surveyTreeId.hasCollapsibleRows = true;
+                    surveyTreeId.hasCollapsedRows = true;
+                    return;
+                }
+            }
+        }
+        surveyTreeId.hasCollapsibleRows = collapsible;
+        surveyTreeId.hasCollapsedRows = false;
+    }
+
+    //Coalesces a burst of row and expansion changes into one scan.
+    function updateExpansionStateLater() : void {
+        Qt.callLater(surveyTreeId.updateExpansionState);
+    }
+
+    //The ids of the nodes that are open right now. A filter change rebuilds
+    //the view's rows, so the set is kept by node identity rather than by row.
+    function expansionSnapshot() : list<string> {
+        let ids = [];
+        for(let row = 0; row < treeViewId.rows; row++) {
+            if(treeViewId.isExpanded(row)) {
+                const object = surveyTreeId.objectAtRow(row);
+                if(object !== null) {
+                    ids.push(String(object.id));
+                }
+            }
+        }
+        return ids;
+    }
+
+    //Reopens the nodes of a snapshot. Expanding a row adds the rows under it,
+    //so walking forward reaches a restored node's own children.
+    function restoreExpansion(ids: list<string>) {
+        for(let row = 0; row < treeViewId.rows; row++) {
+            const object = surveyTreeId.objectAtRow(row);
+            if(object !== null && ids.indexOf(String(object.id)) >= 0) {
+                treeViewId.expand(row);
+                treeViewId.forceLayout();
+            }
+        }
+    }
+
+    //Shows the rows matching \a text and hides the rest. The proxy keeps a
+    //match's ancestors, so opening every row while a filter is on is what
+    //makes each match a row of the view; clearing puts back what was open
+    //before, which the view snapshots on the way in.
+    function applyFilter(text: string) {
+        const wasFiltering = filterModelId.filterText.length > 0;
+        const isFiltering = text.length > 0;
+
+        if(!wasFiltering && isFiltering) {
+            surveyTreeId.expansionBeforeFilter = surveyTreeId.expansionSnapshot();
+        }
+
+        filterModelId.filterText = text;
+        //The filter rebuilds every index, so the view is pointed at its root
+        //again before any row is asked for.
+        surveyTreeId.applyRootIndex();
+
+        if(isFiltering) {
+            surveyTreeId.expandAll();
+        } else if(wasFiltering) {
+            surveyTreeId.collapseAll();
+            surveyTreeId.restoreExpansion(surveyTreeId.expansionBeforeFilter);
+            surveyTreeId.expansionBeforeFilter = [];
+        }
+    }
+
+    //True when the proxy index \a proxyIndex is a node row that owns a copied
+    //survey file.
+    function isSourceRootProxyIndex(proxyIndex) : bool {
+        return RegionSurveyTree.isSourceRootIndex(filterModelId.mapToSource(proxyIndex));
+    }
+
+    //Queues every source root at or under \a proxyIndex, the invalid index
+    //standing for the whole tree, to open one level: a node that owns a
+    //copied survey file shows what the file holds as it arrives.
+    function collectSourceRoots(proxyIndex) {
+        if(proxyIndex.valid && surveyTreeId.isSourceRootProxyIndex(proxyIndex)) {
+            surveyTreeId.pendingSourceRoots.push(surveyTreeId.objectAt(proxyIndex));
+        }
+
+        const childCount = filterModelId.rowCount(proxyIndex);
+        for(let row = 0; row < childCount; row++) {
+            surveyTreeId.collectSourceRoots(filterModelId.index(row, SurveyTreeModel.Name, proxyIndex));
+        }
+    }
+
+    //Opens the queued source roots one level each. A root that left the tree
+    //in the meantime has no row, and is skipped. A row under a closed parent
+    //is no row of the view, so its ancestors open first.
+    function expandPendingSourceRoots() {
+        //A copy: a list property read is a reference to the property itself,
+        //which the clear below would empty.
+        const roots = Array.from(surveyTreeId.pendingSourceRoots);
+        surveyTreeId.pendingSourceRoots = [];
+        for(let i = 0; i < roots.length; i++) {
+            const proxyIndex = filterModelId.mapFromSource(RegionSurveyTree.indexOf(roots[i]));
+            if(proxyIndex.valid) {
+                treeViewId.expandToIndex(proxyIndex);
+                treeViewId.forceLayout();
+
+                const viewRow = treeViewId.rowAtIndex(proxyIndex);
+                if(viewRow >= 0) {
+                    treeViewId.expand(viewRow);
+                }
+            }
+        }
+    }
+
+    //Opens the queued source roots once the view has taken in the rows that
+    //queued them: a row expanded before then leaves the view with rows that
+    //name nothing.
+    function expandPendingSourceRootsLater() {
+        if(surveyTreeId.pendingSourceRoots.length > 0) {
+            Qt.callLater(surveyTreeId.expandPendingSourceRoots);
+        }
+    }
+
+    //Orders the rows by the column a header cell stands for: the first ask
+    //orders them by it, and asking again for the column they are already
+    //ordered by flips which end comes first. Each node's own order is the
+    //default rather than a state a click reaches, so no click clears the sort.
+    //
+    //The order is set ahead of the column so that flipping the order of the
+    //column in hand reorders the rows once: the column set that follows it
+    //finds the column it already has and does nothing.
+    function toggleSort(column: int) {
+        const ascending = !(filterModelId.sortColumn === column
+                            && filterModelId.sortOrder === Qt.AscendingOrder);
+
+        //What was open stays open: sorting announces a layout change, which
+        //moves the rows the view has and keeps their expansion.
+        filterModelId.sortOrder = ascending ? Qt.AscendingOrder : Qt.DescendingOrder;
+        filterModelId.sortColumn = column;
+        treeViewId.forceLayout();
+    }
+
+    //True when the node at \a row has rows of its own to show.
+    function rowHasChildren(row: int) : bool {
+        const node = surveyTreeId.objectAtRow(row) as SurveyNode;
+        return node !== null && (node.childNodeCount + node.tripCount) > 0;
+    }
+
+    //The Theme width of fixed column \a column, used until the user drags it.
+    function defaultColumnWidth(column: int) : int {
+        switch(column) {
+        case SurveyTreeModel.Kind:
+            return Theme.treeKindColumnWidth;
+        case SurveyTreeModel.Trips:
+            return Theme.treeCountColumnWidth;
+        case SurveyTreeModel.Stations:
+            return Theme.treeStationsColumnWidth;
+        case SurveyTreeModel.Decl:
+            return Theme.treeDeclColumnWidth;
+        case SurveyTreeModel.Length:
+        case SurveyTreeModel.Depth:
+            return Theme.treeStatColumnWidth;
+        case SurveyTreeModel.Date:
+            return Theme.treeDateColumnWidth;
+        default:
+            return 0;
+        }
+    }
+
+    //Sets fixed column \a column to \a requestedWidth and stores it. The
+    //width stays above the minimum column width, and grows only as far as the
+    //Name column keeps its own minimum, so the tree still fits the view.
+    function resizeColumn(column: int, requestedWidth: int) : void {
+        const key = surveyTreeId.columnWidthKeys[column];
+        const minimum = Theme.tableColumnMinimumWidth;
+        const nameRoom = Math.max(0, treeViewId.columnWidthProvider(SurveyTreeModel.Name)
+                                     - Theme.treeNameColumnMinimumWidth);
+        const maximum = Math.max(minimum, treeViewId.columnWidthProvider(column) + nameRoom);
+        const width = Math.min(maximum, Math.max(minimum, requestedWidth));
+        columnWidthsId[key] = width;
+        columnSettingsId.setValue(key, width);
+        treeViewId.forceLayout();
+    }
+
+    //Picks up the stored column widths, including ones dragged in the tree on
+    //another page while this one sat hidden.
+    function readColumnWidths() : void {
+        for (const key of surveyTreeId.columnWidthKeys) {
+            if (key.length > 0) {
+                columnWidthsId[key] = Number(columnSettingsId.value(key, 0));
+            }
+        }
+        treeViewId.forceLayout();
+    }
+
+    //Moves the current row, which is what the arrow keys and the tree's own
+    //verbs share.
+    function setCurrentRow(row: int) {
+        if(row < 0 || row >= treeViewId.rows) {
+            return;
+        }
+
+        selectionModelId.setCurrentIndex(treeViewId.index(row, SurveyTreeModel.Name),
+                                         ItemSelectionModel.NoUpdate);
+        treeViewId.positionViewAtRow(row, QQ.TableView.Contain);
+    }
+
+    //The delegate drawing the current row's Name cell, null when that row is
+    //outside the viewport.
+    function currentRowItem() : QQ.Item {
+        return treeViewId.itemAtCell(Qt.point(SurveyTreeModel.Name, treeViewId.currentRow));
+    }
+
+    //The keys TableView leaves to the tree: → ← Space, Enter, F2, and the two
+    //ways to ask for the context menu. ↑ ↓ Home End stay TableView's own.
+    function handleKey(event) {
+        const row = treeViewId.currentRow;
+        if(row < 0) {
+            return;
+        }
+
+        switch(event.key) {
+        case Qt.Key_Right:
+            if(surveyTreeId.rowHasChildren(row) && !treeViewId.isExpanded(row)) {
+                treeViewId.expand(row);
+            } else {
+                surveyTreeId.setCurrentRow(row + 1);
+            }
+            event.accepted = true;
+            break;
+        case Qt.Key_Left: {
+            if(treeViewId.isExpanded(row)) {
+                treeViewId.collapse(row);
+            } else {
+                const parentIndex = treeViewId.index(row, SurveyTreeModel.Name).parent;
+                surveyTreeId.setCurrentRow(treeViewId.rowAtIndex(parentIndex));
+            }
+            event.accepted = true;
+            break;
+        }
+        case Qt.Key_Space:
+            treeViewId.toggleExpanded(row);
+            event.accepted = true;
+            break;
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+            surveyTreeId.openObject(surveyTreeId.objectAtRow(row));
+            event.accepted = true;
+            break;
+        case Qt.Key_F2: {
+            //The platform's rename key opens the current row's own name editor,
+            //which is where a name is edited: a click on the name opens the row.
+            const renameItem = surveyTreeId.currentRowItem();
+            if(renameItem !== null && renameItem.canRename) {
+                renameItem.startRename();
+            }
+            event.accepted = true;
+            break;
+        }
+        case Qt.Key_Menu:
+        case Qt.Key_F10: {
+            if(event.key === Qt.Key_F10 && !(event.modifiers & Qt.ShiftModifier)) {
+                return;
+            }
+
+            const rowItem = surveyTreeId.currentRowItem();
+            if(rowItem !== null) {
+                //Under the row's name, which is where the pointer would be.
+                rowItem.showContextMenu(Theme.delegatePadding, rowItem.height);
+            }
+            event.accepted = true;
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
+    onRootNodeChanged: {
+        //One cave page item serves every cave, so the row that was current and
+        //the rows that were picked belong to the cave that was showing. They
+        //are dropped before the new root is applied, which keeps the page's
+        //verbs — export, the calibration menu — on rows of the cave the page
+        //now shows.
+        selectionModelId.clearCurrentIndex();
+        selectionModelId.clearSelection();
+        surveyTreeId.applyRootIndex();
+        surveyTreeId.makeFirstRowCurrent();
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            surveyTreeId.readColumnWidths();
+        }
+    }
+
+    //A tree built over a region that already holds caves sees no insert.
+    QQ.Component.onCompleted: {
+        surveyTreeId.readColumnWidths();
+        surveyTreeId.applyRootIndex();
+        surveyTreeId.collectSourceRoots(surveyTreeId.rootProxyIndex());
+        surveyTreeId.expandPendingSourceRoots();
+        surveyTreeId.makeFirstRowCurrent();
+    }
+
+    //The whole-region tree shows where an armed move starts from and where
+    //it lands.
+    QQ.Connections {
+        target: RegionSurveyTree
+        enabled: surveyTreeId.moveBanner !== null
+
+        function onMoveChanged() {
+            surveyTreeId.revealObject(RegionSurveyTree.moveSubject);
+        }
+
+        //Deferred: a click on a target row lands the move, and TableView
+        //makes the clicked row current once that click is through.
+        function onMoved(subject) {
+            Qt.callLater(surveyTreeId.revealObject, subject);
+        }
+    }
+
+    //The widths the user dragged the fixed columns to, shared by every tree
+    //on every page. Read each time the tree shows and written straight
+    //through on each drag. A stored 0 leaves that column at its default.
+    QtCore.Settings {
+        id: columnSettingsId
+        category: "SurveyTreeView"
+    }
+
+    QQ.QtObject {
+        id: columnWidthsId
+
+        property int kindColumnWidth: 0
+        property int tripsColumnWidth: 0
+        property int stationsColumnWidth: 0
+        property int lengthColumnWidth: 0
+        property int depthColumnWidth: 0
+        property int dateColumnWidth: 0
+        property int declColumnWidth: 0
+    }
+
+    //The prompt answers for whichever row asked for it.
+    QQ.Connections {
+        target: surveyTreeId.removeAskBox
+
+        function onRemove() {
+            surveyTreeId.removePending();
+        }
+    }
+
+    //Built on the first Replace… a source root's menu asks for: the dialog
+    //carries a file dialog that most visits to a page never open. It sits in
+    //the layout but has no size, and draws itself as a popup. Freed once it
+    //is off the screen, deferred out of its own close so the popup is not
+    //destroyed from inside its emission.
+    QQ.Loader {
+        id: replaceDialogLoaderId
+
+        active: false
+
+        Layout.preferredWidth: 0
+        Layout.preferredHeight: 0
+
+        sourceComponent: QQ.Component {
+            ReplaceCenterlineDialog {
+                onClosed: Qt.callLater(() => replaceDialogLoaderId.active = false)
+            }
+        }
+    }
+
+    RowLayout {
+        id: toolBarId
+
+        spacing: Theme.flowSpacing
+
+        Layout.fillWidth: true
+        Layout.bottomMargin: Theme.tightSpacing
+
+        QC.TextField {
+            id: filterFieldId
+            objectName: "surveyTreeFilter"
+
+            placeholderText: qsTr("Filter caves and trips")
+            inputMethodHints: Qt.ImhNoPredictiveText
+            font.pixelSize: Theme.fontSizeBody
+
+            Layout.preferredWidth: Theme.treeFilterWidth
+
+            onTextChanged: surveyTreeId.applyFilter(filterFieldId.text)
+        }
+
+        QQ.Item { Layout.fillWidth: true }
+
+        ExpandCollapseButton {
+            objectName: "surveyTreeExpandToggle"
+
+            hasCollapsedRows: surveyTreeId.hasCollapsedRows
+            //Every row that holds a match is open while filtering.
+            visible: surveyTreeId.hasCollapsibleRows && filterModelId.filterText.length === 0
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+
+            onExpandAllRequested: surveyTreeId.expandAll()
+            onCollapseAllRequested: surveyTreeId.collapseAll()
+        }
+    }
+
+    QC.HorizontalHeaderView {
+        id: headerId
+        objectName: "surveyTreeHeader"
+
+        syncView: treeViewId
+        clip: true
+        //The grips own the column widths, through resizeColumn().
+        resizableColumns: false
+
+        Layout.fillWidth: true
+
+        delegate: QQ.Rectangle {
+            id: headerCellId
+
+            required property int column
+            required property string display
+
+            objectName: "surveyTreeHeaderCell" + headerCellId.column
+
+            implicitHeight: headerLabelId.implicitHeight + 2 * Theme.delegatePadding
+            color: Theme.surfaceMuted
+
+            RowLayout {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: Theme.delegatePadding
+                anchors.rightMargin: Theme.delegatePadding
+                anchors.verticalCenter: parent.verticalCenter
+
+                spacing: Theme.tightSpacing
+
+                QC.Label {
+                    id: headerLabelId
+
+                    text: headerCellId.display
+                    color: Theme.textSubtle
+                    font.pixelSize: Theme.fontSizeSmall
+                    elide: QQ.Text.ElideRight
+
+                    Layout.fillWidth: true
+                }
+
+                //The arrow stands on the one column the rows are ordered by,
+                //and points at the end of its values that comes first.
+                Icon {
+                    objectName: "surveyTreeSortIndicator" + headerCellId.column
+
+                    visible: filterModelId.sortColumn === headerCellId.column
+                    source: filterModelId.sortOrder === Qt.AscendingOrder
+                            ? "qrc:/twbs-icons/icons/sort-up.svg"
+                            : "qrc:/twbs-icons/icons/sort-down.svg"
+                    sourceSize: Qt.size(Theme.treeSortIndicatorSize, Theme.treeSortIndicatorSize)
+                    colorizationColor: Theme.textSubtle
+                }
+            }
+
+            //The header is the one sort control the tree has, in both the
+            //Data page's layout and the cave page's. It leaves out the grip, so
+            //a press there resizes without sorting.
+            QQ.Item {
+                anchors.fill: parent
+                anchors.leftMargin: gripLoaderId.active ? Theme.columnResizeGripWidth : 0
+
+                QQ.TapHandler {
+                    onTapped: surveyTreeId.toggleSort(headerCellId.column)
+                }
+            }
+
+            //On the left edge: the Name column to the left takes the remainder,
+            //so the boundary dragged stays under the pointer. Name itself has
+            //no grip.
+            QQ.Loader {
+                id: gripLoaderId
+
+                active: headerCellId.column !== SurveyTreeModel.Name
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+
+                sourceComponent: ColumnResizeGrip {
+                    objectName: "surveyTreeResizeGrip" + headerCellId.column
+
+                    columnWidth: headerCellId.width
+                    growsLeftward: true
+
+                    onResizeRequested: (newWidth) => surveyTreeId.resizeColumn(headerCellId.column, newWidth)
+                }
+            }
+        }
+    }
+
+    //The rows this view shows, filtered by its own toolbar. The tree below
+    //gives up its model while its root has no row, so the proxy is held here
+    //rather than inside the view.
+    SurveyTreeFilterModel {
+        id: filterModelId
+
+        //The project's one tree: rooting and filtering are this view's, the
+        //rows and their per-trip tasks are shared with every other tree.
+        //The project's one tree: rooting and filtering are this view's, the
+        //rows and their per-trip tasks are shared with every other tree.
+        sourceModel: RegionSurveyTree
+    }
+
+    //Unnamed on purpose: ObjectFinder matches a test's chain against every
+    //named item between the window and the target, so a name here would sit
+    //in the middle of the row chains the Data page's tests already use.
+    QQ.TreeView {
+        id: treeViewId
+
+        //Handed to the rows, which see the view but not the page around it.
+        //SurveyTreeRow reads both off its required `treeView`, so renaming
+        //either one renames it there too. The tree is typed as an Item rather
+        //than as SurveyTreeView: this is that file.
+        property LinkGenerator linkGenerator: linkGeneratorId
+        property QQ.Item surveyTree: surveyTreeId
+
+        //What the Name column gives up to the fixed columns beside it, asked of
+        //the same provider that lays them out, so a column added here is added
+        //in one place.
+        readonly property int fixedColumnsWidth: {
+            let total = 0;
+            for(let column = 0; column < RegionSurveyTree.columnCount(); column++) {
+                if(column !== SurveyTreeModel.Name) {
+                    total += treeViewId.columnWidthProvider(column);
+                }
+            }
+            return total;
+        }
+        //The bar overlays the last column while the rows can scroll, so the
+        //Name column gives up the bar's width then.
+        readonly property int scrollBarGutter: verticalScrollBarId.size < 1 ? verticalScrollBarId.width : 0
+
+        clip: true
+        keyNavigationEnabled: true
+        pointerNavigationEnabled: true
+        selectionBehavior: QQ.TableView.SelectRows
+        //TableView's own ctrl and shift clicks then pick several rows, which
+        //is what a verb over more than one trip acts on.
+        selectionMode: QQ.TableView.ExtendedSelection
+        //Enter opens the current row and renaming is the row's own editor, so
+        //no key or tap starts a cell edit.
+        editTriggers: QQ.TableView.NoEditTriggers
+
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+
+        //Assigned by applyRootIndex() rather than bound: a view whose root
+        //has no row gives up its model, which is how it shows nothing.
+        model: filterModelId
+
+        selectionModel: ItemSelectionModel {
+            id: selectionModelId
+            model: filterModelId
+        }
+
+        delegate: SurveyTreeRow {}
+
+        //The fixed columns take what they need and the Name column takes the
+        //rest, so a cave's name has the room a window gives it.
+        columnWidthProvider: function(column) {
+            if (column === SurveyTreeModel.Name) {
+                return Math.max(Theme.treeNameColumnMinimumWidth,
+                                treeViewId.width - treeViewId.fixedColumnsWidth - treeViewId.scrollBarGutter);
+            }
+            const stored = columnWidthsId[surveyTreeId.columnWidthKeys[column]];
+            return stored > 0 ? stored : surveyTreeId.defaultColumnWidth(column);
+        }
+
+        onWidthChanged: treeViewId.forceLayout()
+        onScrollBarGutterChanged: treeViewId.forceLayout()
+        onRowsChanged: surveyTreeId.updateExpansionStateLater()
+        onExpanded: surveyTreeId.updateExpansionStateLater()
+        onCollapsed: surveyTreeId.updateExpansionStateLater()
+
+        //Handled before TableView sees the key, and accepted only for the keys
+        //the tree owns, so ↑ ↓ Home End stay TableView's.
+        QQ.Keys.onPressed: (event) => surveyTreeId.handleKey(event)
+
+        QC.ScrollBar.vertical: QC.ScrollBar {
+            id: verticalScrollBarId
+            objectName: "surveyTreeVerticalScrollBar"
+            policy: QC.ScrollBar.AsNeeded
+        }
+
+        LinkGenerator {
+            id: linkGeneratorId
+            pageSelectionModel: RootData.pageSelectionModel
+        }
+
+        //A node that owns a copied survey file opens one level as it arrives,
+        //which is what a load of such a project does row by row.
+        QQ.Connections {
+            target: filterModelId
+
+            function onRowsInserted(parent, first, last) {
+                //The row the tree is rooted at can be one of these.
+                surveyTreeId.ensureRootIndex();
+
+                for(let row = first; row <= last; row++) {
+                    surveyTreeId.collectSourceRoots(filterModelId.index(row, SurveyTreeModel.Name, parent));
+                }
+
+                //An attach adds its root before the file's nodes, and a row
+                //opens only once it has rows to show, so the root opens as its
+                //first children arrive.
+                if(first === 0 && parent.valid
+                        && filterModelId.rowCount(parent) === last - first + 1
+                        && surveyTreeId.isSourceRootProxyIndex(parent)) {
+                    surveyTreeId.pendingSourceRoots.push(surveyTreeId.objectAt(parent));
+                }
+
+                surveyTreeId.expandPendingSourceRootsLater();
+
+                surveyTreeId.makeFirstRowCurrent();
+                //A row added under a closed row changes no view row, yet can
+                //give that row children.
+                surveyTreeId.updateExpansionStateLater();
+            }
+
+            function onRowsRemoved(parent, first, last) {
+                surveyTreeId.ensureRootIndex();
+                surveyTreeId.updateExpansionStateLater();
+            }
+
+            function onModelReset() {
+                //A reset throws every index away, rootIndex included; the rows
+                //the root is looked up in arrive afterwards, which is what
+                //onRowsInserted answers for. A loaded project's rows can also
+                //arrive with the reset itself, source roots among them.
+                surveyTreeId.applyRootIndex();
+                surveyTreeId.collectSourceRoots(surveyTreeId.rootProxyIndex());
+                surveyTreeId.expandPendingSourceRootsLater();
+                surveyTreeId.makeFirstRowCurrent();
+                surveyTreeId.updateExpansionStateLater();
+            }
+
+            function onLayoutChanged() {
+                surveyTreeId.ensureRootIndex();
+                surveyTreeId.updateExpansionStateLater();
+            }
+        }
+    }
+}

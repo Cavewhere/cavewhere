@@ -11,10 +11,20 @@
 // Survex library
 #include "cavern_lib.h"
 
+// Survex's per-run warning counter (message.c, declared in message.h).
+// cavern_run resets it via msg_reset_counters(), so reading it right
+// after the run — still under the serialising mutex — yields this run's
+// count. Hand-declared because survex's message.h can't be included from
+// C++/Qt code (requires config.h first and #defines error(...), which
+// clobbers Qt headers); exporting counters via cavern_lib.h would fix
+// this properly but needs a survex submodule change.
+extern "C" int msg_warnings;
+
 #include <QFile>
 #include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QRegularExpression>
 #include <QTextStream>
 
 #include <array>
@@ -41,11 +51,18 @@ QString readTextFile(const QString& path)
 } // namespace
 
 Monad::Result<cwCavernRunner::Result>
-cwCavernRunner::run(const QString& svxPath, const QString& output3dPath)
+cwCavernRunner::run(const QString& svxPath, const QString& output3dPath,
+                    const std::function<bool()>& isCanceled)
 {
     // cavern_run() uses global state; serialise all callers.
     static QMutex cavernMutex;
     QMutexLocker locker(&cavernMutex);
+
+    // Tested under the lock: a caller superseded while it waited skips its run.
+    if (isCanceled && isCanceled()) {
+        return Monad::Result<Result>(QStringLiteral("The cavern run was canceled"),
+                                     static_cast<int>(LinePlotErrorCode::Cancelled));
+    }
 
     char arg0[] = "cavern";
     char logArg[] = "--log";
@@ -89,5 +106,29 @@ cwCavernRunner::run(const QString& svxPath, const QString& output3dPath)
     result.logText = logText;
     result.loopClosureStats = loopClosureStats;
     result.exitCode = returnCode;
+    result.warningCount = msg_warnings;
     return Monad::Result<Result>(result);
+}
+
+QString cwCavernRunner::firstErrorLine(const QString& logText)
+{
+    // "error:" opens the line or follows cavern's "<file>:<line>: " location.
+    static const QRegularExpression errorMarker(QStringLiteral(R"((^|:\s)error:)"),
+                                                QRegularExpression::CaseInsensitiveOption);
+
+    QString firstNonEmpty;
+    const QStringList lines = logText.split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty()) {
+            continue;
+        }
+        if (errorMarker.match(trimmed).hasMatch()) {
+            return trimmed;
+        }
+        if (firstNonEmpty.isEmpty()) {
+            firstNonEmpty = trimmed;
+        }
+    }
+    return firstNonEmpty;
 }

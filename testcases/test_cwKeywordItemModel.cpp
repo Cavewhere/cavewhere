@@ -11,7 +11,11 @@
 #include "cwKeywordItem.h"
 #include "cwKeywordModel.h"
 #include "cwRootData.h"
+#include "cwCave.h"
+#include "cwCavingRegion.h"
+#include "cwSurveyNode.h"
 #include "cwLinePlotManager.h"
+#include "cwKeywordItemRegistry.h"
 
 //Std includes
 #include <memory>
@@ -22,6 +26,7 @@
 #include <QSignalSpy>
 #include <QMetaObject>
 #include <QCoreApplication>
+#include <QUndoStack>
 
 // using namespace Qt3DCore;
 
@@ -406,4 +411,215 @@ TEST_CASE("Extented cwKeywordModels should work correctly with cwKeywordItemMode
 
     REQUIRE(keywords.size() == 1);
     CHECK(keywords.first() == cwKeyword("sauce", "dude"));
+}
+
+TEST_CASE("A node's hierarchy keyword is its path through the tree",
+          "[cwKeywordItemModel]") {
+    // The keyword search groups by where a node sits, not just by what it is
+    // called, so two nodes of the same name in different parents stay apart.
+    auto hierarchyOf = [](cwSurveyNode* node) {
+        const QVector<cwKeyword> keywords = node->keywordModel()->keywords();
+        for(const cwKeyword& keyword : keywords) {
+            if(keyword.key() == cwKeywordModel::CaveKey) {
+                return keyword.value();
+            }
+        }
+        return QString();
+    };
+
+    cwCavingRegion region;
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+    region.addCave(cave);
+
+    //A cave directly under the region reads exactly as it did before nodes
+    CHECK(hierarchyOf(cave) == QStringLiteral("Fisher Ridge"));
+
+    cwCave* folder = new cwCave();
+    folder->setName(QStringLiteral("Upper Level"));
+    cave->addNode(folder);
+
+    cwCave* section = new cwCave();
+    section->setName(QStringLiteral("Crawl"));
+    folder->addNode(section);
+
+    CHECK(hierarchyOf(folder) == QStringLiteral("Fisher Ridge / Upper Level"));
+    CHECK(hierarchyOf(section) == QStringLiteral("Fisher Ridge / Upper Level / Crawl"));
+
+    //The same value read the way the search reads it, through the item model
+    cwKeywordItemModel itemModel;
+    cwKeywordItem* item = new cwKeywordItem();
+    item->keywordModel()->addExtension(section->keywordModel());
+    item->setObject(section);
+    itemModel.addItem(item);
+
+    REQUIRE(itemModel.rowCount() == 1);
+    const QVector<cwKeyword> itemKeywords = itemModel.index(0, 0, QModelIndex())
+            .data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
+    CHECK(itemKeywords.contains(cwKeyword(cwKeywordModel::CaveKey,
+                                          QStringLiteral("Fisher Ridge / Upper Level / Crawl"))));
+
+    SECTION("renaming an ancestor moves the whole subtree") {
+        cave->setName(QStringLiteral("Fisher Ridge Cave"));
+
+        CHECK(hierarchyOf(cave) == QStringLiteral("Fisher Ridge Cave"));
+        CHECK(hierarchyOf(folder) == QStringLiteral("Fisher Ridge Cave / Upper Level"));
+        CHECK(hierarchyOf(section) == QStringLiteral("Fisher Ridge Cave / Upper Level / Crawl"));
+    }
+
+    SECTION("moving a subtree moves its paths") {
+        cwCave* other = new cwCave();
+        other->setName(QStringLiteral("Mammoth"));
+        region.addCave(other);
+
+        other->addNode(folder);
+
+        CHECK(hierarchyOf(folder) == QStringLiteral("Mammoth / Upper Level"));
+        CHECK(hierarchyOf(section) == QStringLiteral("Mammoth / Upper Level / Crawl"));
+    }
+}
+
+namespace {
+
+constexpr int kBulkItemCount = 50;
+constexpr int kExistingRegistryKeys = 3;
+constexpr int kNewRegistryKeys = 5;
+
+// Items parented to owner until a model adopts them, so a failed add leaks nothing.
+QList<cwKeywordItem*> makeBulkItems(int count, QObject* owner)
+{
+    QList<cwKeywordItem*> items;
+    items.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        auto* item = new cwKeywordItem(owner);
+        item->keywordModel()->add({QStringLiteral("type"), QStringLiteral("bulk")});
+        item->setObject(new QObject(owner));
+        items.append(item);
+    }
+    return items;
+}
+
+} // namespace
+
+TEST_CASE("cwKeywordItemModel::addItems appends a batch in one insert",
+          "[cwKeywordItemModel][MainThreadBudget]")
+{
+    QObject owner;
+    cwKeywordItemModel model;
+
+    const QList<cwKeywordItem*> first = makeBulkItems(1, &owner);
+    model.addItem(first.first());
+    REQUIRE(model.rowCount() == 1);
+
+    const QList<cwKeywordItem*> items = makeBulkItems(kBulkItemCount, &owner);
+    QSignalSpy aboutToInsert(&model, &QAbstractItemModel::rowsAboutToBeInserted);
+    QSignalSpy inserted(&model, &QAbstractItemModel::rowsInserted);
+
+    model.addItems(items);
+
+    REQUIRE(aboutToInsert.count() == 1);
+    REQUIRE(inserted.count() == 1);
+    CHECK_FALSE(inserted.at(0).at(0).value<QModelIndex>().isValid());
+    CHECK(inserted.at(0).at(1).toInt() == 1);
+    CHECK(inserted.at(0).at(2).toInt() == kBulkItemCount);
+    REQUIRE(model.rowCount() == kBulkItemCount + 1);
+
+    // Append order: the batch follows the existing row in the order given.
+    for (int i = 0; i < items.size(); ++i) {
+        CHECK(model.item(i + 1) == items.at(i));
+        CHECK(model.indexOf(items.at(i)).row() == i + 1);
+        CHECK(items.at(i)->parent() == &model);
+    }
+
+    SECTION("nulls, items already present and repeats within the batch are skipped") {
+        const QList<cwKeywordItem*> extra = makeBulkItems(1, &owner);
+        inserted.clear();
+
+        model.addItems({items.at(0), nullptr, extra.first(), extra.first()});
+
+        REQUIRE(topLevelRowsInserted(inserted) == 1);
+        CHECK(inserted.at(0).at(1).toInt() == kBulkItemCount + 1);
+        CHECK(inserted.at(0).at(2).toInt() == kBulkItemCount + 1);
+        CHECK(model.rowCount() == kBulkItemCount + 2);
+        CHECK(model.item(kBulkItemCount + 1) == extra.first());
+    }
+
+    SECTION("removing a middle item keeps every other item's row lookup") {
+        cwKeywordItem* removed = items.at(kBulkItemCount / 2);
+        model.removeItem(removed);
+        delete removed;
+
+        REQUIRE(model.rowCount() == kBulkItemCount);
+        for (cwKeywordItem* item : items) {
+            if (item == removed) {
+                continue;
+            }
+            const QModelIndex index = model.indexOf(item);
+            REQUIRE(index.isValid());
+            CHECK(model.item(index.row()) == item);
+        }
+    }
+}
+
+TEST_CASE("cwKeywordItemRegistry::ensureAll registers every new key in one insert",
+          "[cwKeywordItemModel][MainThreadBudget]")
+{
+    QObject owner;
+    QList<QObject*> keys;
+    for (int i = 0; i < kExistingRegistryKeys + kNewRegistryKeys; ++i) {
+        keys.append(new QObject(&owner));
+    }
+
+    int factoryCalls = 0;
+    const auto makeItem = [&factoryCalls](QObject* key) {
+        ++factoryCalls;
+        auto* item = new cwKeywordItem();
+        item->keywordModel()->add({QStringLiteral("type"), QStringLiteral("registry")});
+        item->setObject(key);
+        return item;
+    };
+
+    SECTION("existing keys return their items and new keys land in one range") {
+        cwKeywordItemModel model;
+        cwKeywordItemRegistry<QObject*> registry;
+        registry.setModel(&model);
+
+        QList<cwKeywordItem*> existing;
+        for (int i = 0; i < kExistingRegistryKeys; ++i) {
+            QObject* key = keys.at(i);
+            existing.append(registry.ensure(key, [&makeItem, key]() { return makeItem(key); }));
+        }
+        REQUIRE(model.rowCount() == kExistingRegistryKeys);
+        factoryCalls = 0;
+
+        // The last new key repeats, so it must collapse to one item.
+        QList<QObject*> request = keys;
+        request.append(keys.last());
+
+        QSignalSpy inserted(&model, &QAbstractItemModel::rowsInserted);
+        const QList<cwKeywordItem*> result = registry.ensureAll(request, makeItem);
+
+        CHECK(topLevelRowsInserted(inserted) == 1);
+        CHECK(factoryCalls == kNewRegistryKeys);
+        CHECK(model.rowCount() == kExistingRegistryKeys + kNewRegistryKeys);
+        REQUIRE(result.size() == request.size());
+        for (int i = 0; i < kExistingRegistryKeys; ++i) {
+            CHECK(result.at(i) == existing.at(i));
+        }
+        for (int i = 0; i < request.size(); ++i) {
+            REQUIRE(result.at(i) != nullptr);
+            CHECK(result.at(i)->object() == request.at(i));
+        }
+        CHECK(result.last() == result.at(request.size() - 2));
+    }
+
+    SECTION("with no model it registers nothing") {
+        cwKeywordItemRegistry<QObject*> registry;
+        const QList<cwKeywordItem*> result = registry.ensureAll(keys, makeItem);
+        CHECK(result.isEmpty());
+        CHECK(factoryCalls == 0);
+    }
 }

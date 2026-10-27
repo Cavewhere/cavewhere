@@ -72,6 +72,7 @@ void cwSortFilterProxyModel::setSource(QObject *source)
 void cwSortFilterProxyModel::sort(Qt::SortOrder order)
 {
     QSortFilterProxyModel::sort(0, order);
+    emit sortOrderChanged();
 }
 
 // QByteArray cwSortFilterProxyModel::sortRole() const

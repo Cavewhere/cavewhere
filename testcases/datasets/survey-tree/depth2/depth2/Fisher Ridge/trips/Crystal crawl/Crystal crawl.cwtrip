@@ -1,0 +1,50 @@
+{
+ "date": {
+  "year": 2026,
+  "month": 9,
+  "day": 16
+ },
+ "tripCalibration": {
+  "correctedCompassBacksight": false,
+  "correctedClinoBacksight": false,
+  "tapeCalibration": 0,
+  "frontCompassCalibration": 0,
+  "frontClinoCalibration": 0,
+  "backClinoCalibration": 0,
+  "declination": 0,
+  "distanceUnit": "Meters",
+  "frontSights": true,
+  "backSights": true,
+  "correctedCompassFrontsight": false,
+  "correctedClinoFrontsight": false,
+  "backCompassCalibration": 0,
+  "autoDeclination": true
+ },
+ "chunks": [
+  {
+   "leg": [
+    {
+     "id": "04adf819-144b-42dc-b493-8823e4d75dec",
+     "name": "B1"
+    },
+    {
+     "id": "49d0e3ff-f9d4-435e-a748-c95ad0563d80",
+     "distance": "10",
+     "compass": "45",
+     "clino": "-5"
+    },
+    {
+     "id": "436d515c-7266-4aa1-8545-ffd18cf6ffd1",
+     "name": "B2"
+    }
+   ],
+   "id": "6dac5739-ef52-41f2-9fea-ee125e6a4792"
+  }
+ ],
+ "name": "Crystal crawl",
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-682-g3e0c437b"
+ },
+ "id": "5020558b-91a2-4564-a4d8-dd5b7a1708f5"
+}

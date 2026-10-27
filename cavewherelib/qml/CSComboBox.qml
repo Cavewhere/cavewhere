@@ -28,6 +28,9 @@ QQ.Item {
     //! Passed through to the picker — see CSPicker.datumEnabled.
     property alias datumEnabled: pickerId.datumEnabled
 
+    //! Passed through to the picker — see CSPicker.offersUnset.
+    property alias offersUnset: pickerId.offersUnset
+
     readonly property int currentMode: pickerId.currentMode
 
     readonly property bool showsResolvedName: rootId.currentMode === CoordinateSystem.Custom

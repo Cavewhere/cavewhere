@@ -19,11 +19,14 @@
 #include "cwGeoReference.h"
 #include "cwGridConvergence.h"
 #include "FixStationFixtureHelper.h"
+#include "TestHelper.h"
 
 //Qt includes
+#include <QCoreApplication>
 #include <QtMath>
 
 //Std includes
+#include <cmath>
 #include <memory>
 
 using Catch::Matchers::WithinAbs;
@@ -52,7 +55,11 @@ namespace {
 
     cwCave* addCaveFixedAt(cwCavingRegion* region, const QString& name, double easting)
     {
-        return addCaveWithFixes(region, {utmFix(name, easting)});
+        cwCave* cave = addCaveWithFixes(region, {utmFix(name, easting)});
+        REQUIRE(waitUntil([cave] {
+            return cave->gridConvergence()->state() == cwGridConvergence::Valid;
+        }));
+        return cave;
     }
 
     //! What γ ≈ Δlon · sin(lat) works out to for a cave \a metersEast of the
@@ -207,6 +214,10 @@ TEST_CASE("cwGridConvergence: moving the frame recomputes the caves that didn't 
     REQUIRE(fixes->setData(fixes->index(0),
                            kCentralMeridianEasting + kCorrectionEast,
                            cwFixStationModel::EastingRole));
+    const double expectedEastAngle = expectedConvergenceFor(kOffsetEast - kCorrectionEast);
+    REQUIRE(waitUntil([&] {
+        return std::abs(eastCave->gridConvergence()->angle() - expectedEastAngle) < 0.01;
+    }));
 
     CHECK_THAT(anchorCave->gridConvergence()->angle(), WithinAbs(0.0, 1e-6));
     CHECK_THAT(eastCave->gridConvergence()->angle(),
@@ -228,6 +239,9 @@ TEST_CASE("cwGridConvergence: a cave outside a region has no grid to converge to
     cwCavingRegion region;
     cwCave* joined = cave.release();
     region.addCave(joined);
+    REQUIRE(waitUntil([&] {
+        return joined->gridConvergence()->state() == cwGridConvergence::Valid;
+    }));
 
     CHECK(joined->gridConvergence()->state() == cwGridConvergence::Valid);
 }

@@ -9,6 +9,7 @@
 #include "cwPointOctreeManifest.h"
 
 #include "LazFixtureHelper.h"
+#include "TestHelper.h"
 
 TEST_CASE("cwLazLayer::enabled defaults to true",
           "[cwLazLayer][cwLazLayerEnabled]") {
@@ -131,6 +132,6 @@ TEST_CASE("cwLazLayer: setSourcePath on a disabled layer captures fingerprint, d
     REQUIRE(layer.pointCount() == 0);
     REQUIRE(layer.octree().isNull());
 
-    QCoreApplication::processEvents();
+    REQUIRE(waitForQueuedEvents());
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Probed);
 }

@@ -4,6 +4,7 @@
 //Our includes
 #include "cwGitHubCredentials.h"
 #include "cwRootData.h"
+#include "TestHelper.h"
 #include "cwSaveLoad.h"
 #include "cwJobSettings.h"
 #include "cwScrapManager.h"
@@ -180,7 +181,7 @@ TEST_CASE("cwRootData::shutdown() stops the coordinator driving derived data", "
     rootData.shutdown();
 
     coordinator->updateNow();
-    QCoreApplication::processEvents();
+    REQUIRE(waitForQueuedEvents());
     plotManager->waitToFinish();
 
     //Still owed, never started: the solve is what shutdown declines to begin.
@@ -307,7 +308,10 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
     accountCoordinator->handleGitHubLfsAuthFailure(githubRepoB,
                                                    401,
                                                    QStringLiteral("LFS auth failed"));
-    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    REQUIRE(waitUntil([&]() {
+        return accountModel->accountById(accountIdB).authState
+            == static_cast<int>(cwRemoteAccountModel::AuthState::Revoked);
+    }));
     CHECK(accountModel->accountById(accountIdB).authState
           == static_cast<int>(cwRemoteAccountModel::AuthState::Revoked));
     CHECK(provider->authorizationHeader(githubRepoB).isEmpty());

@@ -177,7 +177,8 @@ void cwScrapManager::setProject(cwProject *project) {
 
             if (auto* cave = qobject_cast<cwCave*>(object)) {
                 QList<cwScrap*> scraps;
-                for (cwTrip* trip : cave->trips()) {
+                const QList<cwTrip*> trips = cave->allTrips();
+                for (cwTrip* trip : trips) {
                     if (trip == nullptr) {
                         continue;
                     }
@@ -350,12 +351,13 @@ void cwScrapManager::markAllScrapsDirty() {
     }
 
     //Get all the scraps for the whole region
-    foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {
-        foreach(cwTrip* trip, cave->trips()) {
-            foreach(cwNote* note, trip->notes()->notes()) {
-                for(cwScrap* scrap : note->scraps()) {
-                    markScrapDirty(scrap);
-                }
+    const QList<cwTrip*> trips = RegionModel->cavingRegion()->rootNode()->allTrips();
+    for(cwTrip* trip : trips) {
+        const QList<cwNote*> notes = trip->notes()->notes();
+        for(cwNote* note : notes) {
+            const QList<cwScrap*> scraps = note->scraps();
+            for(cwScrap* scrap : scraps) {
+                markScrapDirty(scrap);
             }
         }
     }
@@ -503,17 +505,17 @@ bool cwScrapManager::isScrapGeometryValid(const cwScrap *scrap) const
 void cwScrapManager::handleRegionReset()
 {
     if(RegionModel->cavingRegion() != nullptr) {
-        foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {
-            foreach(cwTrip* trip, cave->trips()) {
-                foreach(cwNote* note, trip->notes()->notes()) {
-                    scrapInsertedHelper(note, 0, note->scraps().size() - 1);
-                }
-                if(auto* sketchModel = trip->notesSketch()) {
-                    for(QObject* obj : sketchModel->notes()) {
-                        if(auto* sketch = qobject_cast<cwSketch*>(obj)) {
-                            connectSketch(sketch);
-                            sketchInsertedHelper(sketch);
-                        }
+        const QList<cwTrip*> trips = RegionModel->cavingRegion()->rootNode()->allTrips();
+        for(cwTrip* trip : trips) {
+            const QList<cwNote*> notes = trip->notes()->notes();
+            for(cwNote* note : notes) {
+                scrapInsertedHelper(note, 0, note->scraps().size() - 1);
+            }
+            if(auto* sketchModel = trip->notesSketch()) {
+                for(QObject* obj : sketchModel->notes()) {
+                    if(auto* sketch = qobject_cast<cwSketch*>(obj)) {
+                        connectSketch(sketch);
+                        sketchInsertedHelper(sketch);
                     }
                 }
             }
@@ -1351,45 +1353,33 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
         data.setNoteTransform({});
         data.setNoteStation(scrap->stations());
         if(auto* cave = scrap->parentCave()) {
-            data.setStationLookup(cave->stationPositionLookup());
-            data.setSurveyNetwork(cave->network());
+            data.setStationLookup(cave->scopedPositions());
+            data.setSurveyNetwork(cave->scopedNetwork());
         }
         return data;
     }
 
-    cwCave* cave = scrap->parentNote()->parentTrip()->parentCave();
+    cwTrip* trip = scrap->parentNote()->parentTrip();
 
     cwImage noteImage = scrap->parentNote()->image();
     if (Project) {
         data.setNoteImage(Project->absolutePathNoteImage(scrap->parentNote()));
     }
+
+    // Resolve the scrap's note stations against the trip's own solved data, in
+    // the trip's local namespace. For a native trip the accessors return the
+    // cave lookup/network verbatim; for an externally-attached trip they present
+    // the scope-relative tails the note stations carry, so the triangulator
+    // resolves either without the note names ever being rewritten.
     data.setNoteStation(scrap->stations());
-    data.setStationLookup(cave->stationPositionLookup());
-    data.setSurveyNetwork(cave->network());
+    data.setStationLookup(trip->solvedStationPositions());
+    data.setSurveyNetwork(trip->solvedNetwork());
     data.setNoteTransform(placement.noteTransform);
 
     double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value;
     data.setNoteImageResolution(dotsPerMeter);
 
     return data;
-}
-
-/**
-  Extracts the note station's position and note position
-  */
-QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations,
-                                                                                const cwStationPositionLookup& positionLookup) {
-    QList<cwTriangulateStation> stations;
-    foreach(cwNoteStation noteStation, noteStations) {
-        if(positionLookup.hasPosition(noteStation.name())) {
-            cwTriangulateStation station;
-            station.setName(noteStation.name());
-            station.setNotePosition(QVector3D(noteStation.positionOnNote()));
-            station.setPosition(positionLookup.position(noteStation.name()));
-            stations.append(cwTriangulateStation(station));
-        }
-    }
-    return stations;
 }
 
 /**

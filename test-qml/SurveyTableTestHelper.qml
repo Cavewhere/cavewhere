@@ -10,14 +10,13 @@ QQ.QtObject {
     id: helperId
 
     required property QQ.Item mainWindow
+    //The test's own window, which owns the shared editor this helper closes
+    required property MainWindowTest testWindow
 
     // The state each test starts from: no editor open, no project, sitting on
     // the view page.
     function resetToViewPage(testCase) {
-        if (GlobalShadowTextInput.coreClickInput !== null) {
-            GlobalShadowTextInput.coreClickInput.closeEditor()
-        }
-        GlobalShadowTextInput.enabled = false
+        helperId.testWindow.closeAnyOpenEditor()
 
         RootData.futureManagerModel.waitForFinished()
         RootData.newProject()
@@ -47,7 +46,7 @@ QQ.QtObject {
         trip.addNewChunk()
 
         RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name
+                "Source/Data/Node=" + cave.name + "/Trip=" + trip.name
         testCase.tryVerify(() => RootData.pageView.currentPageItem !== null
                                  && RootData.pageView.currentPageItem.objectName === "tripPage",
                            5000, "should land on tripPage")

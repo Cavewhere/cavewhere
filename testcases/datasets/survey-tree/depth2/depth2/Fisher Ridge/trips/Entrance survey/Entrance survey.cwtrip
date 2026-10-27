@@ -1,0 +1,50 @@
+{
+ "date": {
+  "year": 2026,
+  "month": 9,
+  "day": 16
+ },
+ "tripCalibration": {
+  "correctedCompassBacksight": false,
+  "correctedClinoBacksight": false,
+  "tapeCalibration": 0,
+  "frontCompassCalibration": 0,
+  "frontClinoCalibration": 0,
+  "backClinoCalibration": 0,
+  "declination": 0,
+  "distanceUnit": "Meters",
+  "frontSights": true,
+  "backSights": true,
+  "correctedCompassFrontsight": false,
+  "correctedClinoFrontsight": false,
+  "backCompassCalibration": 0,
+  "autoDeclination": true
+ },
+ "chunks": [
+  {
+   "leg": [
+    {
+     "id": "945e754d-8339-4103-8eb5-bba56b1db30f",
+     "name": "A1"
+    },
+    {
+     "id": "6a5872f9-dc3e-4c87-b92a-5b44796adc86",
+     "distance": "10",
+     "compass": "45",
+     "clino": "-5"
+    },
+    {
+     "id": "b68d12a9-e1d8-4faf-b8bd-7eebdacb6298",
+     "name": "A2"
+    }
+   ],
+   "id": "2b64959e-9f5c-41a4-a3c1-63e49152f1d1"
+  }
+ ],
+ "name": "Entrance survey",
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-682-g3e0c437b"
+ },
+ "id": "bdeea138-57fe-4b7a-849f-43e920f814de"
+}

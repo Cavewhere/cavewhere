@@ -61,27 +61,24 @@ QC.TextField {
     QC.ToolTip.visible: valueHover.hovered && root.contentWidth > root.width
     QQ.HoverHandler { id: valueHover }
 
-    // Right-click to copy, matching the platform-native affordance the drag-select
-    // alone doesn't advertise. The Menu is left without an id and defined inline so
-    // ContextMenu creates it lazily on first request — nothing is built per field
-    // until it's actually right-clicked.
-    QC.ContextMenu.menu: QC.Menu {
-        objectName: "selectableValueMenu"
-        // In-scene popup (parented to the window overlay) rather than a separate
-        // window, so the menu behaves identically on every platform.
-        popupType: QC.Popup.Item
+    QQ.Connections {
+        target: SelectableValueGroup
 
-        QC.MenuItem {
-            objectName: "selectableValueCopyItem"
-            text: qsTr("Copy")
-            enabled: root.selectedText.length > 0
-            onTriggered: root.copy()
+        function onCurrentChanged() {
+            if (SelectableValueGroup.current !== root) {
+                root.deselect()
+            }
         }
-        QC.MenuItem {
-            objectName: "selectableValueSelectAllItem"
-            text: qsTr("Select All")
-            enabled: root.length > 0
-            onTriggered: root.selectAll()
-        }
+    }
+
+    // Right-click to copy, matching the platform-native affordance the drag-select
+    // alone doesn't advertise. Declared inline so ContextMenu creates it lazily on
+    // first request — nothing is built per field until it's actually right-clicked.
+    QC.ContextMenu.menu: SelectableValueMenu {
+        canCopy: root.selectedText.length > 0
+        canSelectAll: root.length > 0
+
+        onCopyRequested: root.copy()
+        onSelectAllRequested: root.selectAll()
     }
 }

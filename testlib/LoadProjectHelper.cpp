@@ -31,6 +31,7 @@
 #include "cwLinePlotManager.h"
 #include "cwErrorListModel.h"
 #include "cwRootData.h"
+#include "cwSaveLoad.h"
 #include "GitRepository.h"
 #include "Account.h"
 #include "cwGitHubCredentials.h"
@@ -415,6 +416,37 @@ int TestHelper::projectModifiedFileCount(cwProject* project) const
     return project->repository()->modifiedFileCount();
 }
 
+QString TestHelper::externalCenterlineCopyPath(cwProject* project,
+                                               cwTrip* trip,
+                                               const QString& fileName) const
+{
+    if (project == nullptr || project->saveLoad() == nullptr || trip == nullptr) {
+        return QString();
+    }
+    return project->saveLoad()->externalCenterlineDir(trip).absoluteFilePath(fileName);
+}
+
+QString TestHelper::externalCenterlineCaveCopyPath(cwProject* project,
+                                                   cwCave* cave,
+                                                   const QString& fileName) const
+{
+    if (project == nullptr || project->saveLoad() == nullptr || cave == nullptr) {
+        return QString();
+    }
+    return project->saveLoad()->externalCenterlineDir(cave).absoluteFilePath(fileName);
+}
+
+bool TestHelper::writeTextFile(const QString& path, const QString& contents) const
+{
+    QFile file(QDir::cleanPath(path));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        return false;
+    }
+
+    const QByteArray bytes = contents.toUtf8();
+    return file.write(bytes) == bytes.size();
+}
+
 void TestHelper::waitForProjectSaveToFinish(cwProject* project) const
 {
     if (project == nullptr) {
@@ -606,7 +638,7 @@ int TestHelper::liDARStationLookupSize(cwNoteLiDAR* note) const
         return 0;
     }
 
-    return cave->stationPositionLookup().positions().size();
+    return cave->scopedPositions().positions().size();
 }
 
 bool TestHelper::liDARSurveyNetworkIsEmpty(cwNoteLiDAR* note) const
@@ -620,7 +652,7 @@ bool TestHelper::liDARSurveyNetworkIsEmpty(cwNoteLiDAR* note) const
         return true;
     }
 
-    return cave->network().isEmpty();
+    return cave->scopedNetwork().isEmpty();
 }
 
 void TestHelper::addStationSplay(cwSurveyChunk* chunk,
@@ -1237,6 +1269,20 @@ void addTokenManager(cwProject *project)
 {
     cwFutureManagerModel* model = new cwFutureManagerModel(project);
     project->setFutureManagerToken(model->token());
+}
+
+qsizetype tripFileCountUnder(const QDir& root)
+{
+    const QString trashSegment = QStringLiteral("/.cw_trash/");
+    qsizetype count = 0;
+    QDirIterator it(root.absolutePath(), {QStringLiteral("*.cwtrip")}, QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        if (!it.next().contains(trashSegment)) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 bool isProjectModified(cwProject* project)

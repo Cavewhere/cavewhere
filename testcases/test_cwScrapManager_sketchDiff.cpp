@@ -187,7 +187,6 @@ TEST_CASE("Deleting the source stroke removes the derived scrap",
     f.sketch->clearStrokes();
 
     // deleteLater defers destruction; drain the event queue so we can observe it.
-    QCoreApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     CHECK(scrap.isNull());
@@ -206,7 +205,6 @@ TEST_CASE("Destroying the sketch drops derived scraps and tracking entry",
     REQUIRE(scrapPtr);
 
     f.trip->notesSketch()->removeNote(0);
-    QCoreApplication::processEvents();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     CHECK(sketchPtr.isNull());

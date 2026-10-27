@@ -9,6 +9,7 @@ MainWindowTest {
 
     SurveyTableTestHelper {
         id: surveyTableId
+        testWindow: rootId
         mainWindow: rootId.mainWindow
     }
 
@@ -25,7 +26,7 @@ MainWindowTest {
 
         function addSurvey() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });
 
@@ -1180,7 +1181,18 @@ MainWindowTest {
             tryVerify(() => { return station1Cell.errorModel.fatalCount === 1 })
             verify(station1Cell.errorModel.warningCount === 0)
             tryVerify(() => { return chunk.errorModel.fatalCount === 1 && chunk.errorModel.warningCount === 0 })
-            tryVerify(() => { return trip.errorModel.fatalCount === 1 && trip.errorModel.warningCount === 0 })
+            // The cleared shot leaves the chunk in two pieces, which the solve
+            // reports on the trip beside the chunk's fatal.
+            tryVerify(() => { return trip.errorModel.fatalCount === 1 && trip.errorModel.warningCount === 1 })
+            let tripErrors = trip.errorModel.errors
+            let tripWarning = -1
+            for (let i = 0; i < tripErrors.count; ++i) {
+                if (tripErrors.data(tripErrors.index(i, 0), ErrorListModel.ErrorTypeRole) === CwError.Warning) {
+                    tripWarning = i
+                }
+            }
+            verify(tripWarning >= 0)
+            verify(tripErrors.data(tripErrors.index(tripWarning, 0), ErrorListModel.MessageRole).endsWith("are not tied to the cave"))
 
             let errors = station1Cell.errorModel.errors
             verify(errors.count === 1)
@@ -1691,7 +1703,7 @@ MainWindowTest {
             verify(cave !== null)
             let tripFromRegion = cave.trip(0)
             verify(tripFromRegion !== null)
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + tripFromRegion.name
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Trip=" + tripFromRegion.name
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
 
             let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
@@ -1918,7 +1930,7 @@ MainWindowTest {
             verify(cave !== null)
             let tripFromRegion = cave.trip(0)
             verify(tripFromRegion !== null)
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + tripFromRegion.name
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Trip=" + tripFromRegion.name
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
 
             let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
@@ -2229,7 +2241,7 @@ MainWindowTest {
         function test_arrowNavigation() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -2536,7 +2548,7 @@ MainWindowTest {
         function test_tabNavigationTabWorks() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -2969,7 +2981,7 @@ MainWindowTest {
         function test_tabEndingShouldStayFocus() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -3028,7 +3040,7 @@ MainWindowTest {
         function test_tabGuessSurveyName() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -3053,7 +3065,7 @@ MainWindowTest {
         // function test_editorTest() {
         //     TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
-        //     RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+        //     RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
         //     tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 

@@ -18,7 +18,11 @@
 #include "cwCavingRegion.h"
 #include "cwTriangulateTask.h"
 #include "cwTriangulateInData.h"
+#include "cwTriangulateStation.h"
 #include "cwTriangulatedData.h"
+#include "cwCavernNaming.h"
+#include "cwLinePlotTask.h"
+#include "cwExternalCenterline.h"
 #include "cwImageUtils.h"
 #include "cwNoteStation.h"
 #include "cwStationPositionLookup.h"
@@ -44,6 +48,9 @@
 #include <QTemporaryDir>
 #include <QDirIterator>
 #include <QImageWriter>
+#include <QPointF>
+#include <QUuid>
+#include <QVector3D>
 
 //Std includes
 #include <algorithm>
@@ -68,6 +75,42 @@ static QSizeF geometryBoundsSize(const cwGeometry& geometry)
     }
 
     return QSizeF(max.x() - min.x(), max.y() - min.y());
+}
+
+// An externally attached trip's solved positions and changed-station keys are
+// scoped with the trip prefix ("topo1.simple.a1"), while a scrap's note station
+// carries only the scope-relative tail the station-list panel shows
+// ("simple.a1"). cwTrip::scopePrefix() is what qualifies the tail, so the
+// changed-station trigger (StationTripScrapLookup) matches it against the scoped
+// lookup keys; a native trip is unscoped, and its keys already agree.
+TEST_CASE("A boundary-scoped external note station resolves against the cave lookup",
+          "[cwTriangulateInData][Attach]") {
+    cwTrip externalTrip;
+    externalTrip.setName(QStringLiteral("Topo 1"));
+    externalTrip.setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+
+    // computeStations resolves a note station by exact key: a scoped name and a
+    // cave lookup keyed the same way anchor a solved point.
+    const QString scopedName =
+        externalTrip.scopePrefix() + QStringLiteral("simple.a1");
+    REQUIRE(scopedName == QStringLiteral("topo_1.simple.a1"));
+
+    cwNoteStation noteStation;
+    noteStation.setName(scopedName);
+    noteStation.setPositionOnNote(QPointF(0.5, 0.5));
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(scopedName, QVector3D(1.0f, 2.0f, 3.0f));
+
+    cwTriangulateInData data;
+    data.setNoteStation({noteStation});
+    data.setStationLookup(lookup);
+
+    const QList<cwTriangulateStation> stations = data.computeStations();
+    CHECK(stations.size() == 1);
+    if (!stations.isEmpty()) {
+        CHECK(stations.first().position() == QVector3D(1.0f, 2.0f, 3.0f));
+    }
 }
 
 TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateTask]") {
@@ -443,7 +486,7 @@ TEST_CASE("A limit of one delivers both scraps, in order, one at a time",
     REQUIRE(spinUntilSettled(futures, [&]() {
         peakActiveScraps = std::max(peakActiveScraps, run.root->activeChildren().size());
     }));
-    QCoreApplication::processEvents();
+    REQUIRE(waitUntil([&]() { return settledOrder.size() == kTwoScraps; }));
 
     CHECK(peakActiveScraps == kSingleThread);
     CHECK(settledOrder == QList<int>({0, 1}));

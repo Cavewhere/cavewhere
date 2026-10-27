@@ -1,0 +1,116 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+#ifndef CWSTATIONHANDLE_H
+#define CWSTATIONHANDLE_H
+
+//Qt includes
+#include <QHashFunctions>
+#include <QList>
+#include <QMetaType>
+#include <QQmlEngine>
+#include <QString>
+#include <QUuid>
+
+//Our includes
+#include "cwGlobals.h"
+
+/**
+ * Location-independent identity of a single station inside an equate
+ * (cwEquate). A handle names a station by the scope it lives in plus the
+ * tail (the station name relative to that scope), never by a fully-qualified
+ * flat string. That keeps the tie valid when a trip is re-parented or a
+ * cave/trip is renamed, and lets one handle type name a station in any node
+ * of the region's one equate list.
+ *
+ * containerId is always populated (option A in the plan):
+ *   - NativeCave: containerId is the owning cave's id; the station is a bare
+ *     native station (or a cave-level-externalCenterline station directly
+ *     under the cave scope).
+ *   - Trip: containerId is the owning trip's id; covers attached external
+ *     trips (their own survey label), native trips inside a sourced subtree
+ *     (their label in the root's block), and derived trips (their unit's
+ *     stations). The concrete name is rendered at emission time by
+ *     cwSurvexExporterCaveTask::DriverTree::operand().
+ */
+class CAVEWHERE_LIB_EXPORT cwStationHandle
+{
+    Q_GADGET
+    QML_VALUE_TYPE(cwStationHandle)
+
+    Q_PROPERTY(Scope scope READ scope WRITE setScope FINAL)
+    Q_PROPERTY(QUuid containerId READ containerId WRITE setContainerId FINAL)
+    Q_PROPERTY(QString tail READ tail WRITE setTail FINAL)
+
+public:
+    enum Scope {
+        NativeCave,
+        Trip
+    };
+    Q_ENUM(Scope)
+
+    cwStationHandle() = default;
+    cwStationHandle(Scope scope, const QUuid& containerId, const QString& tail)
+        : m_scope(scope), m_containerId(containerId), m_tail(tail) {}
+
+    Scope scope() const { return m_scope; }
+    void setScope(Scope scope) { m_scope = scope; }
+
+    QUuid containerId() const { return m_containerId; }
+    void setContainerId(const QUuid& containerId) { m_containerId = containerId; }
+
+    const QString& tail() const { return m_tail; }
+    void setTail(const QString& tail) { m_tail = tail; }
+
+    //! A handle is structurally valid once it names a container and a station
+    //! within it. Membership (does this container actually live in the owner
+    //! cave?) is a separate, home-specific check on cwCave.
+    bool isValid() const { return !m_containerId.isNull() && !m_tail.isEmpty(); }
+
+    bool operator==(const cwStationHandle& other) const
+    {
+        return m_scope == other.m_scope
+                && m_containerId == other.m_containerId
+                && m_tail == other.m_tail;
+    }
+    bool operator!=(const cwStationHandle& other) const { return !(*this == other); }
+
+private:
+    Scope m_scope = NativeCave;
+    QUuid m_containerId;
+    QString m_tail;
+};
+
+CAVEWHERE_LIB_EXPORT size_t qHash(const cwStationHandle& value, size_t seed = 0) noexcept;
+
+//For exposing Scope to qml — a value type is lower case in qml, so its
+//enumeration needs an element of its own. See cwError for the same pattern.
+class cwStationHandleDerived : public cwStationHandle
+{
+    Q_GADGET
+};
+
+namespace cwStationHandleDerivedForeign {
+    Q_NAMESPACE
+    QML_NAMED_ELEMENT(CwStationHandle)
+    QML_FOREIGN_NAMESPACE(cwStationHandleDerived)
+}
+
+//A list of handles is how identity travels in bulk — the stations of an
+//equate, the stations of a floating survey — so qml has to be able to walk
+//one. See CaveListRegistration in cwQMLRegister.h for the same pattern.
+class cwStationHandleListRegistration
+{
+    Q_GADGET
+    QML_FOREIGN(QList<cwStationHandle>)
+    QML_ANONYMOUS
+    QML_SEQUENTIAL_CONTAINER(cwStationHandle)
+};
+
+Q_DECLARE_METATYPE(cwStationHandle)
+
+#endif // CWSTATIONHANDLE_H
