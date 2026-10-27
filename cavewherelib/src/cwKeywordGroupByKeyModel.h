@@ -55,8 +55,8 @@ public:
 
     void invert();
 
-    // Re-walks every source row. For sources that forward no keyword edits,
-    // such as the keyword filter's accepted model.
+    // Re-walks every source row. For sources that drop keyword edits, such as
+    // the filter pipeline's acceptedModel(), a cwUniqueValueFilterModel.
     void updateAllRows();
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const;

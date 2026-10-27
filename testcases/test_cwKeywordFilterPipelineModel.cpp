@@ -757,6 +757,22 @@ QAbstractItemModel* filterAt(const cwKeywordFilterPipelineModel& model, int row)
     return model.index(row).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>();
 }
 
+int objectCountOf(const cwKeywordGroupByKeyModel* column, const QString& value)
+{
+    for (int i = 0; i < column->rowCount(); ++i) {
+        const QModelIndex row = column->index(i);
+        if (row.data(cwKeywordGroupByKeyModel::ValueRole).toString() == value) {
+            return row.data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt();
+        }
+    }
+    return 0;
+}
+
+cwKeywordGroupByKeyModel* groupColumnAt(const cwKeywordFilterPipelineModel& model, int row)
+{
+    return qobject_cast<cwKeywordGroupByKeyModel*>(filterAt(model, row));
+}
+
 } // namespace
 
 TEST_CASE("cwKeywordFilterPipelineModel clear on a default pipeline leaves its rows in place",
@@ -901,6 +917,71 @@ TEST_CASE("cwKeywordFilterPipelineModel accepts an object whose keyed keyword ar
     items.addItem(item);
     item->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Running Profile")});
 
+    CHECK(objectsIn(model.acceptedModel()).contains(&object));
+    CHECK_FALSE(objectsIn(model.rejectedModel()).contains(&object));
+}
+
+TEST_CASE("cwKeywordFilterPipelineModel second AND column groups a keyword added after insert",
+          "[cwKeywordFilterPipelineModel]")
+{
+    cwKeywordItemModel items;
+    QObject existing;
+    auto existingItem = new cwKeywordItem();
+    existingItem->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Plan")});
+    existingItem->keywordModel()->add({QStringLiteral("Cave"), QStringLiteral("Lechuguilla")});
+    existingItem->setObject(&existing);
+    items.addItem(existingItem);
+
+    cwKeywordFilterPipelineModel model;
+    model.setKeywordModel(&items);
+    groupColumnAt(model, 0)->setKey(QStringLiteral("Cave"));
+    model.addRow();
+    auto typeColumn = groupColumnAt(model, 1);
+    REQUIRE(typeColumn);
+    typeColumn->setKey(QStringLiteral("Type"));
+    REQUIRE(objectsIn(model.acceptedModel()).contains(&existing));
+
+    // A new scrap arrives with its cave keyword; its type keyword lands afterwards.
+    QObject added;
+    auto addedItem = new cwKeywordItem();
+    addedItem->keywordModel()->add({QStringLiteral("Cave"), QStringLiteral("Lechuguilla")});
+    addedItem->setObject(&added);
+    items.addItem(addedItem);
+    addedItem->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Running Profile")});
+
+    CHECK(objectCountOf(typeColumn, QStringLiteral("Running Profile")) == 1);
+    CHECK(typeColumn->otherIndex().data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt() == 0);
+    CHECK(objectsIn(model.acceptedModel()).contains(&added));
+    CHECK_FALSE(objectsIn(model.rejectedModel()).contains(&added));
+}
+
+TEST_CASE("cwKeywordFilterPipelineModel second AND column regroups a changed value",
+          "[cwKeywordFilterPipelineModel]")
+{
+    cwKeywordItemModel items;
+    QObject object;
+    auto item = new cwKeywordItem();
+    item->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Line Plot")});
+    item->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Alice")});
+    item->setObject(&object);
+    items.addItem(item);
+
+    cwKeywordFilterPipelineModel model;
+    model.setKeywordModel(&items);
+    groupColumnAt(model, 0)->setKey(QStringLiteral("Type"));
+    model.addRow();
+    auto caverColumn = groupColumnAt(model, 1);
+    REQUIRE(caverColumn);
+    caverColumn->setKey(QStringLiteral("Caver"));
+    REQUIRE(objectCountOf(caverColumn, QStringLiteral("Alice")) == 1);
+    REQUIRE(objectsIn(model.acceptedModel()).contains(&object));
+
+    // A team change on the trip: Alice -> Bob.
+    item->keywordModel()->replace({QStringLiteral("Caver"), QStringLiteral("Bob")});
+
+    CHECK(objectCountOf(caverColumn, QStringLiteral("Bob")) == 1);
+    CHECK(objectCountOf(caverColumn, QStringLiteral("Alice")) == 0);
+    CHECK(caverColumn->otherIndex().data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt() == 0);
     CHECK(objectsIn(model.acceptedModel()).contains(&object));
     CHECK_FALSE(objectsIn(model.rejectedModel()).contains(&object));
 }
