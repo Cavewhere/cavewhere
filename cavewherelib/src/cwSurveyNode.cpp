@@ -1655,20 +1655,24 @@ void cwSurveyNode::setData(const cwCaveData &data)
     m_fixStations->setFixStations(data.fixStations);
 
     //Each child is filled in before it is inserted, so the whole subtree exists
-    //by the time this node says a row appeared — the way a trip is filled in
-    //before addTrip() announces it.
+    //by the time this node says a row appeared — the way the trips are filled
+    //in before addTrips() announces them.
     for(const auto& nodeData : data.nodes) {
         auto node = new cwCave();
         node->setData(nodeData);
         addNode(node);
     }
 
-    //Insert all trips
+    //One ranged insert pulses tripScopeLabelsChanged once for the whole fill,
+    //where a per-trip insert would reach every held trip on each insert.
+    QList<cwTrip*> trips;
+    trips.reserve(data.trips.size());
     for(const auto& tripData : data.trips) {
         cwTrip* trip = new cwTrip();
         trip->setData(tripData);
-        addTrip(trip);
+        trips.append(trip);
     }
+    addTrips(trips);
 }
 
 QString cwSurveyNode::scopePrefix() const
