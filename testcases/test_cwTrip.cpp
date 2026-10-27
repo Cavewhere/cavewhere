@@ -6,6 +6,9 @@
 #include "cwTrip.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwErrorModel.h"
 #include "cwExternalCenterline.h"
 #include "cwKeywordModel.h"
 #include "cwKeyword.h"
@@ -871,6 +874,103 @@ TEST_CASE("cwTrip::windowsWholeNode names the source root's own unit",
         cwTrip orphan;
         orphan.setSourcePath(cwTrip::ownUnitSourcePath());
         CHECK_FALSE(orphan.windowsWholeNode());
+    }
+}
+
+namespace {
+
+//! The messages of \a trip's AttachedFileUnsolved rows.
+QStringList unsolvedFileRows(const cwTrip* trip)
+{
+    QStringList messages;
+    const QList<cwError> errors = trip->errorModel()->errors()->toList();
+    for (const cwError& error : errors) {
+        if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFileUnsolved)) {
+            CHECK(error.type() == cwError::Warning);
+            CHECK(error.targetId() == trip->id());
+            messages.append(error.message());
+        }
+    }
+    return messages;
+}
+
+} // namespace
+
+TEST_CASE("A trip inside a source root takes no survey file and warns about one it holds",
+          "[cwTrip][scope]")
+{
+    cwCavingRegion region;
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    cwCave* plain = new cwCave();
+    plain->setName(QStringLiteral("Plain"));
+    region.addCave(plain);
+
+    cwCave* holder = new cwCave();
+    holder->setName(QStringLiteral("Holder"));
+    region.addCave(holder);
+
+    // A trip in a plain cave takes a file and carries no warning.
+    cwTrip* plainTrip = new cwTrip();
+    plainTrip->setName(QStringLiteral("Attached"));
+    plain->addTrip(plainTrip);
+    CHECK(plainTrip->takesSurveyFile());
+    plainTrip->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+    CHECK(plainTrip->takesSurveyFile());
+    CHECK(plainTrip->unsolvedFileWarning().isEmpty());
+    CHECK(unsolvedFileRows(plainTrip).isEmpty());
+
+    // A source root, and a cave with a file of its own from before source
+    // roots, both read their trips' data from that file.
+    const bool sourced = GENERATE(true, false);
+    INFO((sourced ? "source root" : "legacy cave attachment"));
+    holder->setExternalCenterline(cwExternalCenterline(QStringLiteral("compass_case_pairs.mak")));
+    if (sourced) {
+        makeSourceRoot(holder);
+    }
+
+    // A derived node below the holder answers like the holder.
+    cwCave* below = new cwCave();
+    below->setName(QStringLiteral("Below"));
+    holder->addNode(below);
+
+    for (cwSurveyNode* node : std::initializer_list<cwSurveyNode*>{holder, below}) {
+        INFO("trip under " << node->name().toStdString());
+        cwTrip* trip = new cwTrip();
+        trip->setName(QStringLiteral("Native"));
+        node->addTrip(trip);
+        cwSignalSpy notifySpy(trip, &cwTrip::externallyBackedChanged);
+
+        CHECK_FALSE(trip->takesSurveyFile());
+        CHECK(trip->unsolvedFileWarning().isEmpty());
+        CHECK(unsolvedFileRows(trip).isEmpty());
+
+        trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+        CHECK(notifySpy.count() >= 1);
+        CHECK_FALSE(trip->takesSurveyFile());
+        const QString warning = trip->unsolvedFileWarning();
+        INFO("warning: " << warning.toStdString());
+        CHECK(warning.contains(QStringLiteral("survex_simple.svx")));
+        CHECK(warning.contains(QStringLiteral("not solved")));
+        CHECK(unsolvedFileRows(trip) == QStringList{warning});
+        // The row counts on the trip's node and every node above it.
+        CHECK(region.rootNode()->errorModel()->warningCount() >= 1);
+
+        // Moving the trip out of the holder clears both.
+        plain->insertTrip(plain->tripCount(), trip);
+        CHECK(trip->takesSurveyFile());
+        CHECK(trip->unsolvedFileWarning().isEmpty());
+        CHECK(unsolvedFileRows(trip).isEmpty());
+
+        // Moving it back brings the warning back, and taking the file away
+        // clears it.
+        node->insertTrip(node->tripCount(), trip);
+        CHECK_FALSE(trip->unsolvedFileWarning().isEmpty());
+        CHECK(unsolvedFileRows(trip).size() == 1);
+        trip->setExternalCenterline(cwExternalCenterline());
+        CHECK(trip->unsolvedFileWarning().isEmpty());
+        CHECK(unsolvedFileRows(trip).isEmpty());
     }
 }
 

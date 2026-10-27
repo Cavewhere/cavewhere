@@ -31,6 +31,7 @@
 #include "cwTeamMember.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "CasePairTestHelpers.h"
 #include "ExternalCenterlineTestHelpers.h"
 #include "LoadProjectHelper.h"
 
@@ -557,6 +558,68 @@ TEST_CASE("attach refuses null inputs with a clear error",
     // a supported case - a temporary project already has a real root
     // dir, and Save As carries the attachment with it. See
     // "[Attach][Temporary]" in test_cwExternalCenterlineAttachTemporary.
+}
+
+TEST_CASE("attach refuses a native trip inside a source root and leaves it untouched",
+          "[Attach][Orchestrator][SourcedFixtures]")
+{
+    // A source root reads its survey data from its own file, so a file
+    // attached to one of its native trips would never reach the solve.
+    auto fixture = makeSavedProject(QStringLiteral("attach-under-source-root"));
+    auto* root = qobject_cast<cwCave*>(attachSourceThroughManager(
+        fixture.get(), fixture->project->cavingRegion()->rootNode(),
+        fixturePath(casePairs::kMakFileName)));
+    REQUIRE(root != nullptr);
+    drainPipelines(fixture.get());
+
+    cwTrip* native = addEmptyTrip(root, QStringLiteral("Native"));
+    drainPipelines(fixture.get());
+    CHECK_FALSE(native->takesSurveyFile());
+
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const auto checkUntouched = [&]() {
+        CHECK(native->externalCenterline().isEmpty());
+        CHECK_FALSE(fixture->settings()->hasBreadcrumb(native->id()));
+        CHECK_FALSE(fixture->saveLoad()->externalCenterlineDir(native).exists());
+    };
+
+    SECTION("the orchestrator refuses with a reason")
+    {
+        auto future = cwExternalCenterlineAttach::attach(
+            native, source, fixture->saveLoad(), fixture->settings());
+        REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+        fixture->project->waitSaveToFinish();
+
+        REQUIRE(future.result().hasError());
+        INFO("reason: " << future.result().errorMessage().toStdString());
+        CHECK(future.result().errorMessage().contains(QStringLiteral("source root")));
+        checkUntouched();
+    }
+
+    SECTION("the manager reports the refusal to the dialog")
+    {
+        cwSignalSpy attachSpy(managerOf(fixture.get()), &cwExternalCenterlineManager::attachCompleted);
+        auto future = fixture->rootData->attachTripCenterline(native, source);
+        REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+        REQUIRE(tryWait(kAttachWaitMs, [&attachSpy]() { return attachSpy.count() == 1; }));
+        drainPipelines(fixture.get());
+
+        CHECK(future.result().hasError());
+        const auto report = attachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
+        CHECK_FALSE(report.success());
+        CHECK(report.ownerId() == native->id());
+        INFO("reason: " << report.errorMessage().toStdString());
+        CHECK(report.errorMessage().contains(QStringLiteral("source root")));
+        checkUntouched();
+    }
+
+    SECTION("a trip in a plain cave still attaches")
+    {
+        CHECK(fixture->trip->takesSurveyFile());
+        const auto result = runAttach(fixture.get(), source);
+        CHECK_FALSE(result.hasError());
+        CHECK(fixture->trip->externalCenterline().entryFile() == QStringLiteral("survex_simple.svx"));
+    }
 }
 
 namespace {

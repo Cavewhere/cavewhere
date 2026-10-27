@@ -455,3 +455,39 @@ TEST_CASE("A descendant's file read with warnings rolls up under its own kind",
     CHECK(targetAt(topModel, 0) == Target::NodePage);
     CHECK(nodeAt(topModel, 0) == nested.deep);
 }
+
+TEST_CASE("A trip's unsolved survey file is listed on its node and rolls up to the nodes above",
+          "[cwNodeWarningModel]")
+{
+    NestedRegion nested;
+    nested.deep->addTrip();
+    cwTrip* trip = nested.deep->trip(0);
+    const QString message = QStringLiteral("survex_simple.svx is not solved.");
+    trip->errorModel()->errors()->setTypedWarning(cwErrorTypeId::AttachedFileUnsolved, message,
+                                                  QString(), trip->id());
+
+    cwNodeWarningModel deepModel;
+    deepModel.setNode(nested.deep);
+    REQUIRE(deepModel.count() == 1);
+    CHECK(messageAt(deepModel, 0) == message);
+    CHECK(targetAt(deepModel, 0) == Target::TripPage);
+    CHECK(tripAt(deepModel, 0) == trip);
+
+    cwNodeWarningModel topModel;
+    topModel.setNode(nested.top);
+    CHECK(waitUntil([&topModel]() { return topModel.count() == 1; }));
+    REQUIRE(topModel.count() == 1);
+    const QString rollUp = messageAt(topModel, 0);
+    INFO("message: " << rollUp.toStdString());
+    CHECK(rollUp.startsWith(QStringLiteral("1 node below")));
+    CHECK(rollUp.contains(QStringLiteral("survey file")));
+    CHECK(rollUp.contains(QStringLiteral("not solved")));
+    CHECK(targetAt(topModel, 0) == Target::NodePage);
+    CHECK(nodeAt(topModel, 0) == nested.deep);
+
+    // Clearing the row empties both lists.
+    trip->errorModel()->errors()->setTypedWarning(cwErrorTypeId::AttachedFileUnsolved, QString(),
+                                                  QString(), trip->id());
+    CHECK(deepModel.count() == 0);
+    CHECK(waitUntil([&topModel]() { return topModel.count() == 0; }));
+}

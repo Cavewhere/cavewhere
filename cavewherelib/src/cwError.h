@@ -54,6 +54,7 @@ enum class cwErrorTypeId : int {
     AttachedFileFixWithoutCS = 17,  //!< an attachment with fixes that name no coordinate system and no system chosen for them, placed with its first such fix at the project origin
     AttachedFileReadWarnings = 18,  //!< advisories the scan of an attached file raised: a missing *include, a case-fallback match, an encoding fallback, a value it could not parse
     SurveyEmptyShot = 19,           //!< on the distance cell of an empty shot inside a chunk
+    AttachedFileUnsolved = 20,      //!< a survey file attached to a trip inside a source root, which the solve never reads
 };
 
 /**

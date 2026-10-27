@@ -12,6 +12,7 @@
 
 // Cavewhere
 #include "cwAttachedCenterlinesModel.h"
+#include "cwAttachedFixModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
@@ -20,6 +21,7 @@
 #include "cwLength.h"
 #include "cwLinePlotManager.h"
 #include "cwLocalProjectionManager.h"
+#include "cwNodeWarningModel.h"
 #include "cwCavernNaming.h"
 #include "cwScopeLabels.h"
 #include "cwEquate.h"
@@ -1413,6 +1415,127 @@ TEST_CASE("A Survex source root's *case setting stays out of its native trips",
     CHECK(casePairs::joined(nativeKeys) == casePairs::joined({scope + QStringLiteral("a1"),
                                                               scope + QStringLiteral("n1"),
                                                               scope + QStringLiteral("n2")}));
+}
+
+TEST_CASE("A survey file a trip holds inside a source root loads with a warning that it is not solved",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    // The shape a project saved before such attachments were refused has: a
+    // native trip under a .mak source root that holds survex_simple.svx. The
+    // held file fixes A1, which the solve never reads, so the root's unfixed
+    // stations must still solve on their own.
+    const QString heldFile = QStringLiteral("survex_simple.svx");
+    const QString prefix = QStringLiteral("compass_case_pairs.");
+    auto project = makeSavedProject(QStringLiteral("unsolved-trip-file"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    auto* root = qobject_cast<cwCave*>(attachSourceAndSolve(project.get(), casePairs::kMakFileName));
+    REQUIRE(root != nullptr);
+    requireSolved(project.get());
+
+    cwTrip* held = addEmptyTrip(root, QStringLiteral("Held"));
+    drainPipelines(project.get());
+    const QString attachDir = project->project->saveLoad()->externalCenterlineDir(held).absolutePath();
+    REQUIRE(QDir().mkpath(attachDir));
+    seedAttachment(attachDir, fixturePath(heldFile));
+    held->setExternalCenterline(cwExternalCenterline(heldFile));
+    const QUuid heldId = held->id();
+    const QUuid rootId = root->id();
+
+    auto reopened = reopenFromDisk(project.get());
+    const cwLinePlotManager* linePlot = reopened->linePlotManager();
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    CHECK_FALSE(linePlot->hasSolveError());
+
+    cwSurveyNode* reopenedRoot = nullptr;
+    cwTrip* reopenedHeld = nullptr;
+    const QList<cwSurveyNode*> nodes = reopened->region()->rootNode()->allNodes();
+    for (cwSurveyNode* node : nodes) {
+        if (node->id() == rootId) {
+            reopenedRoot = node;
+        }
+        for (cwTrip* trip : node->trips()) {
+            if (trip->id() == heldId) {
+                reopenedHeld = trip;
+            }
+        }
+    }
+    REQUIRE(reopenedRoot != nullptr);
+    REQUIRE(reopenedHeld != nullptr);
+    REQUIRE(reopenedHeld->parentNode() == reopenedRoot);
+
+    // The source root's own stations still solve.
+    const cwStationPositionLookup lookup = reopenedRoot->scopedPositions();
+    CHECK(casePairs::storedKeys(lookup) == casePairs::joined(casePairs::keys(prefix)));
+    casePairs::checkStations(lookup, reopenedRoot->scopedNetwork(), prefix);
+
+    // Nothing is removed: the trip still holds its file.
+    CHECK(reopenedHeld->externalCenterline().entryFile() == heldFile);
+    CHECK_FALSE(reopenedHeld->takesSurveyFile());
+
+    const auto unsolvedRows = [](const cwTrip* trip) {
+        QStringList messages;
+        const QList<cwError> errors = trip->errorModel()->errors()->toList();
+        for (const cwError& error : errors) {
+            if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFileUnsolved)) {
+                messages.append(error.message());
+            }
+        }
+        return messages;
+    };
+    const QStringList rows = unsolvedRows(reopenedHeld);
+    INFO("rows: " << casePairs::joined(rows));
+    REQUIRE(rows.size() == 1);
+    CHECK(rows.first().contains(heldFile));
+    CHECK(rows.first() == reopenedHeld->unsolvedFileWarning());
+
+    // The root's page lists it and opens the trip.
+    cwNodeWarningModel model;
+    model.setNode(reopenedRoot);
+    const auto listsHeldTrip = [&model, reopenedHeld]() {
+        for (int row = 0; row < model.count(); ++row) {
+            const QModelIndex index = model.index(row);
+            const auto target = static_cast<cwNodeWarningModel::Target>(
+                model.data(index, cwNodeWarningModel::TargetRole).toInt());
+            if (target == cwNodeWarningModel::Target::TripPage
+                && model.data(index, cwNodeWarningModel::TripRole).value<cwTrip*>() == reopenedHeld
+                && model.data(index, cwNodeWarningModel::MessageRole).toString()
+                       == reopenedHeld->unsolvedFileWarning()) {
+                return true;
+            }
+        }
+        return false;
+    };
+    CHECK(waitUntil(listsHeldTrip));
+
+    // Only a trip whose file is solved lists the fixes it holds, and a move
+    // in or out of the source root relists them on both nodes.
+    cwSurveyNode* plainCave = nullptr;
+    for (cwSurveyNode* node : nodes) {
+        if (node->name() == QStringLiteral("NativeCave")) {
+            plainCave = node;
+        }
+    }
+    REQUIRE(plainCave != nullptr);
+    const auto listsHeldFix = [heldId](const cwSurveyNode* node) {
+        const QList<cwAttachedFix> fixes = node->attachedFixes()->attachedFixes();
+        return std::any_of(fixes.cbegin(), fixes.cend(), [heldId](const cwAttachedFix& fix) {
+            return fix.ownerId == heldId;
+        });
+    };
+    CHECK_FALSE(listsHeldFix(reopenedRoot));
+    plainCave->insertTrip(plainCave->tripCount(), reopenedHeld);
+    CHECK(waitUntil([&]() { return listsHeldFix(plainCave); }));
+    CHECK(reopenedHeld->unsolvedFileWarning().isEmpty());
+    reopenedRoot->insertTrip(reopenedRoot->tripCount(), reopenedHeld);
+    CHECK(waitUntil([&]() { return !listsHeldFix(plainCave); }));
+    CHECK_FALSE(listsHeldFix(reopenedRoot));
+    CHECK(waitUntil(listsHeldTrip));
+
+    // Taking the file away clears the warning.
+    reopenedHeld->setExternalCenterline(cwExternalCenterline());
+    CHECK(unsolvedRows(reopenedHeld).isEmpty());
+    CHECK(waitUntil([&]() { return !listsHeldTrip(); }));
 }
 
 TEST_CASE("survex_mixed_case measures its length and depth as a source root",

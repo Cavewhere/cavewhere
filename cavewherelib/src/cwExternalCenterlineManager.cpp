@@ -1314,6 +1314,11 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
                 : QList<cwAttachedFix>());
             continue;
         }
+        // The solve never reads a file a trip holds inside a source root, so
+        // its fixes place nothing.
+        if (!trip->takesSurveyFile()) {
+            continue;
+        }
         attachedFixes.append(ownerFixes(trip->id(), trip->scopePrefix(), trip->externalCenterline(),
                                         [](const ScannedFix&) { return true; }));
         addFileFixedStations(trip->id());

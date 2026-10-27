@@ -359,6 +359,101 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
         }
 
+        // A new native trip under compass_project's source root, which
+        // reads its survey data from PROJECT.MAK alone.
+        function addTripUnderSourceRoot(projectBaseName) {
+            const sourceRoot = attachCompassProject(projectBaseName)
+            compare(currentCave(), sourceRoot, "the source root is the region's first cave")
+            sourceRoot.addTrip()
+            return sourceRoot.trip(sourceRoot.tripCount - 1)
+        }
+
+        // The Add Survey Data split button's chevron, found through the
+        // button itself: the page holds other split buttons.
+        function addSurveyDataChevron(tripPage) {
+            const addSurveyData = findWhenReady(
+                tripPage, "addSurveyData",
+                "the empty state must offer Add Survey Data")
+            tryVerify(() => addSurveyData.visible, 5000,
+                      "the button shows on an empty trip")
+            const menuButton = findChild(addSurveyData.parent, "menuButton")
+            verify(menuButton !== null, "the split button has a chevron")
+            return menuButton
+        }
+
+        // Opens the Add Survey Data menu directly and returns its one item.
+        function openedAddFromSurveyFileItem(tripPage) {
+            const menu = findWhenReady(tripPage, "addSurveyDataMenu",
+                                       "addSurveyDataMenu must exist")
+            menu.open()
+            tryVerify(() => menu.opened, 5000, "the menu opens")
+            compare(menu.count, 1, "the menu holds one item")
+            const item = menu.itemAt(0)
+            compare(item.objectName, "addFromSurveyFileMenuItem")
+            return item
+        }
+
+        function test_addFromSurveyFileHiddenOnTripUnderSourceRoot() {
+            const trip = addTripUnderSourceRoot("trip-page-source-root-menu")
+            verify(!trip.takesSurveyFile, "a trip inside a source root takes no survey file")
+            const tripPage = gotoTripPage(trip)
+            verify(findWhenReady(tripPage, "surveyEditor", "a native trip shows the editor") !== null)
+
+            const menuButton = addSurveyDataChevron(tripPage)
+            tryVerify(() => !menuButton.visible, 5000,
+                      "the chevron hides when its only item is hidden")
+
+            const item = openedAddFromSurveyFileItem(tripPage)
+            verify(!item.visible, "Add from survey file… is hidden inside a source root")
+            verify(!item.enabled, "and cannot be triggered")
+            findChild(tripPage, "addSurveyDataMenu").close()
+            RootData.futureManagerModel.waitForFinished()
+        }
+
+        function test_addFromSurveyFileShownOnTripInPlainCave() {
+            const trip = makeSavedTrip("trip-page-plain-cave-menu")
+            verify(trip.takesSurveyFile, "a trip in a plain cave takes a survey file")
+            const tripPage = gotoTripPage(trip)
+
+            const menuButton = addSurveyDataChevron(tripPage)
+            verify(menuButton.visible, "the chevron shows in a plain cave")
+
+            const item = openedAddFromSurveyFileItem(tripPage)
+            tryVerify(() => item.visible, 5000, "Add from survey file… shows in a plain cave")
+            verify(item.enabled, "and can be triggered")
+            findChild(tripPage, "addSurveyDataMenu").close()
+            RootData.futureManagerModel.waitForFinished()
+        }
+
+        function test_unsolvedFileBannerOnTripUnderSourceRoot() {
+            // A project saved before such attachments were refused: the trip
+            // under the source root already holds a file.
+            const trip = addTripUnderSourceRoot("trip-page-source-root-banner")
+            RootData.region.addCave()
+            const plainCave = RootData.region.cave(1)
+            plainCave.addTrip()
+            const attached = plainCave.trip(0)
+            attachSourceToTrip(attached, TestHelper.testcasesDatasetPath(
+                                   "external-centerlines/survex_simple.svx"))
+            trip.externalCenterline = attached.externalCenterline
+
+            tryVerify(() => trip.unsolvedFileWarning.indexOf("survex_simple.svx") >= 0,
+                      5000, "the trip warns that its file is not solved")
+            const tripPage = gotoTripPage(trip)
+            tryVerify(() => findChild(tripPage, "externalCenterlineTripPanel") !== null,
+                      10000, "a trip that holds a file shows the panel")
+            const banner = findWhenReady(tripPage, "unsolvedFileBanner",
+                                         "the panel has the unsolved-file banner")
+            tryVerify(() => banner.visible, 5000, "the banner shows")
+            verify(containsText(banner, trip.unsolvedFileWarning),
+                   "the banner shows the trip's warning")
+
+            trip.externalCenterline = plainCave.externalCenterline
+            tryVerify(() => trip.unsolvedFileWarning.length === 0, 5000,
+                      "taking the file away clears the warning")
+            RootData.futureManagerModel.waitForFinished()
+        }
+
         function test_detachSwapsPaneBackToSurveyEditor() {
             const fixture = attachFixtureTrip("trip-page-detach-swap")
             const tripPage = gotoTripPage(fixture.trip)

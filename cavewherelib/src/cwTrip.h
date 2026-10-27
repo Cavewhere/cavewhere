@@ -78,6 +78,8 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(bool isScoped READ isScoped NOTIFY scopeChanged)
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
     Q_PROPERTY(bool windowsWholeNode READ windowsWholeNode NOTIFY externallyBackedChanged)
+    Q_PROPERTY(bool takesSurveyFile READ takesSurveyFile NOTIFY externallyBackedChanged)
+    Q_PROPERTY(QString unsolvedFileWarning READ unsolvedFileWarning NOTIFY externallyBackedChanged)
     Q_PROPERTY(double solvedLength READ solvedLength NOTIFY solvedLengthChanged)
     Q_PROPERTY(QStringList externalStations READ externalStations NOTIFY externalStationsChanged FINAL)
     Q_PROPERTY(QString externalStationsError READ externalStationsError NOTIFY externalStationsErrorChanged FINAL)
@@ -243,6 +245,16 @@ public:
     //! that holds it, so the worker-thread geometry pass and the UI decide
     //! alike.
     static bool windowsWholeNode(const cwTripData& trip, const cwCaveData& node);
+
+    //! True when a survey file attached here is solved: no node at or above the
+    //! trip's node has a file of its own. A trip inside a source root takes its
+    //! survey data through the root's file.
+    bool takesSurveyFile() const;
+
+    //! The warning a trip shows when it holds a survey file the solve never
+    //! reads (one attached inside a source root, from a project saved before
+    //! such attachments were refused); empty otherwise.
+    QString unsolvedFileWarning() const;
 
     //! The length in meters of the legs this trip draws in the last solve, the
     //! per-trip counterpart of cwSurveyNode::length(). It is what an externally
@@ -566,6 +578,8 @@ private:
 
     //True when appliedDeclination() is the calibration's rather than the file's.
     bool readsCalibrationDeclination() const;
+
+    void updateUnsolvedFileWarning();
 
     // void Copy(const cwTrip& object);
 

@@ -120,6 +120,27 @@ QQ.Item {
                               ? root.trip.externalStationsError : ""
             }
 
+            // A file held by a trip inside a source root, from a project saved
+            // before such attachments were refused: the solve never reads it.
+            NoticeBanner {
+                id: unsolvedFileBannerId
+                objectName: "unsolvedFileBanner"
+
+                Layout.fillWidth: true
+                visible: root.isAttached && root.trip !== null
+                         && root.trip.unsolvedFileWarning.length > 0
+                color: Theme.warning
+                title: qsTr("This file is not solved")
+                titleObjectName: "unsolvedFileTitle"
+
+                BodyText {
+                    objectName: "unsolvedFileMessage"
+                    Layout.fillWidth: true
+                    wrapMode: QC.Label.WordWrap
+                    text: root.trip !== null ? root.trip.unsolvedFileWarning : ""
+                }
+            }
+
             FloatingSurveyBanner {
                 id: floatingBannerId
                 Layout.fillWidth: true

@@ -25,8 +25,8 @@ class cwTrip;
 /**
  * The warnings a survey node's page lists, one row per warning: the node's own
  * unsuppressed warnings (fix stations, attached files, untied stations),
- * followed by the UnconnectedStations warning of each of its direct trips,
- * which the solve writes on the trip rather than on the node.
+ * followed by the UnconnectedStations and AttachedFileUnsolved warnings of
+ * each of its direct trips, which live on the trip rather than on the node.
  *
  * Each row also says where the user fixes it, resolved from the warning's
  * targetId against the node: a row of the node's fix stations, one of its

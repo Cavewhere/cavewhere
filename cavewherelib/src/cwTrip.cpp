@@ -15,6 +15,7 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwSurveyNoteSketchModel.h"
 #include "cwErrorModel.h"
+#include "cwErrorListModel.h"
 #include "cwData.h"
 #include "cwKeywordModel.h"
 #include "cwNameUtils.h"
@@ -26,6 +27,7 @@
 
 //Qt includes
 #include <QDebug>
+#include <QFileInfo>
 #include <QMap>
 #include <QSet>
 #include <QUuid>
@@ -225,6 +227,7 @@ cwTrip::cwTrip(QObject *parent) :
     connect(Calibration, &cwTripCalibration::autoDeclinationAvailableChanged, this, &cwTrip::appliedDeclinationChanged);
     connect(this, &cwTrip::fileDeclinationChanged, this, &cwTrip::appliedDeclinationChanged);
     connect(this, &cwTrip::externallyBackedChanged, this, &cwTrip::appliedDeclinationChanged);
+    connect(this, &cwTrip::externallyBackedChanged, this, &cwTrip::updateUnsolvedFileWarning);
 
 //    qDebug() << "Creating:" << this;
 }
@@ -550,6 +553,30 @@ bool cwTrip::windowsWholeNode() const
 bool cwTrip::windowsWholeNode(const cwTripData& trip, const cwCaveData& node)
 {
     return computeWindowsWholeNode(trip.sourcePath, isSourceRoot(node));
+}
+
+bool cwTrip::takesSurveyFile() const
+{
+    const cwSurveyNode* node = parentNode();
+    return node == nullptr || !node->externallyBacked();
+}
+
+QString cwTrip::unsolvedFileWarning() const
+{
+    if (m_externalCenterline.isEmpty() || takesSurveyFile()) {
+        return QString();
+    }
+    const QString fileName = QFileInfo(m_externalCenterline.entryFile()).fileName();
+    return tr("%1 is not solved: a trip inside a source root takes its survey data from "
+              "the source's own file. Add %1 to that file (the .mak, .wpj or .svx), or "
+              "attach it to a trip outside the source root and tie it in with an equate.")
+        .arg(fileName);
+}
+
+void cwTrip::updateUnsolvedFileWarning()
+{
+    errorModel()->errors()->setTypedWarning(cwErrorTypeId::AttachedFileUnsolved,
+                                            unsolvedFileWarning(), QString(), id());
 }
 
 void cwTrip::setId(const QUuid& id)
