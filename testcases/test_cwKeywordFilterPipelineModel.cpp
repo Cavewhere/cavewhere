@@ -859,3 +859,48 @@ TEST_CASE("A Save As keeps the keyword filter pipeline's rows without replaying 
     CHECK(acceptedInserted.count() == 0);
     CHECK(acceptedRemoved.count() == 0);
 }
+
+TEST_CASE("cwKeywordFilterPipelineModel keeps an object accepted when another key's keyword changes",
+          "[cwKeywordFilterPipelineModel]")
+{
+    cwKeywordItemModel items;
+    QObject object;
+    auto item = new cwKeywordItem();
+    item->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Line Plot")});
+    item->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Alice")});
+    item->setObject(&object);
+    items.addItem(item);
+
+    cwKeywordFilterPipelineModel model;
+    model.setKeywordModel(&items);
+    auto column = qobject_cast<cwKeywordGroupByKeyModel*>(filterAt(model, 0));
+    REQUIRE(column);
+    column->setKey(QStringLiteral("Type"));
+    REQUIRE(objectsIn(model.acceptedModel()).contains(&object));
+
+    item->keywordModel()->replace({QStringLiteral("Caver"), QStringLiteral("Bob")});
+
+    CHECK(column->otherIndex().data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt() == 0);
+    CHECK(objectsIn(model.acceptedModel()).contains(&object));
+    CHECK_FALSE(objectsIn(model.rejectedModel()).contains(&object));
+}
+
+TEST_CASE("cwKeywordFilterPipelineModel accepts an object whose keyed keyword arrives after insert",
+          "[cwKeywordFilterPipelineModel]")
+{
+    cwKeywordItemModel items;
+    cwKeywordFilterPipelineModel model;
+    model.setKeywordModel(&items);
+    auto column = qobject_cast<cwKeywordGroupByKeyModel*>(filterAt(model, 0));
+    REQUIRE(column);
+    column->setKey(QStringLiteral("Type"));
+
+    QObject object;
+    auto item = new cwKeywordItem();
+    item->setObject(&object);
+    items.addItem(item);
+    item->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Running Profile")});
+
+    CHECK(objectsIn(model.acceptedModel()).contains(&object));
+    CHECK_FALSE(objectsIn(model.rejectedModel()).contains(&object));
+}

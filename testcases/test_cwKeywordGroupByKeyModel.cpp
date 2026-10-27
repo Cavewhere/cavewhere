@@ -422,3 +422,161 @@ TEST_CASE("cwKeywordGroupByKeyModel takes a source range insert in one pass",
     CHECK(groupBy.otherIndex().data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt() == kRangeCount);
     CHECK(groupBy.acceptedModel()->rowCount() == kRangeCount);
 }
+
+namespace {
+
+bool isAccepted(const cwKeywordGroupByKeyModel& model, QObject* object)
+{
+    const QAbstractItemModel* accepted = model.acceptedModel();
+    for (int i = 0; i < accepted->rowCount(); ++i) {
+        if (accepted->index(i, 0).data(cwKeywordItemModel::ObjectRole).value<QObject*>() == object) {
+            return true;
+        }
+    }
+    return false;
+}
+
+QModelIndex valueIndex(const cwKeywordGroupByKeyModel& model, const QString& value)
+{
+    for (int i = 0; i < model.rowCount() - 1; ++i) {
+        const QModelIndex index = model.index(i);
+        if (index.data(cwKeywordGroupByKeyModel::ValueRole).toString() == value) {
+            return index;
+        }
+    }
+    return QModelIndex();
+}
+
+int objectCount(const QModelIndex& index)
+{
+    return index.data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt();
+}
+
+cwKeywordItem* addItem(cwKeywordItemModel& items, QObject* object, const QVector<cwKeyword>& keywords)
+{
+    auto item = new cwKeywordItem();
+    for (const auto& keyword : keywords) {
+        item->keywordModel()->add(keyword);
+    }
+    item->setObject(object);
+    items.addItem(item);
+    return item;
+}
+
+} // namespace
+
+TEST_CASE("cwKeywordGroupByKeyModel keeps an object in its value row when another key's keyword changes",
+          "[cwKeywordGroupByKeyModel]")
+{
+    cwKeywordItemModel items;
+    QObject object;
+    auto item = addItem(items, &object, {{QStringLiteral("Type"), QStringLiteral("Line Plot")},
+                                         {QStringLiteral("Caver"), QStringLiteral("Alice")}});
+
+    cwKeywordGroupByKeyModel model;
+    model.setSourceModel(&items);
+    model.setKey(QStringLiteral("Type"));
+    REQUIRE(objectCount(valueIndex(model, QStringLiteral("Line Plot"))) == 1);
+    REQUIRE(objectCount(model.otherIndex()) == 0);
+    REQUIRE(isAccepted(model, &object));
+
+    SECTION("Replacing the other key's value") {
+        item->keywordModel()->replace({QStringLiteral("Caver"), QStringLiteral("Bob")});
+    }
+
+    SECTION("Removing and re-adding the other key's keyword") {
+        item->keywordModel()->removeAll(QStringLiteral("Caver"));
+        item->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Bob")});
+    }
+
+    CHECK(objectCount(model.otherIndex()) == 0);
+    CHECK(objectCount(valueIndex(model, QStringLiteral("Line Plot"))) == 1);
+    CHECK(isAccepted(model, &object));
+}
+
+TEST_CASE("cwKeywordGroupByKeyModel accepts an object while any of its values is checked",
+          "[cwKeywordGroupByKeyModel]")
+{
+    cwKeywordItemModel items;
+    QObject object;
+    addItem(items, &object, {{QStringLiteral("Caver"), QStringLiteral("Alice")},
+                             {QStringLiteral("Caver"), QStringLiteral("Bob")}});
+
+    cwKeywordGroupByKeyModel model;
+    model.setSourceModel(&items);
+    model.setKey(QStringLiteral("Caver"));
+    REQUIRE(isAccepted(model, &object));
+
+    REQUIRE(model.setData(valueIndex(model, QStringLiteral("Alice")), false, cwKeywordGroupByKeyModel::AcceptedRole));
+    CHECK(isAccepted(model, &object));
+
+    REQUIRE(model.setData(valueIndex(model, QStringLiteral("Bob")), false, cwKeywordGroupByKeyModel::AcceptedRole));
+    CHECK_FALSE(isAccepted(model, &object));
+
+    REQUIRE(model.setData(valueIndex(model, QStringLiteral("Alice")), true, cwKeywordGroupByKeyModel::AcceptedRole));
+    CHECK(isAccepted(model, &object));
+}
+
+TEST_CASE("cwKeywordGroupByKeyModel invert keeps an object accepted while any of its values is checked",
+          "[cwKeywordGroupByKeyModel]")
+{
+    cwKeywordItemModel items;
+    QObject object;
+    addItem(items, &object, {{QStringLiteral("Caver"), QStringLiteral("Alice")},
+                             {QStringLiteral("Caver"), QStringLiteral("Bob")}});
+
+    cwKeywordGroupByKeyModel model;
+    model.setSourceModel(&items);
+    model.setKey(QStringLiteral("Caver"));
+    REQUIRE(model.setData(valueIndex(model, QStringLiteral("Bob")), false, cwKeywordGroupByKeyModel::AcceptedRole));
+    REQUIRE(isAccepted(model, &object));
+
+    model.invert();
+    CHECK_FALSE(valueIndex(model, QStringLiteral("Alice")).data(cwKeywordGroupByKeyModel::AcceptedRole).toBool());
+    CHECK(valueIndex(model, QStringLiteral("Bob")).data(cwKeywordGroupByKeyModel::AcceptedRole).toBool());
+    CHECK(isAccepted(model, &object));
+
+    model.invert();
+    CHECK(valueIndex(model, QStringLiteral("Alice")).data(cwKeywordGroupByKeyModel::AcceptedRole).toBool());
+    CHECK(isAccepted(model, &object));
+}
+
+TEST_CASE("cwKeywordGroupByKeyModel keeps an object accepted by a checked value through keyword edits",
+          "[cwKeywordGroupByKeyModel]")
+{
+    cwKeywordItemModel items;
+    QObject aliceOnly;
+    addItem(items, &aliceOnly, {{QStringLiteral("Caver"), QStringLiteral("Alice")}});
+
+    QObject object;
+    auto item = addItem(items, &object, {{QStringLiteral("Caver"), QStringLiteral("Bob")},
+                                         {QStringLiteral("Type"), QStringLiteral("Line Plot")}});
+
+    cwKeywordGroupByKeyModel model;
+    model.setSourceModel(&items);
+    model.setKey(QStringLiteral("Caver"));
+    REQUIRE(model.setData(valueIndex(model, QStringLiteral("Alice")), false, cwKeywordGroupByKeyModel::AcceptedRole));
+    REQUIRE_FALSE(isAccepted(model, &aliceOnly));
+    REQUIRE(isAccepted(model, &object));
+
+    SECTION("Gaining a value whose row is unchecked") {
+        item->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Alice")});
+        CHECK(objectCount(valueIndex(model, QStringLiteral("Alice"))) == 2);
+        CHECK(isAccepted(model, &object));
+        CHECK_FALSE(isAccepted(model, &aliceOnly));
+    }
+
+    SECTION("Editing another key while it also holds an unchecked value") {
+        item->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Alice")});
+        item->keywordModel()->replace({QStringLiteral("Type"), QStringLiteral("Scrap")});
+        CHECK(objectCount(model.otherIndex()) == 0);
+        CHECK(isAccepted(model, &object));
+    }
+
+    SECTION("Losing its only checked value") {
+        item->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Alice")});
+        item->keywordModel()->remove(cwKeyword(QStringLiteral("Caver"), QStringLiteral("Bob")));
+        CHECK_FALSE(valueIndex(model, QStringLiteral("Bob")).isValid());
+        CHECK_FALSE(isAccepted(model, &object));
+    }
+}

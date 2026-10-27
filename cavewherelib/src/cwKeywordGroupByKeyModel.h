@@ -153,9 +153,9 @@ private:
     private:
         void addEntity(const QString& value, const QModelIndex &sourceIndex);
         void removeEntity(const QString& value, const QModelIndex &sourceIndex);
-        bool removeEntityFromRow(QVector<Row>::iterator iter, const QModelIndex &sourceIndex);
-        bool removeEntityFromRow(int i, Row& row, const QModelIndex &sourceIndex);
-        void addEntityToOther(const QModelIndex &sourceIndex);
+        void removeEntityFromRow(QVector<Row>::iterator iter, const QModelIndex &sourceIndex);
+        void removeEntityFromRow(int i, Row& row, const QModelIndex &sourceIndex);
+        void setInOther(const QModelIndex &sourceIndex, bool inOther);
 
         void beginInsert(const QVector<Row>::iterator& iter) const;
         void endInsert() const;
@@ -205,7 +205,7 @@ private:
             row.accepted = accepted;
 
             for(const auto& index : std::as_const(row.indexes)) {
-                setAcceptIndex(index, accepted);
+                setAcceptIndex(index, accepted || isIndexAccepted(index));
             }
 
             //Only enable if func isn't nullptr
@@ -216,6 +216,7 @@ private:
     }
 
     void setAcceptIndex(const QModelIndex& index, bool accepted);
+    bool isIndexAccepted(const QPersistentModelIndex& index) const;
 };
 
 inline QAbstractItemModel* cwKeywordGroupByKeyModel::sourceModel() const {
