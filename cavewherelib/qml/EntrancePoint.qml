@@ -8,8 +8,8 @@ import cavewherelib
 // The 2D stand-in for one entrance marker. The pin and its text draw as
 // billboards of the EntranceView's keyed layers; cwEntranceView reads this
 // item's marker visibility for both and places the item at the fix's solved
-// position. Tapping the pin opens a popup with the fix's name, kind and its
-// node's stats, and a link to the node's page.
+// position. Tapping the pin opens a popup with the cave icon, the fix's name,
+// kind and its node's stats, and a link to the node's page.
 PositionItem {
     id: pointId
     objectName: "entrancePoint_" + stationName
@@ -86,11 +86,23 @@ PositionItem {
                     id: contentColumn
                     spacing: Theme.sectionSpacing
 
-                    QC.Label {
-                        objectName: "entranceName"
-                        text: pointId.displayName
-                        font.bold: true
-                        font.pixelSize: Theme.fontSizeMedium
+                    RowLayout {
+                        spacing: Theme.entrancePopupIconSpacing
+
+                        Icon {
+                            objectName: "entranceIcon"
+                            Layout.alignment: Qt.AlignVCenter
+                            sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
+                            colorizationColor: Theme.textSubtle
+                            source: Theme.kindIconCave
+                        }
+
+                        QC.Label {
+                            objectName: "entranceName"
+                            text: pointId.displayName
+                            font.bold: true
+                            font.pixelSize: Theme.fontSizeMedium
+                        }
                     }
 
                     QC.Label {

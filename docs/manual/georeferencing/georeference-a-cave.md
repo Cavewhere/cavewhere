@@ -194,14 +194,16 @@ second, smaller gray line under the name, such as `→1.2 km  ↓85 m`: the
 cave's length and its depth, in the project's units. Lengths under 1 km (or
 1 mi) show whole meters (or feet).
 
-Two columns on the **Fix Stations** page shape the marker. **Kind** picks
-one of `Entrance`, `Well`, `Radio Location` or `Other`, and each kind draws
-its own pin. Only an Entrance gets the length and depth; the others show the
-name alone. **Label** names the marker. Leave it blank and the marker uses
-the cave's name, which is what you want for a cave with one entrance.
+Every marker draws the same cave pin. Two columns on the **Fix Stations**
+page shape its text. **Kind** picks one of `Entrance`, `Well`,
+`Radio Location` or `Other`. Only an Entrance gets the length and depth; the
+others show the name alone. **Label** names the marker. Leave it blank and the
+marker uses the cave's name, which is what you want for a cave with one
+entrance.
 
-Click a pin to see its name and kind, plus the cave's length and depth for an
-entrance, with a link that opens the cave's page. Click empty space to close it.
+Click a pin to see the cave icon, its name and kind, plus the cave's length
+and depth for an entrance, with a link that opens the cave's page. Click empty
+space to close it.
 
 Pins always draw. Where entrances crowd together, only one name and its
 length and depth line show in each spot; the other pins keep their place and

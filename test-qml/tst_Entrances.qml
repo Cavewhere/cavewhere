@@ -270,6 +270,38 @@ MainWindowTest {
             }
         }
 
+        // Every entrance draws the one cave pin, whatever its fix's Kind.
+        function test_entranceViewDeclaresOnePin() {
+            const view = entranceView()
+            verify(view !== null, "the renderer should host an EntranceView")
+            compare(view.sprites.length, 1, "the view should declare one pin sprite")
+            compare(String(view.sprites[0].source), "qrc:/icons/svg/entrancePin.svg")
+        }
+
+        // The popup leads with the cave icon for a fix of every Kind.
+        function test_popupShowsCaveIconForEveryKind() {
+            const {cave, point} = addSolvedEntrance("Gypsum Hollow")
+            const fixes = cave.fixStations
+            for (const kind of [FixStation.Entrance, FixStation.Well,
+                                FixStation.RadioLocation, FixStation.Other]) {
+                fixes.setData(fixes.index(0), kind, FixStationModel.KindRole)
+                tryVerify(() => point.kind === kind && point.visible, 5000,
+                          "the point should follow the fix's kind " + kind)
+
+                const quoteBox = openEntrancePopup(point)
+                const icon = findChild(quoteBox, "entranceIcon")
+                verify(icon !== null, "the popup should show an icon for kind " + kind)
+                compare(String(icon.source), String(Theme.kindIconCave),
+                        "the popup icon should be the cave icon for kind " + kind)
+                verify(icon.visible, "the popup icon should show for kind " + kind)
+
+                mouseClick(point.marker)
+                tryVerify(() => !point.selected, 5000, "tapping the selected entrance should close it")
+                tryVerify(() => findChild(point, "entranceQuoteBox") === null, 5000,
+                          "the popup should close before the next kind")
+            }
+        }
+
         // The popup's link opens the owning cave's page.
         function test_entranceLinkOpensNodePage() {
             const {cave, point} = addSolvedEntrance("Gypsum Hollow")

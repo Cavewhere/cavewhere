@@ -829,7 +829,7 @@ bool cwEntranceView::isEntryVisible(const Entry& entry) const
 void cwEntranceView::updatePin(Entry& entry, bool visible)
 {
     setSpriteBillboard(entry.pinBillboard, entry.position, kEntranceDepthBias, kPinOpacity,
-                       visible, int(entry.kind));
+                       visible);
 }
 
 // A text billboard has no visible flag, so a hidden line leaves its layer.

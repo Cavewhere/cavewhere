@@ -41,13 +41,13 @@ class QQmlComponent;
  *
  * Walks every node of the region and, for each of a node's own fixes whose
  * station has a solved position below that node and whose coordinate places it,
- * draws a tip-down pin in this view's keyed sprite layer (slot = the fix's
- * cwFixStation::Kind) with the fix's display name above it in the keyed text
- * layer. An Entrance also draws its cwEntranceLabel stats line between the pin
- * and the name, in the statsLayerKey() text layer with its own style. Each
- * drawn fix also owns an invisible EntrancePoint item, the tap target, and one
- * cwKeywordItem (Type = kind name, Name = display name, extending the node's
- * keywords) whose cwEntranceVisibility hides that fix.
+ * draws the one tip-down pin (sprite slot 0) in this view's keyed sprite layer
+ * with the fix's display name above it in the keyed text layer. An Entrance also
+ * draws its cwEntranceLabel stats line between the pin and the name, in the
+ * statsLayerKey() text layer with its own style. Each drawn fix also owns an
+ * invisible EntrancePoint item, the tap target, and one cwKeywordItem
+ * (Type = kind name, Name = display name, extending the node's keywords) whose
+ * cwEntranceVisibility hides that fix.
  * Model changes coalesce into one queued rebuild; camera changes only
  * reproject.
  */

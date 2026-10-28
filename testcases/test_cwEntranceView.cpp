@@ -16,6 +16,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 // Qt
+#include <QFile>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -23,6 +24,7 @@
 #include <QRay3D>
 #include <QSignalSpy>
 #include <QTextLayout>
+#include <QXmlStreamReader>
 
 // Std
 #include <algorithm>
@@ -94,6 +96,9 @@ const QColor kStatsColor(85, 85, 85);
 const QColor kStatsOutlineColor(240, 240, 240);
 const QColor kOtherStatsColor(201, 201, 201);
 
+// The one sprite slot every entrance draws, whatever its fix's Kind.
+constexpr uint32_t kPinSlot = 0;
+
 // A 4x larger region may cost at most this many times the keyword inserts.
 constexpr int kGrowthFactor = 4;
 constexpr int kSmallRegionNodes = 4;
@@ -108,11 +113,8 @@ QString entranceViewQml()
                "  EntranceView {\n"
                "    objectName: \"entranceView\"\n"
                "    anchors.fill: parent\n"
-               "    sprites: [entrancePin, wellPin, radioLocationPin, otherPin]\n"
+               "    sprites: [entrancePin]\n"
                "    Item { id: entrancePin; width: %2; height: %3 }\n"
-               "    Item { id: wellPin; width: %2; height: %3 }\n"
-               "    Item { id: radioLocationPin; width: %2; height: %3 }\n"
-               "    Item { id: otherPin; width: %2; height: %3 }\n"
                "  }\n"
                "}\n")
         .arg(kViewportSize)
@@ -268,7 +270,7 @@ TEST_CASE("cwEntranceView draws a placed, solved fix at its solved position", "[
 
     const auto instances = f.pins()->buildInstances();
     CHECK(instances.at(0).worldPosition == kSolvedPosition);
-    CHECK(instances.at(0).spriteIndex == uint32_t(cwFixStation::Entrance));
+    CHECK(instances.at(0).spriteIndex == kPinSlot);
 
     // The name and the stats lines live on two layers, each with its own style.
     REQUIRE(f.statsTexts() != f.texts());
@@ -395,32 +397,85 @@ TEST_CASE("cwEntranceView draws nothing for a fix the solve missed or that has n
     CHECK(f.point(QStringLiteral("entrancePoint_C1")) == nullptr);
 }
 
-TEST_CASE("cwEntranceView draws a Well by name alone in the Well slot", "[cwEntranceView]")
+TEST_CASE("cwEntranceView draws a Well by name alone", "[cwEntranceView]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
     REQUIRE(f.waitForOneEntrance());
-    REQUIRE(f.pins()->buildInstances().at(0).spriteIndex == uint32_t(cwFixStation::Entrance));
     // The positive control: as an Entrance it draws a stats line.
     CHECK(f.statsTexts()->billboardCount() == 1);
 
     cwFixStationModel* fixes = cave->fixStations();
     REQUIRE(fixes->setData(fixes->index(0), int(cwFixStation::Well), cwFixStationModel::KindRole));
 
-    REQUIRE(waitUntil([&] { return f.pins()->buildInstances().size() == 1
-                                   && f.pins()->buildInstances().at(0).spriteIndex
-                                          == uint32_t(cwFixStation::Well); }));
+    // The rebuild that hands the point its kind pushes the pin in the same pass.
+    QQuickItem* point = f.point();
+    REQUIRE(point != nullptr);
+    REQUIRE(waitUntil([&] { return point->property("kind").toInt() == int(cwFixStation::Well); }));
     CHECK(joined(f.drawnTexts()) == joined({kCaveName}));
     CHECK(f.statsTexts()->billboardCount() == 0);
     const auto instances = f.pins()->buildInstances();
     REQUIRE(instances.size() == 1);
-    CHECK(instances.at(0).spriteIndex == uint32_t(cwFixStation::Well));
     CHECK(instances.at(0).worldPosition == kSolvedPosition);
 
     REQUIRE(f.keywords.rowCount() == 1);
     const QStringList pairs = keywordPairs(f.keywords.item(0));
     CHECK(pairs.contains(QStringLiteral("Type=Well")));
     CHECK_FALSE(pairs.contains(QStringLiteral("Type=Entrance")));
+}
+
+TEST_CASE("cwEntranceView draws the one pin for a fix of every Kind", "[cwEntranceView]")
+{
+    const auto kind = GENERATE(cwFixStation::Entrance, cwFixStation::Well,
+                               cwFixStation::RadioLocation, cwFixStation::Other);
+    INFO("kind " << cwFixStation::kindName(kind).toStdString());
+
+    EntranceFixture f;
+    cwCave* cave = f.addEntranceCave();
+    REQUIRE(f.waitForOneEntrance());
+    QQuickItem* point = f.point();
+    REQUIRE(point != nullptr);
+
+    cwFixStationModel* fixes = cave->fixStations();
+    const bool kindWritten = fixes->setData(fixes->index(0), int(kind), cwFixStationModel::KindRole);
+    CHECK((kindWritten || kind == cwFixStation::Entrance));
+    REQUIRE(waitUntil([&] { return point->property("kind").toInt() == int(kind); }));
+
+    const auto instances = f.pins()->buildInstances();
+    REQUIRE(instances.size() == 1);
+    CHECK(instances.at(0).spriteIndex == kPinSlot);
+    CHECK(instances.at(0).worldPosition == kSolvedPosition);
+}
+
+TEST_CASE("The entrance pin carries the cave glyph and the per-kind pins are gone", "[cwEntranceView]")
+{
+    // The cave glyph is the one path in caveKind.svg.
+    QFile caveIcon(QStringLiteral(":/icons/svg/caveKind.svg"));
+    REQUIRE(caveIcon.open(QIODevice::ReadOnly));
+    QXmlStreamReader reader(&caveIcon);
+    QString glyph;
+    while (!reader.atEnd() && glyph.isEmpty()) {
+        reader.readNext();
+        if (reader.isStartElement() && reader.name() == QStringLiteral("path")) {
+            glyph = reader.attributes().value(QStringLiteral("d")).toString();
+        }
+    }
+    REQUIRE_FALSE(glyph.isEmpty());
+
+    {
+        QFile pin(QStringLiteral(":/icons/svg/entrancePin.svg"));
+        REQUIRE(pin.open(QIODevice::ReadOnly));
+        const QString pinSvg = QString::fromUtf8(pin.readAll());
+        INFO(pinSvg.toStdString());
+        CHECK(pinSvg.contains(glyph));
+    }
+
+    for (const QString& removed : {QStringLiteral(":/icons/svg/wellPin.svg"),
+                                   QStringLiteral(":/icons/svg/radioLocationPin.svg"),
+                                   QStringLiteral(":/icons/svg/otherPin.svg")}) {
+        INFO(removed.toStdString());
+        CHECK_FALSE(QFile::exists(removed));
+    }
 }
 
 TEST_CASE("cwEntranceView drops the pin, text and keyword item of a removed fix", "[cwEntranceView]")
@@ -804,11 +859,8 @@ QString declutterQml()
                "    objectName: \"entranceView\"\n"
                "    anchors.fill: parent\n"
                "    declutterTier: LabelDeclutter.EntranceTier\n"
-               "    sprites: [entrancePin, wellPin, radioLocationPin, otherPin]\n"
+               "    sprites: [entrancePin]\n"
                "    Item { id: entrancePin; width: %2; height: %3 }\n"
-               "    Item { id: wellPin; width: %2; height: %3 }\n"
-               "    Item { id: radioLocationPin; width: %2; height: %3 }\n"
-               "    Item { id: otherPin; width: %2; height: %3 }\n"
                "  }\n"
                "}\n")
         .arg(kViewportSize)

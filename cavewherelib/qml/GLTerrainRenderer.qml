@@ -287,10 +287,6 @@ Item {
         }
     }
 
-    component EntrancePin: Image {
-        sourceSize: Qt.size(Theme.entrancePinWidth, Theme.entrancePinHeight)
-    }
-
     EntranceView {
         id: entranceViewId
         objectName: "entranceView"
@@ -309,26 +305,14 @@ Item {
         statsColor: Theme.entranceStatsColor
         statsOutlineColor: Theme.entranceStatsOutlineColor
         textGap: Theme.entranceTextGap
-        sprites: [entrancePin, wellPin, radioLocationPin, otherPin]
+        sprites: [entrancePin]
 
-        // One pin per cwFixStation::Kind, in enum order. Referenced into the 3D
-        // pass as textures, so they are hidden from the 2D tree. All four share
-        // one size: the layer draws every slot at slot 0's size.
-        EntrancePin {
+        // The one pin every entrance draws (slot 0). Referenced into the 3D
+        // pass as a texture, so it is hidden from the 2D tree.
+        Image {
             id: entrancePin
             source: "qrc:/icons/svg/entrancePin.svg"
-        }
-        EntrancePin {
-            id: wellPin
-            source: "qrc:/icons/svg/wellPin.svg"
-        }
-        EntrancePin {
-            id: radioLocationPin
-            source: "qrc:/icons/svg/radioLocationPin.svg"
-        }
-        EntrancePin {
-            id: otherPin
-            source: "qrc:/icons/svg/otherPin.svg"
+            sourceSize: Qt.size(Theme.entrancePinWidth, Theme.entrancePinHeight)
         }
     }
 

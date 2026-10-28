@@ -94,8 +94,9 @@ a cave gets placed on the map.
 
 ### Entrance marker
 The pin and line of text the 3D view draws on a [fixed station](#fixed-station)
-once the survey solves it. Its kind (Entrance, Well, Radio Location, Other)
-picks the pin, and an entrance's line adds the cave's length and depth. See
+once the survey solves it. Every marker draws the same cave pin. Its kind
+(Entrance, Well, Radio Location, Other) decides the text: an entrance's line
+adds the cave's length and depth. See
 [Georeference a Cave](../georeferencing/georeference-a-cave.md#entrance-markers).
 
 ## Notes and drawings
