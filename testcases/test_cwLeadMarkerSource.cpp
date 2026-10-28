@@ -1,14 +1,16 @@
-// Pins cwLeadView::isOccluded — the gate LeadPoint.qml uses to decide whether a
-// tap on a lead marker counts. A lead renders as an overlay billboard regardless
-// of depth, so without this gate you could click a lead through a cave wall.
+// Pins the lead markers: a cwMarkerView fed by a cwLeadMarkerSource.
 //
-// isOccluded needs only a camera and a scene, so it runs here on the GUI thread
-// with no window, QRhi, or QML engine: the BVH is CPU-side and the billboard
-// plane is solved analytically.
+// The occlusion cases pin cwMarkerView::isOccluded with the lead source's anchor
+// and depth bias — the gate LeadPoint.qml uses to decide whether a tap on a lead
+// marker counts. A lead renders as an overlay billboard regardless of depth, so
+// without this gate you could click a lead through a cave wall. isOccluded needs
+// only a camera, a scene and a source, so it runs here on the GUI thread with no
+// window, QRhi, or QML engine: the BVH is CPU-side and the billboard plane is
+// solved analytically.
 //
-// The sprite-slot cases at the end build a LeadView in QML over a one-lead
-// region, because LeadPoint markers come from QML. They read each lead's
-// instance back through the scene's sprite layer, still without a QRhi.
+// The sprite-slot cases at the end build a lead MarkerView in QML over a
+// one-lead region, because LeadPoint markers come from QML. They read each
+// lead's instance back through the scene's sprite layer, still without a QRhi.
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -43,8 +45,14 @@
 #include "cwTrip.h"
 #include "cwGeometry.h"
 #include "cwGeometryItersecter.h"
+#include "cwKeywordItem.h"
+#include "cwKeywordItemModel.h"
+#include "cwPositionItem.h"
+#include "cwVisibilityProxy.h"
+#include "TestHelper.h"
 #include "TestGeometryBuilders.h"
-#include "cwLeadView.h"
+#include "cwLeadMarkerSource.h"
+#include "cwMarkerView.h"
 #include "cwScene.h"
 #include "cwSelectionManager.h"
 
@@ -61,9 +69,9 @@ constexpr int kViewportHeight = 600;
 constexpr float kLeadZ = 0.0f;
 
 // How far in front of the lead the cloud point sits. Must clear the eye-ward
-// slack isOccluded allows (kLeadDepthBias, 1.0 world units, file-local to
-// cwLeadView.cpp) by enough that no test here is deciding a boundary case —
-// 50 units is comfortably past it.
+// slack isOccluded allows (cwLeadMarkerSource::depthBias(), 1.0 world units) by
+// enough that no test here is deciding a boundary case — 50 units is
+// comfortably past it.
 constexpr float kCloudInFrontOfLead = 50.0f;
 constexpr float kCloudZ = kLeadZ + kCloudInFrontOfLead;
 
@@ -89,12 +97,15 @@ struct Fixture
 {
     cwCamera camera;
     cwScene scene;
-    cwLeadView leadView;
+    // Declared before the view, so it outlives it.
+    cwLeadMarkerSource source;
+    cwMarkerView leadView;
 
     Fixture()
     {
         camera.setViewport(QRect(0, 0, kViewportWidth, kViewportHeight));
         camera.setProjection(camera.orthoProjectionDefault());
+        leadView.setSource(&source);
         leadView.setCamera(&camera);
         leadView.setScene(&scene);
     }
@@ -128,7 +139,7 @@ void requireLookingStraightDownNegativeZ(const QRay3D& ray)
 // straight down -Z (assert that first) — which keeps the cloud points below
 // placed relative to the ray the camera ACTUALLY casts rather than to an
 // assumed x=0. A tap pixel is rounded to an integer, and one pixel is half a
-// world unit at this zoom, so an assumed-centre ray would shift the offsets by
+// world unit at this zoom, so an assumed-center ray would shift the offsets by
 // a third of the band they have to land in.
 QVector3D rayPointAtZ(const QRay3D& ray, float z)
 {
@@ -137,8 +148,8 @@ QVector3D rayPointAtZ(const QRay3D& ray, float z)
 
 } // namespace
 
-TEST_CASE("cwLeadView does not occlude a lead with a cloud point the ray misses",
-          "[cwLeadView][occlusion]")
+TEST_CASE("A lead MarkerView does not occlude a lead with a cloud point the ray misses",
+          "[cwLeadMarkerSource][occlusion]")
 {
     // A lead sits in open space with one cloud point off to the side, near the
     // eye. The ray through the tapped pixel passes 1.5 pick radii from that
@@ -147,7 +158,7 @@ TEST_CASE("cwLeadView does not occlude a lead with a cloud point the ray misses"
     //
     // This failed before cwGeometryItersecter's near-miss fallback was deleted:
     // that fallback fired whenever no exact hit existed anywhere, snapping to
-    // the nearest point within 2.5 pick radii and reporting its CENTRE depth.
+    // the nearest point within 2.5 pick radii and reporting its CENTER depth.
     // isOccluded is unusually exposed to it — it picks cwPickQuery::Solid with
     // no tolerance, and neither triangles nor points consult the tolerance, so
     // the fallback was the only near-miss path reachable here and had nothing
@@ -173,8 +184,8 @@ TEST_CASE("cwLeadView does not occlude a lead with a cloud point the ray misses"
     CHECK_FALSE(f.leadView.isOccluded(leadPosition, tap));
 }
 
-TEST_CASE("cwLeadView occludes a lead behind a cloud point the ray hits",
-          "[cwLeadView][occlusion]")
+TEST_CASE("A lead MarkerView occludes a lead behind a cloud point the ray hits",
+          "[cwLeadMarkerSource][occlusion]")
 {
     // The other half, and the reason the case above can't be fixed by dropping
     // point clouds from the occlusion query: a lead genuinely behind the cloud
@@ -195,13 +206,13 @@ TEST_CASE("cwLeadView occludes a lead behind a cloud point the ray hits",
     CHECK(f.leadView.isOccluded(leadPosition, tap));
 }
 
-TEST_CASE("cwLeadView does not occlude a lead in an empty scene",
-          "[cwLeadView][occlusion]")
+TEST_CASE("A lead MarkerView does not occlude a lead in an empty scene",
+          "[cwLeadMarkerSource][occlusion]")
 {
     // The floor the two cases above stand on: with no geometry at all the
     // answer must be "not occluded". Guards the no-hit and no-BVH early-outs
-    // (cwLeadView.cpp's !hit.hit() return, and the intersecter's null-BVH
-    // path), which nothing else here reaches. It does NOT catch an isOccluded
+    // (cw::billboard::isOccluded's !hit.hit() return, and the intersecter's
+    // null-BVH path), which nothing else here reaches. It does NOT catch an isOccluded
     // stubbed to always-false — the occludes case above is what does that.
     Fixture f;
 
@@ -220,8 +231,9 @@ const QSizeF kCompletedSpriteSize(30.0, 12.0);
 // The one lead's LeadPoint: the first scrap's id is 1 and the lead's index 0.
 const QString kLeadPointName = QStringLiteral("leadPoint1_0");
 
-// A LeadView whose sprites list is @a spritesList, built from the openSprite
-// and completedSprite items it declares.
+// A lead MarkerView whose sprites list is @a spritesList, built from the
+// openSprite and completedSprite items it declares. It keeps the default layer
+// key, so leads draw in the default layers before the station labels.
 QString leadViewQml(const QString& spritesList)
 {
     return QStringLiteral(
@@ -229,10 +241,12 @@ QString leadViewQml(const QString& spritesList)
                "import cavewherelib\n"
                "Item {\n"
                "  width: %1; height: %1\n"
-               "  LeadView {\n"
+               "  MarkerView {\n"
                "    objectName: \"leadView\"\n"
                "    anchors.fill: parent\n"
                "    sprites: %2\n"
+               "    source: LeadMarkerSource {}\n"
+               "    delegate: LeadPoint {}\n"
                "    Item { id: openSprite; width: %3; height: %4 }\n"
                "    Item { id: completedSprite; width: %5; height: %6 }\n"
                "  }\n"
@@ -246,7 +260,7 @@ QString leadViewQml(const QString& spritesList)
 }
 
 // One cave, trip, note and scrap holding one lead, under a region tree model,
-// with a QML LeadView over it in a window that is never shown.
+// with a QML lead MarkerView over it in a window that is never shown.
 struct SpriteFixture
 {
     cwCavingRegion region;
@@ -256,7 +270,8 @@ struct SpriteFixture
     QQmlEngine engine;
     QQuickWindow window;
     std::unique_ptr<QObject> root;
-    cwLeadView* leadView = nullptr;
+    cwMarkerView* leadView = nullptr;
+    cwLeadMarkerSource* source = nullptr;
 
     explicit SpriteFixture(const QString& spritesList)
     {
@@ -288,14 +303,19 @@ struct SpriteFixture
         REQUIRE(rootItem != nullptr);
         rootItem->setParentItem(window.contentItem());
 
-        leadView = root->findChild<cwLeadView*>(QStringLiteral("leadView"));
+        leadView = root->findChild<cwMarkerView*>(QStringLiteral("leadView"));
         REQUIRE(leadView != nullptr);
         REQUIRE(leadView->window() == &window);
+        REQUIRE(leadView->layerKey().isEmpty());
+        source = qobject_cast<cwLeadMarkerSource*>(leadView->source());
+        REQUIRE(source != nullptr);
 
         leadView->setScene(&scene);
         leadView->setCamera(&camera);
-        leadView->setRegionModel(&regionModel);
+        source->setRegionModel(&regionModel);
     }
+
+    cwScrap* scrap() { return region.cave(0)->trip(0)->notes()->notes().at(0)->scraps().at(0); }
 
     QQuickItem* marker() const
     {
@@ -309,13 +329,13 @@ struct SpriteFixture
 
 } // namespace
 
-TEST_CASE("cwLeadView names its sprite slots with the LeadSprite enum", "[cwLeadView][sprites]")
+TEST_CASE("cwLeadMarkerSource names its sprite slots with the LeadSprite enum", "[cwLeadMarkerSource][sprites]")
 {
-    CHECK(int(cwLeadView::OpenSprite) == 0);
-    CHECK(int(cwLeadView::CompletedSprite) == 1);
+    CHECK(int(cwLeadMarkerSource::OpenSprite) == 0);
+    CHECK(int(cwLeadMarkerSource::CompletedSprite) == 1);
 }
 
-TEST_CASE("cwLeadView hands its sprites list to the scene's sprite layer", "[cwLeadView][sprites]")
+TEST_CASE("A lead MarkerView hands its sprites list to the scene's default sprite layer", "[cwLeadMarkerSource][sprites]")
 {
     SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
 
@@ -329,20 +349,20 @@ TEST_CASE("cwLeadView hands its sprites list to the scene's sprite layer", "[cwL
     QQuickItem* marker = f.marker();
     REQUIRE(marker != nullptr);
     CHECK(marker->size() == kOpenSpriteSize);
-    CHECK(marker->property("spriteIndex").toInt() == int(cwLeadView::OpenSprite));
+    CHECK(marker->property("spriteIndex").toInt() == int(cwLeadMarkerSource::OpenSprite));
 
     auto instances = layer->buildInstances();
     REQUIRE(instances.size() == 1);
-    CHECK(instances.at(0).spriteIndex == uint32_t(cwLeadView::OpenSprite));
+    CHECK(instances.at(0).spriteIndex == uint32_t(cwLeadMarkerSource::OpenSprite));
 
     // The marker's spriteIndex picks the lead's slot as it changes.
-    REQUIRE(marker->setProperty("spriteIndex", int(cwLeadView::CompletedSprite)));
+    REQUIRE(marker->setProperty("spriteIndex", int(cwLeadMarkerSource::CompletedSprite)));
     instances = layer->buildInstances();
     REQUIRE(instances.size() == 1);
-    CHECK(instances.at(0).spriteIndex == uint32_t(cwLeadView::CompletedSprite));
+    CHECK(instances.at(0).spriteIndex == uint32_t(cwLeadMarkerSource::CompletedSprite));
 }
 
-TEST_CASE("cwLeadView drops a lead whose slot the sprites list lacks", "[cwLeadView][sprites]")
+TEST_CASE("A lead MarkerView drops a lead whose slot the sprites list lacks", "[cwLeadMarkerSource][sprites]")
 {
     SpriteFixture f(QStringLiteral("[openSprite]"));
 
@@ -353,12 +373,12 @@ TEST_CASE("cwLeadView drops a lead whose slot the sprites list lacks", "[cwLeadV
     REQUIRE(marker != nullptr);
     REQUIRE(layer->buildInstances().size() == 1);
 
-    REQUIRE(marker->setProperty("spriteIndex", int(cwLeadView::CompletedSprite)));
+    REQUIRE(marker->setProperty("spriteIndex", int(cwLeadMarkerSource::CompletedSprite)));
     CHECK(layer->billboardCount() == 1);
     CHECK(layer->buildInstances().isEmpty());
 }
 
-TEST_CASE("cwLeadView hands the layer an empty list when it goes", "[cwLeadView][sprites]")
+TEST_CASE("A lead MarkerView hands the layer an empty list when it goes", "[cwLeadMarkerSource][sprites]")
 {
     SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
 
@@ -370,15 +390,15 @@ TEST_CASE("cwLeadView hands the layer an empty list when it goes", "[cwLeadView]
     CHECK(layer->sprites().isEmpty());
 }
 
-TEST_CASE("cwLeadView takes a settable selection manager and hands it to its points",
-          "[cwLeadView][selection]")
+TEST_CASE("A lead MarkerView takes a settable selection manager and hands it to its points",
+          "[cwLeadMarkerSource][selection]")
 {
     cwSelectionManager selection;
     SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
     auto* leadPoint = f.leadView->findChild<QQuickItem*>(kLeadPointName);
     REQUIRE(leadPoint != nullptr);
 
-    QSignalSpy changedSpy(f.leadView, &cwLeadView::selectionManagerChanged);
+    QSignalSpy changedSpy(f.leadView, &cwMarkerView::selectionManagerChanged);
     f.leadView->setSelectionManager(&selection);
     CHECK(changedSpy.count() == 1);
     CHECK(f.leadView->selectionManager() == &selection);
@@ -388,8 +408,8 @@ TEST_CASE("cwLeadView takes a settable selection manager and hands it to its poi
     CHECK(changedSpy.count() == 1);
 }
 
-TEST_CASE("cwLeadView keeps another marker's selection when an unselected lead goes",
-          "[cwLeadView][selection]")
+TEST_CASE("A lead MarkerView keeps another marker's selection when an unselected lead goes",
+          "[cwLeadMarkerSource][selection]")
 {
     cwSelectionManager selection;
     // Stands in for a marker of another view sharing the manager, such as an
@@ -398,7 +418,7 @@ TEST_CASE("cwLeadView keeps another marker's selection when an unselected lead g
     SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
     f.leadView->setSelectionManager(&selection);
 
-    cwScrap* scrap = f.region.cave(0)->trip(0)->notes()->notes().at(0)->scraps().at(0);
+    cwScrap* scrap = f.scrap();
     cwLead lead;
     lead.setDescription(QStringLiteral("Second lead"));
     lead.setPositionOnNote(QPointF(0.25, 0.25));
@@ -416,4 +436,96 @@ TEST_CASE("cwLeadView keeps another marker's selection when an unselected lead g
     selection.setSelectedItem(leadPoint);
     scrap->removeLead(0);
     CHECK(selection.selectedItem() == nullptr);
+}
+
+TEST_CASE("A lead MarkerView selects a lead by its source row", "[cwLeadMarkerSource][selection]")
+{
+    cwSelectionManager selection;
+    SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
+    f.leadView->setSelectionManager(&selection);
+    auto* leadPoint = f.leadView->findChild<QQuickItem*>(kLeadPointName);
+    REQUIRE(leadPoint != nullptr);
+
+    // CaveLeadPage's gotoLead path: the scrap and lead index give the row.
+    const int row = f.source->row(f.scrap(), 0);
+    REQUIRE(row == 0);
+    f.leadView->select(row);
+    CHECK(selection.selectedItem() == leadPoint);
+    CHECK(leadPoint->property("selected").toBool());
+
+    // A lead the scrap lacks has no row.
+    CHECK(f.source->row(f.scrap(), 1) == -1);
+}
+
+TEST_CASE("The lead source hands each LeadPoint its scrap, index and scrap id",
+          "[cwLeadMarkerSource]")
+{
+    SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
+    REQUIRE(f.source->count() == 1);
+    CHECK(f.leadView->count() == 1);
+
+    cwScrap* scrap = f.scrap();
+    cwLead lead;
+    lead.setDescription(QStringLiteral("Second lead"));
+    lead.setPositionOnNote(QPointF(0.25, 0.25));
+    scrap->addLead(lead);
+
+    REQUIRE(f.source->count() == 2);
+    CHECK(f.leadView->count() == 2);
+    CHECK(f.source->row(scrap, 1) == 1);
+
+    for (int i = 0; i < 2; ++i) {
+        INFO("lead " << i);
+        auto* leadPoint = qobject_cast<cwPositionItem*>(
+            f.leadView->findChild<QQuickItem*>(QStringLiteral("leadPoint1_%1").arg(i)));
+        REQUIRE(leadPoint != nullptr);
+        CHECK(leadPoint->property("scrap").value<cwScrap*>() == scrap);
+        CHECK(leadPoint->property("pointIndex").toInt() == i);
+        CHECK(leadPoint->property("scrapId").toInt() == 1);
+        CHECK(leadPoint->position3D() == scrap->leadData(cwScrap::LeadPosition, i).value<QVector3D>());
+        CHECK(leadPoint->property("markerView").value<cwMarkerView*>() == f.leadView);
+    }
+
+    CHECK(f.scene.spriteBillboardLayer()->buildInstances().size() == 2);
+}
+
+TEST_CASE("A scrap's leads share one keyword item that hides them all",
+          "[cwLeadMarkerSource]")
+{
+    cwKeywordItemModel keywords;
+    SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
+    f.leadView->setKeywordItemModel(&keywords);
+    REQUIRE(keywords.rowCount() == 1);
+
+    cwScrap* scrap = f.scrap();
+    cwLead lead;
+    lead.setDescription(QStringLiteral("Second lead"));
+    lead.setPositionOnNote(QPointF(0.25, 0.25));
+    scrap->addLead(lead);
+    CHECK(keywords.rowCount() == 1);
+
+    auto* proxy = qobject_cast<cwVisibilityProxy*>(keywords.item(0)->object());
+    REQUIRE(proxy != nullptr);
+    auto* first = f.leadView->findChild<QQuickItem*>(QStringLiteral("leadPoint1_0"));
+    auto* second = f.leadView->findChild<QQuickItem*>(QStringLiteral("leadPoint1_1"));
+    REQUIRE(first != nullptr);
+    REQUIRE(second != nullptr);
+    REQUIRE(f.scene.spriteBillboardLayer()->buildInstances().size() == 2);
+
+    proxy->setVisible(false);
+    CHECK_FALSE(first->isVisible());
+    CHECK_FALSE(second->isVisible());
+    CHECK(f.scene.spriteBillboardLayer()->buildInstances().isEmpty());
+
+    proxy->setVisible(true);
+    CHECK(first->isVisible());
+    CHECK(second->isVisible());
+    CHECK(f.scene.spriteBillboardLayer()->buildInstances().size() == 2);
+
+    // The item goes with the scrap's last lead.
+    scrap->removeLead(1);
+    CHECK(keywords.rowCount() == 1);
+    scrap->removeLead(0);
+    CHECK(keywords.rowCount() == 0);
+    CHECK(waitUntil([&] { return f.leadView->findChild<QQuickItem*>(kLeadPointName) == nullptr; }));
 }

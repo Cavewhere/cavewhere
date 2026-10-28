@@ -5,19 +5,20 @@
 **
 **************************************************************************/
 
-#include "cwEntranceVisibility.h"
-#include "cwEntranceView.h"
+//Our includes
+#include "cwMarkerVisibility.h"
+#include "cwMarkerView.h"
 
-cwEntranceVisibility::cwEntranceVisibility(cwEntranceView* view, const QUuid& fixId, QObject* parent)
+cwMarkerVisibility::cwMarkerVisibility(cwMarkerView* view, const QString& group, QObject* parent)
     : cwVisibilityProxy(parent),
       m_view(view),
-      m_fixId(fixId)
+      m_group(group)
 {
 }
 
-void cwEntranceVisibility::applyVisible(bool visible)
+void cwMarkerVisibility::applyVisible(bool visible)
 {
     if(!m_view.isNull()) {
-        m_view->setFixKeywordVisible(m_fixId, visible);
+        m_view->setGroupKeywordVisible(m_group, visible);
     }
 }

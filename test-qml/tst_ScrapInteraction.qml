@@ -314,7 +314,7 @@ MainWindowTest {
             verify(leadPoint.x <= render.width)
             verify(leadPoint.y <= render.height)
 
-            // cwLeadView projects each lead's world position to screen; the lead
+            // cwMarkerView projects each lead's world position to screen; the lead
             // is not parked at the exact viewport center. Bumped to 10s from the
             // default 5s since the nightly has flaked at the 5s budget.
             tryVerify(() => { return leadPoint.x !== render.width * 0.5; }, 10000,
@@ -322,13 +322,13 @@ MainWindowTest {
             tryVerify(() => { return leadPoint.y !== render.height * 0.5; }, 10000,
                       "lead point should be off vertical center")
 
-            // A lead click is gated by cwLeadView::isOccluded (clicks must not
+            // A lead click is gated by cwMarkerView::isOccluded (clicks must not
             // pass through walls). The gate now tests the tapped marker pixel
             // against the billboard's own depth, so a lead resting on its scrap
             // is clickable from the default framing — confirm the gate agrees,
             // then click it for real.
-            let leadView = leadPoint.leadView
-            verify(leadView !== null, "leadView should be injected into LeadPoint")
+            let leadView = leadPoint.markerView
+            verify(leadView instanceof MarkerView, "the MarkerView should be injected into LeadPoint")
 
             let leadPos = leadPoint.position3D
             let tap = leadPoint.mapToItem(leadView, 0, 0)

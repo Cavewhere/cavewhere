@@ -13,11 +13,11 @@ PositionItem {
     property int pointIndex; //The index in the item list
     property int scrapId; //enable the testcase to work correctly
     property bool selected: false
-    required property SelectionManager selectionManager; //Injected by cwLeadView
-    required property LeadView leadView; //Injected by cwLeadView
+    required property SelectionManager selectionManager; //Injected by cwMarkerView
+    required property MarkerView markerView; //Injected by cwMarkerView
 
     // The marker's stand-in in the 2D tree. The question mark itself draws as one
-    // instance of the LeadView's sprite layer; cwLeadView reads this item's
+    // instance of the MarkerView's sprite layer; cwMarkerView reads this item's
     // visibility and opacity for that instance. The QuoteBox popup is a sibling,
     // so it stays a normal 2D overlay.
     property alias marker: hitTarget
@@ -37,15 +37,15 @@ PositionItem {
     }
 
     // Tap target sized and centered on the drawn marker, so the hit area matches
-    // the sprite. cwLeadView reads these for the lead's sprite instance; a hidden
+    // the sprite. cwMarkerView reads these for the lead's sprite instance; a hidden
     // marker is also untappable. Opacity has no 2D effect on an empty item.
     QQ.Item {
         id: hitTarget
 
-        property int spriteIndex: LeadView.OpenSprite
+        property int spriteIndex: LeadMarkerSource.OpenSprite
 
-        width: pointId.leadView.spriteSize.width
-        height: pointId.leadView.spriteSize.height
+        width: pointId.markerView.spriteSize.width
+        height: pointId.markerView.spriteSize.height
         anchors.centerIn: parent
 
         visible: !lead.completed || pointId.selected
@@ -60,7 +60,7 @@ PositionItem {
                 // geometry (the click must not pass through walls); closing is
                 // always allowed. isOccluded tests the tapped pixel itself, so it
                 // matches the silhouette the billboard is drawn with — map the tap
-                // into the leadView's (viewport) coordinate space for the ray.
+                // into the markerView's (viewport) coordinate space for the ray.
                 // A view with no manager leaves its leads unselectable.
                 if (pointId.selectionManager === null) {
                     return
@@ -68,8 +68,8 @@ PositionItem {
                 if (pointId.selected) {
                     pointId.selectionManager.selectedItem = null
                 } else {
-                    let tap = hitTarget.mapToItem(pointId.leadView, eventPoint.position)
-                    if (!pointId.leadView.isOccluded(pointId.position3D, tap)) {
+                    let tap = hitTarget.mapToItem(pointId.markerView, eventPoint.position)
+                    if (!pointId.markerView.isOccluded(pointId.position3D, tap)) {
                         pointId.selectionManager.selectedItem = pointId
                     }
                 }

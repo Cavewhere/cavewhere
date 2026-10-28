@@ -57,6 +57,30 @@ QString cwBillboardOverlayItem::layerKey() const {
     return m_layerKey;
 }
 
+void cwBillboardOverlayItem::setLayerKey(const QString& layerKey) {
+    if(m_layerKey == layerKey) {
+        return;
+    }
+
+    // The old key's sprite layer drops its subscenes and textures of the
+    // prototypes, which the new key's layer takes over.
+    if(!m_spriteLayer.isNull()) {
+        m_spriteLayer->setSprites({});
+        m_spriteLayer = nullptr;
+    }
+    m_spritesEdited = true;
+
+    m_layerKey = layerKey;
+    m_renderSpriteBillboards = nullptr;
+    m_renderTextBillboards = nullptr;
+    m_extraTextLayers.clear();
+
+    pushSpritesToLayer();
+    invalidateDeclutter();
+    repositionBillboards();
+    emit layerKeyChanged();
+}
+
 QQmlListProperty<QQuickItem> cwBillboardOverlayItem::sprites() {
     return QQmlListProperty<QQuickItem>(this, nullptr,
                                         &cwBillboardOverlayItem::appendSprite,

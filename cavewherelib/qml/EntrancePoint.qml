@@ -6,7 +6,7 @@ import QtQuick.Layouts
 import cavewherelib
 
 // The 2D stand-in for one entrance marker. The pin and its text draw as
-// billboards of the EntranceView's keyed layers; cwEntranceView reads this
+// billboards of the entrance MarkerView's keyed layers; cwMarkerView reads this
 // item's marker visibility for both and places the item at the fix's solved
 // position. Tapping the pin opens a popup with the cave icon, the fix's name,
 // kind and its node's stats, and a link to the node's page.
@@ -21,12 +21,12 @@ PositionItem {
     property string displayName
     property int kind //A FixStation.Kind
     property string kindName
-    required property SelectionManager selectionManager //Injected by cwEntranceView
-    required property EntranceView entranceView //Injected by cwEntranceView
+    required property SelectionManager selectionManager //Injected by cwMarkerView
+    required property MarkerView markerView //Injected by cwMarkerView
 
     property alias marker: hitTarget
 
-    // Raises the open popup above the other pins. The EntranceView's own z stays
+    // Raises the open popup above the other pins. The MarkerView's own z stays
     // as GLTerrainRenderer sets it, above the camera interaction.
     z: selected ? 1 : 0
 
@@ -35,8 +35,8 @@ PositionItem {
     QQ.Item {
         id: hitTarget
 
-        width: pointId.entranceView.spriteSize.width
-        height: pointId.entranceView.spriteSize.height
+        width: pointId.markerView.spriteSize.width
+        height: pointId.markerView.spriteSize.height
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.verticalCenter
 
@@ -53,8 +53,8 @@ PositionItem {
                 if (pointId.selected) {
                     pointId.selectionManager.selectedItem = null
                 } else {
-                    let tap = hitTarget.mapToItem(pointId.entranceView, eventPoint.position)
-                    if (!pointId.entranceView.isOccluded(pointId.position3D, tap)) {
+                    let tap = hitTarget.mapToItem(pointId.markerView, eventPoint.position)
+                    if (!pointId.markerView.isOccluded(pointId.position3D, tap)) {
                         pointId.selectionManager.selectedItem = pointId
                     }
                 }

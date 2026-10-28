@@ -6,7 +6,7 @@
 // instances of one sprite prototype, see cwSpriteBillboardHandle.h, and
 // cwRenderTextBillboards for station label text, see cwTextBillboardHandle.h).
 // The layer type is a template parameter so all three layers share one
-// implementation. A producer (cwLeadView with sprite handles, cwLabel3dView
+// implementation. A producer (cwMarkerView with sprite handles, cwLabel3dView
 // with text handles, any future overlay) holds a handle next to whatever it already
 // tracks and calls set() each update pass: the first call adds the billboard and
 // remembers its id, later calls update it (cheap — updateBillboard early-outs

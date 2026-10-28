@@ -9,8 +9,8 @@
 #define CWBILLBOARDOVERLAYITEM_H
 
 // Shared base for QQuickItems that render their content as depth-occluded
-// billboards in the scene's 3D pass (cwLeadView's lead markers, cwLabel3dView's
-// station labels, any future overlay). It owns the wiring every such overlay
+// billboards in the scene's 3D pass (cwMarkerView's lead and entrance markers,
+// cwLabel3dView's station labels, any future overlay). It owns the wiring every such overlay
 // needs identically: the scene property, fetching the scene-owned billboard
 // layers (the shared item layer, and the sprite and text layers of its layer
 // key, #538), rebinding those layers to the hosting window on a window change, and the add/update of one billboard through a handle.
@@ -47,7 +47,7 @@ class CAVEWHERE_LIB_EXPORT cwBillboardOverlayItem : public QQuickItem
     friend class cwLabelDeclutter;
 
     Q_OBJECT
-    // Not creatable from QML: it's the shared base for LeadView / Label3dView,
+    // Not creatable from QML: it's the shared base for MarkerView / Label3dView,
     // which inherit its scene and camera properties. QML_ANONYMOUS registers it
     // so those inherited properties participate explicitly in the QML type system.
     QML_ANONYMOUS
@@ -63,6 +63,9 @@ class CAVEWHERE_LIB_EXPORT cwBillboardOverlayItem : public QQuickItem
     // Opts this overlay into its scene's shared declutter pass at a tier; a lower
     // tier claims screen space first. NoTier keeps the overlay's own placement.
     Q_PROPERTY(cwLabelDeclutter::Tier declutterTier READ declutterTier WRITE setDeclutterTier NOTIFY declutterTierChanged)
+    // The key of the scene's sprite and text layers this overlay draws through;
+    // the empty key is the default pair.
+    Q_PROPERTY(QString layerKey READ layerKey WRITE setLayerKey NOTIFY layerKeyChanged)
 
 public:
     explicit cwBillboardOverlayItem(QQuickItem* parent = nullptr);
@@ -73,6 +76,9 @@ public:
     ~cwBillboardOverlayItem() override;
 
     QString layerKey() const;
+    // Moves this overlay to the layers of @a layerKey: the old sprite layer gets
+    // an empty sprite list, and the sprites and billboards move to the new pair.
+    void setLayerKey(const QString& layerKey);
 
     QQmlListProperty<QQuickItem> sprites();
     QSizeF spriteSize() const;
@@ -92,6 +98,7 @@ signals:
     void spritesChanged();
     void spriteSizeChanged();
     void declutterTierChanged();
+    void layerKeyChanged();
 
 protected:
     void itemChange(ItemChange change, const ItemChangeData& value) override;

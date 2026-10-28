@@ -5,7 +5,7 @@ import cw.TestLib
 import QmlTestRecorder
 
 // Entrance markers in the 3D view: every placed, solved fix gets an
-// EntrancePoint from the renderer's EntranceView, and its Type keyword hides it.
+// EntrancePoint from the renderer's entrance MarkerView, and its Type keyword hides it.
 // There is no global toggle; keywords are the only switch.
 MainWindowTest {
     id: rootId
@@ -72,7 +72,7 @@ MainWindowTest {
         // EntrancePoint. Returns {cave, point}.
         function addSolvedEntrance(name) {
             const view = entranceView()
-            verify(view !== null, "the renderer should host an EntranceView")
+            verify(view !== null, "the renderer should host an entrance MarkerView")
 
             const cave = addCaveWithEntrance(name)
             tryVerify(() => cave.length.value > 0, entrancesTestCase.solveTimeout,
@@ -170,7 +170,7 @@ MainWindowTest {
         // the theme, all through Theme tokens.
         function test_entranceTextStylesComeFromTheme() {
             const view = entranceView()
-            verify(view !== null, "the renderer should host an EntranceView")
+            verify(view !== null, "the renderer should host an entrance MarkerView")
 
             verify(Theme.entranceNameFontSize > Theme.fontSizeUI,
                    "an entrance name should be larger than a station label")
@@ -181,14 +181,23 @@ MainWindowTest {
             verify(Qt.colorEqual(Theme.entranceStatsOutlineColor, Theme.textInverse),
                    "the stats outline should be the inverse text color")
 
-            compare(view.font.pixelSize, Theme.entranceNameFontSize)
-            verify(Qt.colorEqual(view.color, Theme.textInverse), "the name keeps the inverse text fill")
-            verify(Qt.colorEqual(view.outlineColor, Theme.text), "the name keeps the text outline")
+            compare(view.textStyles.length, 2, "the view should style a name line and a stats line")
+            const nameStyle = view.textStyles[0]
+            const statsStyle = view.textStyles[1]
+            compare(nameStyle.styleKey, "name")
+            compare(statsStyle.styleKey, "stats")
+            compare(nameStyle.layerKey, "", "names draw in the view's own text layer")
+            compare(statsStyle.layerKey, "entranceStats", "stats lines draw in their own text layer")
+            compare(view.textGap, Theme.entranceTextGap)
 
-            compare(view.statsFont.pixelSize, Theme.entranceStatsFontSize)
-            verify(Qt.colorEqual(view.statsColor, Theme.entranceStatsColor),
+            compare(nameStyle.font.pixelSize, Theme.entranceNameFontSize)
+            verify(Qt.colorEqual(nameStyle.color, Theme.textInverse), "the name keeps the inverse text fill")
+            verify(Qt.colorEqual(nameStyle.outlineColor, Theme.text), "the name keeps the text outline")
+
+            compare(statsStyle.font.pixelSize, Theme.entranceStatsFontSize)
+            verify(Qt.colorEqual(statsStyle.color, Theme.entranceStatsColor),
                    "the view's stats fill should come from Theme.entranceStatsColor")
-            verify(Qt.colorEqual(view.statsOutlineColor, Theme.entranceStatsOutlineColor),
+            verify(Qt.colorEqual(statsStyle.outlineColor, Theme.entranceStatsOutlineColor),
                    "the view's stats outline should come from Theme.entranceStatsOutlineColor")
         }
 
@@ -196,7 +205,7 @@ MainWindowTest {
         // pass, entrances first.
         function test_entrancesAndStationLabelsJoinTheDeclutterPass() {
             const view = entranceView()
-            verify(view !== null, "the renderer should host an EntranceView")
+            verify(view !== null, "the renderer should host an entrance MarkerView")
             compare(view.declutterTier, LabelDeclutter.EntranceTier)
 
             const siblings = view.parent.children
@@ -216,14 +225,14 @@ MainWindowTest {
         function test_entranceTypeKeywordHidesTheMarker() {
             const view = entranceView()
             const {point} = addSolvedEntrance("Gypsum Hollow")
-            compare(view.entranceCount, 1)
+            compare(view.count, 1)
 
             const checkbox = typeValueCheckbox("Entrance")
 
             mouseClick(checkbox)
             tryVerify(() => !point.visible, 5000,
                       "the entrance should hide when the Entrance Type is filtered out")
-            compare(view.entranceCount, 1)
+            compare(view.count, 1)
 
             mouseClick(checkbox)
             tryVerify(() => point.visible, 5000,
@@ -270,10 +279,21 @@ MainWindowTest {
             }
         }
 
+        // The renderer's entrances run on the shared MarkerView, fed by the
+        // region's fixes, in their own "entrances" layers.
+        function test_entranceViewIsAMarkerView() {
+            const view = entranceView()
+            verify(view instanceof MarkerView, "the entrance view should be a MarkerView")
+            verify(view.source instanceof EntranceMarkerSource,
+                   "the entrance view should read an EntranceMarkerSource")
+            verify(view.source.region === RootData.region, "the source should read the project's region")
+            compare(view.layerKey, "entrances")
+        }
+
         // Every entrance draws the one cave pin, whatever its fix's Kind.
         function test_entranceViewDeclaresOnePin() {
             const view = entranceView()
-            verify(view !== null, "the renderer should host an EntranceView")
+            verify(view !== null, "the renderer should host an entrance MarkerView")
             compare(view.sprites.length, 1, "the view should declare one pin sprite")
             compare(String(view.sprites[0].source), "qrc:/icons/svg/entrancePin.svg")
         }

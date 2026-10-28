@@ -889,8 +889,8 @@ MainWindowTest {
         // enum. The terrain view declares one slot, and every marker draws the
         // open slot at that slot's size.
         function test_leadSpriteSlots() {
-            compare(LeadView.OpenSprite, 0, "OpenSprite is atlas slot 0");
-            compare(LeadView.CompletedSprite, 1, "CompletedSprite is atlas slot 1");
+            compare(LeadMarkerSource.OpenSprite, 0, "OpenSprite is atlas slot 0");
+            compare(LeadMarkerSource.CompletedSprite, 1, "CompletedSprite is atlas slot 1");
 
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
@@ -901,19 +901,22 @@ MainWindowTest {
                 return leadPoint !== null;
             }, leadsTestCase.leadSelectTimeout, "lead marker should exist");
 
-            let leadView = leadPoint.leadView;
-            verify(leadView.sprites !== undefined, "LeadView exposes a sprites list");
+            let leadView = leadPoint.markerView;
+            verify(leadView instanceof MarkerView, "the lead view should be a MarkerView");
+            verify(leadView.source instanceof LeadMarkerSource, "the lead view should read a LeadMarkerSource");
+            compare(leadView.layerKey, "", "leads draw in the default layers, before the station labels");
+            verify(leadView.sprites !== undefined, "the lead MarkerView exposes a sprites list");
             compare(leadView.sprites.length, 1, "the terrain view declares one sprite slot");
             compare(leadView.spriteSize.width, leadView.sprites[0].width,
                     "spriteSize is slot 0's width");
             compare(leadView.spriteSize.height, leadView.sprites[0].height,
                     "spriteSize is slot 0's height");
-            compare(leadPoint.marker.spriteIndex, LeadView.OpenSprite,
+            compare(leadPoint.marker.spriteIndex, LeadMarkerSource.OpenSprite,
                     "a marker draws the open slot");
         }
 
         // 4a: a click on a lead hidden behind cave geometry must be ignored (the
-        // click must not pass through walls). cwLeadView::isOccluded gates the
+        // click must not pass through walls). cwMarkerView::isOccluded gates the
         // tap; here we drive it directly. A visible lead (the one the other tests
         // click through) is not occluded; a point far down the same eye->lead ray,
         // well behind the surface the lead rests on, is.
@@ -927,8 +930,8 @@ MainWindowTest {
                 return leadPoint !== null;
             });
 
-            let leadView = leadPoint.leadView;
-            verify(leadView !== null, "leadView should be injected into LeadPoint");
+            let leadView = leadPoint.markerView;
+            verify(leadView instanceof MarkerView, "the MarkerView should be injected into LeadPoint");
             verify(leadView.camera !== null, "leadView needs a camera for the occlusion ray");
 
             let leadPos = leadPoint.position3D;

@@ -267,45 +267,64 @@ Item {
         outlineColor: Theme.text
     }
 
-    LeadView {
+    MarkerView {
         id: leadViewId
         anchors.fill: parent
         z: rootId.zLabels
-        regionModel: RootData.regionTreeModel
         selectionManager: markerSelectionId
         camera: rendererId.camera
         scene: rendererId.scene
         keywordItemModel: RootData.keywordItemModel
         visible: RootData.leadsVisible
+        // Leads keep the default layers, so they draw before the station labels.
         sprites: [leadSprite]
+        source: LeadMarkerSource {
+            regionModel: RootData.regionTreeModel
+        }
+        delegate: LeadPoint {}
 
-        // The one marker every lead draws (slot LeadView.OpenSprite). Referenced
-        // into the 3D pass as a texture, so it is hidden from the 2D tree.
+        // The one marker every lead draws (slot LeadMarkerSource.OpenSprite).
+        // Referenced into the 3D pass as a texture, so it is hidden from the 2D tree.
         Image {
             id: leadSprite
             source: "qrc:/icons/question.png"
         }
     }
 
-    EntranceView {
+    MarkerView {
         id: entranceViewId
         objectName: "entranceView"
         anchors.fill: parent
         z: rootId.zLabels
+        layerKey: "entrances"
         camera: rendererId.camera
         scene: rendererId.scene
-        region: RootData.region
         keywordItemModel: RootData.keywordItemModel
         selectionManager: markerSelectionId
         declutterTier: LabelDeclutter.EntranceTier
-        font.pixelSize: Theme.entranceNameFontSize
-        color: Theme.textInverse
-        outlineColor: Theme.text
-        statsFont.pixelSize: Theme.entranceStatsFontSize
-        statsColor: Theme.entranceStatsColor
-        statsOutlineColor: Theme.entranceStatsOutlineColor
         textGap: Theme.entranceTextGap
         sprites: [entrancePin]
+        source: EntranceMarkerSource {
+            region: RootData.region
+        }
+        delegate: EntrancePoint {}
+        // Names draw in the view's own text layer, and the length and depth
+        // lines under them in a layer of their own.
+        textStyles: [
+            MarkerTextStyle {
+                styleKey: "name"
+                font.pixelSize: Theme.entranceNameFontSize
+                color: Theme.textInverse
+                outlineColor: Theme.text
+            },
+            MarkerTextStyle {
+                styleKey: "stats"
+                layerKey: "entranceStats"
+                font.pixelSize: Theme.entranceStatsFontSize
+                color: Theme.entranceStatsColor
+                outlineColor: Theme.entranceStatsOutlineColor
+            }
+        ]
 
         // The one pin every entrance draws (slot 0). Referenced into the 3D
         // pass as a texture, so it is hidden from the 2D tree.
@@ -335,8 +354,8 @@ Item {
         anchors.topMargin: rootId.chromeMargin
         anchors.bottom: undefined
         // The banner carries a link, so it needs the chrome layer, not just a
-        // spot above the scene: LeadView's tap-away handler fills this item at
-        // zLabels and takes the press first, leaving the link unclickable.
+        // spot above the scene: the marker views and LinePlotLabelView fill this
+        // item at zLabels and would take the press first, leaving the link unclickable.
         z: rootId.zOverlay
         visible: RootData.region.fixStationValidator.warningMessage !== ""
         // Markup here is real — the link is what makes the banner actionable —
@@ -384,8 +403,8 @@ Item {
     }
 
     // Color-by sits above the scale bar and compass: a chip when off, the
-    // colorbar when on. At zOverlay so its tap never reaches LeadView's or
-    // LinePlotLabelView's tap-away handlers or the turntable camera.
+    // colorbar when on. At zOverlay so its tap never reaches the marker views,
+    // LinePlotLabelView or the turntable camera.
     ColorByLegend {
         id: colorByLegendId
         anchors.right: parent.right

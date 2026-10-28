@@ -37,7 +37,7 @@
     PointPickRadiusScale). Letting points widen with a screen-space tolerance
     re-creates the near-miss snap deleted from this picker: picks landing on
     points the ray never touched, which made leads silently unclickable (see
-    test_cwLeadView_occlusion).
+    test_cwLeadMarkerSource).
 
     The intersecter is deliberately camera-agnostic; the caller fills this
     from the camera (see cwCamera::pickQuery).
@@ -82,7 +82,7 @@ struct cwPickQuery {
     static constexpr Kinds All = Kinds(Kind::Triangles) | Kind::Lines | Kind::Points;
 
     //! Solid scene geometry — surfaces and point clouds, but not the centerline
-    //! overlay. Occlusion tests (cwLeadView lead visibility) use this: a lead
+    //! overlay. Occlusion tests (cwMarkerView marker visibility) use this: a lead
     //! behind only the centerline is still visible, so a line must not occlude
     //! it. Note this is deliberately NOT used for the turntable pivot, whose
     //! rotation path wants the opposite split — it picks Triangles|Lines and

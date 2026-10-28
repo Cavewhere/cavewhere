@@ -617,3 +617,46 @@ TEST_CASE("cwBillboardOverlayItem: a further keyed text layer is wired like the 
     overlay.setTextBillboard(nullptr, handle, QStringLiteral("B7"), QVector3D(1, 2, 3), 1.0f);
     CHECK_FALSE(handle.isValid());
 }
+
+TEST_CASE("cwBillboardOverlayItem: setLayerKey moves the sprites and billboards to the new key's layers",
+          "[cwBillboardOverlayItem]")
+{
+    QQuickWindow window;
+    auto pin = makePrototype(window, kPrototypeSize);
+    cwScene scene;
+    TestOverlay overlay(kPinKey);
+    overlay.setParentItem(window.contentItem());
+    overlay.setScene(&scene);
+    appendSprite(overlay, pin.get());
+
+    cwSpriteBillboardHandle handle;
+    overlay.setSpriteBillboard(handle, QVector3D(1, 2, 3), 1.0f, 1.0f, true);
+    cwRenderSpriteBillboards* oldLayer = scene.spriteBillboardLayer(kPinKey);
+    REQUIRE(oldLayer->sprites() == QList<QQuickItem*>({pin.get()}));
+    REQUIRE(oldLayer->billboardCount() == 1);
+    const int repositionsBefore = overlay.repositionCount;
+
+    QSignalSpy layerKeySpy(&overlay, &cwBillboardOverlayItem::layerKeyChanged);
+    overlay.setLayerKey(kOtherKey);
+    CHECK(layerKeySpy.count() == 1);
+    CHECK(overlay.layerKey() == kOtherKey);
+
+    // The old layer lets go of the sprites, and the new one takes them.
+    cwRenderSpriteBillboards* newLayer = scene.spriteBillboardLayer(kOtherKey);
+    REQUIRE(newLayer != oldLayer);
+    CHECK(oldLayer->spriteCount() == 0);
+    CHECK(newLayer->sprites() == QList<QQuickItem*>({pin.get()}));
+    CHECK(newLayer->window() == &window);
+    CHECK(overlay.repositionCount > repositionsBefore);
+
+    // Later billboards and text go to the new key's layers.
+    overlay.setSpriteBillboard(handle, QVector3D(4, 5, 6), 1.0f, 1.0f, true);
+    CHECK(overlay.renderSpriteBillboards() == newLayer);
+    CHECK(newLayer->billboardCount() == 1);
+    CHECK(oldLayer->billboardCount() == 0);
+    CHECK(overlay.ensureRenderTextBillboards() == scene.textBillboardLayer(kOtherKey));
+
+    // The same key again changes nothing.
+    overlay.setLayerKey(kOtherKey);
+    CHECK(layerKeySpy.count() == 1);
+}

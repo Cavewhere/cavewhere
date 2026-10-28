@@ -111,7 +111,7 @@ StandardPage {
         RootData.pageSelectionModel.currentPageAddress = "View"
         let viewpage = RootData.pageView.currentPageItem as RenderingView;
         viewpage.turnTableInteraction.centerOn(leadPosition, true);
-        viewpage.leadView.select(scrap, leadIndex);
+        viewpage.leadView.select((viewpage.leadView.source as LeadMarkerSource).row(scrap, leadIndex));
     }
 
     function leadScrapAndIndex(delegateIndex) {

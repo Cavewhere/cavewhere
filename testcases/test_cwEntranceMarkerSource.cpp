@@ -1,9 +1,11 @@
-// Pins cwEntranceView: every placed fix whose station the solve placed draws one
-// tip-down pin in the view's keyed sprite layer, its name above the pin in the
-// keyed text layer and, for an Entrance, a length and depth line under the name
-// in the stats text layer, and carries one keyword item that can hide it. In
-// the scene's declutter pass ([cwLabelDeclutter]) its pins and text blocks
-// claim screen space before the station labels of a participating Label3dView.
+// Pins the entrance markers, a cwMarkerView fed by a cwEntranceMarkerSource:
+// every placed fix whose station the solve placed draws one tip-down pin in the
+// view's keyed sprite layer, its name above the pin in the keyed text layer
+// ("name" style) and, for an Entrance, a length and depth line under the name in
+// the stats text layer ("stats" style), and carries one keyword item that can
+// hide it. In the scene's declutter pass ([cwLabelDeclutter]) its pins and text
+// blocks claim screen space before the station labels of a participating
+// Label3dView.
 //
 // The view is built in QML because its EntrancePoint tap targets come from QML.
 // The window is never shown and there is no QRhi: every check reads the CPU side
@@ -19,6 +21,7 @@
 #include <QFile>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQmlListReference>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRay3D>
@@ -34,7 +37,7 @@
 #include "cwCamera.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
-#include "cwEntranceView.h"
+#include "cwEntranceMarkerSource.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwGeometryItersecter.h"
@@ -46,6 +49,9 @@
 #include "cwLabel3dView.h"
 #include "cwLabelDeclutter.h"
 #include "cwLength.h"
+#include "cwMarkerSource.h"
+#include "cwMarkerTextStyle.h"
+#include "cwMarkerView.h"
 #include "cwRenderSpriteBillboards.h"
 #include "cwRenderTextBillboards.h"
 #include "cwScene.h"
@@ -99,9 +105,36 @@ const QColor kOtherStatsColor(201, 201, 201);
 // The one sprite slot every entrance draws, whatever its fix's Kind.
 constexpr uint32_t kPinSlot = 0;
 
+// The layer keys and text style keys GLTerrainRenderer gives the entrance view.
+const QString kEntranceLayerKey = QStringLiteral("entrances");
+const QString kStatsLayerKey = QStringLiteral("entranceStats");
+
 // A 4x larger region may cost at most this many times the keyword inserts.
 constexpr int kGrowthFactor = 4;
 constexpr int kSmallRegionNodes = 4;
+
+// The entrance MarkerView's body, as GLTerrainRenderer declares it: the
+// "entrances" layers, the entrance source and delegate, and the name style on
+// the view's own text layer with the stats style on its own layer.
+QString entranceMarkerViewBody()
+{
+    return QStringLiteral(
+               "    objectName: \"entranceView\"\n"
+               "    anchors.fill: parent\n"
+               "    layerKey: \"%1\"\n"
+               "    sprites: [entrancePin]\n"
+               "    source: EntranceMarkerSource {}\n"
+               "    delegate: EntrancePoint {}\n"
+               "    textStyles: [\n"
+               "      MarkerTextStyle { styleKey: \"name\" },\n"
+               "      MarkerTextStyle { styleKey: \"stats\"; layerKey: \"%2\" }\n"
+               "    ]\n"
+               "    Item { id: entrancePin; width: %3; height: %4 }\n")
+        .arg(kEntranceLayerKey)
+        .arg(kStatsLayerKey)
+        .arg(kPinSize.width())
+        .arg(kPinSize.height());
+}
 
 QString entranceViewQml()
 {
@@ -110,16 +143,22 @@ QString entranceViewQml()
                "import cavewherelib\n"
                "Item {\n"
                "  width: %1; height: %1\n"
-               "  EntranceView {\n"
-               "    objectName: \"entranceView\"\n"
-               "    anchors.fill: parent\n"
-               "    sprites: [entrancePin]\n"
-               "    Item { id: entrancePin; width: %2; height: %3 }\n"
+               "  MarkerView {\n"
+               "%2"
                "  }\n"
                "}\n")
         .arg(kViewportSize)
-        .arg(kPinSize.width())
-        .arg(kPinSize.height());
+        .arg(entranceMarkerViewBody());
+}
+
+// The view's text style @a index: 0 styles the names, 1 the stats lines.
+cwMarkerTextStyle* textStyle(cwMarkerView* view, int index)
+{
+    QQmlListReference styles(view, "textStyles");
+    if (index >= styles.count()) {
+        return nullptr;
+    }
+    return qobject_cast<cwMarkerTextStyle*>(styles.at(index));
 }
 
 cwFixStation placedFix(const QString& stationName)
@@ -145,7 +184,7 @@ QStringList keywordPairs(const cwKeywordItem* item)
     return pairs;
 }
 
-// An empty region under a QML EntranceView in a window that is never shown.
+// An empty region under a QML entrance MarkerView in a window that is never shown.
 struct EntranceFixture
 {
     cwCavingRegion region;
@@ -158,7 +197,10 @@ struct EntranceFixture
     QQmlEngine engine;
     QQuickWindow window;
     std::unique_ptr<QObject> root;
-    cwEntranceView* view = nullptr;
+    cwMarkerView* view = nullptr;
+    cwEntranceMarkerSource* source = nullptr;
+    cwMarkerTextStyle* nameStyle = nullptr;
+    cwMarkerTextStyle* statsStyle = nullptr;
 
     EntranceFixture()
     {
@@ -175,18 +217,24 @@ struct EntranceFixture
         REQUIRE(rootItem != nullptr);
         rootItem->setParentItem(window.contentItem());
 
-        view = root->findChild<cwEntranceView*>(QStringLiteral("entranceView"));
+        view = root->findChild<cwMarkerView*>(QStringLiteral("entranceView"));
         REQUIRE(view != nullptr);
         REQUIRE(view->window() == &window);
         // The view draws through its own pair of layers, never the default one
         // leads and station labels share.
         REQUIRE_FALSE(view->layerKey().isEmpty());
+        source = qobject_cast<cwEntranceMarkerSource*>(view->source());
+        REQUIRE(source != nullptr);
+        nameStyle = textStyle(view, 0);
+        statsStyle = textStyle(view, 1);
+        REQUIRE(nameStyle != nullptr);
+        REQUIRE(statsStyle != nullptr);
 
         view->setScene(&scene);
         view->setCamera(&camera);
         view->setKeywordItemModel(&keywords);
         view->setSelectionManager(&selection);
-        view->setRegion(&region);
+        source->setRegion(&region);
     }
 
     cwCave* addCave(const QString& name,
@@ -225,7 +273,7 @@ struct EntranceFixture
     // The name lines.
     cwRenderTextBillboards* texts() { return scene.textBillboardLayer(view->layerKey()); }
     // The length and depth lines under the names.
-    cwRenderTextBillboards* statsTexts() { return scene.textBillboardLayer(view->statsLayerKey()); }
+    cwRenderTextBillboards* statsTexts() { return scene.textBillboardLayer(kStatsLayerKey); }
 
     static QStringList drawnTexts(const cwRenderTextBillboards* layer)
     {
@@ -260,7 +308,7 @@ std::string joined(const QStringList& lines)
 
 } // namespace
 
-TEST_CASE("cwEntranceView draws a placed, solved fix at its solved position", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView draws a placed, solved fix at its solved position", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     f.view->setTextGap(kTextGap);
@@ -308,7 +356,8 @@ TEST_CASE("cwEntranceView draws a placed, solved fix at its solved position", "[
     CHECK_THAT(nameOffset.y() - statsOffset.y(),
                Catch::Matchers::WithinAbs((nameHeight + statsHeight) / 2.0, kOffsetTolerance));
 
-    CHECK(f.view->entranceCount() == 1);
+    CHECK(f.view->count() == 1);
+    CHECK(f.source->count() == 1);
 
     QQuickItem* point = f.point();
     REQUIRE(point != nullptr);
@@ -316,7 +365,7 @@ TEST_CASE("cwEntranceView draws a placed, solved fix at its solved position", "[
     CHECK(point->property("stationName").toString() == kStation);
 }
 
-TEST_CASE("cwEntranceView names a fix by its label, else its node", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView names a fix by its label, else its node", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -327,11 +376,18 @@ TEST_CASE("cwEntranceView names a fix by its label, else its node", "[cwEntrance
 
     const QString label = QStringLiteral("North Shaft");
     cwFixStationModel* fixes = cave->fixStations();
-    QSignalSpy entrancesChangedSpy(f.view, &cwEntranceView::entrancesChanged);
+    QSignalSpy changedSpy(f.source, &cwMarkerSource::markersChanged);
+    QSignalSpy insertedSpy(f.source, &cwMarkerSource::markersInserted);
+    QSignalSpy removedSpy(f.source, &cwMarkerSource::markersRemoved);
+    QSignalSpy resetSpy(f.source, &cwMarkerSource::markersReset);
     REQUIRE(fixes->setData(fixes->index(0), label, cwFixStationModel::LabelRole));
 
     REQUIRE(waitUntil([&] { return f.drawnTexts() == QStringList{label}; }));
-    CHECK(entrancesChangedSpy.count() == 1);
+    // One pass changes the one marker in place.
+    CHECK(changedSpy.count() == 1);
+    CHECK(insertedSpy.count() == 0);
+    CHECK(removedSpy.count() == 0);
+    CHECK(resetSpy.count() == 0);
     // The label names the fix; the stats line stays the cave's.
     CHECK(joined(f.drawnStatsTexts()) == joined({kCaveStats}));
 
@@ -343,23 +399,23 @@ TEST_CASE("cwEntranceView names a fix by its label, else its node", "[cwEntrance
     REQUIRE(waitUntil([&] { return f.drawnTexts() == QStringList{kCaveName}; }));
 }
 
-TEST_CASE("cwEntranceView redraws the stats line when the cave's length changes", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView redraws the stats line when the cave's length changes", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
     REQUIRE(f.waitForOneEntrance());
     CHECK(joined(f.drawnStatsTexts()) == joined({kCaveStats}));
 
-    QSignalSpy entrancesChangedSpy(f.view, &cwEntranceView::entrancesChanged);
+    QSignalSpy changedSpy(f.source, &cwMarkerSource::markersChanged);
     cave->length()->setValue(kLongerCaveLengthMeters);
 
     REQUIRE(waitUntil([&] { return f.drawnStatsTexts() == QStringList{kLongerCaveStats}; }));
     CHECK(joined(f.drawnTexts()) == joined({kCaveName}));
-    CHECK(entrancesChangedSpy.count() == 1);
+    CHECK(changedSpy.count() == 1);
 }
 
-TEST_CASE("cwEntranceView draws nothing for a fix the solve missed or that has no coordinate",
-          "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView draws nothing for a fix the solve missed or that has no coordinate",
+          "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addCave(kCaveName);
@@ -389,7 +445,7 @@ TEST_CASE("cwEntranceView draws nothing for a fix the solve missed or that has n
     CHECK(f.texts()->buildRenderSlots().size() == 1);
     CHECK(f.statsTexts()->buildRenderSlots().size() == 1);
     CHECK(f.pins()->billboardCount() == 1);
-    CHECK(f.view->entranceCount() == 1);
+    CHECK(f.view->count() == 1);
     CHECK(f.keywords.rowCount() == 1);
 
     CHECK(f.point() != nullptr);
@@ -397,7 +453,7 @@ TEST_CASE("cwEntranceView draws nothing for a fix the solve missed or that has n
     CHECK(f.point(QStringLiteral("entrancePoint_C1")) == nullptr);
 }
 
-TEST_CASE("cwEntranceView draws a Well by name alone", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView draws a Well by name alone", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -424,7 +480,7 @@ TEST_CASE("cwEntranceView draws a Well by name alone", "[cwEntranceView]")
     CHECK_FALSE(pairs.contains(QStringLiteral("Type=Entrance")));
 }
 
-TEST_CASE("cwEntranceView draws the one pin for a fix of every Kind", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView draws the one pin for a fix of every Kind", "[cwEntranceMarkerSource]")
 {
     const auto kind = GENERATE(cwFixStation::Entrance, cwFixStation::Well,
                                cwFixStation::RadioLocation, cwFixStation::Other);
@@ -447,7 +503,7 @@ TEST_CASE("cwEntranceView draws the one pin for a fix of every Kind", "[cwEntran
     CHECK(instances.at(0).worldPosition == kSolvedPosition);
 }
 
-TEST_CASE("The entrance pin carries the cave glyph and the per-kind pins are gone", "[cwEntranceView]")
+TEST_CASE("The entrance pin carries the cave glyph and the per-kind pins are gone", "[cwEntranceMarkerSource]")
 {
     // The cave glyph is the one path in caveKind.svg.
     QFile caveIcon(QStringLiteral(":/icons/svg/caveKind.svg"));
@@ -478,7 +534,7 @@ TEST_CASE("The entrance pin carries the cave glyph and the per-kind pins are gon
     }
 }
 
-TEST_CASE("cwEntranceView drops the pin, text and keyword item of a removed fix", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView drops the pin, text and keyword item of a removed fix", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -486,6 +542,7 @@ TEST_CASE("cwEntranceView drops the pin, text and keyword item of a removed fix"
     REQUIRE(f.keywords.rowCount() == 1);
     CHECK(f.statsTexts()->billboardCount() == 1);
 
+    QSignalSpy removedSpy(f.source, &cwMarkerSource::markersRemoved);
     cave->fixStations()->removeAt(0);
 
     REQUIRE(waitUntil([&] {
@@ -495,10 +552,11 @@ TEST_CASE("cwEntranceView drops the pin, text and keyword item of a removed fix"
                && f.keywords.rowCount() == 0
                && f.point() == nullptr;
     }));
-    CHECK(f.view->entranceCount() == 0);
+    CHECK(f.view->count() == 0);
+    CHECK(removedSpy.count() == 1);
 }
 
-TEST_CASE("cwEntranceView's keyword item names the fix and hides it", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView's keyword item names the fix and hides it", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     f.addEntranceCave();
@@ -530,7 +588,7 @@ TEST_CASE("cwEntranceView's keyword item names the fix and hides it", "[cwEntran
     }));
     CHECK_FALSE(point->isVisible());
     // Hidden is not removed: the count of drawn entrances is the drawn set.
-    CHECK(f.view->entranceCount() == 1);
+    CHECK(f.view->count() == 1);
     CHECK(f.keywords.rowCount() == 1);
 
     proxy->setVisible(true);
@@ -540,31 +598,31 @@ TEST_CASE("cwEntranceView's keyword item names the fix and hides it", "[cwEntran
     CHECK(joined(f.drawnStatsTexts()) == joined({kCaveStats}));
 }
 
-TEST_CASE("cwEntranceView styles the name and stats layers from its properties", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView styles the name and stats layers from its properties", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     f.view->setTextGap(kTextGap);
 
     QFont nameFont;
     nameFont.setPixelSize(kNameFontPixels);
-    f.view->setFont(nameFont);
-    f.view->setColor(kNameColor);
-    f.view->setOutlineColor(kNameOutlineColor);
+    f.nameStyle->setFont(nameFont);
+    f.nameStyle->setColor(kNameColor);
+    f.nameStyle->setOutlineColor(kNameOutlineColor);
 
     QFont statsFont;
     statsFont.setPixelSize(kStatsFontPixels);
-    QSignalSpy statsFontSpy(f.view, &cwEntranceView::statsFontChanged);
-    QSignalSpy statsColorSpy(f.view, &cwEntranceView::statsColorChanged);
-    QSignalSpy statsOutlineColorSpy(f.view, &cwEntranceView::statsOutlineColorChanged);
-    f.view->setStatsFont(statsFont);
-    f.view->setStatsColor(kStatsColor);
-    f.view->setStatsOutlineColor(kStatsOutlineColor);
+    QSignalSpy statsFontSpy(f.statsStyle, &cwMarkerTextStyle::fontChanged);
+    QSignalSpy statsColorSpy(f.statsStyle, &cwMarkerTextStyle::colorChanged);
+    QSignalSpy statsOutlineColorSpy(f.statsStyle, &cwMarkerTextStyle::outlineColorChanged);
+    f.statsStyle->setFont(statsFont);
+    f.statsStyle->setColor(kStatsColor);
+    f.statsStyle->setOutlineColor(kStatsOutlineColor);
     CHECK(statsFontSpy.count() == 1);
     CHECK(statsColorSpy.count() == 1);
     CHECK(statsOutlineColorSpy.count() == 1);
-    CHECK(f.view->statsFont().pixelSize() == kStatsFontPixels);
-    CHECK(f.view->statsColor() == kStatsColor);
-    CHECK(f.view->statsOutlineColor() == kStatsOutlineColor);
+    CHECK(f.statsStyle->font().pixelSize() == kStatsFontPixels);
+    CHECK(f.statsStyle->color() == kStatsColor);
+    CHECK(f.statsStyle->outlineColor() == kStatsOutlineColor);
 
     f.addEntranceCave();
     REQUIRE(f.waitForOneEntrance());
@@ -582,7 +640,7 @@ TEST_CASE("cwEntranceView styles the name and stats layers from its properties",
 
     SECTION("A stats color change reaches the stats layer alone")
     {
-        f.view->setStatsColor(kOtherStatsColor);
+        f.statsStyle->setColor(kOtherStatsColor);
         CHECK(f.statsTexts()->style().color.name().toStdString() == kOtherStatsColor.name().toStdString());
         CHECK(f.texts()->style().color.name().toStdString() == kNameColor.name().toStdString());
     }
@@ -595,7 +653,7 @@ TEST_CASE("cwEntranceView styles the name and stats layers from its properties",
 
         QFont largerStatsFont;
         largerStatsFont.setPixelSize(kLargerStatsFontPixels);
-        f.view->setStatsFont(largerStatsFont);
+        f.statsStyle->setFont(largerStatsFont);
         CHECK(f.statsTexts()->style().font.pixelSize() == kLargerStatsFontPixels);
 
         const auto nameSlots = f.texts()->buildRenderSlots();
@@ -618,7 +676,9 @@ namespace {
 
 struct BurstCounts {
     int keywordRowsInserted = 0;
-    int entrancesChanged = 0;
+    int markersInserted = 0;
+    // Every other ranged signal: reset, removed and changed.
+    int otherMarkerSignals = 0;
 };
 
 // Adds @a nodeCount caves with one placed, solved fix each in one event-loop
@@ -629,7 +689,10 @@ BurstCounts addEntranceBurst(int nodeCount)
     REQUIRE(waitForQueuedEvents());
 
     QSignalSpy rowsInsertedSpy(&f.keywords, &QAbstractItemModel::rowsInserted);
-    QSignalSpy entrancesChangedSpy(f.view, &cwEntranceView::entrancesChanged);
+    QSignalSpy insertedSpy(f.source, &cwMarkerSource::markersInserted);
+    QSignalSpy resetSpy(f.source, &cwMarkerSource::markersReset);
+    QSignalSpy removedSpy(f.source, &cwMarkerSource::markersRemoved);
+    QSignalSpy changedSpy(f.source, &cwMarkerSource::markersChanged);
 
     for (int i = 0; i < nodeCount; ++i) {
         f.addEntranceCave(QStringLiteral("Cave %1").arg(i + 1));
@@ -637,18 +700,19 @@ BurstCounts addEntranceBurst(int nodeCount)
 
     INFO("nodes " << nodeCount);
     REQUIRE(waitUntil([&] {
-        return f.view->entranceCount() == nodeCount && f.keywords.rowCount() == nodeCount;
+        return f.view->count() == nodeCount && f.keywords.rowCount() == nodeCount;
     }));
     REQUIRE(waitForQueuedEvents());
     CHECK(f.pins()->buildInstances().size() == nodeCount);
 
-    return {int(rowsInsertedSpy.count()), int(entrancesChangedSpy.count())};
+    return {int(rowsInsertedSpy.count()), int(insertedSpy.count()),
+            int(resetSpy.count() + removedSpy.count() + changedSpy.count())};
 }
 
 } // namespace
 
-TEST_CASE("cwEntranceView rebuilds once per burst and grows its keyword inserts linearly",
-          "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView rebuilds once per burst and grows its keyword inserts linearly",
+          "[cwEntranceMarkerSource]")
 {
     const BurstCounts small = addEntranceBurst(kSmallRegionNodes);
     const BurstCounts large = addEntranceBurst(kSmallRegionNodes * kGrowthFactor);
@@ -658,8 +722,11 @@ TEST_CASE("cwEntranceView rebuilds once per burst and grows its keyword inserts 
     CHECK(small.keywordRowsInserted >= 1);
     CHECK(large.keywordRowsInserted <= kGrowthFactor * small.keywordRowsInserted);
 
-    CHECK(small.entrancesChanged == 1);
-    CHECK(large.entrancesChanged == 1);
+    // One queued pass appends the burst as one inserted range.
+    CHECK(small.markersInserted == 1);
+    CHECK(large.markersInserted == 1);
+    CHECK(small.otherMarkerSignals == 0);
+    CHECK(large.otherMarkerSignals == 0);
 }
 
 namespace {
@@ -691,7 +758,7 @@ void addWallInFront(EntranceFixture& f, const QPointF& tap)
 
 } // namespace
 
-TEST_CASE("cwEntranceView tests a tap against its tip-down pin", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView tests a tap against its tip-down pin", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     f.addEntranceCave();
@@ -703,7 +770,7 @@ TEST_CASE("cwEntranceView tests a tap against its tip-down pin", "[cwEntranceVie
     CHECK(f.view->isOccluded(kSolvedPosition, station + kBelowTip));
 }
 
-TEST_CASE("cwEntranceView reports a pin behind a wall as occluded", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView reports a pin behind a wall as occluded", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     f.addEntranceCave();
@@ -716,7 +783,7 @@ TEST_CASE("cwEntranceView reports a pin behind a wall as occluded", "[cwEntrance
     CHECK(f.view->isOccluded(kSolvedPosition, tap));
 }
 
-TEST_CASE("cwEntranceView selects a fix's point by its node and id", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView selects a fix's point by its source row", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -726,16 +793,18 @@ TEST_CASE("cwEntranceView selects a fix's point by its node and id", "[cwEntranc
     REQUIRE(point != nullptr);
     const QUuid fixId = cave->fixStations()->fixStations().at(0).id();
 
-    f.view->select(otherCave, fixId);
-    CHECK(f.view->selectionManager()->selectedItem() == nullptr);
-
-    f.view->select(cave, fixId);
+    const int row = f.source->row(cave, fixId);
+    REQUIRE(row == 0);
+    f.view->select(row);
     CHECK(f.view->selectionManager()->selectedItem() == point);
     CHECK(point->property("selected").toBool());
+
+    // The fix belongs to its own node only.
+    CHECK(f.source->row(otherCave, fixId) == -1);
 }
 
-TEST_CASE("cwEntranceView takes a settable selection manager and hands it to its points",
-          "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView takes a settable selection manager and hands it to its points",
+          "[cwEntranceMarkerSource]")
 {
     cwSelectionManager otherSelection;
     EntranceFixture f;
@@ -744,7 +813,7 @@ TEST_CASE("cwEntranceView takes a settable selection manager and hands it to its
     QQuickItem* point = f.point();
     REQUIRE(point != nullptr);
 
-    QSignalSpy changedSpy(f.view, &cwEntranceView::selectionManagerChanged);
+    QSignalSpy changedSpy(f.view, &cwMarkerView::selectionManagerChanged);
     f.view->setSelectionManager(&otherSelection);
     CHECK(changedSpy.count() == 1);
     CHECK(f.view->selectionManager() == &otherSelection);
@@ -754,7 +823,7 @@ TEST_CASE("cwEntranceView takes a settable selection manager and hands it to its
     CHECK(changedSpy.count() == 1);
 }
 
-TEST_CASE("cwEntranceView selects nothing without a selection manager", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView selects nothing without a selection manager", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -763,14 +832,16 @@ TEST_CASE("cwEntranceView selects nothing without a selection manager", "[cwEntr
     REQUIRE(point != nullptr);
     const QUuid fixId = cave->fixStations()->fixStations().at(0).id();
 
+    const int row = f.source->row(cave, fixId);
+    REQUIRE(row == 0);
     f.view->setSelectionManager(nullptr);
     CHECK(f.view->selectionManager() == nullptr);
 
-    f.view->select(cave, fixId);
+    f.view->select(row);
     CHECK_FALSE(point->property("selected").toBool());
 }
 
-TEST_CASE("cwEntranceView clears its selected point from a manager it replaces", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView clears its selected point from a manager it replaces", "[cwEntranceMarkerSource]")
 {
     cwSelectionManager otherSelection;
     EntranceFixture f;
@@ -780,7 +851,9 @@ TEST_CASE("cwEntranceView clears its selected point from a manager it replaces",
     REQUIRE(point != nullptr);
     const QUuid fixId = cave->fixStations()->fixStations().at(0).id();
 
-    f.view->select(cave, fixId);
+    const int row = f.source->row(cave, fixId);
+    REQUIRE(row == 0);
+    f.view->select(row);
     CHECK(f.selection.selectedItem() == point);
 
     f.view->setSelectionManager(&otherSelection);
@@ -789,7 +862,7 @@ TEST_CASE("cwEntranceView clears its selected point from a manager it replaces",
     CHECK(otherSelection.selectedItem() == nullptr);
 }
 
-TEST_CASE("cwEntranceView hands each point its display name and kind", "[cwEntranceView]")
+TEST_CASE("The entrance MarkerView hands each point its display name and kind", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -855,17 +928,13 @@ QString declutterQml()
                "    objectName: \"privateLabelView\"\n"
                "    anchors.fill: parent\n"
                "  }\n"
-               "  EntranceView {\n"
-               "    objectName: \"entranceView\"\n"
-               "    anchors.fill: parent\n"
+               "  MarkerView {\n"
                "    declutterTier: LabelDeclutter.EntranceTier\n"
-               "    sprites: [entrancePin]\n"
-               "    Item { id: entrancePin; width: %2; height: %3 }\n"
+               "%2"
                "  }\n"
                "}\n")
         .arg(kViewportSize)
-        .arg(kPinSize.width())
-        .arg(kPinSize.height());
+        .arg(entranceMarkerViewBody());
 }
 
 QRectF centeredRect(const QPointF& center, const QSizeF& size)
@@ -873,7 +942,7 @@ QRectF centeredRect(const QPointF& center, const QSizeF& size)
     return QRectF(center - QPointF(size.width() / 2.0, size.height() / 2.0), size);
 }
 
-// One EntranceView and two Label3dViews in one scene: "stationLabelView" joins
+// One entrance MarkerView and two Label3dViews in one scene: "stationLabelView" joins
 // the scene's declutter pass after the entrances, "privateLabelView" keeps its
 // own placement.
 struct DeclutterFixture
@@ -885,7 +954,8 @@ struct DeclutterFixture
     QQmlEngine engine;
     QQuickWindow window;
     std::unique_ptr<QObject> root;
-    cwEntranceView* view = nullptr;
+    cwMarkerView* view = nullptr;
+    cwEntranceMarkerSource* source = nullptr;
     cwLabel3dView* labelView = nullptr;
     cwLabel3dView* privateLabelView = nullptr;
 
@@ -904,7 +974,7 @@ struct DeclutterFixture
         REQUIRE(rootItem != nullptr);
         rootItem->setParentItem(window.contentItem());
 
-        view = root->findChild<cwEntranceView*>(QStringLiteral("entranceView"));
+        view = root->findChild<cwMarkerView*>(QStringLiteral("entranceView"));
         labelView = root->findChild<cwLabel3dView*>(QStringLiteral("stationLabelView"));
         privateLabelView = root->findChild<cwLabel3dView*>(QStringLiteral("privateLabelView"));
         REQUIRE(view != nullptr);
@@ -913,13 +983,19 @@ struct DeclutterFixture
         REQUIRE(view->declutterTier() == cwLabelDeclutter::EntranceTier);
         REQUIRE(labelView->declutterTier() == cwLabelDeclutter::StationLabelTier);
         REQUIRE(privateLabelView->declutterTier() == cwLabelDeclutter::NoTier);
+        source = qobject_cast<cwEntranceMarkerSource*>(view->source());
+        REQUIRE(source != nullptr);
+        cwMarkerTextStyle* nameStyle = textStyle(view, 0);
+        cwMarkerTextStyle* statsStyle = textStyle(view, 1);
+        REQUIRE(nameStyle != nullptr);
+        REQUIRE(statsStyle != nullptr);
 
         QFont nameFont;
         nameFont.setPixelSize(kNameFontPixels);
-        view->setFont(nameFont);
+        nameStyle->setFont(nameFont);
         QFont statsFont;
         statsFont.setPixelSize(kStatsFontPixels);
-        view->setStatsFont(statsFont);
+        statsStyle->setFont(statsFont);
         view->setTextGap(kTextGap);
 
         view->setScene(&scene);
@@ -938,7 +1014,7 @@ struct DeclutterFixture
         }
 
         view->setKeywordItemModel(&keywords);
-        view->setRegion(&region);
+        source->setRegion(&region);
     }
 
     cwCave* addEntranceCaveAt(const QString& name, const QVector3D& position)
@@ -965,7 +1041,7 @@ struct DeclutterFixture
 
     cwRenderSpriteBillboards* pins() { return scene.spriteBillboardLayer(view->layerKey()); }
     cwRenderTextBillboards* texts() { return scene.textBillboardLayer(view->layerKey()); }
-    cwRenderTextBillboards* statsTexts() { return scene.textBillboardLayer(view->statsLayerKey()); }
+    cwRenderTextBillboards* statsTexts() { return scene.textBillboardLayer(kStatsLayerKey); }
     // Both label views draw on the scene's default text layer.
     cwRenderTextBillboards* stationTexts() { return scene.textBillboardLayer(); }
 
