@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Case-Distinct Stations</title>
+<style>
+  :root {
+    --bg: #1a1d21; --panel: #23272e; --panel2: #2b3038; --ink: #e6e9ee;
+    --muted: #9aa4b2; --accent: #5aa9e6; --accent2: #7ddc8f; --warn: #e6b35a;
+    --bad: #e66a6a; --line: #3a414b; --code-bg: #15181c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg);
+    padding: 1.5px 6px; border-radius: 4px; color: #d8e0ea; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .fig { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 22px 0; text-align: center; }
+  .fig svg { max-width: 100%; height: auto; }
+  .figcap { color: var(--muted); font-size: 13.5px; margin-top: 12px; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+  .callout.warn { border-color: var(--warn); }
+  .callout.ok { border-color: var(--accent2); }
+  .cp { display:inline-block; font-family:var(--mono); font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:6px; background:rgba(90,169,230,.16); color:var(--accent);
+    border:1px solid rgba(90,169,230,.35); margin-right: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Case-Distinct Stations</h1>
+<p class="sub">CaveWhere branch <code>externalFiles</code>, based on <code>3f7be010</code> "Keep foreign neighbors out
+of scoped survey networks" · 2026-10-26</p>
+
+<div class="callout">
+  <b>Goal.</b> When an attached file has two stations whose names differ only in case, CaveWhere draws them as two
+  stations, the way cavern solved them. Compass and Walls names are case-sensitive, and cavern keeps
+  <code>P2</code> and <code>p2</code> apart. CaveWhere folds both to <code>p2</code> when it reads the
+  <code>.3d</code>, so the pair gets one position and every leg of either station is drawn to it. In a private
+  Compass project with 412 such pairs, 284 pairs sit more than 1 km apart, and the plot fills with long false legs.
+</div>
+
+<h2>The bug</h2>
+
+<p>Survex reads a Compass <code>.DAT</code> with case folding off (<code>survex/src/datain.c</code>, about line 753:
+<code>pcsNew-&gt;Case = OFF</code>). Walls files and Survex files that set <code>*case preserve</code> behave the
+same way. Cavern then writes <code>P2</code> and <code>p2</code> as separate labels at separate coordinates in the
+<code>.3d</code>, and that output is correct.</p>
+
+<p><code>cwSurvex3DFileReader::readNetworkAndLookup</code> passes every label to
+<code>cwStationPositionLookup::setPosition</code>, <code>cwSurveyNetwork::setPosition</code> and
+<code>cwSurveyNetwork::addShot</code>. All three key by <code>cwStation::canonicalKey</code>, which lowercases. The
+reader also lowercases the splay anchors, the fixed stations and both ends of each <code>legKey</code>. So:</p>
+<ul>
+  <li>the pair keeps only the position of whichever label came last;</li>
+  <li>the network gives <code>p2</code> the neighbors of both stations, and <code>cwLinePlotGeometry</code> draws
+    every one of those legs to that single position;</li>
+  <li>splays and loop-closure errors from both stations land on that one station.</li>
+</ul>
+
+<div class="fig">
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="14">
+  <text x="20" y="26" fill="#9aa4b2" font-weight="700">Cavern's solve (.3d)</text>
+  <g stroke="#7ddc8f" stroke-width="3">
+    <line x1="60" y1="230" x2="170" y2="230"/><line x1="170" y1="230" x2="280" y2="230"/>
+    <line x1="60" y1="230" x2="60" y2="80"/>
+    <line x1="60" y1="80" x2="170" y2="80"/><line x1="170" y1="80" x2="280" y2="80"/>
+  </g>
+  <g fill="#e6e9ee">
+    <circle cx="60" cy="230" r="5"/><circle cx="170" cy="230" r="5"/><circle cx="280" cy="230" r="5"/>
+    <circle cx="60" cy="80" r="5"/><circle cx="170" cy="80" r="5"/><circle cx="280" cy="80" r="5"/>
+  </g>
+  <g fill="#e6e9ee" font-family="ui-monospace, Menlo, monospace" font-size="13">
+    <text x="45" y="255">P1</text><text x="160" y="255">P2</text><text x="270" y="255">P3</text>
+    <text x="45" y="68">p1</text><text x="160" y="68">p2</text><text x="270" y="68">p3</text>
+  </g>
+
+  <text x="470" y="26" fill="#e66a6a" font-weight="700">What CaveWhere draws today</text>
+  <g stroke="#e66a6a" stroke-width="3">
+    <line x1="510" y1="230" x2="620" y2="80"/>
+    <line x1="620" y1="80" x2="730" y2="230"/>
+    <line x1="620" y1="80" x2="730" y2="80"/>
+    <line x1="510" y1="230" x2="510" y2="80"/>
+    <line x1="510" y1="80" x2="620" y2="80"/>
+  </g>
+  <g fill="#e6e9ee">
+    <circle cx="510" cy="230" r="5"/><circle cx="730" cy="230" r="5"/>
+    <circle cx="510" cy="80" r="5"/><circle cx="620" cy="80" r="7" fill="#e66a6a"/><circle cx="730" cy="80" r="5"/>
+  </g>
+  <g fill="#e6e9ee" font-family="ui-monospace, Menlo, monospace" font-size="13">
+    <text x="495" y="255">P1</text><text x="720" y="255">P3</text>
+    <text x="495" y="68">p1</text><text x="598" y="62" fill="#e66a6a">"p2"</text><text x="720" y="68">p3</text>
+  </g>
+  <text x="470" y="285" fill="#9aa4b2" font-size="12.5">P2 and p2 both become "p2": one position, four legs.
+    (P1/p1 and P3/p3 merge too; left out to keep the picture readable.)</text>
+</svg>
+<div class="figcap"><b>A case pair merges at readback.</b> The legs of <code>P2</code> are drawn to
+<code>p2</code>'s position. In real data the two stations can be kilometers apart.</div>
+</div>
+
+<p>CaveWhere's own trips are safe. The driver keeps cavern's default <code>*case tolower</code>, so a native name
+reaches the <code>.3d</code> already lowercase and never forms a case pair.
+<code>plans/EXTERNAL_FILE_PREFIXING_RESEARCH.md</code> §5.3 named these mixed case regimes, but the readback side
+kept lowercasing.</p>
+
+<h2>Decisions</h2>
+<ul>
+  <li><b>Cavern decides what counts as one station.</b> Two labels are one station exactly when cavern wrote one
+    label. The reader keeps every station cavern kept.</li>
+  <li><b>Keys stay lowercase unless they form a case pair.</b> A solved station's key is
+    <code>canonicalKey(label)</code>, as it is today. It keeps cavern's spelling only when another label in the
+    same <code>.3d</code> lowercases to the same key. The survey levels of such a key are still lowercased; only
+    the last level, the station name, keeps its case. So a project without case pairs gets byte-for-byte the keys
+    it has today, and the existing tests that expect <code>"k1"</code> keep passing.</li>
+  <li><b>Lookups by name keep ignoring case.</b> A by-name lookup first tries the name exactly, then
+    <code>canonicalKey(name)</code>. <code>position("K1")</code> still finds <code>k1</code>. With a pair
+    <code>P2</code>/<code>p2</code>, <code>position("P2")</code> and <code>position("p2")</code> each find their
+    own station. A spelling that matches neither exactly, such as <code>"bB2"</code> for a pair
+    <code>BB2</code>/<code>Bb2</code>, finds the all-lowercase member if there is one and otherwise nothing. A fix
+    or tie typed that way gets the usual unknown-station warning.</li>
+  <li><b>By-name inserts keep folding; by-key inserts don't.</b> <code>setPosition(name)</code>,
+    <code>addShot(name, name)</code> and <code>addNeighbor(name, name)</code> keep lowercasing: test helpers
+    on origin insert <code>"A.s1"</code> to overwrite <code>a.s1</code>, and <code>cwTripLinePlotTask</code> renames
+    native stations through them. New by-key methods store the key exactly as given. The reader and every view
+    built by copying another view's keys use the by-key methods.</li>
+  <li><b>Labels at one coordinate are one station.</b> An equate between spellings (a native <code>P2</code>,
+    which cavern lowercases, tied to a file's <code>P2</code>) makes cavern write two labels at one point. Those are
+    one station, so they share the lowercase key, as today. Only case variants at <em>different</em> coordinates
+    form a case pair. A coincidence without an equate merges the same way; it draws identically.</li>
+  <li><b>The harvest reports spellings, not keys.</b> A harvest runs cavern on the attached file alone, so it can't
+    see a native station that shares the attachment's scope. With a cave-level file holding a lone <code>P2</code>
+    and a native <code>P2</code> in the same cave, the file alone says <code>p2</code> but the region solve has a
+    pair (<code>cave.p2</code> native, <code>cave.P2</code> file). So <code>Stations::names</code> and
+    <code>fixedNames</code> become each station's <em>spelling</em>: survey levels lowercased, the station name as
+    cavern wrote it (<code>K1</code>, <code>P2</code>, <code>p2</code>). Everything that needs a solved key resolves
+    <code>scope + spelling</code> against the region lookup with <code>key()</code>: exact for a pair member,
+    lowercase for everything else. The harvest cache is in memory only
+    (<code>cwExternalCenterlineManager</code> <code>m_harvestCache</code>), so the change needs no migration.</li>
+  <li><b>A fix on an attached file's station is written in the file's spelling.</b> Today
+    <code>cwSurvexExporterUtils::writeFixStations</code> writes <code>*fix &lt;typed name&gt;</code> under cavern's
+    default <code>*case tolower</code>. A fix typed <code>K1</code> or <code>k1</code> for a Compass station
+    <code>K1</code> anchors a new station <code>cave.k1</code>, which cavern reports as an unused control point, and
+    leaves <code>K1</code> unfixed. This happens without any case pair; it was confirmed by running cavern on
+    <code>compass_excluded_lrud.dat</code> plus <code>*fix K1</code>. The writer resolves the typed name to the
+    file's spelling and wraps a fix whose spelling isn't all lowercase in
+    <code>*begin / *case preserve / *end</code>, as <code>cwSurvexExporterCaveTask</code>'s equate writer already
+    does (about lines 543–556).</li>
+  <li><b>Duplicates are judged by resolved station.</b> Two fixes, ties or list rows are duplicates when they
+    resolve to the same station, not when their names lowercase to the same text. A fix on <code>P2</code> and one on
+    <code>p2</code> of a pair are two fixes. A fix on native <code>A1</code> and one on <code>a1</code> are still one
+    station and still a duplicate.</li>
+  <li><b>Scope of the fix.</b> Stations whose names differ only in case. Out of scope, and recorded as follow-ups:
+    labels that differ only in the case of a <em>survey</em> level (a Survex <code>*begin Foo</code> beside
+    <code>*begin foo</code> under <code>*case preserve</code>); a dotted Compass name in a run whose separator is
+    <code>'.'</code>, where the reader can't tell the station part from the survey part (see "Separator ambiguity"
+    in <code>plans/EXTERNAL_FILE_PHASE3.html</code>); and an "ambiguous station" warning for a name that matches a
+    pair only by case.</li>
+</ul>
+
+<h3>The new scoping rules on <code>externalFiles</code></h3>
+<p>Two commits landed after this bug was found. The plan builds on both and must not undo either:</p>
+<table>
+  <tr><th>Commit</th><th>What it does</th><th>How this plan fits</th></tr>
+  <tr><td><code>a16c2d55</code> "Name each .3d leg end under the leg's own survey"</td>
+    <td>The reader keeps every label at a coordinate (<code>coordToNames</code>) and <code>legEndName()</code>
+    picks the one under the leg's own survey for each end. Edges, leg-error keys and splay anchors all use the
+    chosen name.</td>
+    <td>The choice still runs on cavern's verbatim labels. The plan converts the chosen name to its solved key
+    <em>after</em> <code>legEndName()</code> returns, in the same places that call <code>canonicalKey</code> today.
+    <code>legEndName()</code>'s case-insensitive survey compare stays as it is.</td></tr>
+  <tr><td><code>3f7be010</code> "Keep foreign neighbors out of scoped survey networks"</td>
+    <td><code>cwSurveyNetwork::addNeighbor</code> records an edge on the near station only. <code>scoped()</code>,
+    <code>cwCavingRegion::memberNetwork</code> and <code>cwCaptureCenterline::caveNetworks</code> use it for
+    neighbors outside the scope, so a scoped view's <code>stations()</code> lists only its own stations.</td>
+    <td>Each of those sites keeps its <code>addShot</code>/<code>addNeighbor</code> split and switches to the
+    by-key twin (<code>addShotKeys</code>/<code>addNeighborKey</code>). The prefix tests stay lowercase
+    <code>startsWith</code>, which still works because a case-pair key keeps its survey levels lowercase.</td></tr>
+</table>
+<div class="callout warn">The local <code>externalFiles</code> checkout was at <code>7bd37b2f</code>, four commits
+behind origin, when this plan was written. Fast-forward to <code>3f7be010</code> before running the pipeline. All
+anchors below are from <code>3f7be010</code>.</div>
+
+<h2>Keys</h2>
+
+<div class="fig">
+<svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="14">
+  <rect x="20" y="30" width="190" height="64" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="115" y="55" fill="#e6e9ee" text-anchor="middle">.3d labels</text>
+  <text x="115" y="76" fill="#9aa4b2" text-anchor="middle" font-size="12">cave:P2  cave:p2  cave:Q1</text>
+
+  <rect x="250" y="30" width="230" height="64" rx="8" fill="#233a2a" stroke="#7ddc8f"/>
+  <text x="365" y="55" fill="#e6e9ee" text-anchor="middle">reader: find case pairs</text>
+  <text x="365" y="76" fill="#9aa4b2" text-anchor="middle" font-size="12">group labels by canonicalKey</text>
+
+  <rect x="520" y="30" width="360" height="64" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="700" y="55" fill="#e6e9ee" text-anchor="middle">keys: cave.P2  cave.p2  cave.q1</text>
+  <text x="700" y="76" fill="#9aa4b2" text-anchor="middle" font-size="12">lookup, network, splay tips, leg errors, fixed</text>
+  <path d="M210 62 H250 M480 62 H520" stroke="#9aa4b2" stroke-width="2"/>
+
+  <rect x="20" y="150" width="270" height="64" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="155" y="175" fill="#e6e9ee" text-anchor="middle">views copy keys by key</text>
+  <text x="155" y="196" fill="#9aa4b2" text-anchor="middle" font-size="12">scoped, member, trip alias, capture</text>
+
+  <rect x="330" y="150" width="250" height="64" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="455" y="175" fill="#e6e9ee" text-anchor="middle">line plot slices, never folds</text>
+  <text x="455" y="196" fill="#9aa4b2" text-anchor="middle" font-size="12">nodeLocalKey, splay/leg split</text>
+
+  <rect x="620" y="150" width="260" height="64" rx="8" fill="#2b3038" stroke="#3a414b"/>
+  <text x="750" y="175" fill="#e6e9ee" text-anchor="middle">name → key: exact, then lower</text>
+  <text x="750" y="196" fill="#9aa4b2" text-anchor="middle" font-size="12">fixes, ties, exporter, UI</text>
+  <path d="M700 94 V120 H155 V150 M455 120 V150 M750 120 V150" stroke="#9aa4b2" stroke-width="2" fill="none"/>
+</svg>
+<div class="figcap">The reader is the one place that decides keys. Everything after it either copies keys or
+resolves a CaveWhere name to one.</div>
+</div>
+
+<table>
+  <tr><th>Labels in one .3d</th><th>Keys</th><th>Lookup by name</th></tr>
+  <tr><td><code>cave.K1</code></td><td><code>cave.k1</code> (as today)</td>
+    <td><code>K1</code>, <code>k1</code> → <code>cave.k1</code></td></tr>
+  <tr><td><code>cave.P2</code>, <code>cave.p2</code></td><td><code>cave.P2</code>, <code>cave.p2</code></td>
+    <td><code>P2</code> → <code>cave.P2</code>; <code>p2</code> → <code>cave.p2</code></td></tr>
+  <tr><td><code>cave.BB2</code>, <code>cave.Bb2</code></td><td><code>cave.BB2</code>, <code>cave.Bb2</code></td>
+    <td><code>bb2</code>, <code>bB2</code> → nothing</td></tr>
+  <tr><td><code>cave.Foo.P2</code>, <code>cave.Foo.p2</code> (Survex, <code>*case preserve</code>)</td>
+    <td><code>cave.foo.P2</code>, <code>cave.foo.p2</code></td><td>as above</td></tr>
+</table>
+
+<p>The station name of a label is its last level, split at the <code>.3d</code>'s own separator
+(<code>pimg-&gt;separator</code>) <em>before</em> the reader turns <code>':'</code> into <code>'.'</code>. That keeps a
+dotted Compass name such as <code>SA1.1</code> in one piece whenever cavern chose <code>':'</code>.</p>
+
+<h2>Case handling by attachment</h2>
+<p>How cavern reads case decides whether a case pair can exist (<code>survex/src/datain.c</code> about line 753 for
+Compass, about lines 2218 and 3007 for Walls; <code>commands.c</code> about line 165 for the Survex default). CaveWhere
+follows cavern. The test audit (C.7) checks every row of both tables against a test.</p>
+<table>
+  <tr><th>Source</th><th>Cavern case</th><th>Case pair possible</th><th>Solved key</th><th>Harvest reports</th><th>Fix written as</th></tr>
+  <tr><td>Native CaveWhere trip</td><td><code>*case tolower</code> (exporter default)</td><td>No</td>
+    <td><code>cave.trip.p2</code>, lowercase as today</td><td>—</td><td>Typed name, as today</td></tr>
+  <tr><td>Survex <code>.svx</code>, default</td><td>Lowercase</td><td>No</td><td>Lowercase, as today</td>
+    <td><code>p2</code></td><td>Typed name, as today</td></tr>
+  <tr><td>Survex <code>.svx</code>, <code>*case upper</code></td><td>Uppercase</td><td>No</td><td>Lowercase, as today</td>
+    <td><code>P2</code></td><td>Cavern's exact label inside <code>*case preserve</code> (C.5)</td></tr>
+  <tr><td>Survex <code>.svx</code>, <code>*case preserve</code></td><td>Preserved</td><td>Yes</td>
+    <td>Non-pair lowercase; pair <code>cave.foo.P2</code> (levels lowercase, name verbatim)</td>
+    <td><code>P2</code>, <code>p2</code>, plus exact labels</td>
+    <td>Exact label (<code>Foo.P2</code>) inside <code>*case preserve</code> (C.5, widened)</td></tr>
+  <tr><td>Compass <code>.dat</code></td><td>Preserved</td><td>Yes</td>
+    <td>Non-pair <code>cave.k1</code>; pair <code>cave.P2</code>, <code>cave.p2</code></td>
+    <td><code>K1</code>, <code>P2</code>, <code>p2</code></td>
+    <td>Exact label inside <code>*case preserve</code>. Fixes today's bug: a fix typed <code>k1</code> makes a
+    phantom <code>k1</code> and leaves <code>K1</code> unfixed (C.5)</td></tr>
+  <tr><td>Compass <code>.mak</code> source root</td><td>Translator writes <code>*case preserve</code>; each
+    <code>.dat</code> preserved</td><td>Yes</td><td>As <code>.dat</code></td><td>As <code>.dat</code></td>
+    <td>Same rule, through the <code>.mak</code> fix path (C.5)</td></tr>
+  <tr><td>Walls <code>.srv</code> / <code>.wpj</code>, default</td><td>Preserved</td><td>Yes</td>
+    <td>As <code>.dat</code>; a <code>#PREFIX XY</code> level is lowercase in the key (<code>xy.P2</code>)</td>
+    <td>Spelling plus exact label <code>XY:P2</code></td>
+    <td>Exact label <code>XY:P2</code> inside <code>*case preserve</code> (C.5, widened)</td></tr>
+  <tr><td>Walls, <code>#units case=lower</code> or <code>case=upper</code></td><td>Folded</td><td>No</td>
+    <td>Lowercase, as today</td><td><code>p2</code> or <code>P2</code></td>
+    <td>Lower: typed name. Upper: exact label inside <code>*case preserve</code></td></tr>
+</table>
+<table>
+  <tr><th>Situation, any source</th><th>Decision</th></tr>
+  <tr><td>A project with no case pairs</td><td>Keys are byte-for-byte today's; only fix writing changes.</td></tr>
+  <tr><td><code>P2</code> and <code>p2</code> at different coordinates</td><td>A case pair: two stations, two keys, each with its own legs.</td></tr>
+  <tr><td><code>P2</code> and <code>p2</code> at one coordinate (an equate, or a coincidence)</td><td>One station, lowercase key.</td></tr>
+  <tr><td>A typed name</td><td>Exact first, then lowercase. <code>K1</code> finds <code>k1</code>. For a
+    <code>BB2</code>/<code>Bb2</code> pair, <code>bB2</code> finds nothing and gets the unknown-station warning.</td></tr>
+  <tr><td>Two fixes, ties or list rows</td><td>Duplicates when they resolve to the same station. A fix on each member
+    of a pair is two fixes; native <code>A1</code> and <code>a1</code> are one.</td></tr>
+  <tr><td>Native <code>P2</code> plus a cave-level file's <code>P2</code></td><td>Two stations in different scopes. A native
+    trip in a cave with an attachment is written in its own <code>*begin</code> block named after the trip, so its
+    station solves as <code>native.p2</code> while the file's stations sit directly under the cave. Only a fix, which
+    lives on the cave node, sees both: a fix typed <code>P2</code> or <code>p2</code> names the file's station, and
+    the native one is typed <code>Native.P2</code> (C.5 pins this). Equates, the survey editor and note or LiDAR
+    carpeting always name a trip, so they never confuse the two. An explicit equate joins them, and the
+    same-coordinate rule makes them one.</td></tr>
+  <tr><td>Carpeting and LiDAR note stations</td><td>Each resolves to its key once, then keys are compared;
+    <code>Q1</code> on a note still finds <code>q1</code> (C.4).</td></tr>
+  <tr><td>Equates, ties, floating check, station lists</td><td>Use the reader's keys, so a pair member ties, connects
+    and lists as itself (C.6).</td></tr>
+</table>
+
+<h2>Public API</h2>
+<pre><code>// cwStation.h
+//! The key of a solved station whose name is one of a case pair: survey
+//! levels lowercased, the station name as cavern spelled it.
+static QString caseDistinctKey(const QStringList&amp; surveyLevels, const QString&amp; stationName);
+//! \a name as a key of \a keys: the name itself when \a keys holds it,
+//! otherwise canonicalKey(name).
+static QString keyIn(const QString&amp; name, const QSet&lt;QString&gt;&amp; keys);
+//! The spelling in \a spellings that \a name names: an exact match, otherwise
+//! the one spelling that matches ignoring case; empty when none or several do.
+static QString spellingIn(const QString&amp; name, const QStringList&amp; spellings);
+
+// cwStationPositionLookup.h
+void setPositionAtKey(const QString&amp; key, const QVector3D&amp; position);   // stores key exactly
+QString key(const QString&amp; stationName) const;   // stored key it resolves to, or empty
+// position(), hasPosition(): exact, then canonicalKey
+
+// cwSurveyNetwork.h
+void addShotKeys(const QString&amp; fromKey, const QString&amp; toKey);
+void addNeighborKey(const QString&amp; stationKey, const QString&amp; neighborKey);
+void setPositionAtKey(const QString&amp; key, const QVector3D&amp; position);
+QString key(const QString&amp; stationName) const;
+// neighbors(), hasStation(), position(), hasPosition(): exact, then canonicalKey
+
+// cwSurvex3DFileReader.h
+//! The leg between two solved keys, ordered, keys kept as given.
+static QPair&lt;QString, QString&gt; legKeyOfKeys(const QString&amp; fromKey, const QString&amp; toKey);
+// legKey(name, name) keeps folding for the native chunk path.</code></pre>
+<p>The names are a suggestion. The implement stage may rename them if it finds a clearer fit with the surrounding
+code, but the by-name/by-key split stays.</p>
+
+<h2>Fixture</h2>
+<p><code>testcases/datasets/external-centerlines/compass_case_pairs.dat</code>, written by hand, shaped like
+<code>compass_excluded_lrud.dat</code> (CRLF line ends, form feed after the survey, feet). It must use no real
+survey data. Six shots and seven stations:</p>
+<pre><code>P1 → P2   30 ft  bearing  90     P1 → p1  100 ft  bearing 0
+P2 → P3   30 ft  bearing  90     p1 → p2   30 ft  bearing 90
+P3 → Q1   30 ft  bearing 180     p2 → p3   30 ft  bearing 90</code></pre>
+<p>So <code>P1</code>/<code>p1</code>, <code>P2</code>/<code>p2</code> and <code>P3</code>/<code>p3</code> are three case
+pairs 100 ft (30.48 m) apart. <code>Q1</code> has no pair and must keep the lowercase key <code>q1</code>. Cavern
+solves it as one connected survey. Today the cave's lookup holds 4 keys (<code>p1 p2 p3 q1</code>). After the fix
+it holds 7 (<code>P1 P2 P3 p1 p2 p3 q1</code>).</p>
+
+<h2>Items</h2>
+
+<p>Nine items. C.1–C.3 and C.4–C.6 run as two batches of three; seven agents an item keeps each batch at 21.
+C.7, the test audit, runs on its own after C.6; C.8 and then C.9 run next, each on its own. C.3 is the one that fixes the drawn plot. C.5 also fixes the
+fix-station bug that exists today.</p>
+
+<h3><span class="cp">C.1</span>Solved-station containers store keys exactly through by-key methods</h3>
+<ul>
+  <li><b>Code.</b> Add the <code>cwStationPositionLookup</code> and <code>cwSurveyNetwork</code> methods from the
+    Public API section, and <code>cwStation::caseDistinctKey</code> / <code>keyIn</code> / <code>spellingIn</code>.
+    Change the by-name lookups (<code>position</code>, <code>hasPosition</code>, <code>neighbors</code>,
+    <code>hasStation</code>) to try the name exactly before <code>canonicalKey(name)</code>.
+    <code>hasStation</code> keeps its trim. Keep <code>scoped()</code>'s lowercase prefix match; inside
+    <code>cwSurveyNetwork::scoped()</code>, switch the copies to the by-key methods (keep <code>3f7be010</code>'s
+    in-scope <code>addShot</code> / foreign <code>addNeighbor</code> split). Update the <code>scoped()</code> comment
+    in <code>cwStationPositionLookup.cpp</code> ("Keys are canonical") to say survey levels are lowercase.</li>
+  <li><b>No behavior change.</b> The reader still inserts by name here, so every key in the app stays lowercase.
+    Every existing test must pass unchanged.</li>
+  <li><b>New tests</b> in <code>testcases/test_cwSurveyNetwork.cpp</code> and a new
+    <code>testcases/test_cwStationPositionLookup.cpp</code> (tag <code>[cwStationPositionLookup]</code>):
+    <code>P2</code> and <code>p2</code> stored by key stay two entries with their own positions and neighbors;
+    <code>position("P2")</code> and <code>position("p2")</code> each find their own; <code>position("K1")</code>
+    finds a key stored as <code>k1</code>; <code>bB2</code> finds nothing for a <code>BB2</code>/<code>Bb2</code>
+    pair; <code>scoped("cave.")</code> keeps both members of a pair, and in the network view their foreign neighbors
+    stay edges only (the <code>3f7be010</code> rule); <code>key()</code> returns the stored spelling;
+    <code>spellingIn</code> returns empty for an ambiguous name. They fail today because the new methods are stubs
+    and lookups fold first.</li>
+  <li><b>Gate:</b> <code>cavewhere-test "[cwSurveyNetwork],[SurveyNetwork],[cwStationPositionLookup],[MemberViews],[ScopeStations],[cwTrip]"</code>.</li>
+</ul>
+
+<h3><span class="cp">C.2</span>The .3d reader keys a case pair by cavern's spelling, and the harvest reports spellings</h3>
+<ul>
+  <li><b>Reader.</b> In <code>cwSurvex3DFileReader::readNetworkAndLookup</code> (about lines 135–260 on
+    <code>3f7be010</code>), pass 1 collects labels as now. Before inserting anything, group them by
+    <code>canonicalKey</code>. A group is a case pair when its spellings sit at more than one coordinate; spellings
+    at the same coordinate (an equate or a coincidence) are one station and share the lowercase key. Each label's
+    key is <code>canonicalKey(label)</code>, or <code>caseDistinctKey(levels, station)</code> for a pair member, with
+    the levels split at the raw <code>pimg-&gt;separator</code> (see Keys). Keep a label → key map, insert positions
+    with <code>setPositionAtKey</code>, and use the key for <code>fixedStations</code>. In pass 2, convert
+    <code>legEndName()</code>'s chosen name to its key, then use <code>addShotKeys</code>,
+    <code>legKeyOfKeys</code> and the key for <code>splayTips</code>. <code>coordToNames</code> and
+    <code>legEndName()</code> keep the verbatim labels. Both passes stay linear in the label count. Expose each
+    label's spelling (<code>caseDistinctKey</code> form) next to the lookup in <code>NetworkAndLookup</code> for the
+    harvest.</li>
+  <li><b>Harvest.</b> <code>cwExternalStationHarvest::run</code> (about line 262) returns spellings for
+    <code>names</code> and <code>fixedNames</code> (see Decisions), sorted as today, and its comment says so. A seed
+    matches a fixed name through <code>spellingIn</code>. The harvest cache needs no change: it lives in memory.</li>
+  <li><b>Expected test changes.</b> Harvest tests that expect lowercase names of a Compass or Walls file
+    (<code>test_cwExternalStationHarvest.cpp</code> about line 82) now expect the file's spelling. Investigate
+    lists every such test before the test stage edits it.</li>
+  <li><b>New tests.</b> In <code>testcases/test_cwSurvex3DFileReader.cpp</code>: solve
+    <code>compass_case_pairs.dat</code> and check the 7 keys, that <code>P2</code> and <code>p2</code> are 30.48 m
+    apart, <code>neighbors("P2") == {P1, P3}</code>, <code>neighbors("p2") == {p1, p3}</code>, and that
+    <code>q1</code> stays lowercase. A small Survex fixture with <code>*case preserve</code>, a <code>*begin Foo</code>
+    and a <code>P2</code>/<code>p2</code> pair checks that the level is lowercased (<code>…foo.P2</code>). A driver
+    that equates a lowercase <code>p9</code> with a preserved <code>P9</code> checks that the two labels at one
+    coordinate get one key with all the station's neighbors. In
+    <code>testcases/test_cwExternalStationHarvest.cpp</code>, the harvest of the Compass fixture lists
+    <code>P1 P2 P3 Q1 p1 p2 p3</code>. Re-run <code>a16c2d55</code>'s equate tests unchanged. The new tests fail
+    today on the 4-key lookup and the lowercase harvest.</li>
+  <li><b>Gate:</b> <code>cavewhere-test "[cwSurvex3DFileReader],[cwSurvex3DFileReaderPrecision],[ExternalStationHarvest],[Equate],[NodeTree],[LinePlotManager]"</code>.</li>
+</ul>
+
+<h3><span class="cp">C.3</span>Views and the line plot carry case-pair keys through, so the plot draws each station once</h3>
+<ul>
+  <li><b>Views that copy keys</b> switch to the by-key methods, each keeping its current prefix logic:
+    <code>cwLinePlotTask</code> <code>regionStationPositions</code> (about line 681);
+    <code>cwCavingRegion::memberPositions</code> / <code>memberNetwork</code> (about lines 670–725, keeping the
+    <code>3f7be010</code> member/non-member split); <code>cwTrip::solvedStationPositions</code> /
+    <code>solvedNetwork</code> tail aliases (about lines 905–960); <code>cwCaptureCenterline::caveNetworks</code>
+    (about lines 85–100). <code>cwTripLinePlotTask</code>'s duplicate rename stays by-name: it renames native
+    stations.</li>
+  <li><b>The line plot stops folding solved keys.</b> In <code>cwLinePlotTask</code>,
+    <code>splitSplayTipsByNode</code> keys the sliced tail as is, and <code>splitLegErrorsByNode</code> uses
+    <code>legKeyOfKeys</code>. In <code>cwLinePlotGeometry.cpp</code>: <code>nodeLocalKey</code> slices the prefix
+    (matched case-insensitively) and leaves the rest alone; <code>segmentErrorFor</code> takes keys on the network
+    path; and the source-root geometry, the <code>SourcedGeometry</code> constructor (about lines 490–510) and
+    <code>measure()</code> (about lines 604–613 and 657–664), builds <code>m_stations</code> /
+    <code>m_neighbors</code> from the keys as they are. That last site draws a <code>.mak</code> or
+    <code>.wpj</code> source root, the likely shape of a real Compass project. The native chunk path keeps resolving
+    chunk names with <code>canonicalKey</code> and <code>legKey</code>.</li>
+  <li><b>Member sets resolve spellings.</b> <code>cwSurveyNode::sourceMembers</code> (about line 1750) and
+    <code>fileFixedStations</code> (about line 1610) build each member as the region key of
+    <code>canonicalKey(path) + spelling</code>, through the region lookup's <code>key()</code>, so a cave-level file's
+    <code>P2</code> names <code>cave.P2</code> even when a native <code>p2</code> shares the cave.</li>
+  <li><b>New tests.</b> In <code>testcases/test_cwLinePlotTask_AttachInclude.cpp</code>, next to "Cave-attached
+    Compass file solves with X-flagged shots that carry LRUDs" (about line 638): attach
+    <code>compass_case_pairs.dat</code> to a cave, solve, and check that <code>cave-&gt;scopedPositions()</code> has
+    7 keys, that <code>cave-&gt;scopedNetwork()</code> gives each pair member its own neighbors, and that the
+    line-plot geometry draws exactly the 6 shots: each segment's endpoints are the solved positions of one shot's two
+    stations, and no segment is longer than 30.48 m plus rounding. Use the route the
+    <code>[cwLinePlotGeometry]</code> and <code>[LinePlotManager]</code> tests use to read geometry points. Repeat
+    for a trip-level attach (the scoped-trip path in <code>emitOwnTrips</code>) and for a source root: a small
+    hand-written <code>.mak</code> that names <code>compass_case_pairs.dat</code>. A mixed cave, a native trip
+    <code>P2 → N1</code> plus the cave-level file, checks that the file's <code>P2</code> and the native
+    <code>p2</code> are separate members, as cavern solved them. In
+    <code>test_cwCavingRegion_MemberViews.cpp</code>, a member view of a file with a case pair keeps both members.
+    Today these fail: 4 keys, and a leg about 31.8 m long (<code>P1</code> to <code>p2</code>'s position).</li>
+  <li><b>Gate:</b> <code>cavewhere-test "[Attach],[cwLinePlotGeometry],[LinePlotManager],[LinePlot],[MemberViews],[cwCavingRegion],[cwTrip],[cwCaptureManager],[TripLinePlotTask]"</code>.</li>
+</ul>
+
+<h3><span class="cp">C.4</span>Scrap and LiDAR carpeting place a case pair's note stations on their own stations</h3>
+<ul>
+  <li><b>Rule.</b> Each consumer resolves a note station's name once with <code>lookup.key(name)</code> or
+    <code>network.key(name)</code>, then compares keys with keys. The inputs are already right after C.3:
+    <code>cwNoteLiDARManager.cpp</code> (about lines 576–577) and <code>cwNoteLiDAR.cpp</code> (about line 301)
+    pass <code>trip-&gt;solvedStationPositions()</code> / <code>solvedNetwork()</code>.</li>
+  <li><b>Sites.</b> <code>cwNoteTransformCalculator.h</code> about line 103:
+    <code>neighborsStation1.contains(canonicalKey(station2.name()))</code> never matches a pair member's exact
+    neighbor list, so the note gets no transform (used by <code>cwScrap</code> and <code>cwNoteLiDAR.cpp</code>
+    about line 305). <code>cwTriangulateTask.h</code> about lines 96–100 and 140 keys <code>notePositions</code> by
+    <code>canonicalKey</code>, so two pair members on one note collide and shot interpolation skips them;
+    <code>cwTriangulateLiDARTask.cpp</code> about line 72 shares that code. <code>cwScrapStationView.cpp</code>
+    about line 223 draws an extra shot line for a pair member.</li>
+  <li><b>New tests.</b> A scrap on a trip attached to <code>compass_case_pairs.dat</code> with note stations
+    <code>P2</code> and <code>p2</code>: the note transform is found, and with interpolation on, each station
+    morphs to its own solved position. The same check for a LiDAR note. A note station typed <code>Q1</code> still
+    resolves through the lowercase fallback. Find the existing carpeting and LiDAR test files and tags during
+    investigate (start from the tests of <code>cwTriangulateTask</code> and <code>cwNoteLiDARManager</code>). These
+    fail today on the merged position and, after C.3 alone, on the missing transform.</li>
+  <li><b>Gate:</b> the carpeting and LiDAR tags investigate finds, plus <code>"[Attach]"</code>.</li>
+</ul>
+
+<h3><span class="cp">C.5</span>A fix on an attached station anchors that station, in the file's spelling</h3>
+<ul>
+  <li><b>Writer.</b> <code>cwSurvexExporterUtils::writeFixStations</code> (about lines 325–342) gets each fix's
+    spelling from its owner's harvest spellings with <code>spellingIn</code>, falling back to the typed name for a
+    native station. A spelling that isn't all lowercase is written inside
+    <code>*begin / *case preserve / *end</code>, with the same check the equate writer uses. The
+    <code>.mak</code> fix path in <code>cwSurvexExporterCaveTask</code> (about lines 675–690, <code>makFixes</code>)
+    follows the same rule.</li>
+  <li><b>Keys and duplicates.</b> <code>cwSurvexExporterCaveTask.cpp</code> about lines 586–588 and 650
+    (<code>stationNamesLower</code>) and 664 (<code>fileFixedStations</code> lookup);
+    <code>cwSurvexExporterUtils::scopedStationKeys</code> and <code>validateFixStations</code> (about lines
+    291–299, <code>seenLower</code>); <code>cwLinePlotManager.cpp</code> <code>keepsAFix</code> (about lines
+    148–168); <code>cwFixStationModel.cpp</code> about line 44; <code>cwFixStationDiagnostics.cpp</code> about
+    lines 121–129; <code>cwFindUnconnectedSurveyChunks.cpp</code> about lines 133 and 192. Each resolves names per
+    the Decisions section: duplicates by resolved station.</li>
+  <li><b>New tests.</b> These solve and check positions, never only the driver text:
+    <ul>
+      <li>With <code>compass_excluded_lrud.dat</code> attached to a cave, a fix typed <code>k1</code> lands
+        <code>K1</code> on the fix coordinate and cavern warns about no unused control point. This fails today.</li>
+      <li>With <code>compass_case_pairs.dat</code>, a fix on <code>P2</code> moves <code>P2</code> and leaves
+        <code>p2</code> where its shots put it. Fixes on both <code>P2</code> and <code>p2</code> are accepted as
+        two fixes.</li>
+      <li>In a mixed cave (native <code>P2 → N1</code> plus the cave-level file), a fix typed <code>P2</code>
+        lands on the file's <code>P2</code>, a fix typed <code>p2</code> on the file's <code>p2</code>, and a fix
+        typed with the trip scope (<code>Native.P2</code>) on the native station. The test pins this behavior.
+        (Corrected after C.5: the first draft said <code>p2</code> lands on the native station, which assumed the native
+        trip shares the cave's scope.)</li>
+      <li>A file-declared fix on a pair member shows on the Fix Stations page under its own name.</li>
+    </ul></li>
+  <li><b>Owner decision (2026-10-27): widen C.5.</b> The C.5 investigation found that a fix on a station whose
+    <em>survey level</em> has capitals (a Walls <code>#PREFIX XY</code> giving <code>XY:P2</code>, or a capitalized
+    <code>*begin</code> block under <code>*case preserve</code>) still lands on a station that does not exist,
+    because the harvest lowercases survey levels and the driver writes <code>xy.P2</code>. The reader and the harvest
+    also carry cavern's exact label for each station, in a new field next to <code>Stations::names</code>; the C.2/C.3
+    key rules stay. The fix writer writes that label inside <code>*case preserve</code>. New tests use a small
+    synthetic prefixed Walls fixture and a capitalized-block Survex fixture, and each solves and checks positions,
+    no unused fixed point and no unconnected warning.</li>
+  <li><b>Gate:</b> <code>cavewhere-test "[FixStation],[cwFixStation],[cwFixStationModel],[FindUnconnectedSurveyChunksTask],[SurvexExport],[cwSurvexExporter],[Attach]"</code>.</li>
+</ul>
+
+<h3><span class="cp">C.6</span>Equates, ties and station lists keep both members of a case pair</h3>
+<ul>
+  <li><b>Sites.</b> <code>cwExternalUnitManifest.cpp</code> about line 46 (<code>canonicalStations</code>) and
+    about line 213 (<code>solveView</code>'s <code>seen</code>), which keep one spelling per lowercased name even
+    with <code>preserveCase</code>. <code>cwSurvexExporterCaveTask.cpp</code> about lines 154–216
+    (<code>sourcedTripOperand</code> and its helpers). <code>cwFindUnconnectedSurveyChunks.cpp</code> about lines
+    87 and 218 (equate operands): connectivity has to use the same keys the reader emits, or a tied pair member
+    reports as floating. <code>cwTieSuggestionModel.cpp</code> about lines 40 and 62. <code>cwTrip.cpp</code> about
+    line 90 (<code>mergeStationSpellings</code>), 979 (<code>solvedStations</code>, which reads <code>p2</code>'s
+    position for <code>P2</code>; <code>cwLinePlotLabelView.cpp</code> about line 273 draws that label), 1034 and
+    1055. <code>cwScopeStationListModel.cpp</code> about lines 161, 169, 222–225, 245 and 264.
+    <code>cwExternalCenterlineScanPreview.cpp</code> about lines 142–146. Investigate gives each site a verdict.</li>
+  <li><b>New tests.</b>
+    <ul>
+      <li>An equate from a native station to <code>P2</code> of <code>compass_case_pairs.dat</code> ties to
+        <code>P2</code> only, and <code>p2</code> stays where its own shots put it.</li>
+      <li>A native trip tied to <code>p2</code> doesn't report as floating.</li>
+      <li>The fix-station autocomplete (<code>cwScopeStationListModel</code> node mode, <code>dd970cbd</code>)
+        lists <code>P2</code> and <code>p2</code> as two rows.</li>
+      <li>The <code>P2</code> line-plot label sits at <code>P2</code>'s position.</li>
+      <li>The tie suggestions offer both members.</li>
+    </ul></li>
+  <li><b>Gate:</b> <code>cavewhere-test "[TieStations],[TieSuggestionModel],[FloatingSurveys],[FindUnconnectedSurveyChunksTask],[ScopeStations],[cwTrip],[Equate],[Attach]"</code>
+    plus <code>cavewhere-qml-test -input test-qml/tst_FixStationAutocomplete.qml</code>.</li>
+</ul>
+
+<h3><span class="cp">C.7</span>Every row of the case-handling tables has a test that pins it</h3>
+<ul>
+  <li><b>Audit.</b> For each row of both tables in "Case handling by attachment", name the test (file, test case,
+    tag) that pins the row's solved key, harvest spelling, fix placement and lookup. A row counts as covered only by
+    a test that solves and checks positions or keys; driver text alone does not count. Record the map in the stage
+    report and the commit body, not in the plan.</li>
+  <li><b>Where a name is typed.</b> Cover each place a person names a station, in a mixed cave (native trip
+    <code>Native</code> with <code>P2 → N1</code>, plus a cave-level <code>compass_case_pairs.dat</code>): the native
+    survey editor (the trip's own station), an equate or tie (the picked trip's station; <code>P2</code> and
+    <code>p2</code> on the file's trip are two), scrap note carpeting and LiDAR carpeting (the note's own trip), and a
+    fix on the cave node (<code>P2</code>/<code>p2</code> name the file's stations, <code>Native.P2</code> the native
+    one). Also check what the fix-station autocomplete lists for the native station.</li>
+  <li><b>Known gaps from C.5 and C.6</b> (see "Still open"). Each gets a test that solves and checks the station it
+    lands on: a Survex <code>*case preserve</code> source
+    root whose derived trip holds a case pair (both members in the trip's unit set); and the
+    <code>mergeStationSpellings</code> mix (a lone file <code>P2</code> beside a native <code>p2</code> in one scope,
+    placed at its own position).</li>
+  <li><b>Fill the gaps.</b> Add a test for every row without one, with small synthetic fixtures under
+    <code>testcases/datasets/external-centerlines/</code>. Rows that C.1–C.6 likely leave uncovered: Survex
+    <code>*case upper</code> (a fix typed <code>p2</code> lands on <code>P2</code>), Walls
+    <code>#units case=lower</code> and <code>case=upper</code>, a Survex default-case file (keys and fixes exactly as
+    today), and the no-case-pair project (keys byte-for-byte as before C.2). Out of scope for C.7: the follow-ups
+    under "Still open" marked "Follow-up".</li>
+  <li><b>Bugs found.</b> A row whose new test fails is a bug in C.1–C.6: fix it in this item when it is small and
+    inside the tables' decisions; otherwise record it under "Still open" for the owner.</li>
+  <li><b>Gate:</b> <code>cavewhere-test "[CasePairs],[Attach],[cwSurvex3DFileReader],[ExternalStationHarvest],[FixStation],[SurvexExport],[Equate],[TieStations],[ScopeStations],[cwTrip],[cwNoteLiDAR],[cwScrapManager]"</code>
+    plus <code>cavewhere-qml-test -input test-qml/tst_FixStationAutocomplete.qml</code> and every tag the audit adds.</li>
+</ul>
+
+<h3><span class="cp">C.8</span>A trip under a source root refuses a survey file, and an existing one says its file is unsolved</h3>
+<ul>
+  <li><b>Why.</b> Found in the C.7 investigation. A source root (a <code>.mak</code>, <code>.wpj</code> or
+    <code>.svx</code> attached as a node) can hold native trips. On an empty one, the survey editor's
+    "Add from survey file…" (<code>SurveyEditor.qml</code> about line 448) attaches a file to that trip, and
+    <code>cwExternalCenterlineAttach::attach(cwTrip*)</code> (about lines 596–621) accepts it. The driver never writes
+    it: <code>DriverTree::indexSourcedSubtree</code> (<code>cwSurvexExporterCaveTask.cpp</code> about line 134) and the
+    source-root branch of <code>writeNodeBlock</code> (about line 356) write only native trips, and
+    <code>cwScopeLabels</code>' <code>sourcedTripLabels</code> (about line 36) labels only native trips. So the file
+    draws nothing, and <code>sourcedTripOperand</code>'s second branch (about lines 165–167) returns an empty operand,
+    so <code>writeEquateLine</code> drops any tie to it without a word.</li>
+  <li><b>Owner decision (2026-10-27): refuse it.</b> A trip under a source root takes no survey file, matching the
+    node page's rule (<code>NodePage.qml</code> about line 616 hides "Add trip from survey file…" on a sourced node).
+    To add such a file, the user puts it in the <code>.mak</code>, or attaches it to a node outside the source root and
+    ties it with an equate. Supporting it (writing the trip's <code>*include</code> inside the source root's block
+    under its own label) is a separate feature and out of scope.</li>
+  <li><b>Code.</b> Hide "Add from survey file…" for a trip under a sourced subtree. Make
+    <code>attach(cwTrip*)</code> refuse there with a reason. A trip that already holds such an attachment (from a
+    project saved before this item) shows a warning on the trip and on the project's error list that its file is not
+    solved and how to move it; nothing is removed or migrated.</li>
+  <li><b>New tests.</b> <code>attach(cwTrip*)</code> on a native trip under a <code>.mak</code> source root returns the
+    refusal and leaves the trip unchanged. A project built with such an attachment already in place loads, solves, and
+    carries the warning; the source root's own stations still solve. A QML test checks the menu item is hidden on a
+    trip under a source root and shown on a trip in a plain cave.</li>
+  <li><b>Gate:</b> <code>cavewhere-test "[Attach],[SourcedFixtures],[LinePlotManager],[SurvexExport]"</code> plus the
+    QML test file for the survey editor menu that investigate finds.</li>
+</ul>
+
+<h3><span class="cp">C.9</span>A Survex source root keeps its settings to itself, and a file that uses <code>*export</code> still takes CaveWhere's ties and fixes</h3>
+<ul>
+  <li><b>Why, settings.</b> Found in C.7 and measured with cavern 1.4.22 (scratchpad experiments, one included file per
+    setting, then a native trip with a 10 m leg due east). A setting at a Survex file's top level stays in force past
+    its <code>*include</code>, and the source-root branch of <code>writeNodeBlock</code>
+    (<code>cwSurvexExporterCaveTask.cpp</code> about lines 350–372) writes the native trips right after it in the same
+    block. The trip writer (<code>cwSurvexExporter.cpp</code> about lines 56–100) always writes <code>*data</code>,
+    <code>*title</code>, <code>*date</code> and <code>*team</code>, but writes a calibration only when it is nonzero and
+    <code>*units tape</code> only for feet or yards, so a meters trip with no calibration takes the file's values.
+    Measured leaks: <code>*units tape feet</code> (b at 3.05 m), <code>*units tape 2 metres</code> (20 m),
+    <code>*units compass grads</code>, <code>*units clino percent</code>/<code>grads</code>,
+    <code>*calibrate tape/compass/clino</code>, <code>*declination 10 degrees</code>, <code>*flags surface</code>
+    (stations marked SURFACE), <code>*flags duplicate</code>/<code>splay</code> (leg flagged),
+    <code>*truncate 1</code> (native stations renamed, trip comes loose), <code>*set decimal ,</code> (cavern fails on
+    <code>10.5</code>). C.7's B1 reset covers <code>*case</code> only.</li>
+  <li><b>Fix, settings.</b> Write an anonymous <code>*begin</code> before <code>writeIncludeSystem</code> and
+    <code>*end</code> after <code>writeExternalInclude</code> in the source-root branch, and remove B1's
+    <code>*case tolower</code> line (about line 365). Measured: the wrapper closes every leak above, and leaves the file's
+    own result unchanged (same stations, positions, flags, exports and <code>*title</code> in the 3D output; a node fix
+    written before the wrapper still lands; a file with an extra or missing <code>*end</code> still gets cavern's "in
+    this file" error, so it can't close the wrapper). Walls and Compass files reset their own settings at end of file;
+    <code>.mak</code> output is already wrapped by the translator, and trip-level attachments by
+    <code>*begin &lt;tripLabel&gt;</code>, so the source-root branch is the only place to change.</li>
+  <li><b>Why, exports.</b> Found in the same investigation, and independent of case. Once any file uses
+    <code>*export</code>, cavern checks exports across the whole solve. Then CaveWhere's own lines fail: a tie
+    <code>*equate sub.s1 native.a</code> fails with "Station root.native.a not exported from survey root.native"
+    (CaveWhere never writes <code>*export</code>), and a node fix on a file station the file doesn't export fails the
+    same way. Worse, a second Survex attachment that never uses <code>*export</code> and solves alone (a cross-level
+    <code>*equate x.b y.c</code>) fails too, as soon as the first one is in the project. The comment above
+    <code>writeEquates</code> (about line 509) says no <code>*export</code> is needed, which holds only while no file
+    uses it. The one fixture with <code>*export</code> (<code>survex_root_and_block.svx</code>) is used only by
+    scanner tests.</li>
+  <li><b>Owner decision (2026-10-27): <code>*infer exports on</code>.</b> Write it once at the top of the driver.
+    Measured: it clears CaveWhere's ties and fixes and the second file's failure. Accepted cost: a file's own missing
+    <code>*export</code> no longer errors in CaveWhere, though cavern still rejects that file when run on it alone.
+    Writing <code>*export</code> lines was rejected: it covers only the blocks CaveWhere writes, so it can't reach a
+    station the file keeps private, nor the second file's own equates. Update the comment above
+    <code>writeEquates</code> to say why the line is there.</li>
+  <li><b>New tests.</b> A Survex source root whose file sets, at its top level, each leaking setting above, with a
+    meters native trip and no calibration: the native trip's stations land where its own shots put them, and stay
+    underground and unflagged. A <code>*case toupper</code> root keeps B1's test passing after its reset line is gone.
+    For exports: a Survex root that uses <code>*export</code>, with a native trip tied to one of its stations and a node
+    fix on a station it doesn't export, solves; a second Survex root with an unexported cross-level equate solves beside
+    it. Tests that check the exact driver text are updated for the wrapper.</li>
+  <li><b>Gate:</b> <code>cavewhere-test "[SurvexExport],[LinePlotManager],[SourcedFixtures],[Attach]"</code>.</li>
+</ul>
+
+<h2>Still open</h2>
+<ul>
+  <li><b>Survey levels that differ only in case</b> (<code>*begin Foo</code> beside <code>*begin foo</code> under
+    <code>*case preserve</code>): the key lowercases levels, so the two merge. Follow-up.</li>
+  <li><b>Dotted Compass names under a <code>'.'</code> separator</b>: the reader can't tell the station part from the
+    survey part (see "Separator ambiguity" in <code>plans/EXTERNAL_FILE_PHASE3.html</code>). Follow-up.</li>
+  <li><b>An "ambiguous station" warning</b> for a typed name that matches a pair only by case (<code>bB2</code>):
+    today it gets the plain unknown-station warning. Follow-up.</li>
+  <li><b>Mixed cave, typed <code>p2</code></b>. The plan's C.5 test said a fix typed <code>p2</code> lands on the
+    native <code>p2</code>. The C.5 investigation re-pinned it: native stations always sit under their trip scope
+    (<code>cwTrip.cpp</code> about lines 59–65 and 423–429, <code>cwScopeLabels.cpp</code> about lines 108–121), so a
+    typed <code>p2</code> lands on the file's <code>p2</code>, and the native station is typed with its trip scope
+    (<code>Native.P2</code>). Pinned by <code>ff7b8e76</code> ("A fix beside a cave-level Compass file's case pair lands
+    on the station it names"); the owner confirms the behavior.</li>
+  <li><b>Survex <code>*case upper</code> fixes</b>: by reading the code (no cavern run), these have today's phantom-fix
+    bug too. The widened C.5 likely fixes them through the exact label; C.7 pins it.</li>
+  <li><b>A survey file attached to a trip under a source root</b> (found in C.6, diagnosis corrected in C.7). The
+    first reading was that a tie to it lands on the wrong member. In fact the file is never written to the solve: it
+    draws nothing, and a tie to it is dropped. The owner chose to refuse it; that is C.8, next after C.7.</li>
+  <li><b>Survex <code>*case preserve</code> source root</b> (found in C.6): a derived trip's unit set still shows one
+    member of a pair. C.7 adds the test.</li>
+  <li><b><code>mergeStationSpellings</code> mix</b> (found in C.6, <code>cwTrip.cpp</code> about line 110): a lone
+    harvest <code>P2</code> is keyed <code>p2</code>, while the region solve keys it <code>P2</code> when a native
+    <code>p2</code> shares the scope. In that mix, the placed lookup can read the other member's position. C.7 checks
+    it.</li>
+  <li><b>Fix on a <code>.mak</code> when translation fails</b> (found in C.5, existed before this plan,
+    <code>cwSurvexExporterCaveTask.cpp</code> about line 850): the fallback writes <code>.mak</code> fixes as unscoped
+    labels, while cavern reads each <code>.dat</code> into a lowercase survey named after the file, so the fix still
+    names a station outside that survey. Follow-up.</li>
+  <li><b>Cleanups</b> (found in C.5 and C.6): <code>cwScopeStationListModel::appendNodeRows</code> builds a second
+    scoped lookup per rebuild (linear, so a cost rather than a hazard). <code>cwTrip.cpp</code> and
+    <code>cwScopeStationListModel.cpp</code> include <code>cwSurvexExporterUtils.h</code> only for
+    <code>stationKeysBySpelling</code>, which could move somewhere neutral. Follow-up.</li>
+  <li><b>Survex settings leak from a source root into its native trips</b> (found in C.7). A setting at an included
+    file's top level persists past <code>*include</code>, and the native trips are written right after it in the same
+    block. C.7 (<code>1b53313e</code>, B1) resets <code>*case</code> only; <code>*units</code>, <code>*infer</code>,
+    <code>*set</code> and the rest still carry over. An anonymous <code>*begin</code> around the include closes
+    them all (measured). That is C.9, after C.8.</li>
+  <li><b>A file that uses <code>*export</code> breaks CaveWhere's ties and fixes, and other Survex attachments</b>
+    (found in the C.9 investigation). Folded into C.9; the owner chose <code>*infer exports on</code>.</li>
+  <li><b>A file whose own blocks set <code>*infer exports off</code></b> (found in C.9): inside those blocks cavern
+    checks exports again, so a CaveWhere tie or fix on a station there that the file does not export still fails.
+    Follow-up.</li>
+  <li><b>Harvest seed fixes on unexported nested stations</b> (found in C.9): the harvest driver's seed
+    <code>*fix</code> lines can fail on a nested station the file does not export. Follow-up.</li>
+  <li><b>Issue671 scrap progress test</b> (<code>test_cwScrapManager.cpp</code>, "A scrap run's progress moves in
+    steps finer than one per scrap") failed under load in the full run after C.3 and in C.4's gate, and passed both
+    times alone. A flake candidate, unrelated to this plan.</li>
+</ul>
+
+<h2>After landing</h2>
+<ul>
+  <li>Attach the private Compass project again and check the plot by eye: no long legs between case pairs.
+    The data stays on the owner's machine; nothing from it goes into tests or commit messages.</li>
+  <li>File the follow-ups listed under "Still open".</li>
+</ul>
+
+<h2>Out of scope</h2>
+<ul>
+  <li><b><code>cwLinePlotTask::setStationAsChanged</code></b> keys trip lookups with <code>toUpper()</code>, so a
+    change to one member of a pair also marks the other's trips changed. That over-marks and costs one extra
+    redraw; it never draws anything wrong.</li>
+  <li><b>Tying a native trip to a cave-level file by sharing a name.</b> A native <code>P2</code> and a
+    cave-level file's <code>P2</code> are two stations to cavern because they sit in different scopes (the native trip
+    is written in its own <code>*begin</code> block), and after this plan CaveWhere draws them as cavern solved them;
+    C.3 and C.5 pin that. Joining them stays the job of an explicit
+    equate, which the Decisions section's same-coordinate rule turns back into one station.</li>
+</ul>
+
+</div>
+</body>
+</html>
