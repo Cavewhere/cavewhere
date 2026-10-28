@@ -34,7 +34,17 @@ Interaction {
 
         // Choose the smaller scale factor to ensure the image fits within the item
         target.scale = Math.min(scaleX, scaleY);
-        pinchHandlerId.persistentScale = target.scale
+    }
+
+    function zoomAround(factor, scenePoint) {
+        if (factor > 0 && isFinite(factor)) {
+            const local = target.mapFromItem(null, scenePoint)
+            const before = target.mapToItem(target.parent, local)
+            target.scale *= factor
+            const after = target.mapToItem(target.parent, local)
+            target.x += before.x - after.x
+            target.y += before.y - after.y
+        }
     }
 
     QQ.Connections {
@@ -68,14 +78,41 @@ Interaction {
         }
     }
 
+    //Trackpad pinches are applied as relative steps on the target's live
+    //transform. Driving the target from PinchHandler jumps (#747): it scales
+    //from its own persistentScale, stale after any other zoom, and a click
+    //mid-gesture deactivates it, so later steps restart from position (0,0).
     QQ.PinchHandler {
-        id: pinchHandlerId
+        id: trackpadPinchHandlerId
+        enabled: interactionId.enabled
+        target: null
+        parent: interactionId.target
+        acceptedDevices: QQ.PointerDevice.TouchPad
+        rotationAxis.enabled: false
+        onScaleChanged: (delta) => interactionId.zoomAround(delta, trackpadPinchHandlerId.centroid.scenePosition)
+    }
+
+    //Touchscreens keep PinchHandler's own transform, which also pans with the fingers
+    QQ.PinchHandler {
+        id: touchPinchHandlerId
         enabled: interactionId.enabled
         target: interactionId.target
         parent: interactionId.target
+        acceptedDevices: QQ.PointerDevice.TouchScreen
         rotationAxis.minimum: interactionId.target.rotation
         rotationAxis.maximum: interactionId.target.rotation
         persistentRotation: interactionId.target.rotation
+    }
+
+    //Every other zoom (wheel, trackpad, refit, another tool's instance) moves
+    //the scale behind the touch pinch's back; resync its basis
+    QQ.Connections {
+        target: interactionId.target
+        function onScaleChanged() {
+            if (!touchPinchHandlerId.active) {
+                touchPinchHandlerId.persistentScale = interactionId.target.scale
+            }
+        }
     }
 
     states: [
