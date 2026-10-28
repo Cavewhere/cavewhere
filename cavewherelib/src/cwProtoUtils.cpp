@@ -869,6 +869,12 @@ void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fi
     if (!fix.coordinate().isEmpty()) {
         saveString(protoFix->mutable_coordinate(), fix.coordinate());
     }
+    if (fix.kind() != cwFixStation::Entrance) {
+        protoFix->set_kind(static_cast<CavewhereProto::FixStation_Kind>(fix.kind()));
+    }
+    if (!fix.label().isEmpty()) {
+        saveString(protoFix->mutable_label(), fix.label());
+    }
 }
 
 cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
@@ -896,6 +902,12 @@ cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
     //opening it.
     if (protoFix.has_coordinate()) {
         fix.setCoordinate(QString::fromStdString(protoFix.coordinate()));
+    }
+    if (protoFix.has_kind() && CavewhereProto::FixStation_Kind_IsValid(protoFix.kind())) {
+        fix.setKind(static_cast<cwFixStation::Kind>(protoFix.kind()));
+    }
+    if (protoFix.has_label()) {
+        fix.setLabel(QString::fromStdString(protoFix.label()));
     }
 
     return fix;

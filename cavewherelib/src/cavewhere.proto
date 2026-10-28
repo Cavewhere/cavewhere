@@ -128,6 +128,18 @@ message FixStation {
     // Held for the fix-station twin of StationShot.ignoredWarnings; drop this
     // line when that field lands.
     reserved 12;
+
+    // What the fixed station marks on the surface. Absent reads as Entrance.
+    enum Kind {
+        Entrance = 0;
+        Well = 1;
+        RadioLocation = 2;
+        Other = 3;
+    }
+    optional Kind kind = 13;
+
+    // The name the user gave the fix. Absent or empty means the owning node's name.
+    optional string label = 14;
 }
 
 message ExternalCenterline {

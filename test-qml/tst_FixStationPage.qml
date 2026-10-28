@@ -9,6 +9,12 @@ import cw.TestLib
 MainWindowTest {
     id: rootId
 
+    // Wide enough for the wide table with its Kind and Label columns, beside
+    // the window's chrome, with room left for a column to widen into.
+    readonly property int wideWindowWidth: 1400
+
+    width: wideWindowWidth
+
     //! Hovers \a host through \a testCase and returns the window's shared
     //! tooltip once it shows on \a host.
     function hoverSharedToolTip(testCase, host) {
@@ -197,7 +203,8 @@ MainWindowTest {
         }
 
         readonly property string coordinateTitle: "Coordinate (East, North / Lat, Long)"
-        readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]
+        readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth",
+                                                          "kindColumnWidth", "labelColumnWidth"]
         readonly property int columnDrag: 80
         readonly property int columnWidthTolerance: 2
         readonly property int largerFontStep: 4
@@ -319,16 +326,20 @@ MainWindowTest {
             return picker
         }
 
-        //! Row \a rowIndex's coordinate cell, once the delegate carrying it
-        //! exists — the row is added to the model before the view has built it.
-        function findCoordinateCell(rowIndex) {
-            let cell = null
+        //! Row \a rowIndex's item named \a prefix + "." + rowIndex, once the
+        //! delegate carrying it exists — the row is added to the model before
+        //! the view has built it.
+        function findRowChild(prefix, rowIndex) {
+            let item = null
             tryVerify(() => {
-                cell = findChild(RootData.pageView.currentPageItem,
-                                 "coordinateCell." + rowIndex)
-                return cell !== null
-            }, 5000, "row " + rowIndex + " coordinate cell should be reachable")
-            return cell
+                item = findChild(RootData.pageView.currentPageItem, prefix + "." + rowIndex)
+                return item !== null
+            }, 5000, "row " + rowIndex + " should have a " + prefix)
+            return item
+        }
+
+        function findCoordinateCell(rowIndex) {
+            return findRowChild("coordinateCell", rowIndex)
         }
 
         function test_emptyStateShowsHelpBox() {
@@ -1820,6 +1831,148 @@ MainWindowTest {
                     "and still shows that row's text")
             verify(askBox.opened, "and is still up")
             askBox.close()
+        }
+
+        //! The user-facing kind names, in cwFixStation::Kind order.
+        readonly property list<string> kindNames: ["Entrance", "Well", "Radio Location", "Other"]
+
+        // Kind and Label follow the Coordinate column at their Theme widths, sort
+        // by their own roles, and the test window still holds the wide table.
+        function test_kindAndLabelColumnsFollowTheCoordinate() {
+            gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            waitForRendering(page)
+
+            const coordinate = rootId.headerCell(coordinateTitle)
+            const kind = rootId.headerCell("Kind")
+            const label = rootId.headerCell("Label")
+            verify(coordinate !== null, "the page has a Coordinate header")
+            verify(kind !== null, "the page has a Kind header")
+            verify(label !== null, "the page has a Label header")
+
+            const coordinateX = coordinate.mapToItem(page, 0, 0).x
+            const kindX = kind.mapToItem(page, 0, 0).x
+            const labelX = label.mapToItem(page, 0, 0).x
+            verify(kindX > coordinateX, "Kind (" + kindX + ") comes after Coordinate (" + coordinateX + ")")
+            verify(labelX > kindX, "Label (" + labelX + ") comes after Kind (" + kindX + ")")
+
+            compare(kind.columnWidth, Theme.fixKindColumnWidth, "Kind starts at its Theme width")
+            compare(label.columnWidth, Theme.fixLabelColumnWidth, "Label starts at its Theme width")
+            compare(kind.sortRole, FixStationModel.KindRole, "Kind sorts by the kind")
+            compare(label.sortRole, FixStationModel.LabelRole, "Label sorts by the label")
+
+            verify(!page.isNarrow, "the test window holds the wide table, page " + page.width
+                   + " for a table needing " + page.wideMinimumWidth)
+        }
+
+        // The Kind combo lists the four kinds, shows the row's kind, and a
+        // choice commits onto the row.
+        function test_theKindComboCommitsIntoTheModel() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            model.addFixStation()
+            tryCompare(model, "count", 1)
+
+            const combo = findRowChild("kindCombo", 0)
+            compare(combo.count, kindNames.length, "the combo offers every kind")
+            for (let i = 0; i < kindNames.length; ++i) {
+                compare(combo.textAt(i), kindNames[i], "kind " + i + " reads " + kindNames[i])
+            }
+            compare(combo.currentIndex, FixStation.Entrance, "a new fix is an Entrance")
+
+            dataChangedSpyId.target = model
+            dataChangedSpyId.clear()
+            combo.activated(FixStation.Well)
+            tryCompare(model, "count", 1)
+            tryVerify(() => model.data(model.index(0), FixStationModel.KindRole) === FixStation.Well,
+                      5000, "choosing Well commits it onto the row")
+            compare(dataChangedSpyId.count, 1, "in one write")
+
+            model.setData(model.index(0), FixStation.RadioLocation, FixStationModel.KindRole)
+            tryCompare(combo, "currentIndex", FixStation.RadioLocation, 5000,
+                       "the combo follows the row's kind")
+            compare(combo.displayText, "Radio Location")
+        }
+
+        // An empty label shows the owning node's name as a placeholder; a typed
+        // label commits onto the row and replaces it.
+        function test_theLabelCellCommitsIntoTheModel() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            model.addFixStation()
+            tryCompare(model, "count", 1)
+
+            const labelCell = findRowChild("labelCell", 0)
+            tryCompare(labelCell, "text", cave.name, 5000,
+                       "an unlabeled fix shows its node's name")
+            verify(Qt.colorEqual(labelCell.color, Theme.textSubtle),
+                   "in the subtle color, so it reads as a placeholder; got " + labelCell.color)
+
+            labelCell.finishedEditting("North sink")
+            compare(model.data(model.index(0), FixStationModel.LabelRole), "North sink",
+                    "the field's commit lands on the row")
+            tryCompare(labelCell, "text", "North sink", 5000, "and the cell shows the label")
+            verify(Qt.colorEqual(labelCell.color, Theme.text),
+                   "in the ordinary text color; got " + labelCell.color)
+
+            labelCell.finishedEditting("")
+            compare(model.data(model.index(0), FixStationModel.LabelRole), "",
+                    "clearing the label clears the row")
+            tryCompare(labelCell, "text", cave.name, 5000, "and the node's name comes back")
+        }
+
+        // Opening the label editor on an unlabeled fix and leaving it writes
+        // nothing: the editor opens on the empty label, not the placeholder.
+        function test_theLabelCellOpenedAndLeftWritesNothing() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            model.addFixStation()
+            tryCompare(model, "count", 1)
+
+            const labelCell = findRowChild("labelCell", 0)
+            tryCompare(labelCell, "text", cave.name, 5000,
+                       "an unlabeled fix shows its node's name")
+
+            dataChangedSpyId.target = model
+            dataChangedSpyId.clear()
+            labelCell.openEditor()
+            compare(labelCell.commitChanges(), true, "an untouched field commits")
+
+            compare(dataChangedSpyId.count, 0, "leaving an untouched field writes nothing")
+            compare(model.data(model.index(0), FixStationModel.LabelRole), "",
+                    "the label stays empty rather than taking the node's name")
+        }
+
+        // The narrow layout shows Kind and Label on each row, and both commit.
+        function test_theNarrowLayoutShowsKindAndLabel() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            const model = cave.fixStations
+            model.addFixStation()
+            tryCompare(model, "count", 1)
+
+            rootId.width = Theme.breakpointPanelCollapse - 100
+            tryVerify(() => page.isNarrow, 5000, "the page should be in its narrow layout")
+            let narrowRow = null
+            tryVerify(() => {
+                narrowRow = findChild(page, "narrowFixRow.0")
+                return narrowRow !== null
+            }, 5000, "the row takes its narrow delegate")
+
+            const combo = findChild(narrowRow, "kindCombo.0")
+            verify(combo !== null, "the narrow row carries the Kind combo")
+            const labelCell = findChild(narrowRow, "labelCell.0")
+            verify(labelCell !== null, "the narrow row carries the Label field")
+
+            combo.activated(FixStation.Other)
+            tryVerify(() => model.data(model.index(0), FixStationModel.KindRole) === FixStation.Other,
+                      5000, "the narrow combo commits onto the row")
+            labelCell.finishedEditting("Radio beacon")
+            compare(model.data(model.index(0), FixStationModel.LabelRole), "Radio beacon",
+                    "the narrow label commits onto the row")
+
+            rootId.width = defaultWindowWidth
+            tryVerify(() => !page.isNarrow, 5000, "and the layout goes back")
         }
 
         //! The page swaps layouts on whether the wide table fits, so the two

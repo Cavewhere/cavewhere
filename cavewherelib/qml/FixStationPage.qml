@@ -49,12 +49,15 @@ StandardPage {
                                                      + Theme.tableColumnMinimumWidth
 
     // The QSettings keys of the dragged column widths, in column order.
-    readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]
+    readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth",
+                                                     "kindColumnWidth", "labelColumnWidth"]
 
     // Whether any column holds a dragged width rather than its default.
     readonly property bool hasCustomColumnWidths: columnWidthsId.stationColumnWidth > 0
                                                   || columnWidthsId.inputCSColumnWidth > 0
                                                   || columnWidthsId.coordinateColumnWidth > 0
+                                                  || columnWidthsId.kindColumnWidth > 0
+                                                  || columnWidthsId.labelColumnWidth > 0
 
     // Under any output system, a local grid's included, a file whose fix names
     // no system is placed at the project origin, so only then does a bare
@@ -472,7 +475,7 @@ StandardPage {
     //! stays above the column's minimum, and grows only as far as the table
     //! still fits the page, so the page keeps the wide layout through a drag.
     function resizeColumn(column: int, requestedWidth: int): void {
-        const columns = [stationColumn, csColumn, coordinateColumn]
+        const columns = [stationColumn, csColumn, coordinateColumn, kindColumn, labelColumn]
         const keys = fixStationPage.columnWidthKeys
         const minimum = column === 0 ? fixStationPage.stationColumnMinimumWidth
                                      : Theme.tableColumnMinimumWidth
@@ -587,8 +590,12 @@ StandardPage {
         //! editor opens on what the cell displays, which is what every field
         //! other than the coordinate does.
         property string editValue: ""
+        //! Shown, subtle, while the value is empty. The editor still opens on
+        //! the empty value, so leaving it untouched writes nothing.
+        property string placeholder: ""
+        readonly property bool showsPlaceholder: field.value === "" && field.placeholder !== ""
 
-        text: value
+        text: field.showsPlaceholder ? field.placeholder : field.value
         //! A coordinate cell now shows the row's own text when that text can't
         //! be read (see the value bindings below), and such text is by
         //! definition unvalidated — it reached the project by hand. AutoText
@@ -598,9 +605,10 @@ StandardPage {
         //! Display and edit are deliberately different for a coordinate: the
         //! column renders every row in the project's units so it can be scanned,
         //! while an edit starts from what the user wrote.
-        editText: field.editValue !== "" ? field.editValue : field.text
+        editText: field.editValue !== "" ? field.editValue
+                                         : field.showsPlaceholder ? "" : field.text
         color: field.error ? Theme.errorText
-                           : field.readOnly ? Theme.textSubtle : Theme.text
+                           : field.readOnly || field.showsPlaceholder ? Theme.textSubtle : Theme.text
         validator: field.coordinate ? coordinateValidatorId : null
         editorComponent: field.role === FixStationModel.StationNameRole ? EditorComponents.stationName : null
         stationScope: field.role === FixStationModel.StationNameRole ? stationScopeId : null
@@ -630,6 +638,22 @@ StandardPage {
         }
     }
 
+    // A fix's kind. Commits only on a user's choice, never on a rebind.
+    component KindCombo : QC.ComboBox {
+        id: kindCombo
+        property int kind
+        property int rowIndex
+
+        model: fixStationPage.fixStationsModel ? fixStationPage.fixStationsModel.kindNames : []
+        currentIndex: kindCombo.kind
+
+        onActivated: (index) => {
+            fixStationPage.commitEdit(kindCombo.rowIndex, FixStationModel.KindRole, String(index))
+            // A choice from the popup sets currentIndex itself; follow the row again.
+            kindCombo.currentIndex = Qt.binding(() => kindCombo.kind)
+        }
+    }
+
     component WideCell : QQ.Item {
         id: cell
         property int columnWidth: 0
@@ -647,6 +671,7 @@ StandardPage {
         property alias coordinate: field.coordinate
         property alias axisOrder: field.axisOrder
         property alias editValue: field.editValue
+        property alias placeholder: field.placeholder
         property alias readOnly: field.readOnly
         //! Names the inner editable field rather than this wrapper, so callers
         //! reach the same item the narrow layout exposes directly.
@@ -1242,6 +1267,8 @@ StandardPage {
         property int stationColumnWidth: 0
         property int inputCSColumnWidth: 0
         property int coordinateColumnWidth: 0
+        property int kindColumnWidth: 0
+        property int labelColumnWidth: 0
     }
 
     TableStaticColumnModel {
@@ -1281,6 +1308,22 @@ StandardPage {
                 // Long", "Northing / Lat") were the only place that was said.
                 text: "Coordinate (East, North / Lat, Long)"
                 sortRole: FixStationModel.EastingRole
+            },
+            TableStaticColumn {
+                id: kindColumn
+                columnWidth: columnWidthsId.kindColumnWidth > 0
+                             ? columnWidthsId.kindColumnWidth
+                             : Theme.fixKindColumnWidth
+                text: "Kind"
+                sortRole: FixStationModel.KindRole
+            },
+            TableStaticColumn {
+                id: labelColumn
+                columnWidth: columnWidthsId.labelColumnWidth > 0
+                             ? columnWidthsId.labelColumnWidth
+                             : Theme.fixLabelColumnWidth
+                text: "Label"
+                sortRole: FixStationModel.LabelRole
             }
         ]
     }
@@ -1776,6 +1819,8 @@ StandardPage {
             required property bool coordinateOrderUnknown
             required property list<string> availableDatums
             required property bool datumEnabled
+            required property int kind
+            required property string label
 
             readonly property int indent: Math.min(wideEditableId.depth,
                                                    fixStationPage.stationIndentLevels) * Theme.treeIndent
@@ -1890,6 +1935,32 @@ StandardPage {
                     }
                 }
 
+                QQ.Item {
+                    implicitWidth: kindColumn.columnWidth
+                    implicitHeight: wideKindCombo.implicitHeight
+                    clip: true
+
+                    KindCombo {
+                        id: wideKindCombo
+                        objectName: "kindCombo." + wideEditableId.fixRow
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.tightSpacing
+                        anchors.verticalCenter: parent.verticalCenter
+                        kind: wideEditableId.kind
+                        rowIndex: wideEditableId.fixRow
+                    }
+                }
+
+                WideCell {
+                    fieldObjectName: "labelCell." + wideEditableId.fixRow
+                    columnWidth: labelColumn.columnWidth
+                    value: wideEditableId.label
+                    placeholder: fixStationPage.displayNameOf(wideEditableId.node)
+                    role: FixStationModel.LabelRole
+                    rowIndex: wideEditableId.fixRow
+                }
+
                 InlineWarning {
                     objectName: "stationWarning." + wideEditableId.fixRow
                     Layout.leftMargin: Theme.tightSpacing
@@ -1998,6 +2069,13 @@ StandardPage {
                     axisOrder: CoordinateText.axisOrderFor(wideReadOnlyId.inputCS)
                 }
 
+                // An attached fix carries no kind or label, so the trailing
+                // warning lines up with the editable rows' past those columns.
+                QQ.Item {
+                    Layout.preferredWidth: kindColumn.columnWidth + labelColumn.columnWidth
+                    Layout.preferredHeight: 1
+                }
+
                 QQ.Loader {
                     Layout.leftMargin: Theme.tightSpacing
                     Layout.alignment: Qt.AlignVCenter
@@ -2031,6 +2109,8 @@ StandardPage {
             required property bool coordinateOrderUnknown
             required property list<string> availableDatums
             required property bool datumEnabled
+            required property int kind
+            required property string label
 
             //! Mutually exclusive with the domain error — see the wide delegate.
             readonly property string coordinateWarning: narrowEditableId.coordinateError !== ""
@@ -2119,6 +2199,22 @@ StandardPage {
                     objectName: "pickFromViewButton." + narrowEditableId.fixRow
 
                     onClicked: fixStationPage.pickFromView(narrowEditableId.fixRow)
+                }
+
+                QC.Label { text: "·"; color: Theme.textSubtle }
+
+                KindCombo {
+                    objectName: "kindCombo." + narrowEditableId.fixRow
+                    kind: narrowEditableId.kind
+                    rowIndex: narrowEditableId.fixRow
+                }
+
+                FixField {
+                    objectName: "labelCell." + narrowEditableId.fixRow
+                    value: narrowEditableId.label
+                    placeholder: fixStationPage.displayNameOf(narrowEditableId.node)
+                    role: FixStationModel.LabelRole
+                    rowIndex: narrowEditableId.fixRow
                 }
             }
         }

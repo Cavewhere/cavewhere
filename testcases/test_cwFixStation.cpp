@@ -44,6 +44,8 @@ TEST_CASE("cwFixStation defaults are zero/empty", "[FixStation][cwFixStation]") 
     CHECK(fix.coordinate().isEmpty());
     CHECK(fix.state() == cwFixStation::Empty);
     CHECK_FALSE(fix.hasElevation());
+    CHECK(fix.kind() == cwFixStation::Entrance);
+    CHECK(fix.label().isEmpty());
 }
 
 TEST_CASE("cwFixStation reads its numbers out of the coordinate it was given",
@@ -495,6 +497,72 @@ TEST_CASE("cwFixStation equality compares all fields", "[FixStation][cwFixStatio
         REQUIRE(c.easting() != d.easting());
         CHECK(c != d);
     }
+}
+
+TEST_CASE("cwFixStation keeps the kind and label it is given", "[FixStation][cwFixStation]") {
+    const QList<cwFixStation::Kind> kinds = {
+        cwFixStation::Well, cwFixStation::RadioLocation, cwFixStation::Other, cwFixStation::Entrance
+    };
+    cwFixStation fix;
+    for (const cwFixStation::Kind kind : kinds) {
+        fix.setKind(kind);
+        INFO("kind " << static_cast<int>(kind));
+        CHECK(fix.kind() == kind);
+    }
+
+    fix.setLabel(QStringLiteral("North sink"));
+    CHECK(fix.label() == QStringLiteral("North sink"));
+
+    //The label is an annotation: it leaves the station and coordinate alone.
+    CHECK(fix.stationName().isEmpty());
+    CHECK(fix.state() == cwFixStation::Empty);
+}
+
+TEST_CASE("cwFixStation equality sees the kind and the label", "[FixStation][cwFixStation]") {
+    cwFixStation a;
+    cwFixStation b;
+    b.setId(a.id());
+    REQUIRE(a == b);
+
+    SECTION("a different kind is a different fix") {
+        b.setKind(cwFixStation::Well);
+        CHECK(a != b);
+
+        a.setKind(cwFixStation::Well);
+        CHECK(a == b);
+    }
+
+    SECTION("a different label is a different fix") {
+        b.setLabel(QStringLiteral("North sink"));
+        CHECK(a != b);
+
+        a.setLabel(QStringLiteral("North sink"));
+        CHECK(a == b);
+    }
+}
+
+TEST_CASE("cwFixStation copies its kind and label on write", "[FixStation][cwFixStation]") {
+    cwFixStation a;
+    a.setKind(cwFixStation::RadioLocation);
+    a.setLabel(QStringLiteral("Beacon"));
+
+    cwFixStation b = a;
+    CHECK(b.kind() == cwFixStation::RadioLocation);
+    CHECK(b.label() == QStringLiteral("Beacon"));
+
+    b.setKind(cwFixStation::Well);
+    b.setLabel(QStringLiteral("North sink"));
+    CHECK(a.kind() == cwFixStation::RadioLocation);
+    CHECK(a.label() == QStringLiteral("Beacon"));
+    CHECK(b.kind() == cwFixStation::Well);
+    CHECK(b.label() == QStringLiteral("North sink"));
+}
+
+TEST_CASE("cwFixStation names each kind for the user", "[FixStation][cwFixStation]") {
+    CHECK(cwFixStation::kindName(cwFixStation::Entrance) == QStringLiteral("Entrance"));
+    CHECK(cwFixStation::kindName(cwFixStation::Well) == QStringLiteral("Well"));
+    CHECK(cwFixStation::kindName(cwFixStation::RadioLocation) == QStringLiteral("Radio Location"));
+    CHECK(cwFixStation::kindName(cwFixStation::Other) == QStringLiteral("Other"));
 }
 
 TEST_CASE("cwFixStation hands its three components out as one point",

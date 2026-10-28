@@ -346,6 +346,7 @@ private:
 
 private slots:
     void runSurvex();
+    void fixStationDataChanged(const QModelIndex& topLeft, const QModelIndex& bottomRight, const QList<int>& roles);
 };
 
 //This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot

@@ -132,5 +132,47 @@ MainWindowTest {
             compare(RootData.region.geoReference.state, GeoReference.Anchored)
             compare(RootData.region.geoReference.localCoordinateSystem, frameBeforeSave)
         }
+
+        // A fix's kind and label are part of the project: a Well named
+        // "North sink" comes back a Well named "North sink", and a fix nobody
+        // annotated comes back an unlabeled Entrance.
+        function test_aFixKeepsItsKindAndLabelThroughABundledSave() {
+            RootData.region.addCave()
+            const cave = RootData.region.cave(RootData.region.caveCount - 1)
+            cave.name = "AnnotatedCave"
+
+            const m = cave.fixStations
+            compare(m.addFixStation("W1"), 0)
+            compare(m.addFixStation("E1"), 1)
+            verify(m.setData(m.index(0), FixStation.Well, FixStationModel.KindRole),
+                   "the kind is written")
+            verify(m.setData(m.index(0), "North sink", FixStationModel.LabelRole),
+                   "the label is written")
+            compare(m.data(m.index(0), FixStationModel.KindRole), FixStation.Well)
+            compare(m.data(m.index(0), FixStationModel.LabelRole), "North sink")
+
+            // tempDirectoryUrl() is PID-suffixed so parallel test processes don't collide.
+            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            const projectPath = tempDir + "/fix-station-kind-label.cw"
+            verify(RootData.project.saveAs(projectPath), "saveAs should succeed")
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+
+            RootData.newProject()
+            tryCompare(RootData.region, "caveCount", 0)
+
+            RootData.project.loadFile(TestHelper.toLocalUrl(projectPath))
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+            tryVerify(() => RootData.region.caveCount === 1, 10000,
+                      "reloaded project should contain the annotated cave")
+
+            const reloaded = RootData.region.cave(0).fixStations
+            tryCompare(reloaded, "count", 2)
+            compare(reloaded.data(reloaded.index(0), FixStationModel.StationNameRole), "W1")
+            compare(reloaded.data(reloaded.index(0), FixStationModel.KindRole), FixStation.Well)
+            compare(reloaded.data(reloaded.index(0), FixStationModel.LabelRole), "North sink")
+            compare(reloaded.data(reloaded.index(1), FixStationModel.StationNameRole), "E1")
+            compare(reloaded.data(reloaded.index(1), FixStationModel.KindRole), FixStation.Entrance)
+            compare(reloaded.data(reloaded.index(1), FixStationModel.LabelRole), "")
+        }
     }
 }

@@ -26,10 +26,12 @@
  * roleNames(). Add and remove rows with addFixStation() / removeAt(index).
  *
  * Every role here is persisted data the user typed, so dataChanged() means
- * exactly "save, re-solve and re-validate this". The read-only warnings derived
- * from the solve live in cwFixStationDiagnosticsModel, a proxy over this model —
- * keeping them out is what lets cwLinePlotManager, cwFixStationValidator,
- * cwTripCalibration and cwSaveLoad connect here without a role filter.
+ * "save this". All but KindRole and LabelRole also feed the solve; those two
+ * annotate the fix, so cwLinePlotManager skips a change that carries only them.
+ * The read-only warnings derived from the solve live in
+ * cwFixStationDiagnosticsModel, a proxy over this model — keeping them out is
+ * what lets cwFixStationValidator, cwTripCalibration and cwSaveLoad connect
+ * here without a role filter.
  */
 class CAVEWHERE_LIB_EXPORT cwFixStationModel : public QAbstractListModel
 {
@@ -37,6 +39,8 @@ class CAVEWHERE_LIB_EXPORT cwFixStationModel : public QAbstractListModel
     QML_NAMED_ELEMENT(FixStationModel)
 
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    //! cwFixStation::kindName() for every kind, indexed by cwFixStation::Kind.
+    Q_PROPERTY(QStringList kindNames READ kindNames CONSTANT)
 
 public:
     enum Roles {
@@ -54,7 +58,11 @@ public:
         //! components in the project's units, so display and edit deliberately
         //! differ. Written through setCoordinateText(), the one path that
         //! validates a string before it becomes the coordinate.
-        CoordinateTextRole
+        CoordinateTextRole,
+        //! cwFixStation::Kind, as an int.
+        KindRole,
+        //! The raw label; empty when the user gave none.
+        LabelRole
     };
     Q_ENUM(Roles)
 
@@ -154,6 +162,7 @@ public:
     void setFixStations(const QList<cwFixStation>& fixes);
     const QList<cwFixStation>& fixStations() const { return m_fixStations; }
     int count() const { return m_fixStations.size(); }
+    static QStringList kindNames();
 
 signals:
     void countChanged();

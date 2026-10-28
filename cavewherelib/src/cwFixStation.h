@@ -13,6 +13,7 @@
 #include <QString>
 #include <QUuid>
 #include <QMetaType>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGeoPoint.h"
@@ -79,6 +80,16 @@ public:
         //! cwCoordinateText::swapHorizontal()).
         NoSystem
     };
+
+    //! What the fixed station marks on the surface. A fix that records no kind
+    //! is an Entrance.
+    enum Kind {
+        Entrance,
+        Well,
+        RadioLocation,
+        Other
+    };
+    Q_ENUM(Kind)
 
     cwFixStation();
     cwFixStation(const cwFixStation& other);
@@ -177,10 +188,31 @@ public:
     double verticalVariance() const;
     void setVerticalVariance(double v);
 
+    Kind kind() const;
+    void setKind(Kind kind);
+
+    //! The name the user gave this fix, stored as typed. Empty means the view
+    //! shows the owning node's name instead.
+    QString label() const;
+    void setLabel(const QString& label);
+
+    //! The user-facing name of \a kind: "Entrance", "Well", "Radio Location"
+    //! or "Other".
+    static QString kindName(Kind kind);
+
 private:
     QSharedDataPointer<cwFixStationData> data;
 };
 
 Q_DECLARE_METATYPE(cwFixStation)
+
+// Re-exports cwFixStation as a QML namespace, so its Kind enum reads as
+// FixStation.Entrance / FixStation.Well (the cwPenStrokeForeign pattern).
+struct cwFixStationForeign
+{
+    Q_GADGET
+    QML_FOREIGN_NAMESPACE(cwFixStation)
+    QML_NAMED_ELEMENT(FixStation)
+};
 
 #endif // CWFIXSTATION_H

@@ -1804,3 +1804,44 @@ TEST_CASE("A trip row holds no fixes of its own, and Add on it targets its node"
     CHECK(model.indexOfFixRow(pageRow).data(cwFixStationTreeModel::NodeObjectRole)
               .value<cwSurveyNode*>() == root);
 }
+
+TEST_CASE("A native fix row reads and writes its kind and label through the tree",
+          "[FixStationTreeModel][cwFixStationTreeModel]")
+{
+    const QString northSink = QStringLiteral("North sink");
+    const QString sump = QStringLiteral("Sump");
+
+    auto fixture = makeProject(QStringLiteral("fix-tree-kind-label"));
+    cwSurveyNode* regionRoot = fixture->project->cavingRegion()->rootNode();
+    cwCave* north = addChildNode(regionRoot, kNativeFolderName, cwSurveyNode::Kind::Folder);
+    cwCave* pit = addChildNode(north, kNativeCaveName, cwSurveyNode::Kind::Cave);
+    addNativeFix(pit, kNativeStation, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
+                 kNativeFixElevation);
+    cwFixStationModel* fixes = pit->fixStations();
+    REQUIRE(fixes->setData(fixes->index(0), static_cast<int>(cwFixStation::Well),
+                           cwFixStationModel::KindRole));
+    REQUIRE(fixes->setData(fixes->index(0), northSink, cwFixStationModel::LabelRole));
+
+    cwFixStationTreeModel model;
+    model.setRootNode(regionRoot);
+
+    CHECK(model.roleNames().value(cwFixStationModel::KindRole) == "kind");
+    CHECK(model.roleNames().value(cwFixStationModel::LabelRole) == "label");
+
+    const QModelIndex pitRow = nodeRow(model, kNativeCaveName);
+    REQUIRE(pitRow.isValid());
+    const QModelIndex row = fixRow(model, pitRow, kNativeStation);
+    REQUIRE(row.isValid());
+    CHECK(row.data(cwFixStationModel::KindRole).toInt() == cwFixStation::Well);
+    CHECK(row.data(cwFixStationModel::LabelRole).toString() == northSink);
+
+    QSignalSpy spy(&model, &QAbstractItemModel::dataChanged);
+    REQUIRE(model.setData(row, static_cast<int>(cwFixStation::Other), cwFixStationModel::KindRole));
+    CHECK(fixes->fixStationAt(0).kind() == cwFixStation::Other);
+    CHECK(roleAnnouncements(spy, row, cwFixStationModel::KindRole) == 1);
+
+    spy.clear();
+    REQUIRE(model.setData(row, sump, cwFixStationModel::LabelRole));
+    CHECK(fixes->fixStationAt(0).label() == sump);
+    CHECK(roleAnnouncements(spy, row, cwFixStationModel::LabelRole) == 1);
+}
