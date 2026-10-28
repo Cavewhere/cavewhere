@@ -381,6 +381,24 @@ namespace {
         ~ValidatorContext() { if (ctx) { proj_context_destroy(ctx); } }
     };
 
+    /**
+     * \a cs as proj_create_crs_to_crs reads it, which CaveWhere's transforms
+     * and cavern both use: a bare "+proj=" string gains " +type=crs", so
+     * "+proj=utm +zone=16" is a CRS while proj_create alone reads it as a
+     * conversion. Mirrors PROJ's pj_add_type_crs_if_needed.
+     */
+    QString asProjCrsString(const QString& cs)
+    {
+        const bool isProjString = cs.startsWith(QStringLiteral("proj="))
+            || cs.startsWith(QStringLiteral("+proj="))
+            || cs.startsWith(QStringLiteral("+init="))
+            || cs.startsWith(QStringLiteral("+title="));
+        if (isProjString && !cs.contains(QStringLiteral("type=crs"))) {
+            return cs + QStringLiteral(" +type=crs");
+        }
+        return cs;
+    }
+
     PJ_CONTEXT* validatorContext()
     {
         thread_local ValidatorContext tls;
@@ -454,12 +472,8 @@ bool cwCoordinateTransform::isValidCS(const QString& cs)
         if (!ctx) {
             return false;
         }
-        PJ* p = proj_create(ctx, key.toUtf8().constData());
-        const bool valid = (p != nullptr);
-        if (p) {
-            proj_destroy(p);
-        }
-        return valid;
+        const PjPtr p(proj_create(ctx, asProjCrsString(key).toUtf8().constData()));
+        return p && proj_is_crs(p.get());
     });
 }
 

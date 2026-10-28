@@ -66,6 +66,8 @@ public:
     static const QString Wgs84;
 
     static QStringList commonProjectedCSList();
+    //! True when PROJ reads \a cs as a coordinate reference system, a bare
+    //! "+proj=" string included; an operation such as a pipeline is false.
     static bool isValidCS(const QString& cs);
     static bool isGeographic(const QString& cs);
 

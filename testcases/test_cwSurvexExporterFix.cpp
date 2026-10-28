@@ -489,6 +489,61 @@ TEST_CASE("Survex export drops a fix whose coordinate can't be read",
     CHECK_FALSE(output.contains(QStringLiteral("a2")));
 }
 
+TEST_CASE("Fix validation drops a fix whose system is a PROJ operation",
+          "[cwSurvexExporterFix][issue708]") {
+    // A pipeline is an operation, not a coordinate system: it has no area of
+    // use to check the coordinate against, and survex can't take it as *cs.
+    // The fix is dropped like any other unusable one, and the message names
+    // the system so the user can find the row.
+    const QString pipeline =
+        QStringLiteral("+proj=pipeline +step +proj=unitconvert +xy_in=m +xy_out=m");
+    const QSet<QString> stationKeys = {cwStation::canonicalKey(QStringLiteral("a1")),
+                                       cwStation::canonicalKey(QStringLiteral("a2"))};
+
+    const cwFixStation pipelineFix = makeFix("a1", pipeline, 500000.0, 4000000.0, 100.0);
+    REQUIRE(pipelineFix.state() == cwFixStation::Valid);
+
+    const QList<cwFixStation> fixes = {
+        pipelineFix,
+        makeFix("a2", QStringLiteral("EPSG:32616"), 500100.0, 4000050.0, 110.0)
+    };
+
+    QStringList errors;
+    const QList<cwFixStation> kept =
+        cwSurvexExporterUtils::validateFixStations(fixes, stationKeys, errors);
+
+    INFO(errors.join('\n').toStdString());
+    REQUIRE(kept.size() == 1);
+    CHECK(kept.first().stationName() == QStringLiteral("a2"));
+    REQUIRE(errors.size() == 1);
+    CHECK(errors.first().contains(QStringLiteral("a1")));
+    CHECK(errors.first().contains(pipeline));
+}
+
+TEST_CASE("Survex export writes no *cs for a fix whose system is a PROJ operation",
+          "[cwSurvexExporterFix][issue708]") {
+    // Written out, the pipeline became *cs CUSTOM "+proj=pipeline ..." and
+    // the solve failed on it; the good fix beside it carries the cave alone.
+    cwCavingRegionData region;
+
+    cwCaveData cave = makeCave(QStringLiteral("Operation"),
+                               {QStringLiteral("a1"), QStringLiteral("a2")});
+    cave.fixStations.append(makeFix("a1",
+                                    QStringLiteral("+proj=pipeline +step +proj=unitconvert "
+                                                   "+xy_in=m +xy_out=m"),
+                                    500000.0, 4000000.0, 100.0));
+    cave.fixStations.append(makeFix("a2", QStringLiteral("EPSG:32616"),
+                                    500100.0, 4000050.0, 110.0));
+    region.caves.append(cave);
+
+    const QString output = writeRegionToString(region);
+    INFO(output.toStdString());
+    CHECK_FALSE(output.contains(QStringLiteral("+proj=pipeline")));
+    CHECK_FALSE(output.contains(QStringLiteral("*fix a1")));
+    CHECK(output.contains(QStringLiteral("*cs EPSG:32616")));
+    CHECK(output.contains(QStringLiteral("*fix a2 500100.000000000 4000050.000000000 110.000000000")));
+}
+
 TEST_CASE("Survex export writes a geographic fix to the last digit the user typed",
           "[cwSurvexExporterFix]") {
     // Degrees, so the decimals that are micrometers in UTM are centimeters

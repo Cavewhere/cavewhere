@@ -300,6 +300,9 @@ QString fixUnusableReason(const cwFixStation& fix);
  * - A fix whose coordinate lies outside its own CS's domain
  *   (cwFixStationDiagnostics::isDomainValid) is dropped, matching the
  *   project frame, which leaves the same fix out.
+ * - A fix whose system PROJ reads as an operation rather than a coordinate
+ *   system (cwCoordinateTransform::isValidCS) is dropped with a message
+ *   naming the system.
  */
 QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
                                         const QSet<QString>& stationKeys,

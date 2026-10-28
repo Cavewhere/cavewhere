@@ -86,6 +86,49 @@ TEST_CASE("cwCoordinateTransform::isValidCS validates EPSG codes", "[cwCoordinat
     CHECK_FALSE(cwCoordinateTransform::isValidCS("EPSG:99999999"));
 }
 
+TEST_CASE("cwCoordinateTransform::isValidCS rejects a PROJ operation that is no coordinate system",
+          "[cwCoordinateTransform][isValidCS][issue708]")
+{
+    // proj_create reads each of these as a coordinate operation. A fix under
+    // one has no system to place it, and survex reads one written as
+    // *cs CUSTOM "..." as an output CS it can't use.
+    const QString pipeline =
+        QStringLiteral("+proj=pipeline +step +proj=unitconvert +xy_in=m +xy_out=m");
+    const QString unitConversion = QStringLiteral("+proj=unitconvert +xy_in=m +xy_out=m");
+    const QString utmConversion = QStringLiteral("urn:ogc:def:coordinateOperation:EPSG::16016");
+
+    CHECK_FALSE(cwCoordinateTransform::isValidCS(pipeline));
+    CHECK_FALSE(cwCoordinateTransform::isValidCS(unitConversion));
+    CHECK_FALSE(cwCoordinateTransform::isValidCS(utmConversion));
+
+    // The QML singleton the custom-CS dialog asks answers the same way.
+    CHECK_FALSE(cwCoordinateSystem::isValidCS(pipeline));
+}
+
+TEST_CASE("cwCoordinateTransform::isValidCS keeps every spelling of a coordinate system",
+          "[cwCoordinateTransform][isValidCS][issue708]")
+{
+    // Codes, compounds and WKT.
+    CHECK(cwCoordinateTransform::isValidCS("EPSG:32616"));
+    CHECK(cwCoordinateTransform::isValidCS("EPSG:4326"));
+    CHECK(cwCoordinateTransform::isValidCS("EPSG:32616+5703"));
+    CHECK(cwCoordinateTransform::isValidCS(
+        "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],"
+        "PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433]]"));
+
+    // A bare "+proj=" string with no +type=crs is a CRS to every transform
+    // CaveWhere and cavern build (proj_create_crs_to_crs adds the +type=crs),
+    // and the survex importer stores its keyword systems in this form.
+    CHECK(cwCoordinateTransform::isValidCS("+proj=merc +ellps=WGS84"));
+    CHECK(cwCoordinateTransform::isValidCS("+proj=utm +zone=16 +datum=WGS84"));
+    CHECK(cwCoordinateTransform::isValidCS(
+        "+proj=utm +zone=30 +ellps=intl +towgs84=-86,-98,-119,0,0,0,0 +no_defs"));
+    CHECK(cwCoordinateTransform::isValidCS(
+        "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 "
+        "+ellps=airy +datum=OSGB36 +units=m +no_defs"));
+    CHECK(cwCoordinateTransform::isValidCS("+proj=utm +zone=16 +datum=WGS84 +type=crs"));
+}
+
 TEST_CASE("cwCoordinateTransform reprojects WGS84 to UTM 12N", "[cwCoordinateTransform][reproject]")
 {
     cwCoordinateTransform t("EPSG:4326", "EPSG:32612");

@@ -9,6 +9,7 @@
 #include "cwSurvexExporterUtils.h"
 #include "cwClinoReading.h"
 #include "cwCompassReading.h"
+#include "cwCoordinateTransform.h"
 #include "cwDistanceReading.h"
 #include "cwFixStationDiagnostics.h"
 #include "cwGridConvergence.h"
@@ -256,10 +257,17 @@ QString verticalClinoText(const cwClinoReading& reading)
 // read is not a coordinate at 0, 0, 0. A Valid fix outside its own system's
 // domain is dropped too: cwLocalProjectionManager leaves it out of the frame, so
 // writing it would put a *cs in a solve whose *cs out the frame never named.
+// So is one whose system PROJ reads as an operation such as a pipeline: it has
+// no domain to check against, and cavern can't take it as a *cs.
 QString fixUnusableReason(const cwFixStation& fix)
 {
     switch (fix.state()) {
     case cwFixStation::Valid:
+        if (!cwCoordinateTransform::isValidCS(fix.inputCS())) {
+            return QStringLiteral("Fix on station \"%1\" uses \"%2\", which is not a "
+                                  "coordinate system")
+                .arg(fix.stationName(), fix.inputCS());
+        }
         if (cwFixStationDiagnostics::isDomainValid(fix)) {
             return QString();
         }
