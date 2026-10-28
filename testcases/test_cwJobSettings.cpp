@@ -3,6 +3,8 @@
 
 //Our includes
 #include "cwJobSettings.h"
+#include "cwTask.h"
+#include "cwThreadCountRestorer.h"
 #include "SpyChecker.h"
 
 //Qt includes
@@ -10,6 +12,44 @@
 #include <QThreadPool>
 #include <QSettings>
 #include "cwSignalSpy.h"
+
+//Std includes
+#include <algorithm>
+
+namespace {
+    const QString kThreadCountKey = QStringLiteral("threadCount");
+    constexpr int kThreadsReservedForUi = 2;
+
+    //! Puts the thread count setting and its stored value back the way the test found them
+    class ThreadCountSettingRestorer {
+    public:
+        explicit ThreadCountSettingRestorer(cwJobSettings* settings) :
+            m_settings(settings),
+            m_previousCount(settings->threadCount()),
+            m_previousStored(QSettings().value(kThreadCountKey))
+        {
+        }
+
+        ~ThreadCountSettingRestorer()
+        {
+            m_settings->setThreadCount(m_previousCount);
+            QSettings diskSettings;
+            if(m_previousStored.isValid()) {
+                diskSettings.setValue(kThreadCountKey, m_previousStored);
+            } else {
+                diskSettings.remove(kThreadCountKey);
+            }
+        }
+
+        ThreadCountSettingRestorer(const ThreadCountSettingRestorer&) = delete;
+        ThreadCountSettingRestorer& operator=(const ThreadCountSettingRestorer&) = delete;
+
+    private:
+        cwJobSettings* m_settings;
+        int m_previousCount;
+        QVariant m_previousStored;
+    };
+}
 
 TEST_CASE("cwJobSettings should initilize correctly and update settings correcly", "[cwJobSettings]") {
     cwJobSettings::initialize();
@@ -34,10 +74,10 @@ TEST_CASE("cwJobSettings should initilize correctly and update settings correcly
 
     SECTION("Check thread count") {
         CHECK(settings->idleThreadCount() == QThread::idealThreadCount());
-        CHECK(settings->threadCount() == QThreadPool::globalInstance()->maxThreadCount());
+        CHECK(settings->threadCount() == cwTask::threadPool()->maxThreadCount());
 
         settings->setThreadCount(1);
-        CHECK(settings->threadCount() == QThreadPool::globalInstance()->maxThreadCount());
+        CHECK(settings->threadCount() == cwTask::threadPool()->maxThreadCount());
 
         checker[&threadCountSpy]++;
         checker.checkSpies();
@@ -45,6 +85,27 @@ TEST_CASE("cwJobSettings should initilize correctly and update settings correcly
         CHECK(diskSettings.value("threadCount").toInt() == 1);
 
         settings->setThreadCount(QThread::idealThreadCount());
+    }
+
+    SECTION("Default thread count leaves two threads for the UI") {
+        ThreadCountSettingRestorer restorer(settings);
+        const int expectedDefault = std::max(1, QThread::idealThreadCount() - kThreadsReservedForUi);
+        CHECK(settings->defaultThreadCount() == expectedDefault);
+
+        settings->resetToDefaults();
+        diskSettings.remove(kThreadCountKey);
+        CHECK(settings->threadCount() == settings->defaultThreadCount());
+
+        CHECK(settings->isAtDefaults());
+
+        if(QThread::idealThreadCount() > kThreadsReservedForUi) {
+            settings->setThreadCount(settings->idleThreadCount());
+            CHECK_FALSE(settings->isAtDefaults());
+
+            settings->resetToDefaults();
+            CHECK(settings->threadCount() == settings->defaultThreadCount());
+            CHECK(settings->isAtDefaults());
+        }
     }
 
     SECTION("Check auto update") {
@@ -67,6 +128,38 @@ TEST_CASE("cwJobSettings should initilize correctly and update settings correcly
 
     diskSettings.clear();
 
-    CHECK(settings->threadCount() == QThread::idealThreadCount());
     CHECK(QThreadPool::globalInstance()->maxThreadCount() == QThread::idealThreadCount());
+}
+
+TEST_CASE("cwJobSettings sizes only the task pool", "[cwJobSettings]") {
+    cwJobSettings::initialize();
+    auto settings = cwJobSettings::instance();
+    REQUIRE(settings);
+
+    if(settings->idleThreadCount() <= kSingleThread) {
+        SKIP("Needs more than one ideal thread to pick a count below idleThreadCount");
+    }
+
+    ThreadCountSettingRestorer restorer(settings);
+    const int globalCountBefore = QThreadPool::globalInstance()->maxThreadCount();
+
+    settings->setThreadCount(kSingleThread);
+
+    CHECK(cwTask::threadPool()->maxThreadCount() == kSingleThread);
+    CHECK(settings->threadCount() == kSingleThread);
+    CHECK(QThreadPool::globalInstance()->maxThreadCount() == globalCountBefore);
+}
+
+TEST_CASE("cwJobSettings reads the thread count from the task pool", "[cwJobSettings]") {
+    cwJobSettings::initialize();
+    auto settings = cwJobSettings::instance();
+    REQUIRE(settings);
+
+    if(settings->idleThreadCount() <= kSingleThread) {
+        SKIP("Needs more than one ideal thread to give the task pool a distinct size");
+    }
+
+    cwThreadCountRestorer threadCount(kSingleThread);
+
+    CHECK(settings->threadCount() == kSingleThread);
 }

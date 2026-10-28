@@ -4,7 +4,7 @@ import QtTest
 import cavewherelib
 import cw.TestLib
 
-// Issue #729: the node page hosts the Attach survey file dialog, so it opens
+// Issue #729: the node page hosts the Add survey file dialog, so it opens
 // on an empty cave, whose page hides the survey tree, and every way out of it
 // or of the Add trip from survey file dialog leaves the window usable.
 MainWindowTest {
@@ -95,15 +95,15 @@ MainWindowTest {
 
         function attachDialog(page) {
             const dialog = findChild(page, "attachSurveyFileDialog")
-            verify(dialog !== null, "the page hosts the Attach survey file dialog")
+            verify(dialog !== null, "the page hosts the Add survey file dialog")
             return dialog
         }
 
-        // Add caret → Attach survey file…
+        // Add caret → Add Survey File…
         function triggerAttachFromCaret(page) {
             const menu = openAddCaret(page)
             const item = findChild(menu, "attachSurveyFileMenuItem")
-            verify(item !== null && item.visible, "the Add menu offers Attach survey file…")
+            verify(item !== null && item.visible, "the Add menu offers Add Survey File…")
             mouseClick(item)
         }
 
@@ -115,7 +115,7 @@ MainWindowTest {
             mouseClick(button)
         }
 
-        // Add caret → Attach survey file…, waiting for the dialog to show.
+        // Add caret → Add Survey File…, waiting for the dialog to show.
         function openAttachFromCaret(page) {
             triggerAttachFromCaret(page)
             const dialog = attachDialog(page)
@@ -137,7 +137,7 @@ MainWindowTest {
             const dialog = attachDialog(empty.page)
             compare(dialog.target, empty.cave, "the file goes under the page's cave")
             tryVerify(() => findChild(dialog, "sourcePathField").visible, 5000,
-                      "Attach survey file… opens its dialog on an empty cave")
+                      "Add Survey File… opens its dialog on an empty cave")
         }
 
         function test_cancelOnAnEmptyCaveLeavesNoModalBackground() {

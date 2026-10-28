@@ -19,34 +19,7 @@
 
 namespace {
 
-//! Union-find over canonical station keys: two keys share a root exactly when
-//! cavern would join them.
-class StationKeyUnion
-{
-public:
-    QString root(const QString& key) const
-    {
-        QString current = key;
-        QString parent = m_parents.value(current, current);
-        while (parent != current) {
-            current = parent;
-            parent = m_parents.value(current, current);
-        }
-        return current;
-    }
-
-    void join(const QString& first, const QString& second)
-    {
-        const QString firstRoot = root(first);
-        m_parents.insert(root(second), firstRoot);
-        // Point both keys straight at the root so later walks stay short.
-        m_parents.insert(first, firstRoot);
-        m_parents.insert(second, firstRoot);
-    }
-
-private:
-    QHash<QString, QString> m_parents;
-};
+using cwSurvexExporterUtils::StationKeyUnion;
 
 //! A native node whose chunks the result reports on, with the cavern keys of
 //! each chunk's named stations, indexed [trip][chunk].

@@ -53,6 +53,9 @@
 #include <QTemporaryDir>
 #include <QTextStream>
 
+// Std
+#include <algorithm>
+
 namespace {
 
 // addNativeTripWithShot's default: a 10 m level shot due north.
@@ -701,15 +704,22 @@ TEST_CASE("A cave's solved network holds only its own stations when a region equ
         for (const QString& foreign : std::as_const(rejectedStations)) {
             INFO("foreign station: " << foreign.toStdString());
 
-            cwCaveData caveData = cave->data();
-            caveData.fixStations = {fixAt(foreign, 0.0, 0.0)};
-            const cwCavingRegionData regionData = region.data();
+            // The fix goes into the snapshot the tree and the plan are built
+            // from, since the plan validates each node's fixes by its id.
+            cwCavingRegionData regionData = region.data();
+            const auto caveData = std::find_if(regionData.caves.begin(), regionData.caves.end(),
+                                               [cave](const cwCaveData& node) {
+                                                   return node.id == cave->id();
+                                               });
+            REQUIRE(caveData != regionData.caves.end());
+            caveData->fixStations = {fixAt(foreign, 0.0, 0.0)};
             const cwSurvexExporterCaveTask::DriverTree tree(regionData.caves,
                                                             cwScopeLabels(regionData));
+            const cwSurvexExporterCaveTask::AnchorPlan plan(tree, {});
             cwSurvexExporterCaveTask task;
             QString driver;
             QTextStream stream(&driver);
-            task.writeNode(stream, caveData, tree);
+            task.writeNode(stream, *caveData, tree, plan);
             CHECK(task.errors().contains(
                 QStringLiteral("Fix references unknown station: \"%1\"").arg(foreign)));
 

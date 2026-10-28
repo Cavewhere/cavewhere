@@ -133,6 +133,17 @@ int cwUniqueValueFilterModel::findRow(const QVariant &value) const
     return -1;
 }
 
+void cwUniqueValueFilterModel::forwardDataChanged(int first, int last, const QList<int> &roles)
+{
+    for(int i = first; i <= last; i++) {
+        const auto sourceIndex = sourceModel()->index(i, 0);
+        const int row = findRow(uniqueValue(sourceIndex));
+        if(row >= 0 && mUniqueIndex.at(row).index == sourceIndex) {
+            emit dataChanged(index(row), index(row), roles);
+        }
+    }
+}
+
 void cwUniqueValueFilterModel::appendRow(const Row &row)
 {
     const int rowNumber = static_cast<int>(mUniqueIndex.size());
@@ -302,7 +313,8 @@ void cwUniqueValueFilterModel::connectSourceModel()
     connect(sourceModel(), &QAbstractItemModel::dataChanged,
             this, [this](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int> roles)
     {
-        if(roles.contains(mUniqueRole)) {
+        //An empty roles list means every role changed, the unique role included
+        if(roles.isEmpty() || roles.contains(mUniqueRole)) {
             for(int i = topLeft.row(); i <= bottomRight.row(); i++) {
                 const auto sourceIndex = this->sourceModel()->index(i, 0);
 
@@ -321,6 +333,8 @@ void cwUniqueValueFilterModel::connectSourceModel()
 
                 insertSourceRows(i, i);
             }
+        } else {
+            forwardDataChanged(topLeft.row(), bottomRight.row(), roles);
         }
     });
 

@@ -56,12 +56,14 @@ private:
 
 public:
     /**
-     * Reads and transcodes levels topLevel through the 1x1 tail. The default is
-     * cw::ktx2::loadStreamedLevels(); tests substitute a synchronous fake.
+     * Reads and transcodes levels topLevel through the 1x1 tail, polling
+     * isCanceled between stages. The default is cw::ktx2::loadStreamedLevels();
+     * tests substitute a synchronous fake.
      */
     using Loader = std::function<Monad::Result<cwCompressedTexture>(const cwStreamedTexture&,
                                                                     QRhiTexture::Format,
-                                                                    int firstLevel)>;
+                                                                    int firstLevel,
+                                                                    const std::function<bool()>& isCanceled)>;
 
     //How many loads run on cwConcurrent at once
     static constexpr int kMaxConcurrentLoads = Streamer::kMaxConcurrentLoads;
@@ -97,13 +99,14 @@ public:
                  quint64 priority);
 
     /**
-     * Forgets everything for itemId — for an item that has been removed. A load
-     * already in flight finishes into the void.
+     * Forgets everything for itemId — for an item that has been removed. Cancels
+     * a load already in flight for itemId and returns without waiting for it.
      */
     void cancel(quint32 itemId);
 
     /**
-     * Forgets every item and blocks until the loads in flight have finished.
+     * Forgets every item, cancels the loads in flight, and blocks until their
+     * workers have returned.
      */
     void cancelAll();
 

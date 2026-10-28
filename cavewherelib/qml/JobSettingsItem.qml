@@ -39,11 +39,16 @@ ColumnLayout {
             HelpArea {
                 id: threadHelpAreaId
                 Layout.fillWidth: true
-                text: "By default and the recommend setting, CaveWhere uses all the usable threads provide by your system. Decreasing Max Number of Threads will limit the number concurrent jobs that CaveWhere execute and will reduce CaveWhere's performance. If your computer is experiencing over heating issues from CaveWhere, reducing the Max Number of Threads may help."
+                text: "By default, CaveWhere uses every usable thread except two, which it leaves free for the interface and the 3D view. Lowering Max Number of Threads runs fewer jobs at once, so they take longer to finish. If your computer runs hot while CaveWhere works, lowering Max Number of Threads may help."
             }
 
             QC.Label {
                 text: "Usable threads: " + settingsId.jobSettings.idleThreadCount
+            }
+
+            QC.Label {
+                objectName: "defaultThreadCountLabel"
+                text: "Default: " + settingsId.jobSettings.defaultThreadCount + " of " + settingsId.jobSettings.idleThreadCount
             }
 
             RowLayout {

@@ -157,8 +157,8 @@ void cwKeywordFilterModel::setSourceModel(QAbstractItemModel *sourceModel)
     QAbstractProxyModel::setSourceModel(sourceModel);
 
     if(sourceModel) {
-        mRowsAboutToBeRemoved = connect(sourceModel, &QAbstractItemModel::rowsAboutToBeRemoved,
-                                        this, [this, sourceModel](const QModelIndex& parent, int first, int last)
+        mSourceConnections.append(connect(sourceModel, &QAbstractItemModel::rowsAboutToBeRemoved,
+                                          this, [this, sourceModel](const QModelIndex& parent, int first, int last)
         {
             if(parent.isValid()) {
                 return;
@@ -166,29 +166,53 @@ void cwKeywordFilterModel::setSourceModel(QAbstractItemModel *sourceModel)
             for(int i = first; i <= last; ++i) {
                 remove(sourceModel->index(i, 0, parent));
             }
-        });
+        }));
 
-        mDataChanged = connect(sourceModel, &QAbstractItemModel::dataChanged,
-                               this, [this, sourceModel](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
+        mSourceConnections.append(connect(sourceModel, &QAbstractItemModel::dataChanged,
+                                          this, [this, sourceModel](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
         {
-            if(!roles.contains(cwKeywordItemModel::ObjectRole)) {
-                return;
-            }
-
             if(topLeft.parent().isValid()) {
+                // Child rows are an item's keywords.
+                if(roles.contains(cwKeywordItemModel::KeywordsRole)) {
+                    forwardKeywordsChanged(topLeft.parent());
+                }
                 return;
             }
 
-            for(int row = topLeft.row(); row <= bottomRight.row(); ++row) {
-                auto srcIndex = sourceModel->index(row, 0, topLeft.parent());
-                removeBySourceIndex(srcIndex);
-                insert(srcIndex);
+            if(roles.contains(cwKeywordItemModel::ObjectRole)) {
+                for(int row = topLeft.row(); row <= bottomRight.row(); ++row) {
+                    auto srcIndex = sourceModel->index(row, 0);
+                    removeBySourceIndex(srcIndex);
+                    insert(srcIndex);
+                }
+            } else if(roles.contains(cwKeywordItemModel::KeywordsRole)) {
+                for(int row = topLeft.row(); row <= bottomRight.row(); ++row) {
+                    forwardKeywordsChanged(sourceModel->index(row, 0));
+                }
             }
-        });
+        }));
+
+        const auto forwardChildRows = [this](const QModelIndex& parent) {
+            if(parent.isValid()) {
+                forwardKeywordsChanged(parent);
+            }
+        };
+        mSourceConnections.append(connect(sourceModel, &QAbstractItemModel::rowsInserted,
+                                          this, forwardChildRows));
+        mSourceConnections.append(connect(sourceModel, &QAbstractItemModel::rowsRemoved,
+                                          this, forwardChildRows));
 
         // Clear while the source's rows are still readable.
-        mModelAboutToBeReset = connect(sourceModel, &QAbstractItemModel::modelAboutToBeReset,
-                                       this, &cwKeywordFilterModel::clear);
+        mSourceConnections.append(connect(sourceModel, &QAbstractItemModel::modelAboutToBeReset,
+                                          this, &cwKeywordFilterModel::clear));
+    }
+}
+
+void cwKeywordFilterModel::forwardKeywordsChanged(const QModelIndex& sourceIndex)
+{
+    const QModelIndex proxyIndex = mapFromSource(sourceIndex);
+    if(proxyIndex.isValid()) {
+        emit dataChanged(proxyIndex, proxyIndex, {cwKeywordItemModel::KeywordsRole});
     }
 }
 
@@ -219,16 +243,8 @@ void cwKeywordFilterModel::removeBySourceIndex(const QModelIndex &sourceIndex)
 
 void cwKeywordFilterModel::disconnectSource()
 {
-    if(mDataChanged) {
-        disconnect(mDataChanged);
-        mDataChanged = {};
+    for(const QMetaObject::Connection& connection : std::as_const(mSourceConnections)) {
+        disconnect(connection);
     }
-    if(mRowsAboutToBeRemoved) {
-        disconnect(mRowsAboutToBeRemoved);
-        mRowsAboutToBeRemoved = {};
-    }
-    if(mModelAboutToBeReset) {
-        disconnect(mModelAboutToBeReset);
-        mModelAboutToBeReset = {};
-    }
+    mSourceConnections.clear();
 }

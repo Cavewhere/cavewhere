@@ -299,8 +299,10 @@ private:
         exportOptions.outputCSPolicy =
             cwSurvexExporterRegion::OutputCSPolicy::WorkingFrame;
 
+        QSet<QUuid> originFixedOwners;
         const Monad::ResultBase r =
-            cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions);
+            cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions,
+                                                 &originFixedOwners);
         if (r.hasError()) {
             cwLinePlotTask::SolveError error;
             error.step = cwLinePlotTask::SolveError::Step::Export;
@@ -315,6 +317,7 @@ private:
         if (driverFile.open(QFile::ReadOnly)) {
             result.DriverSource = QString::fromUtf8(driverFile.readAll());
         }
+        result.OriginFixedOwners = std::move(originFixedOwners);
         return true;
     }
 
@@ -944,6 +947,13 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
     return input;
 }
 
+cwLinePlotTask::LinePlotResultData cwLinePlotTask::runInline(cwLinePlotTask::Input input,
+                                                               std::function<bool()> isCanceled)
+{
+    LinePlotWorker worker(std::move(input), std::move(isCanceled));
+    return worker.run();
+}
+
 QFuture<cwLinePlotTask::LinePlotResultData> cwLinePlotTask::run(cwLinePlotTask::Input input)
 {
     // The QPromise form is what makes cancel() reach the worker: the solve polls
@@ -955,9 +965,8 @@ QFuture<cwLinePlotTask::LinePlotResultData> cwLinePlotTask::run(cwLinePlotTask::
                              (QPromise<cwLinePlotTask::LinePlotResultData>& promise) mutable {
         QElapsedTimer timer;
         timer.start();
-        cwLinePlotTask::LinePlotWorker worker(std::move(input),
-                                              [&promise]() { return promise.isCanceled(); });
-        auto result = worker.run();
+        auto result = runInline(std::move(input),
+                                [&promise]() { return promise.isCanceled(); });
         if (promise.isCanceled()) {
             return;
         }

@@ -324,6 +324,18 @@ QHash<QString, QString> stationKeysBySpelling(const QString& scope, const QStrin
  */
 QSet<QString> scopedStationKeys(const QString& scope, const QStringList& stations);
 
+//! Union-find over canonical station keys: two keys share a root exactly when
+//! cavern would join them.
+class StationKeyUnion
+{
+public:
+    QString root(const QString& key) const;
+    void join(const QString& first, const QString& second);
+
+private:
+    QHash<QString, QString> m_parents;
+};
+
 /**
  * Emit the per-cave *cs / *fix block.
  *

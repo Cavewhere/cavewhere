@@ -44,7 +44,7 @@ Data model: `cwCavingRegion` → `cwSurveyNode` tree (`cwCave` is a thin node su
 
 **Import/export**: Compass, Survex, and Walls parsing goes through the `dewalls` submodule. Compass station names are exported uppercase — Compass is case-sensitive, CaveWhere is not. `cwSurveyNetwork` performs loop closure detection.
 
-**Solve and georeferencing**: `cwSurvexExporter` writes Survex from `cwTripData` snapshots, with splays, each fix in its own CS via `cwSurvexCS`, and `*declination auto` once per located node. Pipelines are `cwUpdatable`s driven by `cwUpdateCoordinator`: mark one as needing an update, then run it (there is no `rerunSurvex`). `cwGeoReference` + `cwLocalProjectionManager` hold the project's local frame, which is stored and read back on load as is; `cwFixStationValidator` checks fixes against it, and per-fix diagnostics live on `cwSurveyNode::fixStationDiagnostics`.
+**Solve and georeferencing**: `cwSurvexExporter` writes Survex from `cwTripData` snapshots, with splays, each fix in its own CS via `cwSurvexCS`, `*declination auto` once per located node, and a fallback `*fix` on an unfixed block only when no written tie joins it to an anchored one. Pipelines are `cwUpdatable`s driven by `cwUpdateCoordinator`: mark one as needing an update, then run it (there is no `rerunSurvex`). `cwGeoReference` + `cwLocalProjectionManager` hold the project's local frame, which is stored and read back on load as is; `cwFixStationValidator` checks fixes against it, and per-fix diagnostics live on `cwSurveyNode::fixStationDiagnostics`.
 
 **UI**: `cwPageSelectionModel` routes pages; `cwKeywordItemModel` / `cwKeywordFilterPipelineModel` drive hierarchical keyword search.
 
@@ -84,6 +84,15 @@ Data model: `cwCavingRegion` → `cwSurveyNode` tree (`cwCave` is a thin node su
   };
   seedConnected();
   ```
+
+### Threading and the task pool
+- **One pool, one entry point.** All CPU work runs on `cwTask::threadPool()` through `cwConcurrent::run`, `cwConcurrent::map`, or `cwConcurrent::mapped`. Never call `QThreadPool::start`/`tryStart`, subclass `QRunnable` or `QThread`, use `std::thread`, or call `QtConcurrent::run` directly. The only other executors are the two serial lanes (`cw::ktx2::encodeLane()`, `cwSaveLoadPrivate::m_saveThreadPool`) and the render thread's `scheduleRenderJob`; do not add a pool.
+- **The future is the completion signal.** Every `QFuture` is stored, observed with `AsyncFuture::observe(f).context(this, ...)`, combined, or joined. Never discard one. Never hand-roll completion with `QSemaphore`, `QWaitCondition`, `std::condition_variable`, an atomic counter, `isFinished()` polling, or `msleep`. The two documented exceptions are the encode lane hand-off (`runOnLane`) and `EncodeClaim` in `cwKtx2Codec.cpp`; a new one needs a comment saying why a future cannot carry it.
+- **Fan-out is bounded.** The pool is a single FIFO shared with interactive work, so a loop that enqueues N runs up front makes every later job wait for the drain. Data-parallel items go through `cwConcurrent::map`/`mapped` (pull model, queue depth = pool width). Weighted or memory-budgeted admission goes through `cwMemoryBudget::limitedOnPool` / `AsyncFuture::limited`; a long-lived queue through `AsyncFuture::Limiter`.
+- **Cancel reaches the worker.** Work that can be superseded or takes more than a few milliseconds uses the `QPromise&` form of `cwConcurrent::run` and polls `promise.isCanceled()` between stages. Managers keep the current run (`Limited` or `Restarter`) and cancel it on restart and in the destructor. No side-channel cancel flags (`shared_ptr<atomic<bool>>`).
+- **Waiting inside a pool worker.** Prefer calling the dependent work inline on the current thread. If a worker must block on other pool work, it releases its slot around the wait (`cwGeometryItersecter::waitOnPool` is the model) so a small pool cannot deadlock. A plain `QFuture::waitForFinished` is fine from a thread outside the pool and the event loop (a lane, a teardown join); `AsyncFuture::waitForFinished` and any `QEventLoop` spin stay test-only.
+- **Destructors cancel, never wait.** No `waitToFinish`, `processEvents`, or `QEventLoop` in a destructor.
+- **Review trigger.** A diff that adds `QSemaphore`, `QWaitCondition`, `QRunnable`, `QThread`, `std::thread`, `QtConcurrent::`, `globalInstance()`, `releaseThread`, `msleep`, or a `cwConcurrent::run` whose result is unused gets a threading review before it merges.
 
 ### QML
 - Strict typed properties (no `property var`); lowerCamelCase property names; Capitalized component filenames

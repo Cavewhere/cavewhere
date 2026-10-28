@@ -38,6 +38,7 @@ class cwScopeLabels;
 #include <QUuid>
 
 //Std includes
+#include <functional>
 #include <optional>
 #include <utility>
 
@@ -280,6 +281,11 @@ public:
         //! only when ExternalScopesChecked is true.
         QList<HangingStations> Hanging;
 
+        //! The attached-file owners (trip ids and sourced-root node ids) the
+        //! driver fixed at the origin; std::nullopt when the run stopped before
+        //! writing the driver, which leaves the last answer standing.
+        std::optional<QSet<QUuid>> OriginFixedOwners;
+
         //! A result asserting "there is nothing, and I looked" — what the
         //! manager publishes to wipe state on setRegion, and what a region with
         //! nothing solvable in it produces. Distinct from a default-constructed
@@ -335,6 +341,16 @@ public:
     static QFuture<LinePlotResultData> run(Input input);
 
     /**
+     * @brief Solves \a input synchronously on the calling thread.
+     *
+     * Lets a caller that is already on a pool worker solve inline instead of
+     * starting a second pool task and blocking on it.
+     * \a isCanceled is polled between the solve's phases; a canceled solve
+     * returns a result that asserts nothing, which the caller discards.
+     */
+    static LinePlotResultData runInline(Input input, std::function<bool()> isCanceled);
+
+    /**
      * @brief The StationCaveLookup class
      *
      * Stores a lookup for all the stations and scraps in one node's own trips.
@@ -375,6 +391,7 @@ inline cwLinePlotTask::LinePlotResultData cwLinePlotTask::LinePlotResultData::cl
 {
     LinePlotResultData result;
     result.ExternalScopesChecked = true;
+    result.OriginFixedOwners = QSet<QUuid>();
     return result;
 }
 

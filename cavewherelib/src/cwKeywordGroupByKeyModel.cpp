@@ -9,6 +9,7 @@
 #include <QQuickItem>
 
 //Std includes
+#include <algorithm>
 #include <utility>
 
 cwKeywordGroupByKeyModel::cwKeywordGroupByKeyModel(QObject *parent) :
@@ -253,31 +254,12 @@ void cwKeywordGroupByKeyModel::Filter::addEntity(const QString &value,
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);
 
     if(iter != rows.end() && iter->value == value) {
-        if(!iter->indexes.contains(sourceIndex)) {
-            //Add to an existing row, dataChanged
-            iter->indexes.insert(sourceIndex);
-            model->setAcceptIndex(sourceIndex, iter->accepted);
-            dataChanged(iter);
-        }
+        iter->indexes.insert(sourceIndex);
+        dataChanged(iter);
     } else {
         beginInsert(iter);
         rows.insert(iter, Row(value, {sourceIndex}, model->acceptByDefault()));
-        model->setAcceptIndex(sourceIndex, model->acceptByDefault());
         endInsert();
-    }
-
-    bool removed = model->mData.OtherRow.indexes.remove(sourceIndex);
-    if(removed) {
-        dataChanged(model->mData.otherRowIndex());
-    }
-}
-
-void cwKeywordGroupByKeyModel::Filter::addEntityToOther(const QModelIndex& sourceIndex)
-{
-    if(!model->mData.OtherRow.indexes.contains(sourceIndex)) {
-        model->mData.OtherRow.indexes.insert(sourceIndex);
-        model->setAcceptIndex(sourceIndex, model->mData.OtherRow.accepted);
-        dataChanged(model->mData.otherRowIndex());
     }
 }
 
@@ -287,34 +269,31 @@ void cwKeywordGroupByKeyModel::Filter::removeEntity(const QString &value, const 
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);
 
     if(iter != rows.end() && iter->value == value) {
-        bool removed = removeEntityFromRow(iter, sourceIndex);
-        if(removed) {
-            bool stillContainsEntity = false;
-            for(const auto& row : rows) {
-                if(row.indexes.contains(sourceIndex)) {
-                    stillContainsEntity = true;
-                    break;
-                }
-            }
-
-            if(!stillContainsEntity) {
-                addEntityToOther(sourceIndex);
-            }
-        }
-    } else {
-        addEntityToOther(sourceIndex);
+        removeEntityFromRow(iter, sourceIndex);
     }
 }
 
-bool cwKeywordGroupByKeyModel::Filter::removeEntityFromRow(QVector<Row>::iterator iter, const QModelIndex& sourceIndex)
+void cwKeywordGroupByKeyModel::Filter::setInOther(const QModelIndex& sourceIndex, bool inOther)
 {
-    return removeEntityFromRow(std::distance(model->mData.Rows.begin(), iter), *iter, sourceIndex);
+    auto& otherIndexes = model->mData.OtherRow.indexes;
+    if(otherIndexes.contains(sourceIndex) != inOther) {
+        if(inOther) {
+            otherIndexes.insert(sourceIndex);
+        } else {
+            otherIndexes.remove(sourceIndex);
+        }
+        dataChanged(model->mData.otherRowIndex());
+    }
 }
 
-bool cwKeywordGroupByKeyModel::Filter::removeEntityFromRow(int i, Row &row, const QModelIndex& sourceIndex)
+void cwKeywordGroupByKeyModel::Filter::removeEntityFromRow(QVector<Row>::iterator iter, const QModelIndex& sourceIndex)
 {
-    bool removed = row.indexes.remove(sourceIndex);
-    if(removed) {
+    removeEntityFromRow(std::distance(model->mData.Rows.begin(), iter), *iter, sourceIndex);
+}
+
+void cwKeywordGroupByKeyModel::Filter::removeEntityFromRow(int i, Row &row, const QModelIndex& sourceIndex)
+{
+    if(row.indexes.remove(sourceIndex)) {
         if(row.indexes.isEmpty() && &row != &model->mData.OtherRow) {
             //No more entities
             beginRemoveFuction(i);
@@ -324,7 +303,6 @@ bool cwKeywordGroupByKeyModel::Filter::removeEntityFromRow(int i, Row &row, cons
             dataChanged(i);
         }
     }
-    return removed;
 }
 
 void cwKeywordGroupByKeyModel::Filter::beginInsert(const QVector<Row>::iterator &iter) const
@@ -389,28 +367,31 @@ bool cwKeywordGroupByKeyModel::Filter::lessThan(const cwKeywordGroupByKeyModel::
 
 void cwKeywordGroupByKeyModel::Filter::filterEntity(const QModelIndex& sourceIndex)
 {
-    auto keywords = sourceIndex.data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
+    const auto keywords = sourceIndex.data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
 
-    addEntityToOther(sourceIndex);
-
-    //Existing values for the entity
-    QSet<QString> oldValues = entityValues(sourceIndex);
-
-    for(const auto& keyword : std::as_const(keywords)) {
-        //One of sourceIndex's keys matches the key were's filtering by
+    QSet<QString> newValues;
+    for(const auto& keyword : keywords) {
         if(keyword.key() == key) {
-            if(!oldValues.contains(keyword.value())) {
-                addEntity(keyword.value(), sourceIndex);
-            } else {
-                //Doesn't have to be removed
-                oldValues.remove(keyword.value());
-            }
+            newValues.insert(keyword.value());
         }
     }
 
-    for(const auto& valueToRemove : std::as_const(oldValues)) {
-        removeEntity(valueToRemove, sourceIndex);
+    const QSet<QString> oldValues = entityValues(sourceIndex);
+
+    for(const auto& value : std::as_const(newValues)) {
+        if(!oldValues.contains(value)) {
+            addEntity(value, sourceIndex);
+        }
     }
+
+    for(const auto& value : oldValues) {
+        if(!newValues.contains(value)) {
+            removeEntity(value, sourceIndex);
+        }
+    }
+
+    setInOther(sourceIndex, newValues.isEmpty());
+    model->setAcceptIndex(sourceIndex, model->isIndexAccepted(sourceIndex));
 }
 
 void cwKeywordGroupByKeyModel::Filter::removeEntityFromAllRows(const QModelIndex& sourceIndex)
@@ -430,6 +411,19 @@ QSet<QString> cwKeywordGroupByKeyModel::Filter::entityValues(const QModelIndex& 
         }
     }
     return valuesOfEntity;
+}
+
+// An object in a value row is accepted when any row holding it is accepted;
+// an object with no value for the key lives only in Others.
+bool cwKeywordGroupByKeyModel::isIndexAccepted(const QPersistentModelIndex& index) const
+{
+    if(mData.OtherRow.indexes.contains(index)) {
+        return mData.OtherRow.accepted;
+    }
+
+    return std::any_of(mData.Rows.cbegin(), mData.Rows.cend(), [&index](const Row& row) {
+        return row.accepted && row.indexes.contains(index);
+    });
 }
 
 bool cwKeywordGroupByKeyModel::setData(const QModelIndex &index, const QVariant &value, int role)

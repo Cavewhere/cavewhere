@@ -12,6 +12,7 @@
 //Qt includes
 #include <QMetaMethod>
 #include <QSet>
+#include <QSignalSpy>
 #include <QStandardItemModel>
 
 //Std includes
@@ -233,6 +234,23 @@ public:
     }
 };
 
+// The proxy rows named by each dataChanged the spy saw, or -1 for a dataChanged
+// that spans rows or lacks KeywordsRole.
+QList<int> keywordChangedRows(const QSignalSpy& spy)
+{
+    QList<int> rows;
+    for(const QList<QVariant>& arguments : spy) {
+        const auto topLeft = arguments.at(0).value<QModelIndex>();
+        const auto bottomRight = arguments.at(1).value<QModelIndex>();
+        const auto roles = arguments.at(2).value<QList<int>>();
+        const bool isOneKeywordRow = topLeft.isValid()
+                                     && topLeft == bottomRight
+                                     && roles.contains(cwKeywordItemModel::KeywordsRole);
+        rows.append(isOneKeywordRow ? topLeft.row() : -1);
+    }
+    return rows;
+}
+
 } // namespace
 
 TEST_CASE("cwKeywordFilterModel drops its destroyed connection with the row", "[cwKeywordFilterModel]") {
@@ -308,4 +326,90 @@ TEST_CASE("cwKeywordFilterModel empties when its source resets",
     source.clear();
 
     CHECK(filter.rowCount() == 0);
+}
+
+TEST_CASE("cwKeywordFilterModel forwards keyword edits for the rows it holds", "[cwKeywordFilterModel]")
+{
+    cwKeywordItemModel items;
+    QObject held;
+    QObject unheld;
+
+    auto heldItem = new cwKeywordItem();
+    heldItem->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Line Plot")});
+    heldItem->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Alice")});
+    heldItem->setObject(&held);
+    items.addItem(heldItem);
+
+    auto unheldItem = new cwKeywordItem();
+    unheldItem->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Scrap")});
+    unheldItem->setObject(&unheld);
+    items.addItem(unheldItem);
+
+    cwKeywordFilterModel filter;
+    filter.setSourceModel(&items);
+    filter.insert(items.indexOf(heldItem));
+    REQUIRE(filter.rowCount() == 1);
+    const int heldRow = filter.mapFromSource(items.indexOf(heldItem)).row();
+    REQUIRE(heldRow == 0);
+
+    QSignalSpy dataChangedSpy(&filter, &QAbstractItemModel::dataChanged);
+
+    SECTION("a keyword added to a held row") {
+        heldItem->keywordModel()->add({QStringLiteral("Cave"), QStringLiteral("Lechuguilla")});
+        CHECK(keywordChangedRows(dataChangedSpy) == QList<int>{heldRow});
+    }
+
+    SECTION("a keyword removed from a held row") {
+        heldItem->keywordModel()->removeAll(QStringLiteral("Caver"));
+        CHECK(keywordChangedRows(dataChangedSpy) == QList<int>{heldRow});
+    }
+
+    SECTION("a keyword replaced on a held row") {
+        // replace() removes the old keyword row and adds the new one; each
+        // child change is forwarded.
+        heldItem->keywordModel()->replace({QStringLiteral("Caver"), QStringLiteral("Bob")});
+        CHECK(keywordChangedRows(dataChangedSpy) == QList<int>{heldRow, heldRow});
+    }
+
+    SECTION("a keyword value edited in place on a held row") {
+        auto keywords = heldItem->keywordModel();
+        const QModelIndex caverIndex = keywords->index(1);
+        REQUIRE(caverIndex.data(cwKeywordModel::KeyRole).toString() == QStringLiteral("Caver"));
+        REQUIRE(keywords->setData(caverIndex, QStringLiteral("Bob"), cwKeywordModel::ValueRole));
+        CHECK(keywordChangedRows(dataChangedSpy) == QList<int>{heldRow});
+    }
+
+    SECTION("edits on a row it does not hold") {
+        unheldItem->keywordModel()->add({QStringLiteral("Cave"), QStringLiteral("Lechuguilla")});
+        unheldItem->keywordModel()->replace({QStringLiteral("Type"), QStringLiteral("Running Profile")});
+        unheldItem->keywordModel()->setData(unheldItem->keywordModel()->index(0),
+                                            QStringLiteral("Plan"), cwKeywordModel::ValueRole);
+        CHECK(dataChangedSpy.count() == 0);
+        CHECK(filter.rowCount() == 1);
+    }
+}
+
+TEST_CASE("cwKeywordFilterModel forwards a top-level keyword dataChanged for a held row", "[cwKeywordFilterModel]")
+{
+    QStandardItemModel source;
+    QObject held;
+    QObject unheld;
+    for (QObject* object : {&held, &unheld}) {
+        auto* row = new QStandardItem();
+        row->setData(QVariant::fromValue<QObject*>(object), cwKeywordItemModel::ObjectRole);
+        source.appendRow(row);
+    }
+
+    cwKeywordFilterModel filter;
+    filter.setSourceModel(&source);
+    filter.insert(source.index(0, 0));
+    REQUIRE(filter.rowCount() == 1);
+
+    QSignalSpy dataChangedSpy(&filter, &QAbstractItemModel::dataChanged);
+
+    source.item(1)->setData(QStringLiteral("unheld edit"), cwKeywordItemModel::KeywordsRole);
+    CHECK(dataChangedSpy.count() == 0);
+
+    source.item(0)->setData(QStringLiteral("held edit"), cwKeywordItemModel::KeywordsRole);
+    CHECK(keywordChangedRows(dataChangedSpy) == QList<int>{0});
 }

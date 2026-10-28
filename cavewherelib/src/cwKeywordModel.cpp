@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QDebug>
+#include <QSet>
 
 const QString cwKeywordModel::TypeKey = QStringLiteral("Type");
 const QString cwKeywordModel::CaveKey = QStringLiteral("Cave");
@@ -406,12 +407,20 @@ int cwKeywordModel::rowCount(const QModelIndex &parent) const
 }
 
 /**
- * Return all the keywords in the model
+ * Return the model's own keywords, then each extension's resolved keywords whose
+ * key this model does not define, so the nearest level wins. The rows still list
+ * every keyword, including shadowed ones.
  */
 QVector<cwKeyword> cwKeywordModel::keywords() const
 {
     if(Extentions.isEmpty()) {
         return Keywords;
+    }
+
+    QSet<QString> ownKeys;
+    ownKeys.reserve(Keywords.size());
+    for(const cwKeyword& keyword : std::as_const(Keywords)) {
+        ownKeys.insert(keyword.key());
     }
 
     QVector<cwKeyword> keywords = Keywords;
@@ -421,7 +430,12 @@ QVector<cwKeyword> cwKeywordModel::keywords() const
             continue;
         }
 
-        keywords.append(model->keywords());
+        const QVector<cwKeyword> extensionKeywords = model->keywords();
+        for(const cwKeyword& keyword : extensionKeywords) {
+            if(!ownKeys.contains(keyword.key())) {
+                keywords.append(keyword);
+            }
+        }
     }
     return keywords;
 }

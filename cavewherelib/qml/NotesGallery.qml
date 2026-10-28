@@ -319,8 +319,8 @@ QQ.Rectangle {
 
         RemoveAskBox {
             id: removeAskDialog
-            anchors.right: removeImageId.horizontalCenter
-            anchors.top: removeImageId.verticalCenter
+            x: removeImageId.x + removeImageId.width / 2 - width
+            y: removeImageId.y + removeImageId.height / 2
             onRemove: {
                 noteGallery.notesModel.removeNote(container.index);
             }

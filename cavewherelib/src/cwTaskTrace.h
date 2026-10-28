@@ -205,8 +205,9 @@ public:
     //! A coarse batch interval in the current context that ends when future finishes
     static void traceOperation(const QString& name, const QFuture<void>& future, const QObject* context);
 
-    //! Starts the sampler thread and the idle watcher; quits the app on idle when quitOnIdle is set
-    static void start(cwRootData* rootData, bool quitOnIdle);
+    //! Starts the sampler thread and the idle watcher; quits the app on idle when quitOnIdle is set.
+    //! A positive redirtyAfterSeconds marks every scrap and LiDAR note dirty once, that long after the project loads.
+    static void start(cwRootData* rootData, bool quitOnIdle, double redirtyAfterSeconds = 0.0);
 };
 
 //! Snapshot of the idle conditions
@@ -220,6 +221,7 @@ struct CAVEWHERE_LIB_EXPORT cwTaskQuietState
     int activeThreadCount = 0;
     int queuedTaskCount = 0;
     int runningTaskCount = 0;
+    bool redirtyPending = false;
 
     bool isQuiet() const;
 };
@@ -335,7 +337,7 @@ public:
     static std::optional<cwTaskMemorySample> memorySample() { return std::nullopt; }
     static void dropped(const QString&, quint64) {}
     static void traceOperation(const QString&, const QFuture<void>&, const QObject*) {}
-    static void start(cwRootData*, bool) {}
+    static void start(cwRootData*, bool, double = 0.0) {}
 };
 
 //! Without the idle watcher, the state never reads as quiet
@@ -349,6 +351,7 @@ struct cwTaskQuietState
     int activeThreadCount = 0;
     int queuedTaskCount = 0;
     int runningTaskCount = 0;
+    bool redirtyPending = false;
 
     bool isQuiet() const { return false; }
 };

@@ -9,13 +9,14 @@
 #define CWTILESTREAMER_H
 
 // Qt includes
+#include <QFuture>
 #include <QHash>
 #include <QList>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPromise>
 #include <QString>
 #include <QVector>
-#include <QWaitCondition>
 
 // Std includes
 #include <algorithm>
@@ -40,17 +41,18 @@
  * uses.
  *
  * There is one slot per item id. Asking for something different than what is
- * queued or in flight bumps that item's generation: the stale worker's result is
- * dropped when it tries to publish, and results carry the generation so the
- * caller can check them against what it wants by the time they land.
+ * queued or in flight bumps that item's generation and cancels the stale load,
+ * and results carry the generation so the caller can check them against what it
+ * wants by the time they land.
  *
  * Source describes what to load and must provide operator==: the dedup against
  * what is already queued, in flight, or waiting to be drained compares sources
  * with it. Payload is what the loader produces.
  *
- * cancel(itemId) returns without waiting — a load already in flight for that
- * item finishes into the void — while cancelAll() and the destructor block until
- * the loads in flight have finished.
+ * Each load runs as a stored future. Superseding or canceling an item cancels
+ * its load in flight, which the loader sees through isCanceled, and frees its
+ * slot right away. cancel(itemId) returns without waiting, while cancelAll()
+ * and the destructor cancel every load and then join them.
  */
 template <typename Source, typename Payload>
 class cwTileStreamer
@@ -59,9 +61,12 @@ public:
     /**
      * Loads level and whatever else that level implies for source. Runs on a
      * cwConcurrent worker, so it may touch only what it captured by value or
-     * what is documented thread-safe.
+     * what is documented thread-safe. Polls isCanceled between stages and
+     * returns early once it is true; the result of a canceled load is dropped.
      */
-    using Loader = std::function<Monad::Result<Payload>(const Source&, int level)>;
+    using Loader = std::function<Monad::Result<Payload>(const Source&,
+                                                        int level,
+                                                        const std::function<bool()>& isCanceled)>;
 
     /**
      * How many bytes the payload for (source, level) will hold. Used for the CPU
@@ -103,13 +108,14 @@ public:
     void request(quint32 itemId, const Source& source, int level, quint64 priority);
 
     /**
-     * Forgets everything for itemId — for an item that has been removed. Returns
-     * without waiting: a load already in flight finishes into the void.
+     * Forgets everything for itemId — for an item that has been removed. Cancels
+     * a load already in flight for itemId and returns without waiting for it.
      */
     void cancel(quint32 itemId);
 
     /**
-     * Forgets every item and blocks until the loads in flight have finished.
+     * Forgets every item, cancels the loads in flight, and blocks until their
+     * workers have returned.
      */
     void cancelAll();
 
@@ -158,6 +164,12 @@ private:
         }
     };
 
+    struct InFlight
+    {
+        Request request;
+        QFuture<void> future;
+    };
+
     struct ReadyResult
     {
         Result result;
@@ -170,7 +182,7 @@ private:
     void publish(const Request& request, const Monad::Result<Payload>& loaded);
     void forget(quint32 itemId);
     void updateLedger();
-    void waitForInFlight();
+    void abandon(const InFlight& inFlight);
     const Request* currentInFlight(quint32 itemId) const;
 
     const Loader m_loader;
@@ -178,12 +190,11 @@ private:
     const QString m_traceContext;
 
     mutable QMutex m_mutex;
-    QWaitCondition m_inFlightFinished;
 
     QList<Request> m_pending;                  //Highest priority first
-    //At most kMaxConcurrentLoads entries. A superseded load stays here until it
-    //finishes, so one item id can hold both a stale and a current entry.
-    QList<Request> m_inFlight;
+    QList<InFlight> m_inFlight;                //At most kMaxConcurrentLoads, one per item id
+    //Canceled loads whose worker may still be running, joined by cancelAll()
+    QList<QFuture<void>> m_canceled;
 
     QList<ReadyResult> m_ready;
     QHash<quint32, quint64> m_generations;
@@ -275,26 +286,43 @@ void cwTileStreamer<Source, Payload>::cancel(quint32 itemId)
 template <typename Source, typename Payload>
 void cwTileStreamer<Source, Payload>::cancelAll()
 {
-    QMutexLocker locker(&m_mutex);
+    QList<QFuture<void>> joining;
 
-    for (const Request& request : std::as_const(m_pending)) {
-        ++m_generations[request.itemId];
+    {
+        QMutexLocker locker(&m_mutex);
+
+        for (const Request& request : std::as_const(m_pending)) {
+            ++m_generations[request.itemId];
+        }
+
+        for (const InFlight& inFlight : std::as_const(m_inFlight)) {
+            ++m_generations[inFlight.request.itemId];
+            joining.append(inFlight.future);
+        }
+
+        for (const ReadyResult& ready : std::as_const(m_ready)) {
+            ++m_generations[ready.result.itemId];
+        }
+
+        for (QFuture<void>& future : joining) {
+            future.cancel();
+        }
+        joining.append(m_canceled);
+
+        m_pending.clear();
+        m_inFlight.clear();
+        m_canceled.clear();
+        m_ready.clear();
+        m_inFlightBytes = 0;
+        m_readyBytes = 0;
+        updateLedger();
     }
 
-    for (const Request& request : std::as_const(m_inFlight)) {
-        ++m_generations[request.itemId];
+    //Joined with the lock released: a canceled worker already running still
+    //locks it in publish()
+    for (QFuture<void>& future : joining) {
+        future.waitForFinished();
     }
-
-    for (const ReadyResult& ready : std::as_const(m_ready)) {
-        ++m_generations[ready.result.itemId];
-    }
-
-    m_pending.clear();
-    m_ready.clear();
-    m_readyBytes = 0;
-    updateLedger();
-
-    waitForInFlight();
 }
 
 template <typename Source, typename Payload>
@@ -373,13 +401,17 @@ void cwTileStreamer<Source, Payload>::launchReadyJobs()
         }
 
         m_pending.removeFirst();
-        m_inFlight.append(request);
         m_inFlightBytes += request.estimatedBytes;
         updateLedger();
 
-        cwConcurrent::run([this, request]() {
-            publish(request, m_loader(request.source, request.level));
+        //A load canceled before it starts never runs this body, so cancelers
+        //do the bookkeeping for it rather than publish()
+        QFuture<void> future = cwConcurrent::run([this, request](QPromise<void>& promise) {
+            const auto isCanceled = [&promise]() { return promise.isCanceled(); };
+            publish(request, m_loader(request.source, request.level, isCanceled));
         });
+
+        m_inFlight.append({request, std::move(future)});
     }
 }
 
@@ -389,34 +421,35 @@ void cwTileStreamer<Source, Payload>::publish(const Request& request,
 {
     QMutexLocker locker(&m_mutex);
 
-    //Keyed by sequence: a superseding load for the same item is a separate entry
-    m_inFlight.removeIf([&request](const Request& inFlight) {
-        return inFlight.sequence == request.sequence;
+    //A canceled load has already left m_inFlight and given its bytes back
+    const qsizetype removed = m_inFlight.removeIf([&request](const InFlight& inFlight) {
+        return inFlight.request.sequence == request.sequence;
     });
+
+    if (removed == 0) {
+        return;
+    }
+
     m_inFlightBytes -= request.estimatedBytes;
 
-    if (m_generations.value(request.itemId) == request.generation) {
-        ReadyResult ready;
-        ready.request = request;
-        ready.result.itemId = request.itemId;
-        ready.result.generation = request.generation;
-        ready.result.level = request.level;
+    ReadyResult ready;
+    ready.request = request;
+    ready.result.itemId = request.itemId;
+    ready.result.generation = request.generation;
+    ready.result.level = request.level;
 
-        if (loaded.hasError()) {
-            ready.result.error = loaded.errorMessage();
-        } else {
-            ready.result.payload = loaded.value();
-            ready.bytes = request.estimatedBytes;
-            m_readyBytes += ready.bytes;
-        }
-
-        m_ready.append(ready);
+    if (loaded.hasError()) {
+        ready.result.error = loaded.errorMessage();
+    } else {
+        ready.result.payload = loaded.value();
+        ready.bytes = request.estimatedBytes;
+        m_readyBytes += ready.bytes;
     }
+
+    m_ready.append(ready);
 
     updateLedger();
     launchReadyJobs();
-
-    m_inFlightFinished.wakeAll();
 }
 
 template <typename Source, typename Payload>
@@ -424,6 +457,15 @@ void cwTileStreamer<Source, Payload>::forget(quint32 itemId)
 {
     m_pending.removeIf([itemId](const Request& request) {
         return request.itemId == itemId;
+    });
+
+    m_inFlight.removeIf([this, itemId](const InFlight& inFlight) {
+        if (inFlight.request.itemId != itemId) {
+            return false;
+        }
+
+        abandon(inFlight);
+        return true;
     });
 
     m_ready.removeIf([this, itemId](const ReadyResult& ready) {
@@ -439,6 +481,17 @@ void cwTileStreamer<Source, Payload>::forget(quint32 itemId)
 }
 
 template <typename Source, typename Payload>
+void cwTileStreamer<Source, Payload>::abandon(const InFlight& inFlight)
+{
+    QFuture<void> future = inFlight.future;
+    future.cancel();
+    m_inFlightBytes -= inFlight.request.estimatedBytes;
+
+    m_canceled.removeIf([](const QFuture<void>& canceled) { return canceled.isFinished(); });
+    m_canceled.append(future);
+}
+
+template <typename Source, typename Payload>
 void cwTileStreamer<Source, Payload>::updateLedger()
 {
     m_cpuBytes.setBytes(m_inFlightBytes + m_readyBytes);
@@ -448,21 +501,12 @@ template <typename Source, typename Payload>
 const typename cwTileStreamer<Source, Payload>::Request*
 cwTileStreamer<Source, Payload>::currentInFlight(quint32 itemId) const
 {
-    const quint64 generation = m_generations.value(itemId);
     const auto found = std::find_if(m_inFlight.constBegin(), m_inFlight.constEnd(),
-                                    [itemId, generation](const Request& request) {
-        return request.itemId == itemId && request.generation == generation;
+                                    [itemId](const InFlight& inFlight) {
+        return inFlight.request.itemId == itemId;
     });
 
-    return found == m_inFlight.constEnd() ? nullptr : &*found;
-}
-
-template <typename Source, typename Payload>
-void cwTileStreamer<Source, Payload>::waitForInFlight()
-{
-    while (!m_inFlight.isEmpty()) {
-        m_inFlightFinished.wait(&m_mutex);
-    }
+    return found == m_inFlight.constEnd() ? nullptr : &found->request;
 }
 
 #endif // CWTILESTREAMER_H

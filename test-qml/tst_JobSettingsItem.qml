@@ -56,7 +56,7 @@ MainWindowTest {
             if (settings.idleThreadCount < 2) {
                 skip("Need at least 2 usable threads to drift from default")
             }
-            settings.threadCount = settings.idleThreadCount - 1
+            settings.threadCount = settings.defaultThreadCount === 1 ? settings.idleThreadCount : 1
             settings.automaticUpdate = false
             waitForRendering(rootId)
 
@@ -65,7 +65,7 @@ MainWindowTest {
             verify(btn.enabled)
             mouseClick(btn)
 
-            tryCompare(settings, "threadCount", settings.idleThreadCount)
+            tryCompare(settings, "threadCount", settings.defaultThreadCount)
             tryCompare(settings, "automaticUpdate", true)
         }
 

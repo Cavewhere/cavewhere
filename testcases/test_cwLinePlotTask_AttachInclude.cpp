@@ -44,6 +44,7 @@
 #include "cwShot.h"
 #include "cwSurveyNoteModel.h"
 #include "cwStation.h"
+#include "cwStationHandle.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
 #include "cwSurveyChunk.h"
@@ -2061,13 +2062,14 @@ TEST_CASE("A node fix naming a station its attached file lacks or fixes itself i
 
     const cwCavingRegionData regionData = region.data();
     const cwSurvexExporterCaveTask::DriverTree tree(regionData.caves, cwScopeLabels(regionData));
+    const cwSurvexExporterCaveTask::AnchorPlan plan(tree, options.externalFixedStations);
     cwSurvexExporterCaveTask task;
     task.setExportOptions(options);
 
     QString driver;
     QTextStream stream(&driver);
     for (const cwCaveData& node : regionData.caves) {
-        REQUIRE(task.writeNode(stream, node, tree));
+        REQUIRE(task.writeNode(stream, node, tree, plan));
     }
     stream.flush();
     INFO("driver:\n" << driver.toStdString());
@@ -2679,4 +2681,263 @@ TEST_CASE("A trip-attached Compass pair the harvest missed lists each member at 
         REQUIRE(station->position.has_value());
         CHECK(casePairs::samePoint(*station->position, lookup.position(prefix + member)));
     }
+}
+
+namespace {
+
+const QString kBlocksUnfixedWarning = QStringLiteral(
+    "survex_blocks.svx has no fixed station, so it sits at the origin — fix one of its stations.");
+
+//! A georeferenced project: a fixed native cave, and survex_blocks.svx with its
+//! own *fix removed, attached as a whole cave beside it.
+struct UnfixedCaveFile {
+    cwCave* native = nullptr;
+    cwCave* attached = nullptr;
+    QString attachDir;
+    QString includePath;
+};
+
+UnfixedCaveFile addUnfixedCaveFile(cwCavingRegion& region, const QTemporaryDir& tempRoot)
+{
+    UnfixedCaveFile project;
+    project.attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    project.includePath = seedBlocks(project.attachDir, false);
+    project.native = addFixedNativeCave(region);
+    project.attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    project.attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    return project;
+}
+
+//! Ties the native cave's b2 to \a fileStation, the first station of the file.
+cwEquate nativeTie(const cwCave* native, const cwStationHandle& fileStation)
+{
+    return cwEquate({cwStationHandle(cwStationHandle::NativeCave, native->id(), QStringLiteral("b2")),
+                     fileStation});
+}
+
+//! Ties the native cave's b2 to the attached cave's doghill.d1.
+cwEquate attachedCaveTie(const UnfixedCaveFile& project)
+{
+    return nativeTie(project.native, cwStationHandle(cwStationHandle::NativeCave, project.attached->id(),
+                                                     QStringLiteral("doghill.d1")));
+}
+
+//! A trip on \a cave whose one shot reaches no other station, so the next
+//! solve stops at validation before the driver is written.
+void addUnconnectedTrip(cwCave* cave)
+{
+    cwTrip* trip = addTripWithShot(cave, QStringLiteral("Unconnected"), QStringLiteral("c1"),
+                                   QStringLiteral("c2"), 10.0);
+    trip->calibrations()->setAutoDeclination(false);
+}
+
+std::string solveInfo(const cwLinePlotManager& manager)
+{
+    return "driver:\n" + manager.driverSource().toStdString() + "\nsolve error ("
+           + manager.solveErrorStep().toStdString() + "): "
+           + manager.solveErrorMessage().toStdString() + "\ncavern log:\n"
+           + manager.cavernLog().toStdString();
+}
+
+} // namespace
+
+TEST_CASE("A cave-level attached file tied to a fixed cave draws no origin warning",
+          "[Attach][Cave][CS][LinePlotManager]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const UnfixedCaveFile project = addUnfixedCaveFile(region, tempRoot);
+    region.equates()->appendEquate(attachedCaveTie(project));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{project.attached->id(), project.attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE_FALSE(project.attached->externalStations().isEmpty());
+    const QString originStation = project.attached->externalStations().first();
+    const QString originFix = QStringLiteral("*fix %1 0 0 0").arg(originStation);
+
+    // The tie anchors the file on the native cave, so the driver writes no
+    // origin fix for it and nothing says it sits at the origin.
+    CHECK_FALSE(driverUpToInclude(manager.driverSource(), project.includePath).contains(originFix));
+    CHECK(unfixedFileWarnings(project.attached).isEmpty());
+    CHECK(unfixedFileWarnings(project.native).isEmpty());
+
+    region.equates()->removeAt(0);
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(driverUpToInclude(manager.driverSource(), project.includePath).contains(originFix));
+    CHECK(unfixedFileWarnings(project.attached) == QStringList{kBlocksUnfixedWarning});
+}
+
+TEST_CASE("A trip-attached file tied to a fixed cave draws no origin warning",
+          "[Attach][Trip][CS][LinePlotManager]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    const QString includePath = seedBlocks(attachDir, false);
+
+    cwCavingRegion region;
+    cwCave* native = addFixedNativeCave(region);
+    cwCave* host = addEmptyCave(region, QStringLiteral("Host"));
+    cwTrip* attached = addEmptyTrip(host, QStringLiteral("Attached"));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    region.equates()->appendEquate(nativeTie(
+        native, cwStationHandle(cwStationHandle::Trip, attached->id(), QStringLiteral("doghill.d1"))));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE_FALSE(attached->externalStations().isEmpty());
+    const QString originFix = QStringLiteral("*fix %1 0 0 0").arg(attached->externalStations().first());
+    const auto tripBlock = [&]() {
+        const QString beforeInclude = driverUpToInclude(manager.driverSource(), includePath);
+        const qsizetype tripBegin =
+            beforeInclude.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
+        REQUIRE(tripBegin >= 0);
+        return beforeInclude.mid(tripBegin);
+    };
+
+    CHECK_FALSE(tripBlock().contains(originFix));
+    CHECK(unfixedFileWarnings(host).isEmpty());
+
+    region.equates()->removeAt(0);
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(tripBlock().contains(originFix));
+    CHECK(unfixedFileWarnings(host) == QStringList{kBlocksUnfixedWarning});
+}
+
+TEST_CASE("A solve that stops before writing the driver keeps the last origin warning",
+          "[Attach][Cave][CS][LinePlotManager]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    enum class Anchor { Tie, NodeFix };
+    const Anchor anchor = GENERATE(Anchor::Tie, Anchor::NodeFix);
+    INFO("anchored by " << (anchor == Anchor::Tie ? "a tie" : "a node fix"));
+
+    cwCavingRegion region;
+    const UnfixedCaveFile project = addUnfixedCaveFile(region, tempRoot);
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{project.attached->id(), project.attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE(unfixedFileWarnings(project.attached) == QStringList{kBlocksUnfixedWarning});
+
+    // The unconnected trip lands first, so every solve from here on stops at
+    // validation, before any driver says where the file sits.
+    addUnconnectedTrip(project.native);
+    if (anchor == Anchor::Tie) {
+        region.equates()->appendEquate(attachedCaveTie(project));
+    } else {
+        project.attached->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.d1")));
+    }
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE(manager.hasSolveError());
+    REQUIRE(manager.solveErrorStep() == QStringLiteral("Validation"));
+    CHECK(unfixedFileWarnings(project.attached) == QStringList{kBlocksUnfixedWarning});
+
+    // Once the driver is written again, its answer replaces the kept warning.
+    const int unconnectedTrip = project.native->tripCount() - 1;
+    REQUIRE(project.native->trip(unconnectedTrip)->name() == QStringLiteral("Unconnected"));
+    project.native->removeTrip(unconnectedTrip);
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(unfixedFileWarnings(project.attached).isEmpty());
+}
+
+TEST_CASE("A cavern failure after the driver is written still updates the origin warning",
+          "[Attach][Cave][CS][LinePlotManager]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const UnfixedCaveFile project = addUnfixedCaveFile(region, tempRoot);
+
+    const QString brokenDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("broken")),
+                                             fixturePath(QStringLiteral("broken.svx")));
+    cwCave* brokenCave = addEmptyCave(region, QStringLiteral("Broken"));
+    cwTrip* broken = addEmptyTrip(brokenCave, QStringLiteral("Attached"));
+    broken->calibrations()->setAutoDeclination(false);
+    broken->setExternalCenterline(cwExternalCenterline(QStringLiteral("broken.svx")));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{project.attached->id(), project.attachDir}});
+    manager.externalCenterlineManager()->setTripAttachmentDirs({{broken->id(), brokenDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE(manager.hasSolveError());
+    REQUIRE(manager.solveErrorStep() == QStringLiteral("Cavern"));
+    CHECK(unfixedFileWarnings(project.attached) == QStringList{kBlocksUnfixedWarning});
+
+    region.equates()->appendEquate(attachedCaveTie(project));
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE(manager.hasSolveError());
+    REQUIRE(manager.solveErrorStep() == QStringLiteral("Cavern"));
+    CHECK(unfixedFileWarnings(project.attached).isEmpty());
+
+    region.equates()->removeAt(0);
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE(manager.hasSolveError());
+    REQUIRE(manager.solveErrorStep() == QStringLiteral("Cavern"));
+    CHECK(unfixedFileWarnings(project.attached) == QStringList{kBlocksUnfixedWarning});
+}
+
+TEST_CASE("An origin warning clears when nothing is left to solve",
+          "[Attach][Cave][CS][LinePlotManager]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const UnfixedCaveFile project = addUnfixedCaveFile(region, tempRoot);
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{project.attached->id(), project.attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO(solveInfo(manager));
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE(unfixedFileWarnings(project.attached) == QStringList{kBlocksUnfixedWarning});
+
+    project.attached->setExternalCenterline(cwExternalCenterline());
+    REQUIRE(project.native->tripCount() == 1);
+    project.native->removeTrip(0);
+    manager.waitToFinish();
+
+    CHECK(unfixedFileWarnings(project.attached).isEmpty());
 }

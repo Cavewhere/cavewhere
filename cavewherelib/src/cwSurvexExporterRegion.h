@@ -128,9 +128,14 @@ public:
     //! member initializer for 'outputCSPolicy' needed within definition of
     //! enclosing class ... outside of member functions". Callers wanting the
     //! defaults pass {}.
+    //!
+    //! When given, \a originFixedOwners receives the attached-file owners (trip
+    //! ids and sourced-root node ids) whose *include the driver fixes at the
+    //! origin; it is written only when the driver is written in full.
     static Monad::ResultBase exportRegion(const cwCavingRegionData& region,
                                           const QString& outputPath,
-                                          const Options& options);
+                                          const Options& options,
+                                          QSet<QUuid>* originFixedOwners = nullptr);
 };
 
 #endif // CWSURVEXEXPORTERREGION_H

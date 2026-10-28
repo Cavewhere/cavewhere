@@ -85,13 +85,14 @@ QString driverFor(const cwCavingRegion& region, const cwSurvexExporterRegion::Op
 {
     const cwCavingRegionData regionData = region.data();
     const cwSurvexExporterCaveTask::DriverTree tree(regionData.caves, cwScopeLabels(regionData));
+    const cwSurvexExporterCaveTask::AnchorPlan plan(tree, options.externalFixedStations);
     cwSurvexExporterCaveTask task;
     task.setExportOptions(options);
 
     QString driver;
     QTextStream stream(&driver);
     for (const cwCaveData& node : regionData.caves) {
-        REQUIRE(task.writeNode(stream, node, tree, globalCS));
+        REQUIRE(task.writeNode(stream, node, tree, plan, globalCS));
     }
     stream.flush();
     if (errors != nullptr) {

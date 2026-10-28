@@ -1,0 +1,11 @@
+; Two surveys that share no station, and no *fix. The harvest solves the
+; file alone from its first station, so it names only survey s.
+*begin s
+*data normal from to tape compass clino
+s1 s2 10 0 0
+*end s
+
+*begin t
+*data normal from to tape compass clino
+t1 t2 10 90 0
+*end t

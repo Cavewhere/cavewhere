@@ -90,7 +90,8 @@ CAVEWHERE_LIB_EXPORT Input buildInput(const cwTrip *trip);
 // Runs the pipeline asynchronously. The returned future resolves with a list
 // of components ordered by station count descending — [0] is the largest.
 // Empty input (no chunks) resolves to an empty list. The future never errors;
-// individual components with cavern errors are simply omitted.
+// individual components with cavern errors are simply omitted. A canceled
+// run carries no result.
 CAVEWHERE_LIB_EXPORT QFuture<QList<TripComponent>> run(Input input);
 
 } // namespace cwTripLinePlotTask

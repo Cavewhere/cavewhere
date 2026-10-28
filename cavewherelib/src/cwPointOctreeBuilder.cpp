@@ -7,10 +7,10 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFuture>
 #include <QHash>
 #include <QPromise>
 #include <QTemporaryDir>
-#include <QThread>
 #include <QThreadPool>
 #include <QVector>
 
@@ -21,6 +21,7 @@
 #include <atomic>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <utility>
@@ -114,8 +115,6 @@ namespace {
 
     //Floor on a bbox edge, so a vertical-only scan still has a mean spacing
     constexpr double kMinimumSpacingExtent = 1e-3;
-
-    constexpr int kMapPollMs = 30;
 
     //One pass of a build, as a "build <name> ..." line on cw.profile.load
     cwProfilePhase buildProfilePhase(const QString& name)
@@ -313,13 +312,10 @@ namespace {
         RootCube root;
         int depth = 0;
         QString tempDirPath;
-        std::atomic<bool>* cancel = nullptr;
+        //The build's, which every range reads its cancel from and reports to
+        const Promise* promise = nullptr;
+        Reporter* progress = nullptr;
         std::atomic<qint64>* pointsDone = nullptr;
-
-        //Set only where the build thread decodes the one range itself, so a
-        //lone range cancels and reports as the map's poll loop does for many
-        Promise* inlinePromise = nullptr;
-        Reporter* inlineProgress = nullptr;
     };
 
     struct DecodeResult {
@@ -357,7 +353,7 @@ namespace {
             return result;
         }
 
-        if(context.cancel->load(std::memory_order_relaxed)) {
+        if(context.promise->isCanceled()) {
             result.errorCode = cwPointOctreeBuilder::Cancelled;
             return result;
         }
@@ -457,17 +453,11 @@ namespace {
 
         qint64 reported = 0;
         const auto publishProgress = [&]() {
-            context.pointsDone->fetch_add(result.pointCount - reported, std::memory_order_relaxed);
+            const qint64 done =
+                context.pointsDone->fetch_add(result.pointCount - reported, std::memory_order_relaxed)
+                + result.pointCount - reported;
             reported = result.pointCount;
-
-            if(context.inlinePromise == nullptr) {
-                return;
-            }
-
-            if(context.inlinePromise->isCanceled()) {
-                context.cancel->store(true, std::memory_order_relaxed);
-            }
-            context.inlineProgress->report(context.pointsDone->load(std::memory_order_relaxed));
+            context.progress->report(done);
         };
 
         bool cancelled = false;
@@ -502,7 +492,7 @@ namespace {
 
             publishProgress();
 
-            if(context.cancel->load(std::memory_order_relaxed)) {
+            if(context.promise->isCanceled()) {
                 cancelled = true;
                 break;
             }
@@ -539,34 +529,18 @@ namespace {
     }
 
     /**
-     * Runs a map of this pool's own tasks to completion, forwarding a cancel to
-     * it and reporting @a pointsDone above @a progressBase while it runs. Both
-     * passes map from a task on the pool they map onto, so both give up their
-     * slot for the duration or the pool cannot scale up to run the map.
+     * Runs a map of this pool's own tasks to completion. Both passes map from a
+     * task on the pool they map onto, so both give up their slot for the wait
+     * or a small pool cannot run the map. The workers read the build's cancel
+     * and report its progress themselves.
      */
     template <typename T>
-    QList<T> awaitMapped(QFuture<T>& mapFuture,
-                         Promise& promise,
-                         Reporter& progress,
-                         std::atomic<bool>& cancel,
-                         const std::atomic<qint64>& pointsDone,
-                         qint64 progressBase)
+    QList<T> awaitMapped(QFuture<T>& mapFuture)
     {
         QThreadPool* pool = cwTask::threadPool();
         pool->releaseThread();
-
-        while(!mapFuture.isFinished()) {
-            if(promise.isCanceled() && !cancel.load(std::memory_order_relaxed)) {
-                cancel.store(true, std::memory_order_relaxed);
-                mapFuture.cancel();
-            }
-            progress.report(progressBase + pointsDone.load(std::memory_order_relaxed));
-            QThread::msleep(kMapPollMs);
-        }
-
-        pool->reserveThread();
-
         mapFuture.waitForFinished();
+        pool->reserveThread();
         return mapFuture.results();
     }
 
@@ -672,24 +646,22 @@ namespace {
             return result;
         }
 
-        std::atomic<bool> cancel {promise.isCanceled()};
         std::atomic<qint64> pointsDone {0};
 
-        DecodeContext context {
+        const DecodeContext context {
             .path = request.path,
             .sourceCS = sourceCS,
             .frameCS = request.frameCS,
             .root = root,
             .depth = depth,
             .tempDirPath = tempDir.path(),
-            .cancel = &cancel,
+            .promise = &promise,
+            .progress = &progress,
             .pointsDone = &pointsDone
         };
 
         QList<DecodeResult> decoded;
         if(ranges.size() == 1) {
-            context.inlinePromise = &promise;
-            context.inlineProgress = &progress;
             decoded.append(decodeRange(ranges.constFirst(), context));
         } else {
             const auto worker = [context](const DecodeRange& range) {
@@ -697,12 +669,11 @@ namespace {
             };
 
             QFuture<DecodeResult> mapFuture = cwConcurrent::mapped(ranges, worker);
-            decoded = awaitMapped(mapFuture, promise, progress, cancel, pointsDone, 0);
+            decoded = awaitMapped(mapFuture);
         }
 
-        //A cancelled map stops pending ranges from starting, so a short result
-        //list is the cancel showing up as missing work
-        if(decoded.size() != ranges.size()) {
+        //A range that saw the cancel stopped short, so its partial parts are no answer
+        if(promise.isCanceled()) {
             result.errorCode = cwPointOctreeBuilder::Cancelled;
             return result;
         }
@@ -921,7 +892,11 @@ namespace {
         cwPointOctreePack::Writer* writer = nullptr;
         QVector3D rootMin;
         double rootSize = 0.0;
-        std::atomic<bool>* cancel = nullptr;
+        //The build's, which every column reads its cancel from and reports to
+        const Promise* promise = nullptr;
+        Reporter* progress = nullptr;
+        //Where pass B's span of the bar starts
+        qint64 progressBase = 0;
         std::atomic<qint64>* pointsDone = nullptr;
     };
 
@@ -1004,11 +979,17 @@ namespace {
      * whose points pass C still pulls from.
      */
     ColumnResult buildColumn(const ColumnTask& column, const QVector<ChunkTask>& chunkTasks,
-                             const ChunkContext& context)
+                             const ChunkContext& context,
+                             const QPromise<ColumnResult>& columnPromise)
     {
         ColumnResult result;
 
-        if(context.cancel->load(std::memory_order_relaxed)) {
+        //The build's cancel, or pass B's when a sibling column failed
+        const auto isCanceled = [&]() {
+            return columnPromise.isCanceled() || context.promise->isCanceled();
+        };
+
+        if(isCanceled()) {
             result.errorCode = cwPointOctreeBuilder::Cancelled;
             return result;
         }
@@ -1018,8 +999,13 @@ namespace {
             return result;
         }
 
-        const NodeProgress creditNode = [pointsDone = context.pointsDone](qsizetype pointCount) {
-            pointsDone->fetch_add(pointCount, std::memory_order_relaxed);
+        //Each stage credits every point once, and the stages share pass B's
+        //weighted span of the bar
+        const NodeProgress creditNode = [&context](qsizetype pointCount) {
+            const qint64 done =
+                context.pointsDone->fetch_add(pointCount, std::memory_order_relaxed) + pointCount;
+            context.progress->report(context.progressBase
+                                     + done * kPassBPointWeight / kPassBStageCount);
         };
 
         QVector<QVector<SampledNode>> subtrees;
@@ -1079,7 +1065,7 @@ namespace {
                                                         measureNodeSpacing(node.points),
                                                         node.children});
 
-                if(context.cancel->load(std::memory_order_relaxed)) {
+                if(isCanceled()) {
                     result.errorCode = cwPointOctreeBuilder::Cancelled;
                     return result;
                 }
@@ -1115,7 +1101,8 @@ namespace {
         QHash<quint64, int> columnByKey;
         //The levels the columns sit at, each once
         QVector<int> columnLevels;
-        std::atomic<bool>* cancel = nullptr;
+        //The build's, which every chunk reads its cancel from
+        const Promise* promise = nullptr;
     };
 
     struct HaloResult {
@@ -1192,7 +1179,7 @@ namespace {
     HaloResult writeHalo(const ChunkTask& task, int ownColumn, const HaloContext& context)
     {
         HaloResult result;
-        if(context.cancel->load(std::memory_order_relaxed)) {
+        if(context.promise->isCanceled()) {
             result.errorCode = cwPointOctreeBuilder::Cancelled;
             return result;
         }
@@ -1239,7 +1226,7 @@ namespace {
                 return false;
             }
 
-            if(context.cancel->load(std::memory_order_relaxed)) {
+            if(context.promise->isCanceled()) {
                 result.errorCode = cwPointOctreeBuilder::Cancelled;
                 return false;
             }
@@ -1273,12 +1260,11 @@ namespace {
      * needs and which the column's budget charge counts.
      */
     ColumnsResult planColumns(const QVector<ChunkTask>& tasks, const RootCube& root,
-                              const QDir& tempDir, Promise& promise, Reporter& progress,
-                              qint64 progressBase)
+                              const QDir& tempDir, const Promise& promise)
     {
         ColumnsResult result;
 
-        HaloContext context {.root = root, .tempDirPath = tempDir.path()};
+        HaloContext context {.root = root, .tempDirPath = tempDir.path(), .promise = &promise};
         QVector<int> columnOfTask(tasks.size(), -1);
         for(qsizetype i = 0; i < tasks.size(); i++) {
             const quint64 key = columnKey(tasks.at(i).cell);
@@ -1299,23 +1285,13 @@ namespace {
 
         //A lone column has no neighbor to lend it anything
         if(result.columns.size() > 1) {
-            std::atomic<bool> cancel {promise.isCanceled()};
-            const std::atomic<qint64> pointsDone {0};
-            context.cancel = &cancel;
-
             QVector<qsizetype> taskIndices(tasks.size());
             std::iota(taskIndices.begin(), taskIndices.end(), qsizetype(0));
             const auto worker = [&tasks, &columnOfTask, context](qsizetype task) {
                 return writeHalo(tasks.at(task), columnOfTask.at(task), context);
             };
             QFuture<HaloResult> mapFuture = cwConcurrent::mapped(taskIndices, worker);
-            const QList<HaloResult> halos =
-                awaitMapped(mapFuture, promise, progress, cancel, pointsDone, progressBase);
-
-            if(halos.size() != tasks.size()) {
-                result.errorCode = cwPointOctreeBuilder::Cancelled;
-                return result;
-            }
+            const QList<HaloResult> halos = awaitMapped(mapFuture);
 
             //Task order, so a column's halo reads the same whatever order the
             //workers finished in
@@ -1380,10 +1356,7 @@ namespace {
     PassBResult runPassB(const QVector<ChunkTask>& tasks,
                          const QVector<ColumnTask>& columns,
                          const ChunkContext& context,
-                         qint64 budgetBytes,
-                         Promise& promise,
-                         Reporter& progress,
-                         qint64 progressBase)
+                         qint64 budgetBytes)
     {
         PassBResult result;
         if(columns.isEmpty()) {
@@ -1397,12 +1370,26 @@ namespace {
             qsizetype columnIndex = 0;
             qint64 bytes = 0;
             QFuture<ColumnResult> future;
+            //Reports columnIndex to finishedOrder once future ends, however it ends
+            QFuture<void> announced;
         };
+
+        //Each column's "build column" line places its start on this clock, so a
+        //profile shows how long a freed slot waited for the next column
+        QElapsedTimer passBClock;
+        passBClock.start();
+
+        //Column indices in the order their columns finished. A future takes one
+        //continuation, so each column announces itself here once, and the
+        //orchestrator waits on the next index rather than on the columns.
+        const auto finished = std::make_shared<QPromise<qsizetype>>();
+        finished->start();
+        const QFuture<qsizetype> finishedOrder = finished->future();
 
         QThreadPool* pool = cwTask::threadPool();
 
-        //The orchestrator polls rather than works, so it gives its slot up to
-        //the columns it runs, as pass A's map does
+        //The orchestrator only waits, so it gives its slot up to the columns it
+        //runs, as pass A's map does
         pool->releaseThread();
 
         //Read after the release, so the slot the orchestrator gave up is one a
@@ -1412,16 +1399,16 @@ namespace {
         QList<RunningColumn> running;
         qint64 inFlightBytes = 0;
         qsizetype nextColumn = 0;
+        qsizetype finishedCount = 0;
         bool admitting = true;
 
         //A canceled or failed pass admits nothing more, so what is running is
         //all that is left of it
         while((admitting && nextColumn < columns.size()) || !running.isEmpty()) {
-            //The started columns poll the shared flag per node, and the ones
-            //still waiting are never admitted
-            if(admitting && promise.isCanceled()) {
+            //The running columns read the build's cancel themselves, and the
+            //ones still waiting are never admitted
+            if(admitting && context.promise->isCanceled()) {
                 admitting = false;
-                context.cancel->store(true, std::memory_order_relaxed);
             }
 
             while(admitting && nextColumn < columns.size() && running.size() < maxRunning) {
@@ -1440,60 +1427,86 @@ namespace {
                     chunkTasks.append(tasks.at(chunk));
                 }
 
-                running.append(RunningColumn {
-                    nextColumn,
-                    bytes,
-                    cwConcurrent::run([column, chunkTasks, context]() {
-                        return buildColumn(column, chunkTasks, context);
-                    })});
+                QFuture<ColumnResult> future = cwConcurrent::run(
+                    [column, chunkTasks, context, passBClock](QPromise<ColumnResult>& columnPromise) {
+                        //Read before the phase's timer starts, so startUs plus its
+                        //us never lands past the column's end
+                        const qint64 startUs = cw::profile::elapsedUs(passBClock);
+                        cwProfilePhase phase = buildProfilePhase(QStringLiteral("column"));
+                        phase.addField(QStringLiteral("startUs"), startUs);
+                        phase.addField(QStringLiteral("bytes"), column.bytes);
+
+                        ColumnResult columnResult =
+                            buildColumn(column, chunkTasks, context, columnPromise);
+                        phase.addField(QStringLiteral("error"), columnResult.errorCode);
+                        columnPromise.addResult(std::move(columnResult));
+                    });
+
+                //A canceled column skips then(), so onCanceled() announces it instead
+                const auto announce = [finished, index = nextColumn]() {
+                    finished->addResult(index);
+                };
+                QFuture<void> announced =
+                    future.then(QtFuture::Launch::Sync, [announce](const QFuture<ColumnResult>&) {
+                              announce();
+                          })
+                        .onCanceled(announce);
+
+                running.append(RunningColumn {nextColumn, bytes, future, announced});
 
                 inFlightBytes += bytes;
                 result.peakBytes = std::max(result.peakBytes, inFlightBytes);
                 nextColumn++;
             }
 
-            bool reaped = false;
-            for(qsizetype i = running.size() - 1; i >= 0; i--) {
-                if(!running.at(i).future.isFinished()) {
-                    continue;
-                }
-
-                reaped = true;
-                RunningColumn finished = running.takeAt(i);
-                inFlightBytes -= finished.bytes;
-
-                ColumnResult column = finished.future.takeResult();
-
-                //A column that failed is the build's answer, so the running
-                //columns stop at their next node and no more are admitted
-                if(column.errorCode != Monad::ResultBase::NoError) {
-                    admitting = false;
-                    context.cancel->store(true, std::memory_order_relaxed);
-                } else {
-                    const QVector<qsizetype>& chunks = columns.at(finished.columnIndex).chunks;
-                    for(qsizetype c = 0; c < chunks.size(); c++) {
-                        result.chunks[chunks.at(c)] = std::move(column.chunks[c]);
-                    }
-                    column.chunks.clear();
-                }
-
-                result.columns[finished.columnIndex] = std::move(column);
+            if(running.isEmpty()) {
+                continue;
             }
 
-            //Each stage credits every point once, and the stages share pass B's
-            //weighted span of the bar
-            progress.report(progressBase
-                            + context.pointsDone->load(std::memory_order_relaxed)
-                                  * kPassBPointWeight / kPassBStageCount);
+            //Blocks until the next column ends, so its slot and budget go to the
+            //next column the moment it frees them
+            const qsizetype finishedIndex = finishedOrder.resultAt(finishedCount);
+            finishedCount++;
 
-            //A slot a column just freed is filled on the next turn rather than
-            //after a sleep, so the pool waits only while every column still runs
-            if(!reaped && !running.isEmpty()) {
-                QThread::msleep(kMapPollMs);
+            const auto finishedAt = std::find_if(running.begin(), running.end(),
+                                                 [finishedIndex](const RunningColumn& column) {
+                                                     return column.columnIndex == finishedIndex;
+                                                 });
+            Q_ASSERT(finishedAt != running.end());
+            RunningColumn finishedColumn = std::move(*finishedAt);
+            running.erase(finishedAt);
+            inFlightBytes -= finishedColumn.bytes;
+
+            //Only a failed sibling cancels a column, and that failure is the
+            //build's answer, so a canceled column stands as one that never ran.
+            //Its result is gone either way: cancel() drops a later one and
+            //invalidates one already there.
+            if(finishedColumn.future.isCanceled()) {
+                continue;
             }
+
+            ColumnResult column = finishedColumn.future.takeResult();
+
+            //A column that failed is the build's answer, so the running
+            //columns stop at their next node and no more are admitted
+            if(column.errorCode != Monad::ResultBase::NoError) {
+                admitting = false;
+                for(RunningColumn& sibling : running) {
+                    sibling.future.cancel();
+                }
+            } else {
+                const QVector<qsizetype>& chunks = columns.at(finishedColumn.columnIndex).chunks;
+                for(qsizetype c = 0; c < chunks.size(); c++) {
+                    result.chunks[chunks.at(c)] = std::move(column.chunks[c]);
+                }
+                column.chunks.clear();
+            }
+
+            result.columns[finishedColumn.columnIndex] = std::move(column);
         }
 
         pool->reserveThread();
+        finished->finish();
 
         //The column that failed is the build's answer, whichever came first in
         //column order. Its siblings stop at their next node and report
@@ -1831,7 +1844,6 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 deepestChunkLevel = std::max(deepestChunkLevel, task.cell.level);
             }
 
-            std::atomic<bool> cancelFlag {false};
             std::atomic<qint64> chunkPointsDone {0};
 
             const qint64 memoryBudgetBytes = request.memoryBudgetBytes > 0
@@ -1839,7 +1851,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                                  : kDefaultBuildMemoryBudgetBytes;
 
             ColumnsResult columns =
-                planColumns(tasks, root, tempPath, promise, progress, passA.pointCount);
+                planColumns(tasks, root, tempPath, promise);
             if(columns.errorCode != Monad::ResultBase::NoError) {
                 fail(columns.errorCode == Cancelled ? cancelledMessage : columns.errorMessage,
                      columns.errorCode);
@@ -1858,7 +1870,9 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 .writer = &writer,
                 .rootMin = root.minimum,
                 .rootSize = root.size,
-                .cancel = &cancelFlag,
+                .promise = &promise,
+                .progress = &progress,
+                .progressBase = passA.pointCount,
                 .pointsDone = &chunkPointsDone
             };
 
@@ -1871,8 +1885,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             passPhase.finish();
             passPhase = buildProfilePhase(QStringLiteral("passB"));
 
-            PassBResult passB = runPassB(tasks, columns.columns, context, memoryBudgetBytes,
-                                         promise, progress, passA.pointCount);
+            PassBResult passB = runPassB(tasks, columns.columns, context, memoryBudgetBytes);
 
             qint64 localSpacingMilliseconds = 0;
             qint64 localSpacingCappedPoints = 0;

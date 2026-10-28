@@ -98,10 +98,11 @@ Fixing a cave to the world stays optional, and plenty of projects never need it.
 earns its keep when the cave has to meet things outside itself:
 
 - **Keep multiple caves apart.** Every unfixed cave starts at the *same* local
-  origin. Add several caves to one project without georeferencing them and they
-  pile up on that shared origin, overlapping in the 3D view. Fixing each cave to
-  its real coordinates pushes them apart into their true relative positions, so a
-  project full of caves lays out like the map it should be.
+  origin, unless a tie joins it to another cave. Add several caves to one
+  project without georeferencing them and they pile up on that shared origin,
+  overlapping in the 3D view. Fixing each cave to its real coordinates pushes
+  them apart into their true relative positions, so a project full of caves lays
+  out like the map it should be.
 - **Combine with point clouds and LiDAR.** A georeferenced survey and a
   georeferenced scan share one coordinate space, so they drop into place together.
 - **Auto declination.** IGRF-14 has to know where on Earth the cave sits, so

@@ -233,6 +233,10 @@ MainWindowTest {
             const tripLink = findChild(tripRow, "tripLink")
             verify(tripLink !== null, "a trip row shows its name as a link")
             compare(tripLink.text, "Trip A")
+            const tripIcon = findChild(tripRow, "kindIcon")
+            verify(tripIcon !== null && tripIcon.visible, "a trip row carries its kind icon")
+            verify(String(tripIcon.source).indexOf("journal-text.svg") >= 0,
+                   "a trip draws the trip icon")
 
             tree.collapse(0)
             tryCompare(tree, "rows", 2, 5000)
@@ -810,7 +814,7 @@ MainWindowTest {
             const menu = openRowMenu(page, tree, 0)
             const submenu = openAddSubmenu(menu)
             compare(menuEntryNames(submenu),
-                    ["addCaveMenuItem", "addFolderMenuItem", "attachSurveyFileMenuItem"],
+                    ["addCaveMenuItem", "addFolderMenuItem", "addSurveyFileSeparator", "attachSurveyFileMenuItem"],
                     "a Folder outside every cave takes caves, folders and survey files")
 
             mouseClick(findChild(submenu, "addCaveMenuItem"))
@@ -838,9 +842,11 @@ MainWindowTest {
 
             let submenu = openAddSubmenu(openRowMenu(page, tree, 0))
             compare(menuEntryNames(submenu),
-                    ["addTripMenuItem", "addSectionMenuItem", "attachSurveyFileMenuItem"],
+                    ["addTripMenuItem", "addSectionMenuItem", "addSurveyFileSeparator", "attachSurveyFileMenuItem"],
                     "a Cave takes trips, sections and survey files, never a cave")
             compare(submenu.itemAt(1).text, "Add Section")
+            verify(String(submenu.itemAt(0).icon.source).indexOf("journal-text.svg") >= 0,
+                   "Add Trip carries the trip glyph")
 
             mouseClick(findChild(submenu, "addSectionMenuItem"))
             tryCompare(cave, "childNodeCount", 1, 5000)
@@ -864,7 +870,7 @@ MainWindowTest {
 
             submenu = openAddSubmenu(openRowMenu(page, tree, 1))
             compare(menuEntryNames(submenu),
-                    ["addTripMenuItem", "addSectionMenuItem", "attachSurveyFileMenuItem"],
+                    ["addTripMenuItem", "addSectionMenuItem", "addSurveyFileSeparator", "attachSurveyFileMenuItem"],
                     "a Section offers no cave either")
 
             mouseClick(findChild(submenu, "addTripMenuItem"))

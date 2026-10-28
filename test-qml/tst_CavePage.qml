@@ -109,10 +109,12 @@ MainWindowTest {
                        "removing a lead should lower the count")
         }
 
-        function setupCaveWithTrips() {
+        // Give each test its own cave name: a second page registered under the
+        // same name in one run crashes cwPage teardown at exit.
+        function setupCaveWithTrips(caveName = "TestCave") {
             RootData.region.addCave()
             let cave = RootData.region.cave(0)
-            cave.name = "TestCave"
+            cave.name = caveName
 
             cave.addTrip()
             cave.trip(0).name = "C-Trip"
@@ -123,7 +125,7 @@ MainWindowTest {
             cave.addTrip()
             cave.trip(2).name = "B-Trip"
 
-            gotoCavePage("TestCave")
+            gotoCavePage(caveName)
             waitForRendering(rootId)
 
             return cave
@@ -614,6 +616,95 @@ MainWindowTest {
             verify(indicator !== null, "the Name header comes back with its arrow")
             tryVerify(() => indicator.visible, 5000,
                       "and the arrow still says which column is sorted")
+        }
+
+        function showTripRemoveAskBox(cavePage, removeName) {
+            let removeAskBox = findChild(cavePage, "removeChallange")
+            verify(removeAskBox !== null, "the cave page should declare a remove ask box")
+
+            removeAskBox.indexToRemove = 0
+            removeAskBox.removeName = removeName
+            removeAskBox.show()
+            tryVerify(() => removeAskBox.visible, 5000, "show() should open the remove ask box")
+            return removeAskBox
+        }
+
+        // Issue #720: Escape dismisses the ask box and removes nothing.
+        function test_escapeClosesRemoveAskBox() {
+            let cave = setupCaveWithTrips("EscapeCave")
+            let cavePage = RootData.pageView.currentPageItem
+            let removeAskBox = showTripRemoveAskBox(cavePage, "C-Trip")
+
+            keyClick(Qt.Key_Escape)
+            tryVerify(() => !removeAskBox.visible, 5000, "Escape should close the remove ask box")
+            compare(cave.rowCount(), 3, "closing the box with Escape should keep every trip")
+        }
+
+        // Issue #720: a press outside the ask box closes it and removes nothing.
+        function test_pressOutsideClosesRemoveAskBox() {
+            let cave = setupCaveWithTrips("OutsidePressCave")
+            let cavePage = RootData.pageView.currentPageItem
+            let removeAskBox = showTripRemoveAskBox(cavePage, "C-Trip")
+
+            // show() leaves the box at the page's top-left; the trip table is
+            // only as tall as its rows, so the bottom-right corner is empty page.
+            const outsideInset = 10
+            mouseClick(cavePage, cavePage.width - outsideInset, cavePage.height - outsideInset)
+            tryVerify(() => !removeAskBox.visible, 5000, "a press outside should close the remove ask box")
+            compare(cave.rowCount(), 3, "closing the box with an outside press should keep every trip")
+        }
+
+        // Issue #720: a name that holds a markup character shows it literally.
+        // Trip names reject < and >, so an ampersand is the markup a name can hold.
+        function test_removeNameRendersAsPlainText() {
+            const markupName = "A & B"
+            let cave = setupCaveWithTrips("PlainTextCave")
+            cave.trip(0).name = markupName
+            let cavePage = RootData.pageView.currentPageItem
+            let tree = tripTree(cavePage)
+            tryCompare(tree, "rowCount", 3, 5000)
+
+            let row = null
+            tryVerify(() => {
+                          row = findChild(cavePage, "tripDelegate0")
+                          return row !== null && row.object === cave.trip(0)
+                      }, 5000, "the first trip must have a row")
+            row.showContextMenu(0, 0)
+
+            let menu = null
+            tryVerify(() => {
+                          menu = findChild(row, "surveyItemContextMenu")
+                          return menu !== null && menu.visible
+                      }, 5000, "the row must open its context menu")
+            mouseClick(findChild(menu, "surveyItemDeleteMenuItem"))
+
+            let removeAskBox = null
+            tryVerify(() => {
+                          removeAskBox = findChild(cavePage, "removeChallange")
+                          return removeAskBox !== null && removeAskBox.visible
+                      }, 5000, "Delete… must ask first")
+            compare(removeAskBox.message, "Delete <b>A &amp; B</b>?")
+
+            let messageLabel = findChild(removeAskBox, "removeMessageLabel")
+            verify(messageLabel !== null, "the remove ask box should show the prompt in its own label")
+            verify(messageLabel.visible, "the prompt label should show a non-empty message")
+
+            keyClick(Qt.Key_Escape)
+            tryVerify(() => !removeAskBox.visible, 5000, "Escape should close the remove ask box")
+            compare(cave.rowCount(), 3, "closing the box with Escape should keep every trip")
+        }
+
+        // Issue #720: a box without a name shows only its buttons.
+        function test_emptyRemoveNameHidesNameLabel() {
+            setupCaveWithTrips("EmptyNameCave")
+            let removeAskBox = showTripRemoveAskBox(RootData.pageView.currentPageItem, "")
+
+            let nameLabel = findChild(removeAskBox, "removeNameLabel")
+            verify(nameLabel !== null, "the remove ask box should declare its name label")
+            verify(!nameLabel.visible, "an empty name should hide the name label")
+
+            keyClick(Qt.Key_Escape)
+            tryVerify(() => !removeAskBox.visible, 5000, "Escape should close the remove ask box")
         }
     }
 }

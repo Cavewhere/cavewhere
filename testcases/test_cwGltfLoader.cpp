@@ -333,7 +333,7 @@ cwDiskCacher::Key textureKey(const QString& gltfPath, int textureIndex)
 //What the render side would find behind a descriptor: the entry's level 0
 QSize streamedLevelZeroSize(const cwStreamedTexture& streamed)
 {
-    const auto levels = cw::ktx2::loadStreamedLevels(streamed, QRhiTexture::RGBA8, 0);
+    const auto levels = cw::ktx2::loadStreamedLevels(streamed, QRhiTexture::RGBA8, 0, []() { return false; });
     if(levels.hasError()) {
         return {};
     }

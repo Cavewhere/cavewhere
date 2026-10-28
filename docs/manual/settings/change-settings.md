@@ -53,14 +53,15 @@ meet before you ever open Settings:
 ## Cap the worker threads (Jobs)
 
 CaveWhere recomputes carpets, solves the survey network and loads point clouds on
-background threads. By default it uses every thread Qt reports your machine has,
-which finishes that work as fast as the hardware allows. **Max Number of
-Threads** caps it. The control runs from 1 up to the count printed below it as
-**Usable threads**, and it cannot go higher than that. The tab's own help gives
-the one reason to lower it:
+background threads. By default it uses every thread your machine has except two,
+which it leaves free so the interface and the 3D view stay responsive. **Max
+Number of Threads** caps it. The control runs from 1 up to the count printed below it as
+**Usable threads**, and it cannot go higher than that. The line under it shows
+the default, such as "Default: 14 of 16", which is what Restore Defaults gives
+you. The tab's own help gives the one reason to lower it:
 
-> If your computer is experiencing over heating issues from CaveWhere, reducing
-> the Max Number of Threads may help.
+> If your computer runs hot while CaveWhere works, lowering Max Number of
+> Threads may help.
 
 Nothing stops working when you lower it. CaveWhere still runs every job, just
 fewer at a time, so each batch takes longer.

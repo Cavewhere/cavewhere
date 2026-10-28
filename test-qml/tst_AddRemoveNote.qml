@@ -87,11 +87,15 @@ MainWindowTest {
             mouseClick(removeImageButton_obj1)
 
             //Make sure the cancel challange is visible
-            let cancelChallenge = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage0->removeChallange")
+            let noteImage0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage0")
+            verify(noteImage0 !== null)
+            let cancelChallenge = findChild(noteImage0, "removeChallange")
+            verify(cancelChallenge !== null)
             tryVerify(() => { return cancelChallenge.visible; });
 
             //Click on cancel button
-            let cancelButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage0->removeChallange->cancelButton")
+            let cancelButton = findChild(cancelChallenge, "cancelButton")
+            verify(cancelButton !== null)
             mouseClick(cancelButton)
 
             //Make sure cancel challange is hidden
@@ -107,7 +111,8 @@ MainWindowTest {
             tryVerify(() => { return cancelChallenge.visible; });
 
             //Click on the remove button
-            let removeButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage0->removeChallange->removeButton")
+            let removeButton = findChild(cancelChallenge, "removeButton")
+            verify(removeButton !== null)
             mouseClick(removeButton)
 
             //Make sure cancel challange is hidden
@@ -142,10 +147,12 @@ MainWindowTest {
             let removeImageButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1->removeImageButton")
             mouseClick(removeImageButton)
 
-            let cancelChallenge = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1->removeChallange")
+            let cancelChallenge = findChild(noteImage1, "removeChallange")
+            verify(cancelChallenge !== null)
             tryVerify(() => { return cancelChallenge.visible; });
 
-            let removeButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1->removeChallange->removeButton")
+            let removeButton = findChild(cancelChallenge, "removeButton")
+            verify(removeButton !== null)
             mouseClick(removeButton)
 
             tryVerify(() => { return !cancelChallenge.visible; });

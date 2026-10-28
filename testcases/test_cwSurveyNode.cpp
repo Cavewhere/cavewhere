@@ -5,6 +5,7 @@
 #include "SignalSpyChecker.h"
 #include "SurveyTreeTestHelper.h"
 #include "cwCave.h"
+#include "cwCaveData.h"
 #include "cwCavingRegion.h"
 #include "cwFixStationModel.h"
 #include "cwSignalSpy.h"
@@ -18,6 +19,11 @@
 #include <QSignalSpy>
 #include <QUndoStack>
 #include <QUuid>
+
+//Std includes
+#include <memory>
+#include <utility>
+#include <vector>
 
 namespace {
     //Every node the production code builds is a cwCave, so the tests build one
@@ -582,6 +588,145 @@ TEST_CASE("cwSurveyNode addTrips appends a batch of trips as one insert and one 
         CHECK(tripNamesOf(node) == QStringList({QStringLiteral("T"), QStringLiteral("Moving"),
                                                 QStringLiteral("Fresh")}));
         CHECK(moving->parentNode() == &node);
+    }
+}
+
+namespace {
+    constexpr int kFillTripCount = 50;
+    constexpr int kFillGrowthFactor = 4;
+
+    cwCaveData caveDataWithTrips(const QStringList& tripNames)
+    {
+        cwCaveData data;
+        data.name = QStringLiteral("Filled Cave");
+        for(const QString& name : tripNames) {
+            cwTripData tripData;
+            tripData.name = name;
+            data.trips.append(tripData);
+        }
+        return data;
+    }
+
+    QStringList numberedTripNames(int count)
+    {
+        QStringList names;
+        names.reserve(count);
+        for(int i = 0; i < count; ++i) {
+            names.append(QStringLiteral("Trip %1").arg(i + 1));
+        }
+        return names;
+    }
+
+    //What one setData() fill announces: the node's tripScopeLabelsChanged
+    //pulses, its insertedTrips ranges, and the scopeChanged each filled trip
+    //hears from its own insert onward.
+    struct TripFillSignals {
+        qsizetype tripScopeLabelsPulses = 0;
+        QList<QList<QVariant>> insertedRanges;
+        qsizetype firstTripScopeChanges = 0;
+        qsizetype allTripScopeChanges = 0;
+    };
+
+    TripFillSignals fillAndCount(cwSurveyNode* node, const cwCaveData& data)
+    {
+        //setData() builds the trips itself, so each trip's spy attaches when
+        //the node announces that trip's insert.
+        std::vector<std::unique_ptr<QSignalSpy>> tripSpies;
+        const QMetaObject::Connection spyAttacher =
+            QObject::connect(node, &cwSurveyNode::insertedTrips, node,
+                             [node, &tripSpies](int begin, int end) {
+                                 for(int i = begin; i <= end; ++i) {
+                                     tripSpies.push_back(std::make_unique<QSignalSpy>(
+                                         node->trip(i), &cwTrip::scopeChanged));
+                                 }
+                             });
+        QSignalSpy pulses(node, &cwSurveyNode::tripScopeLabelsChanged);
+        QSignalSpy inserted(node, &cwSurveyNode::insertedTrips);
+
+        node->setData(data);
+        QObject::disconnect(spyAttacher);
+
+        TripFillSignals result;
+        result.tripScopeLabelsPulses = pulses.count();
+        for(const QList<QVariant>& range : std::as_const(inserted)) {
+            result.insertedRanges.append(range);
+        }
+        if(!tripSpies.empty()) {
+            result.firstTripScopeChanges = tripSpies.front()->count();
+        }
+        for(const auto& spy : tripSpies) {
+            result.allTripScopeChanges += spy->count();
+        }
+        return result;
+    }
+}
+
+TEST_CASE("cwSurveyNode setData inserts its trips as one range", "[SurveyNode]")
+{
+    SECTION("one scope-label pulse per fill, whatever the trip count") {
+        const QStringList smallNames = numberedTripNames(kFillTripCount);
+        const QStringList largeNames = numberedTripNames(kFillTripCount * kFillGrowthFactor);
+
+        cwCave smallCave;
+        const TripFillSignals smallFill = fillAndCount(&smallCave, caveDataWithTrips(smallNames));
+        cwCave largeCave;
+        const TripFillSignals largeFill = fillAndCount(&largeCave, caveDataWithTrips(largeNames));
+
+        CHECK(tripNamesOf(smallCave) == smallNames);
+        CHECK(tripNamesOf(largeCave) == largeNames);
+
+        CHECK(smallFill.tripScopeLabelsPulses == 1);
+        CHECK(largeFill.tripScopeLabelsPulses == 1);
+
+        CHECK(smallFill.insertedRanges.size() == 1);
+        REQUIRE_FALSE(smallFill.insertedRanges.isEmpty());
+        CHECK(smallFill.insertedRanges.first().at(0).toInt() == 0);
+        CHECK(smallFill.insertedRanges.first().at(1).toInt() == kFillTripCount - 1);
+
+        CHECK(smallFill.firstTripScopeChanges == 1);
+        CHECK(largeFill.firstTripScopeChanges == 1);
+
+        //Every trip hears the fill once: activations grow with the trip count,
+        //not with its square.
+        CHECK(smallFill.allTripScopeChanges == smallNames.size());
+        CHECK(largeFill.allTripScopeChanges
+              <= kFillGrowthFactor * smallFill.allTripScopeChanges);
+    }
+
+    SECTION("duplicate input names are deduped in input order") {
+        cwCave node;
+        const TripFillSignals fill = fillAndCount(
+            &node, caveDataWithTrips({QStringLiteral("A"), QStringLiteral("A"), QStringLiteral("B")}));
+
+        CHECK(tripNamesOf(node) == QStringList({QStringLiteral("A"), QStringLiteral("A 2"),
+                                                QStringLiteral("B")}));
+        CHECK(fill.tripScopeLabelsPulses == 1);
+        for(const cwTrip* trip : node.trips()) {
+            CHECK(trip->parentNode() == &node);
+        }
+    }
+
+    SECTION("a refill replaces the trips with one pulse count at any size") {
+        const QStringList firstNames({QStringLiteral("First"), QStringLiteral("First"),
+                                      QStringLiteral("Other")});
+        const QStringList smallNames = numberedTripNames(kFillTripCount);
+        const QStringList largeNames = numberedTripNames(kFillTripCount * kFillGrowthFactor);
+
+        cwCave smallCave;
+        fillAndCount(&smallCave, caveDataWithTrips(firstNames));
+        CHECK(tripNamesOf(smallCave) == QStringList({QStringLiteral("First"), QStringLiteral("First 2"),
+                                                 QStringLiteral("Other")}));
+        cwCave largeCave;
+        fillAndCount(&largeCave, caveDataWithTrips(firstNames));
+
+        const TripFillSignals smallRefill = fillAndCount(&smallCave, caveDataWithTrips(smallNames));
+        const TripFillSignals largeRefill = fillAndCount(&largeCave, caveDataWithTrips(largeNames));
+
+        CHECK(tripNamesOf(smallCave) == smallNames);
+        CHECK(tripNamesOf(largeCave) == largeNames);
+        CHECK(smallRefill.tripScopeLabelsPulses == largeRefill.tripScopeLabelsPulses);
+        CHECK(smallRefill.firstTripScopeChanges == 1);
+        CHECK(largeRefill.firstTripScopeChanges == 1);
     }
 }
 

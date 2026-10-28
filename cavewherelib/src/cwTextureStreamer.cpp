@@ -14,8 +14,10 @@
 #include <utility>
 
 cwTextureStreamer::cwTextureStreamer(Loader loader) :
-    m_streamer([loader = std::move(loader)](const TextureRequest& request, int level) {
-                   return loader(request.source, request.target, level);
+    m_streamer([loader = std::move(loader)](const TextureRequest& request,
+                                            int level,
+                                            const std::function<bool()>& isCanceled) {
+                   return loader(request.source, request.target, level, isCanceled);
                },
                [](const TextureRequest& request, int level) {
                    return cw::mip::chainBytes(request.target, request.source.size, level);

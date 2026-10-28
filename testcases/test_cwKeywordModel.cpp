@@ -14,6 +14,9 @@
 //Qt includes
 #include <QSignalSpy>
 
+//Std includes
+#include <string>
+
 TEST_CASE("cwKeywordModel should initilize correctly", "[cwKeywordModel]") {
     cwKeywordModel model;
     CHECK(model.rowCount() == 0);
@@ -586,4 +589,178 @@ TEST_CASE("cwKeywordModel extensions respect existing keywords", "[cwKeywordMode
     CHECK(idx.isValid());
     CHECK(idx.data(cwKeywordModel::KeyRole).toString() == "Child");
     CHECK(idx.data(cwKeywordModel::ValueRole).toString() == "B");
+}
+
+namespace {
+
+std::string resolvedValues(const cwKeywordModel& model, const QString& key)
+{
+    QStringList values;
+    const QVector<cwKeyword> keywords = model.keywords();
+    for (const cwKeyword& keyword : keywords) {
+        if (keyword.key() == key) {
+            values.append(keyword.value());
+        }
+    }
+    return values.join(QStringLiteral(", ")).toStdString();
+}
+
+} // namespace
+
+TEST_CASE("cwKeywordModel resolves a key from its own keywords over the same key in an extension",
+          "[cwKeywordModel]")
+{
+    cwKeywordModel extension;
+    extension.addKeywords({{QStringLiteral("Type"), QStringLiteral("Plan")},
+                           {QStringLiteral("Orientation"), QStringLiteral("Plan")}});
+
+    cwKeywordModel model;
+    model.add({QStringLiteral("Type"), QStringLiteral("Lead")});
+    model.addExtension(&extension);
+
+    CHECK(resolvedValues(model, QStringLiteral("Type")) == "Lead");
+    CHECK(resolvedValues(model, QStringLiteral("Orientation")) == "Plan");
+}
+
+TEST_CASE("cwKeywordModel resolves each key at the nearest level through nested extensions",
+          "[cwKeywordModel]")
+{
+    cwKeywordModel deepest;
+    deepest.addKeywords({{QStringLiteral("Type"), QStringLiteral("Deep")},
+                         {QStringLiteral("Color"), QStringLiteral("Red")},
+                         {QStringLiteral("Region"), QStringLiteral("North")}});
+
+    cwKeywordModel middle;
+    middle.add({QStringLiteral("Type"), QStringLiteral("Middle")});
+    middle.addExtension(&deepest);
+
+    cwKeywordModel top;
+    top.addKeywords({{QStringLiteral("Type"), QStringLiteral("Top")},
+                     {QStringLiteral("Color"), QStringLiteral("Blue")}});
+    top.addExtension(&middle);
+
+    CHECK(resolvedValues(middle, QStringLiteral("Type")) == "Middle");
+    CHECK(resolvedValues(middle, QStringLiteral("Color")) == "Red");
+
+    CHECK(resolvedValues(top, QStringLiteral("Type")) == "Top");
+    CHECK(resolvedValues(top, QStringLiteral("Color")) == "Blue");
+    CHECK(resolvedValues(top, QStringLiteral("Region")) == "North");
+}
+
+TEST_CASE("cwKeywordModel keeps every value of a key defined at one level",
+          "[cwKeywordModel]")
+{
+    SECTION("Several own values shadow the extension's value") {
+        cwKeywordModel extension;
+        extension.add({QStringLiteral("Caver"), QStringLiteral("Carol")});
+
+        cwKeywordModel model;
+        model.addKeywords({{QStringLiteral("Caver"), QStringLiteral("Alice")},
+                           {QStringLiteral("Caver"), QStringLiteral("Bob")}});
+        model.addExtension(&extension);
+
+        CHECK(resolvedValues(model, QStringLiteral("Caver")) == "Alice, Bob");
+    }
+
+    SECTION("Sibling extensions each contribute their values") {
+        cwKeywordModel first;
+        first.add({QStringLiteral("Caver"), QStringLiteral("Alice")});
+        cwKeywordModel second;
+        second.add({QStringLiteral("Caver"), QStringLiteral("Bob")});
+
+        cwKeywordModel model;
+        model.add({QStringLiteral("Type"), QStringLiteral("Line Plot")});
+        model.addExtension(&first);
+        model.addExtension(&second);
+
+        CHECK(resolvedValues(model, QStringLiteral("Caver")) == "Alice, Bob");
+    }
+}
+
+TEST_CASE("cwKeywordModel exposes the extension's values once its own key is removed",
+          "[cwKeywordModel]")
+{
+    cwKeywordModel extension;
+    extension.addKeywords({{QStringLiteral("Type"), QStringLiteral("Plan")},
+                           {QStringLiteral("Type"), QStringLiteral("Running Profile")}});
+
+    cwKeywordModel model;
+    model.add({QStringLiteral("Type"), QStringLiteral("Lead")});
+    model.addExtension(&extension);
+
+    CHECK(resolvedValues(model, QStringLiteral("Type")) == "Lead");
+
+    model.removeAll(QStringLiteral("Type"));
+
+    CHECK(resolvedValues(model, QStringLiteral("Type")) == "Plan, Running Profile");
+}
+
+TEST_CASE("cwKeywordModel keeps its own value when the extension edits a shadowed key",
+          "[cwKeywordModel]")
+{
+    cwKeywordModel extension;
+    extension.add({QStringLiteral("Orientation"), QStringLiteral("Plan")});
+
+    cwKeywordModel model;
+    model.add({QStringLiteral("Type"), QStringLiteral("Lead")});
+    model.addExtension(&extension);
+    REQUIRE(resolvedValues(model, QStringLiteral("Type")) == "Lead");
+
+    SECTION("The extension adds the key") {
+        extension.add({QStringLiteral("Type"), QStringLiteral("Plan")});
+    }
+
+    SECTION("The extension replaces the key") {
+        extension.add({QStringLiteral("Type"), QStringLiteral("Plan")});
+        extension.replace({QStringLiteral("Type"), QStringLiteral("Projected Profile")});
+    }
+
+    SECTION("The extension edits the key's value in place") {
+        extension.add({QStringLiteral("Type"), QStringLiteral("Plan")});
+        const QModelIndex typeIndex = extension.index(extension.rowCount() - 1);
+        REQUIRE(typeIndex.data(cwKeywordModel::KeyRole).toString() == QStringLiteral("Type"));
+        REQUIRE(extension.setData(typeIndex, QStringLiteral("Running Profile"), cwKeywordModel::ValueRole));
+    }
+
+    CHECK(resolvedValues(model, QStringLiteral("Type")) == "Lead");
+    CHECK(resolvedValues(model, QStringLiteral("Orientation")) == "Plan");
+}
+
+TEST_CASE("cwKeywordModel rows list every keyword, including shadowed ones",
+          "[cwKeywordModel]")
+{
+    cwKeywordModel extension;
+    extension.add({QStringLiteral("Type"), QStringLiteral("Plan")});
+
+    cwKeywordModel model;
+    model.add({QStringLiteral("Type"), QStringLiteral("Lead")});
+    model.addExtension(&extension);
+
+    REQUIRE(model.rowCount() == 2);
+    CHECK(model.index(0).data(cwKeywordModel::ValueRole).toString() == QStringLiteral("Lead"));
+    CHECK(model.index(1).data(cwKeywordModel::ValueRole).toString() == QStringLiteral("Plan"));
+}
+
+TEST_CASE("cwScrap lead keyword model resolves Type to Lead and inherits the scrap's ancestors",
+          "[cwKeywordModel][cwScrap]")
+{
+    cwCave cave;
+    cave.setName(QStringLiteral("Lead Cave"));
+
+    auto trip = new cwTrip();
+    trip->setName(QStringLiteral("Lead Trip"));
+    cave.addTrip(trip);
+
+    cwNote note;
+    note.setParentTrip(trip);
+
+    auto scrap = new cwScrap();
+    note.addScrap(scrap);
+    REQUIRE(resolvedValues(*scrap->keywordModel(), cwKeywordModel::TypeKey) == "Plan");
+
+    const cwKeywordModel& leadModel = *scrap->leadKeywordModel();
+    CHECK(resolvedValues(leadModel, cwKeywordModel::TypeKey) == "Lead");
+    CHECK(resolvedValues(leadModel, cwKeywordModel::CaveKey) == "Lead Cave");
+    CHECK(resolvedValues(leadModel, cwKeywordModel::TripNameKey) == "Lead Trip");
+    CHECK(resolvedValues(leadModel, QStringLiteral("Orientation")) == "Plan");
 }

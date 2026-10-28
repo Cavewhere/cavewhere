@@ -11,6 +11,10 @@
 
 //Qt includes
 #include <QCoreApplication>
+#include <QDir>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QVector3D>
 
 //Our includes
@@ -22,9 +26,25 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwTripCalibration.h"
+#include "cwLinePlotTask.h"
+#include "cwScopeLabels.h"
+#include "cwThreadCountRestorer.h"
+#include "EnvironmentOverride.h"
+#include "TestHelper.h"
 #include "asyncfuture.h"
 
 namespace {
+
+constexpr int kSolveTimeoutMs = 10000;
+constexpr int kOneThreadComponentCount = 3;
+
+// Enough components that a run which ignores cancel spends most of its time
+// after the cancel, and a run which honors it spends at most one component.
+constexpr int kCancelComponentCount = 96;
+
+// A canceled run must finish at least this many times faster than a full one.
+// Honoring cancel gives about kCancelComponentCount; ignoring it gives about 1.
+constexpr int kCancelSpeedup = 4;
 
 cwShot straightShot(double distance = 10.0, double compass = 0.0, double clino = 0.0)
 {
@@ -86,8 +106,16 @@ QList<cwTripLinePlotTask::TripComponent> runAndWait(cwTrip *trip)
 {
     auto input = cwTripLinePlotTask::buildInput(trip);
     auto future = cwTripLinePlotTask::run(std::move(input));
-    REQUIRE(AsyncFuture::waitForFinished(future, 10000));
+    REQUIRE(AsyncFuture::waitForFinished(future, kSolveTimeoutMs));
     return future.result();
+}
+
+// One two-station chunk per component, sharing no station with any other.
+void addDisconnectedComponents(cwTrip *trip, int count)
+{
+    for (int i = 0; i < count; ++i) {
+        addChunk(trip, {QStringLiteral("c%1a").arg(i), QStringLiteral("c%1b").arg(i)});
+    }
 }
 
 } // namespace
@@ -279,4 +307,90 @@ TEST_CASE("Canonical anchor is the first station of the first chunk in the compo
     }
     CHECK(anchors.contains("start"));
     CHECK(anchors.contains("p1"));
+}
+
+TEST_CASE("cwLinePlotTask::runInline solves on the calling thread and honors isCanceled", "[TripLinePlotTask]")
+{
+    auto f = makeRegion();
+    addChunk(f.trip, {"a1", "a2", "a3", "a4"});
+
+    const cwLinePlotTask::Input input = cwLinePlotTask::buildInput(f.region.get());
+    REQUIRE(input.regionData.caves.size() == 1);
+    const QString cavePrefix = cwScopeLabels(input.regionData).prefix(input.regionData.caves.constFirst().id);
+
+    SECTION("A live solve returns every station's position")
+    {
+        const auto result = cwLinePlotTask::runInline(input, [] { return false; });
+        CHECK_FALSE(result.hasSolveError());
+        REQUIRE(result.hasRegionStationPositionsChanged());
+
+        const auto positions = result.regionStationPositions().scoped(cavePrefix);
+        CHECK(positions.positions().size() == 4);
+        REQUIRE(positions.hasPosition("a1"));
+        REQUIRE(positions.hasPosition("a4"));
+        CHECK(positions.position("a1").distanceToPoint(positions.position("a4")) == Catch::Approx(30.0));
+    }
+
+    SECTION("A canceled solve returns no positions")
+    {
+        const auto result = cwLinePlotTask::runInline(input, [] { return true; });
+        CHECK_FALSE(result.hasRegionStationPositionsChanged());
+        CHECK(result.regionStationPositions().isEmpty());
+    }
+}
+
+TEST_CASE("Canceling a running trip solve skips the components it has not reached", "[TripLinePlotTask]")
+{
+    auto f = makeRegion();
+    addDisconnectedComponents(f.trip, kCancelComponentCount);
+    const auto input = cwTripLinePlotTask::buildInput(f.trip);
+
+    // Untimed first run, so one-time setup cost lands outside the measurements.
+    auto warmup = cwTripLinePlotTask::run(input);
+    REQUIRE(AsyncFuture::waitForFinished(warmup, kSolveTimeoutMs));
+    REQUIRE(warmup.result().size() == kCancelComponentCount);
+
+    QElapsedTimer timer;
+    timer.start();
+    auto full = cwTripLinePlotTask::run(input);
+    full.waitForFinished();
+    const qint64 fullNs = timer.nsecsElapsed();
+    REQUIRE(full.result().size() == kCancelComponentCount);
+
+    QTemporaryDir solveTempRoot;
+    REQUIRE(solveTempRoot.isValid());
+    // QDir::tempPath(), and so the worker's per-solve QTemporaryDir, follows
+    // TMPDIR: a child appearing under solveTempRoot shows a component solve
+    // is underway.
+    const EnvironmentOverride tempPath("TMPDIR", QFile::encodeName(solveTempRoot.path()));
+    const auto componentSolveStarted = [&]() {
+        return !QDir(solveTempRoot.path()).entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty();
+    };
+
+    auto canceled = cwTripLinePlotTask::run(input);
+    // Cancel only once a component solve is underway: a run canceled while
+    // still queued is skipped by QtConcurrent itself and proves nothing.
+    REQUIRE(waitUntil([&] { return componentSolveStarted() || canceled.isFinished(); }, kSolveTimeoutMs));
+    REQUIRE_FALSE(canceled.isFinished());
+
+    timer.restart();
+    canceled.cancel();
+    canceled.waitForFinished();
+    const qint64 canceledNs = timer.nsecsElapsed();
+
+    INFO("full run " << fullNs / 1000 << " us, canceled run after cancel " << canceledNs / 1000 << " us");
+    CHECK(canceled.isCanceled());
+    CHECK(canceled.resultCount() == 0);
+    CHECK(canceledNs * kCancelSpeedup < fullNs);
+}
+
+TEST_CASE("A one-thread pool solves every component of a multi-component trip", "[TripLinePlotTask]")
+{
+    cwThreadCountRestorer restorer(kSingleThread);
+
+    auto f = makeRegion();
+    addDisconnectedComponents(f.trip, kOneThreadComponentCount);
+
+    const auto components = runAndWait(f.trip);
+    CHECK(components.size() == kOneThreadComponentCount);
 }

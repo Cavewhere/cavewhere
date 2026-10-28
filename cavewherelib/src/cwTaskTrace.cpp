@@ -2,8 +2,10 @@
 #include "cwTaskTrace.h"
 #include "cwFutureManagerModel.h"
 #include "cwKtx2Codec.h"
+#include "cwNoteLiDARManager.h"
 #include "cwProject.h"
 #include "cwRootData.h"
+#include "cwScrapManager.h"
 #include "cwTask.h"
 #include "cwUpdateCoordinator.h"
 
@@ -20,6 +22,7 @@
 
 //Std includes
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -209,6 +212,7 @@ struct IdleWatch
     QElapsedTimer clock;
     bool projectLoaded = false;
     bool idleReported = false;
+    bool redirtyPending = false;
 };
 
 cwTaskQuietState quietState(const cwRootData* rootData, const IdleWatch& watch)
@@ -217,6 +221,7 @@ cwTaskQuietState quietState(const cwRootData* rootData, const IdleWatch& watch)
 
     cwTaskQuietState state;
     state.projectLoaded = watch.projectLoaded;
+    state.redirtyPending = watch.redirtyPending;
     state.coordinatorRunning = coordinator->running();
     state.automaticUpdate = coordinator->automaticUpdate();
     state.needsUpdate = coordinator->needsUpdate();
@@ -235,7 +240,24 @@ cwTaskQuietState quietState(const cwRootData* rootData, const IdleWatch& watch)
     return state;
 }
 
-void startIdleWatcher(cwRootData* rootData, bool quitOnIdle)
+//Marks every scrap and LiDAR note dirty once, delay after the project loads, so
+//a recording catches an edit landing on a busy run
+void armRedirty(cwRootData* rootData, const std::shared_ptr<IdleWatch>& watch, std::chrono::milliseconds delay)
+{
+    watch->redirtyPending = true;
+
+    QObject::connect(rootData->project(), &cwProject::loaded, rootData, [rootData, watch, delay]() {
+        QTimer::singleShot(delay, rootData, [rootData, watch]() {
+            profiler().event(QStringLiteral("redirty elapsed_ms=%1").arg(watch->clock.elapsed()));
+            rootData->scrapManager()->markAllScrapsDirty();
+            rootData->noteLiDARManager()->markAllLiDARNotesDirty();
+            rootData->updateCoordinator()->updateNow();
+            watch->redirtyPending = false;
+        });
+    }, Qt::SingleShotConnection);
+}
+
+void startIdleWatcher(cwRootData* rootData, bool quitOnIdle, double redirtyAfterSeconds)
 {
     auto watch = std::make_shared<IdleWatch>();
     watch->clock.start();
@@ -243,6 +265,11 @@ void startIdleWatcher(cwRootData* rootData, bool quitOnIdle)
     QObject::connect(rootData->project(), &cwProject::loaded, rootData, [watch]() {
         watch->projectLoaded = true;
     });
+
+    if (redirtyAfterSeconds > 0.0) {
+        const std::chrono::duration<double> seconds(redirtyAfterSeconds);
+        armRedirty(rootData, watch, std::chrono::duration_cast<std::chrono::milliseconds>(seconds));
+    }
 
     auto* timer = new QTimer(rootData);
     QObject::connect(timer, &QTimer::timeout, rootData, [rootData, timer, watch, quitOnIdle]() {
@@ -469,7 +496,7 @@ void cwTaskTrace::traceOperation(const QString& name, const QFuture<void>& futur
     AsyncFuture::observe(future).context(context, finish, finish);
 }
 
-void cwTaskTrace::start(cwRootData* rootData, bool quitOnIdle)
+void cwTaskTrace::start(cwRootData* rootData, bool quitOnIdle, double redirtyAfterSeconds)
 {
     static bool started = false;
     if (started) {
@@ -486,7 +513,7 @@ void cwTaskTrace::start(cwRootData* rootData, bool quitOnIdle)
         sampler.reset();
     });
 
-    startIdleWatcher(rootData, quitOnIdle);
+    startIdleWatcher(rootData, quitOnIdle, redirtyAfterSeconds);
 }
 
 bool cwTaskQuietState::isQuiet() const
@@ -498,7 +525,8 @@ bool cwTaskQuietState::isQuiet() const
            && futureCount == 0
            && activeThreadCount == 0
            && queuedTaskCount == 0
-           && runningTaskCount == 0;
+           && runningTaskCount == 0
+           && !redirtyPending;
 }
 
 bool cwTaskIdleWindow::update(const cwTaskQuietState& state, qint64 nowMs)

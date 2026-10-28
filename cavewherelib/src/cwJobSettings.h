@@ -16,6 +16,7 @@ class CAVEWHERE_LIB_EXPORT cwJobSettings : public QObject
 
     Q_PROPERTY(int threadCount READ threadCount WRITE setThreadCount NOTIFY threadCountChanged)
     Q_PROPERTY(int idleThreadCount READ idleThreadCount CONSTANT)
+    Q_PROPERTY(int defaultThreadCount READ defaultThreadCount CONSTANT)
     Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
     Q_PROPERTY(int memoryBudgetMb READ memoryBudgetMb WRITE setMemoryBudgetMb NOTIFY memoryBudgetMbChanged)
     Q_PROPERTY(int resolvedMemoryBudgetMb READ resolvedMemoryBudgetMb NOTIFY memoryBudgetMbChanged)
@@ -27,6 +28,7 @@ public:
     void setThreadCount(int threadCount);
 
     int idleThreadCount() const;
+    int defaultThreadCount() const;
 
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);

@@ -13,7 +13,6 @@
 #include <QRegularExpression>
 #include <QMap>
 #include <QDebug>
-#include <QtConcurrentMap>
 
 cwUsedStationsTask::cwUsedStationsTask(QObject *parent) :
     cwTask(parent)
@@ -65,7 +64,7 @@ void cwUsedStationsTask::runTask() {
 }
 
 /**
- * This is a threaded helper function to createSplitStationNames
+ * Splits one station's name for createSplitStationNames
  */
 cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(cwStation station) {
     const static QRegularExpression namePartRegExp("\\d+\\D*$");
@@ -82,7 +81,12 @@ cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(cwStation sta
   \brief Splits the StationNames into the survey and StationNamuber
   */
 QList<cwUsedStationsTask::SplitStationName> cwUsedStationsTask::createSplitStationNames() const {
-    return QtConcurrent::blockingMapped(Stations, splitName);
+    QList<SplitStationName> splitStations;
+    splitStations.reserve(Stations.size());
+    for(const cwStation& station : Stations) {
+        splitStations.append(splitName(station));
+    }
+    return splitStations;
 }
 
 /**

@@ -24,6 +24,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Std includes
+#include <algorithm>
 #include <vector>
 
 TEST_CASE("cwKeywordFilterPipelineModel should initilize correctly", "[cwKeywordFilterPipelineModel]") {
@@ -309,6 +310,8 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                                    entity2.get(),
                                    entity4.get()};
 
+                // The edit reaches the accepted row before the row leaves.
+                acceptedSpy[acceptedSpy.findSpy(&QAbstractItemModel::dataChanged)] += 1;
                 acceptedSpy[acceptedRowsAboutToBeRemovedSpy] += 1;
                 acceptedSpy[acceptedRowsRemovedSpy] += 1;
 
@@ -757,6 +760,27 @@ QAbstractItemModel* filterAt(const cwKeywordFilterPipelineModel& model, int row)
     return model.index(row).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>();
 }
 
+QModelIndex valueIndexOf(const cwKeywordGroupByKeyModel* column, const QString& value)
+{
+    for (int i = 0; i < column->rowCount(); ++i) {
+        const QModelIndex row = column->index(i);
+        if (row.data(cwKeywordGroupByKeyModel::ValueRole).toString() == value) {
+            return row;
+        }
+    }
+    return QModelIndex();
+}
+
+int objectCountOf(const cwKeywordGroupByKeyModel* column, const QString& value)
+{
+    return valueIndexOf(column, value).data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt();
+}
+
+cwKeywordGroupByKeyModel* groupColumnAt(const cwKeywordFilterPipelineModel& model, int row)
+{
+    return qobject_cast<cwKeywordGroupByKeyModel*>(filterAt(model, row));
+}
+
 } // namespace
 
 TEST_CASE("cwKeywordFilterPipelineModel clear on a default pipeline leaves its rows in place",
@@ -858,4 +882,206 @@ TEST_CASE("A Save As keeps the keyword filter pipeline's rows without replaying 
     CHECK(objectsIn(pipeline->rejectedModel()) == rejectedBefore);
     CHECK(acceptedInserted.count() == 0);
     CHECK(acceptedRemoved.count() == 0);
+}
+
+TEST_CASE("cwKeywordFilterPipelineModel keeps an object accepted when another key's keyword changes",
+          "[cwKeywordFilterPipelineModel]")
+{
+    cwKeywordItemModel items;
+    QObject object;
+    auto item = new cwKeywordItem();
+    item->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Line Plot")});
+    item->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Alice")});
+    item->setObject(&object);
+    items.addItem(item);
+
+    cwKeywordFilterPipelineModel model;
+    model.setKeywordModel(&items);
+    auto column = qobject_cast<cwKeywordGroupByKeyModel*>(filterAt(model, 0));
+    REQUIRE(column);
+    column->setKey(QStringLiteral("Type"));
+    REQUIRE(objectsIn(model.acceptedModel()).contains(&object));
+
+    item->keywordModel()->replace({QStringLiteral("Caver"), QStringLiteral("Bob")});
+
+    CHECK(column->otherIndex().data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt() == 0);
+    CHECK(objectsIn(model.acceptedModel()).contains(&object));
+    CHECK_FALSE(objectsIn(model.rejectedModel()).contains(&object));
+}
+
+TEST_CASE("cwKeywordFilterPipelineModel accepts an object whose keyed keyword arrives after insert",
+          "[cwKeywordFilterPipelineModel]")
+{
+    cwKeywordItemModel items;
+    cwKeywordFilterPipelineModel model;
+    model.setKeywordModel(&items);
+    auto column = qobject_cast<cwKeywordGroupByKeyModel*>(filterAt(model, 0));
+    REQUIRE(column);
+    column->setKey(QStringLiteral("Type"));
+
+    QObject object;
+    auto item = new cwKeywordItem();
+    item->setObject(&object);
+    items.addItem(item);
+    item->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Running Profile")});
+
+    CHECK(objectsIn(model.acceptedModel()).contains(&object));
+    CHECK_FALSE(objectsIn(model.rejectedModel()).contains(&object));
+}
+
+TEST_CASE("cwKeywordFilterPipelineModel second AND column groups a keyword added after insert",
+          "[cwKeywordFilterPipelineModel]")
+{
+    cwKeywordItemModel items;
+    QObject existing;
+    auto existingItem = new cwKeywordItem();
+    existingItem->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Plan")});
+    existingItem->keywordModel()->add({QStringLiteral("Cave"), QStringLiteral("Lechuguilla")});
+    existingItem->setObject(&existing);
+    items.addItem(existingItem);
+
+    cwKeywordFilterPipelineModel model;
+    model.setKeywordModel(&items);
+    groupColumnAt(model, 0)->setKey(QStringLiteral("Cave"));
+    model.addRow();
+    auto typeColumn = groupColumnAt(model, 1);
+    REQUIRE(typeColumn);
+    typeColumn->setKey(QStringLiteral("Type"));
+    REQUIRE(objectsIn(model.acceptedModel()).contains(&existing));
+
+    // A new scrap arrives with its cave keyword; its type keyword lands afterwards.
+    QObject added;
+    auto addedItem = new cwKeywordItem();
+    addedItem->keywordModel()->add({QStringLiteral("Cave"), QStringLiteral("Lechuguilla")});
+    addedItem->setObject(&added);
+    items.addItem(addedItem);
+    addedItem->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Running Profile")});
+
+    CHECK(objectCountOf(typeColumn, QStringLiteral("Running Profile")) == 1);
+    CHECK(typeColumn->otherIndex().data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt() == 0);
+    CHECK(objectsIn(model.acceptedModel()).contains(&added));
+    CHECK_FALSE(objectsIn(model.rejectedModel()).contains(&added));
+}
+
+TEST_CASE("cwKeywordFilterPipelineModel second AND column regroups a changed value",
+          "[cwKeywordFilterPipelineModel]")
+{
+    cwKeywordItemModel items;
+    QObject object;
+    auto item = new cwKeywordItem();
+    item->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Line Plot")});
+    item->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Alice")});
+    item->setObject(&object);
+    items.addItem(item);
+
+    cwKeywordFilterPipelineModel model;
+    model.setKeywordModel(&items);
+    groupColumnAt(model, 0)->setKey(QStringLiteral("Type"));
+    model.addRow();
+    auto caverColumn = groupColumnAt(model, 1);
+    REQUIRE(caverColumn);
+    caverColumn->setKey(QStringLiteral("Caver"));
+    REQUIRE(objectCountOf(caverColumn, QStringLiteral("Alice")) == 1);
+    REQUIRE(objectsIn(model.acceptedModel()).contains(&object));
+
+    // A team change on the trip: Alice -> Bob.
+    item->keywordModel()->replace({QStringLiteral("Caver"), QStringLiteral("Bob")});
+
+    CHECK(objectCountOf(caverColumn, QStringLiteral("Bob")) == 1);
+    CHECK(objectCountOf(caverColumn, QStringLiteral("Alice")) == 0);
+    CHECK(caverColumn->otherIndex().data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt() == 0);
+    CHECK(objectsIn(model.acceptedModel()).contains(&object));
+    CHECK_FALSE(objectsIn(model.rejectedModel()).contains(&object));
+}
+
+namespace {
+
+// The accepted model's row holding object, or -1.
+int acceptedRowOf(const cwKeywordFilterPipelineModel& model, const QObject* object)
+{
+    const QAbstractItemModel* accepted = model.acceptedModel();
+    for (int row = 0; row < accepted->rowCount(); ++row) {
+        if (accepted->index(row, 0).data(cwKeywordItemModel::ObjectRole).value<QObject*>() == object) {
+            return row;
+        }
+    }
+    return -1;
+}
+
+// True when spy recorded at least one dataChanged, and every one is a
+// KeywordsRole change on exactly row.
+bool onlyKeywordChangesOn(const QSignalSpy& spy, int row)
+{
+    const auto isKeywordChangeOnRow = [row](const QList<QVariant>& arguments) {
+        return arguments.at(0).toModelIndex().row() == row
+               && arguments.at(1).toModelIndex().row() == row
+               && arguments.at(2).value<QList<int>>().contains(cwKeywordItemModel::KeywordsRole);
+    };
+    return !spy.isEmpty() && std::all_of(spy.cbegin(), spy.cend(), isKeywordChangeOnRow);
+}
+
+} // namespace
+
+TEST_CASE("cwKeywordFilterPipelineModel accepted model reports a keyword edit on an accepted object",
+          "[cwKeywordFilterPipelineModel]")
+{
+    cwKeywordItemModel items;
+    QObject linePlot;
+    auto linePlotItem = new cwKeywordItem();
+    linePlotItem->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Line Plot")});
+    linePlotItem->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Alice")});
+    linePlotItem->setObject(&linePlot);
+    items.addItem(linePlotItem);
+
+    QObject scrap;
+    auto scrapItem = new cwKeywordItem();
+    scrapItem->keywordModel()->add({QStringLiteral("Type"), QStringLiteral("Plan")});
+    scrapItem->keywordModel()->add({QStringLiteral("Caver"), QStringLiteral("Carol")});
+    scrapItem->setObject(&scrap);
+    items.addItem(scrapItem);
+
+    cwKeywordFilterPipelineModel model;
+    model.setKeywordModel(&items);
+    auto typeColumn = groupColumnAt(model, 0);
+    REQUIRE(typeColumn);
+    typeColumn->setKey(QStringLiteral("Type"));
+    REQUIRE(acceptedRowOf(model, &linePlot) >= 0);
+    REQUIRE(acceptedRowOf(model, &scrap) >= 0);
+
+    QSignalSpy acceptedChanged(model.acceptedModel(), &QAbstractItemModel::dataChanged);
+
+    SECTION("An edit on an accepted object reaches its row") {
+        linePlotItem->keywordModel()->replace({QStringLiteral("Caver"), QStringLiteral("Bob")});
+        CHECK(onlyKeywordChangesOn(acceptedChanged, acceptedRowOf(model, &linePlot)));
+    }
+
+    SECTION("An edit on a rejected object emits nothing") {
+        REQUIRE(typeColumn->setData(valueIndexOf(typeColumn, QStringLiteral("Plan")), false, cwKeywordGroupByKeyModel::AcceptedRole));
+        REQUIRE(acceptedRowOf(model, &scrap) < 0);
+        acceptedChanged.clear();
+
+        scrapItem->keywordModel()->replace({QStringLiteral("Caver"), QStringLiteral("Dave")});
+        CHECK(acceptedChanged.isEmpty());
+    }
+
+    SECTION("An object accepted by two OR groups reports through its one row") {
+        model.addRow();
+        REQUIRE(model.setData(model.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole));
+        auto caverColumn = groupColumnAt(model, 1);
+        REQUIRE(caverColumn);
+        caverColumn->setKey(QStringLiteral("Caver"));
+        REQUIRE(caverColumn->setData(valueIndexOf(caverColumn, QStringLiteral("Alice")), true, cwKeywordGroupByKeyModel::AcceptedRole));
+        REQUIRE(objectCountOf(caverColumn, QStringLiteral("Alice")) == 1);
+        REQUIRE(caverColumn->acceptedModel()->rowCount() == 1);
+        REQUIRE(model.acceptedModel()->rowCount() == 2);
+        acceptedChanged.clear();
+
+        // An edit on another key keeps the object in both groups; each group
+        // reports it, and the accepted model reports it as often as one group.
+        QSignalSpy firstGroupChanged(typeColumn->acceptedModel(), &QAbstractItemModel::dataChanged);
+        linePlotItem->keywordModel()->add({QStringLiteral("Cave"), QStringLiteral("Lechuguilla")});
+        REQUIRE(caverColumn->acceptedModel()->rowCount() == 1);
+        CHECK(onlyKeywordChangesOn(acceptedChanged, acceptedRowOf(model, &linePlot)));
+        CHECK(acceptedChanged.count() == firstGroupChanged.count());
+    }
 }

@@ -59,7 +59,8 @@ namespace {
                                                const QString& pathToImage,
                                                const QString& keyPrefix,
                                                quint64 parentHash,
-                                               const cwProgressNodePtr& progressParent)
+                                               const cwProgressNodePtr& progressParent,
+                                               const std::function<bool()>& isCanceled)
     {
         const cwDiskCacher::Key key = cwImageProvider::imageCacheKey(
             pathToImage,
@@ -72,7 +73,7 @@ namespace {
             //compressed texture must carry the same flip
             //cwOpenGLUtils::toGLTexture() gives the uncompressed path
             return cwOpenGLUtils::toGLTexture(croppedImage);
-        }, progressParent);
+        }, progressParent, isCanceled);
 
         if(ensured.hasError()) {
             return {};
@@ -131,7 +132,9 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
         int dotsPerMeter;
     };
 
-    auto cropImage = [dataRootDir, originalImage, cropRect, progressParent]()->Image {
+    //The QPromise form lets a cancel reach the worker: it polls between the
+    //decode, crop, hash, cache insert and encode, and a canceled crop adds no result
+    auto cropImage = [dataRootDir, originalImage, cropRect, progressParent](QPromise<Image>& promise) {
             cwProgressScope cropping(progressParent, QStringLiteral("Cropping"));
             cropping.setTotal(kCropSteps);
 
@@ -144,6 +147,9 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
             QImage image = provider.requestImage(requestPath, &imageSize, QSize());
             image.setColorSpace(QColorSpace());
             cropping.advance();
+            if(promise.isCanceled()) {
+                return;
+            }
             QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
                                                                   image.size()));
 
@@ -166,9 +172,15 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
                 }
 
                 cropping.advance();
+                if(promise.isCanceled()) {
+                    return;
+                }
 
                 const quint64 parentHash = cwImageProvider::imageHash(image);
                 cropping.advance();
+                if(promise.isCanceled()) {
+                    return;
+                }
 
                 const QString keyPrefix = cropKeyPrefix(cropArea, keySuffix);
 
@@ -177,6 +189,9 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
                     croppedImage,
                     cwImageProvider::imageCacheKey(originalPath, keyPrefix, parentHash));
                 cropping.advance();
+                if(promise.isCanceled()) {
+                    return;
+                }
 
                 //The crop is done here, so the encode below owns the detail
                 //line instead of hiding behind a finished-looking "Cropping"
@@ -187,14 +202,19 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
                                                                     originalPath,
                                                                     keyPrefix,
                                                                     parentHash,
-                                                                    progressParent);
-                return Image({key, compressedKey, croppedImage, dotsPerMeter});
+                                                                    progressParent,
+                                                                    [&promise]() { return promise.isCanceled(); });
+                if(promise.isCanceled()) {
+                    return;
+                }
+                promise.addResult(Image({key, compressedKey, croppedImage, dotsPerMeter}));
+                return;
             }
 
             QImage badImage(cropArea.size(), QImage::Format_ARGB32);
             badImage.fill(QColor("red"));
             // qDebug() << "Original image is bad id:" << originalImage.original() << imageData.data().size() << imageData.size() << imageData.format() << LOCATION;
-            return Image({{}, {}, badImage, 0});
+            promise.addResult(Image({{}, {}, badImage, 0}));
     };
 
     auto cropFuture = cwConcurrent::run(cropImage);
@@ -202,6 +222,10 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
     auto finishedFuture =
         AsyncFuture::observe(cropFuture)
             .subscribe([cropFuture, dataRootDir]() {
+                if(cropFuture.resultCount() == 0) {
+                    return Result();
+                }
+
                 const auto cropRGBImage = cropFuture.result();
 
                 if(cropRGBImage.key.id.isEmpty()) {

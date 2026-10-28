@@ -46,12 +46,16 @@
 #include <QPainter>
 #include <QCoreApplication>
 #include <QFutureWatcher>
+#include <QTemporaryDir>
+#include <QDirIterator>
+#include <QImageWriter>
 #include <QPointF>
 #include <QUuid>
 #include <QVector3D>
 
 //Std includes
 #include <algorithm>
+#include <random>
 
 static QSizeF geometryBoundsSize(const cwGeometry& geometry)
 {
@@ -552,4 +556,111 @@ TEST_CASE("A scrap is launched only when it is admitted", "[cwTriangulateTask]")
     CHECK_FALSE(secondLaunchedBeforeFirstSettled);
     CHECK(futures.at(1).isFinished());
     CHECK(futures.at(1).resultCount() == 1);
+}
+
+TEST_CASE("A canceled scrap hands its progress node back", "[cwTriangulateTask]")
+{
+    // A scrap's node grows when the scrap is admitted, so a scrap canceled after
+    // admission hands the node back on its canceled path too; otherwise the
+    // run's row holds the node until the whole run is over.
+    TwoScrapRun run(QStringLiteral("cancel-admitted"));
+    const QString firstScrap = QStringLiteral("Scrap 1");
+
+    const auto limited = run.task.triangulate(&run.context);
+    REQUIRE(limited.items.size() == kTwoScraps);
+    REQUIRE(hasActiveChild(run.root, firstScrap));
+
+    QFuture<cwTriangulatedData> canceled = limited.items.at(0);
+    canceled.cancel();
+
+    REQUIRE(spinUntilSettled(limited.items));
+    REQUIRE(waitUntil([&]() { return limited.all.isFinished(); }, kLimitedRunTimeoutMs));
+    QCoreApplication::processEvents();
+
+    CHECK(canceled.isCanceled());
+    CHECK(canceled.resultCount() == 0);
+
+    const QFuture<cwTriangulatedData>& delivered = limited.items.at(1);
+    REQUIRE(delivered.resultCount() == 1);
+    CHECK_FALSE(delivered.result().isNull());
+
+    CHECK_FALSE(hasActiveChild(run.root, firstScrap));
+    CHECK(run.root->activeChildren().isEmpty());
+}
+
+namespace {
+    //Large enough that its decode outlasts the cancel's trip to the worker
+    constexpr int kSlowDecodeImageSide = 3000;
+    constexpr int kNoiseJpegQuality = 90;
+    constexpr int kChannelMax = 255;
+
+    //Writes a square JPEG of random pixels, so its decode takes real time
+    bool writeNoiseJpeg(const QString& path, int side)
+    {
+        QImage image(side, side, QImage::Format_RGB32);
+        std::minstd_rand generator;
+        std::uniform_int_distribution<int> channel(0, kChannelMax);
+        for(int y = 0; y < side; y++) {
+            auto* line = reinterpret_cast<QRgb*>(image.scanLine(y));
+            for(int x = 0; x < side; x++) {
+                line[x] = qRgb(channel(generator), channel(generator), channel(generator));
+            }
+        }
+
+        QImageWriter writer(path, "jpg");
+        writer.setQuality(kNoiseJpegQuality);
+        return writer.write(image);
+    }
+
+    QStringList filesUnder(const QDir& dir)
+    {
+        QStringList files;
+        QDirIterator it(dir.absolutePath(), QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+        while(it.hasNext()) {
+            files.append(it.next());
+        }
+        return files;
+    }
+}
+
+TEST_CASE("A scrap canceled mid-crop writes nothing to the texture cache", "[cwTriangulateTask]")
+{
+    // The crop polls its promise between the decode, the crop, the hash and the
+    // encode, so a scrap canceled while its image decodes stops there: no PNG
+    // crop and no KTX2 entry reach the cache. Timing-based: the cancel takes a
+    // few event-loop hops to reach the worker, against a decode of tens of
+    // milliseconds.
+    cwThreadCountRestorer threadCount(kSingleThread);
+
+    QTemporaryDir imageDir;
+    REQUIRE(imageDir.isValid());
+    const QString imagePath = imageDir.filePath(QStringLiteral("noise-scrap.jpg"));
+    REQUIRE(writeNoiseJpeg(imagePath, kSlowDecodeImageSide));
+
+    const QDir dataRootDir = coldDataRootDir(QStringLiteral("cancel-mid-crop"));
+
+    cwTriangulateTask task;
+    task.setScrapData({scrapInDataForImage(imagePath)});
+    task.setDataRootDir(dataRootDir);
+    task.setFormatType(cwTextureUploadTask::OpenGL_RGBA);
+
+    QObject context;
+    const auto limited = task.triangulate(&context);
+    REQUIRE(limited.items.size() == 1);
+
+    QFuture<cwTriangulatedData> scrap = limited.items.at(0);
+    scrap.cancel();
+
+    REQUIRE(spinUntilSettled(limited.items));
+    REQUIRE(waitUntil([&]() { return limited.all.isFinished(); }, kLimitedRunTimeoutMs));
+
+    // The canceled worker may still be running; the cache is read once it exits
+    REQUIRE(cwTask::threadPool()->waitForDone(kLimitedRunTimeoutMs));
+
+    CHECK(scrap.isCanceled());
+    CHECK(scrap.resultCount() == 0);
+
+    const QStringList cachedFiles = filesUnder(dataRootDir);
+    INFO("Cached files: " << cachedFiles.join(QStringLiteral(", ")).toStdString());
+    CHECK(cachedFiles.isEmpty());
 }

@@ -55,10 +55,6 @@ public:
 
     void invert();
 
-    // Re-walks every source row. For sources that forward no keyword edits,
-    // such as the keyword filter's accepted model.
-    void updateAllRows();
-
     int rowCount(const QModelIndex& parent = QModelIndex()) const;
     QVariant data(const QModelIndex& index, int role) const;
     Q_INVOKABLE bool setData(const QModelIndex &index, const QVariant &value, int role);
@@ -77,6 +73,9 @@ signals:
     void acceptByDefaultChanged();
 
 private:
+    // Re-walks every source row; used on a key change, a source reset or a new source.
+    void updateAllRows();
+
     class Row {
     public:
         Row() {}
@@ -153,9 +152,9 @@ private:
     private:
         void addEntity(const QString& value, const QModelIndex &sourceIndex);
         void removeEntity(const QString& value, const QModelIndex &sourceIndex);
-        bool removeEntityFromRow(QVector<Row>::iterator iter, const QModelIndex &sourceIndex);
-        bool removeEntityFromRow(int i, Row& row, const QModelIndex &sourceIndex);
-        void addEntityToOther(const QModelIndex &sourceIndex);
+        void removeEntityFromRow(QVector<Row>::iterator iter, const QModelIndex &sourceIndex);
+        void removeEntityFromRow(int i, Row& row, const QModelIndex &sourceIndex);
+        void setInOther(const QModelIndex &sourceIndex, bool inOther);
 
         void beginInsert(const QVector<Row>::iterator& iter) const;
         void endInsert() const;
@@ -205,7 +204,7 @@ private:
             row.accepted = accepted;
 
             for(const auto& index : std::as_const(row.indexes)) {
-                setAcceptIndex(index, accepted);
+                setAcceptIndex(index, accepted || isIndexAccepted(index));
             }
 
             //Only enable if func isn't nullptr
@@ -216,6 +215,7 @@ private:
     }
 
     void setAcceptIndex(const QModelIndex& index, bool accepted);
+    bool isIndexAccepted(const QPersistentModelIndex& index) const;
 };
 
 inline QAbstractItemModel* cwKeywordGroupByKeyModel::sourceModel() const {

@@ -554,7 +554,7 @@ TEST_CASE("A tie to a trip-attached Compass station names the file's station",
         const QHash<QUuid, QHash<QString, QString>> stationLabels = {
             {attached.id, {{QStringLiteral("xy.P1"), QStringLiteral("XY.P1")},
                            {QStringLiteral("xy.P2"), QStringLiteral("XY.P2")}}}};
-        const cwSurvexExporterCaveTask::DriverTree tree(prefixed.caves, labels, {}, stationLabels);
+        const cwSurvexExporterCaveTask::DriverTree tree(prefixed.caves, labels, {}, {}, stationLabels);
         CHECK(operandOf(tree, attached, QStringLiteral("xy.P2"))
               == (scope + QStringLiteral("XY.P2")).toStdString());
     }

@@ -50,7 +50,7 @@ class cwSurveyNode;
  *
  * Set node instead (setting one scope clears the other) and the model lists
  * the names a fix on that node takes, the set
- * cwSurvexExporterCaveTask::writeFixStations accepts: each trip's
+ * cwSurvexExporterCaveTask::AnchorPlan's fix validation accepts: each trip's
  * knownStations() under its scopePrefix() ("trip1.entrance"), in node order,
  * then the node's own attachment's stations unscoped, deduplicated by the
  * station each name resolves to, so both members of a case pair list. A

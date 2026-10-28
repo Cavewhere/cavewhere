@@ -11,6 +11,7 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import QtQml.Models
 import cavewherelib
+import "Utils.js" as Utils
 
 // The survey tree: every cave, the nodes under it, and each node's trips as
 // leaves, in one table of eight columns. The Data page shows the whole region
@@ -94,7 +95,7 @@ ColumnLayout {
 
     spacing: 0
 
-    //Asks the host page to open its Attach survey file dialog for \a node.
+    //Asks the host page to open its Add survey file dialog for \a node.
     signal attachSurveyFileRequested(node: SurveyNode)
 
     //The cwSurveyNode or cwTrip a proxy index stands for, null for a row that
@@ -332,12 +333,13 @@ ColumnLayout {
     //What the prompt says. Deleting a source root takes its subtree and its
     //copied file along; anything else is the ordinary delete, which counts
     //the children and trips that go with it.
+    //Names go in as markup, so a name that holds markup characters stays literal.
     function removeMessage(object: QQ.QtObject) : string {
         const node = object as SurveyNode;
         const trip = object as Trip;
 
         if(trip !== null) {
-            return qsTr("Delete <b>%1</b>?").arg(trip.name);
+            return qsTr("Delete <b>%1</b>?").arg(Utils.escapeHtml(trip.name));
         }
 
         if(node === null) {
@@ -352,9 +354,9 @@ ColumnLayout {
                     ? qsTr("%1, %2").arg(surveyTreeId.countText(nodeCount, noun[0], noun[1])).arg(tripsText)
                     : tripsText;
             return qsTr("Delete <b>%1</b>? Removes %2. The copied %3 is removed from the project.")
-                      .arg(node.name)
+                      .arg(Utils.escapeHtml(node.name))
                       .arg(parts)
-                      .arg(surveyTreeId.sourceFileName(node));
+                      .arg(Utils.escapeHtml(surveyTreeId.sourceFileName(node)));
         }
 
         const nodeCount = surveyTreeId.descendantNodeCount(node);
@@ -369,8 +371,8 @@ ColumnLayout {
         }
 
         const subject = contents.length === 0
-                      ? qsTr("<b>%1</b>").arg(node.name)
-                      : qsTr("<b>%1</b> and its %2").arg(node.name).arg(contents.join(qsTr(" and ")));
+                      ? qsTr("<b>%1</b>").arg(Utils.escapeHtml(node.name))
+                      : qsTr("<b>%1</b> and its %2").arg(Utils.escapeHtml(node.name)).arg(contents.join(qsTr(" and ")));
         return qsTr("Delete %1?").arg(subject);
     }
 
@@ -444,7 +446,7 @@ ColumnLayout {
         }
     }
 
-    //Asks the host page to open its Attach survey file dialog with \a node as
+    //Asks the host page to open its Add survey file dialog with \a node as
     //the place the file's subtree goes. The page owns the dialog because it
     //can hide this tree, which takes the tree out of the window.
     function attachSurveyFile(node: SurveyNode) {

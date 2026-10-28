@@ -40,6 +40,7 @@ cwStation makeStation(const QString& name)
 cwTripData tripWithStations(const QStringList& stationNames)
 {
     cwTripData trip;
+    trip.id = QUuid::createUuid();
     trip.name = QStringLiteral("Trip1");
     trip.calibrations.setBackSights(false);
 
@@ -57,6 +58,7 @@ cwTripData tripWithStations(const QStringList& stationNames)
 cwCaveData makeCave(const QString& name, const QStringList& stationNames)
 {
     cwCaveData cave;
+    cave.id = QUuid::createUuid();
     cave.name = name;
     cave.trips.append(tripWithStations(stationNames));
     return cave;

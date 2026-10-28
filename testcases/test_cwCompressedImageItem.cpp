@@ -105,6 +105,34 @@ TEST_CASE("cwCompressedImageItem paints at raw pixel size regardless of source d
     CHECK(inkOnRightHalf);
 }
 
+TEST_CASE("cwCompressedImageItem adopts a pre-compressed image identically to setImage",
+          "[cwCompressedImageItem]")
+{
+    // The export path compresses tiles on a worker thread and hands the
+    // finished cwCompressedImage to the GUI-thread item, so adopting a blob
+    // must behave exactly like compressing in place.
+    const QImage tile = makeInkedTile();
+
+    cwCompressedImageItem inPlaceItem;
+    inPlaceItem.setImage(tile);
+
+    cwCompressedImageItem adoptedItem;
+    adoptedItem.setCompressedImage(cwCompressedImage(tile));
+
+    CHECK(adoptedItem.boundingRect() == inPlaceItem.boundingRect());
+    CHECK(adoptedItem.compressedImage().size() == tile.size());
+    CHECK(adoptedItem.compressedImage().decompress() == tile);
+
+    const QImage fromInPlace = paintItem(inPlaceItem, tile.size());
+    const QImage fromAdopted = paintItem(adoptedItem, tile.size());
+    CHECK(fromAdopted == fromInPlace);
+
+    // Adopting a null blob clears a previously stored image.
+    adoptedItem.setCompressedImage(cwCompressedImage());
+    CHECK(adoptedItem.boundingRect().isEmpty());
+    CHECK(adoptedItem.compressedImage().isNull());
+}
+
 TEST_CASE("cwCompressedImageItem survives repeated paints and null images",
           "[cwCompressedImageItem]")
 {

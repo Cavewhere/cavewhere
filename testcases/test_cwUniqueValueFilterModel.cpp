@@ -12,6 +12,7 @@
 #include <QSignalSpy>
 
 //Std includes
+#include <functional>
 #include <utility>
 
 template<typename T, typename INIT>
@@ -93,7 +94,7 @@ TEST_CASE("cwUniqueValueFilterModel should filter values correctly", "[cwUniqueV
 
     filter.setUniqueRole(Qt::UserRole + 1);
     filter.setLessThan([](const QVariant& left, const QVariant& right) {
-        return left.value<QObject*>() < right.value<QObject*>();
+        return std::less<QObject*>()(left.value<QObject*>(), right.value<QObject*>());
     });
     filter.setSourceModel(&model);
 
@@ -262,7 +263,7 @@ TEST_CASE("cwUniqueValueFilterModel takes a source range insert as one insert",
     cwUniqueValueFilterModel filter;
     filter.setUniqueRole(kUniqueRole);
     filter.setLessThan([](const QVariant& left, const QVariant& right) {
-        return left.value<QObject*>() < right.value<QObject*>();
+        return std::less<QObject*>()(left.value<QObject*>(), right.value<QObject*>());
     });
     filter.setSourceModel(&model);
     REQUIRE(filter.rowCount() == 0);
@@ -292,4 +293,90 @@ TEST_CASE("cwUniqueValueFilterModel takes a source range insert as one insert",
         INFO("insert " << i);
         CHECK(rowCountBeforeInsert.at(i) == firstInsertedRow.at(i));
     }
+}
+
+TEST_CASE("cwUniqueValueFilterModel forwards another role's change on a value's representative row",
+          "[cwUniqueValueFilterModel]")
+{
+    constexpr int kUniqueRole = Qt::UserRole + 1;
+    constexpr int kOtherRole = Qt::UserRole + 2;
+
+    QObject a;
+    QObject b;
+
+    QStandardItemModel model;
+    const auto appendValue = [&model](QObject* value) {
+        auto* item = new QStandardItem();
+        item->setData(QVariant::fromValue(value), kUniqueRole);
+        model.appendRow(item);
+        return item;
+    };
+    QStandardItem* aRepresentative = appendValue(&a);
+    QStandardItem* aDuplicate = appendValue(&a);
+    QStandardItem* bItem = appendValue(&b);
+
+    cwUniqueValueFilterModel filter;
+    filter.setUniqueRole(kUniqueRole);
+    filter.setLessThan([](const QVariant& left, const QVariant& right) {
+        return std::less<QObject*>()(left.value<QObject*>(), right.value<QObject*>());
+    });
+    filter.setSourceModel(&model);
+    REQUIRE(filter.rowCount() == 2);
+
+    const auto proxyRowOf = [&filter](const QObject* value) {
+        for (int row = 0; row < filter.rowCount(); ++row) {
+            if (filter.index(row).data(kUniqueRole).value<QObject*>() == value) {
+                return row;
+            }
+        }
+        return -1;
+    };
+    const int aRow = proxyRowOf(&a);
+    const int bRow = proxyRowOf(&b);
+    REQUIRE(aRow >= 0);
+    REQUIRE(bRow >= 0);
+
+    QSignalSpy dataChanged(&filter, &QAbstractItemModel::dataChanged);
+    QSignalSpy rowsInserted(&filter, &QAbstractItemModel::rowsInserted);
+    QSignalSpy rowsRemoved(&filter, &QAbstractItemModel::rowsRemoved);
+
+    const auto checkOneChangeOn = [&dataChanged](int row) {
+        REQUIRE(dataChanged.count() == 1);
+        const QList<QVariant> arguments = dataChanged.takeFirst();
+        CHECK(arguments.at(0).toModelIndex().row() == row);
+        CHECK(arguments.at(1).toModelIndex().row() == row);
+        CHECK(arguments.at(2).value<QList<int>>() == QList<int>({kOtherRole}));
+    };
+
+    SECTION("An edit on the representative row reaches its proxy row") {
+        aRepresentative->setData(QStringLiteral("edited"), kOtherRole);
+        checkOneChangeOn(aRow);
+        CHECK(filter.index(aRow).data(kOtherRole).toString() == QStringLiteral("edited"));
+    }
+
+    SECTION("An edit on a duplicate row emits nothing") {
+        aDuplicate->setData(QStringLiteral("edited"), kOtherRole);
+        CHECK(dataChanged.isEmpty());
+    }
+
+    SECTION("An edit on another value's row reaches that value's proxy row") {
+        bItem->setData(QStringLiteral("edited"), kOtherRole);
+        checkOneChangeOn(bRow);
+    }
+
+    SECTION("The former duplicate forwards once it becomes the representative") {
+        model.removeRow(aRepresentative->row());
+        REQUIRE(filter.rowCount() == 2);
+        REQUIRE(proxyRowOf(&a) == aRow);
+        rowsInserted.clear();
+        rowsRemoved.clear();
+
+        aDuplicate->setData(QStringLiteral("edited"), kOtherRole);
+        checkOneChangeOn(aRow);
+    }
+
+    // Another role leaves the unique rows in place.
+    CHECK(rowsInserted.isEmpty());
+    CHECK(rowsRemoved.isEmpty());
+    CHECK(filter.rowCount() == 2);
 }

@@ -11,20 +11,28 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QImage>
+#include <QProcess>
+#include <QProcessEnvironment>
+#include <QPromise>
 #include <QSemaphore>
 #include <QString>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QThreadPool>
+#include <QtEndian>
 
 #include <ktx.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <functional>
+#include <optional>
 #include <thread>
 
 #include "cwConcurrent.h"
+#include "cwEncodeShutdownChild.h"
 #include "cwDiskCacher.h"
 #include "cwKtx2Codec.h"
 #include "cwStreamedTexture.h"
@@ -115,6 +123,12 @@ namespace {
         }
         return image;
     }
+
+    QImage solidImage(int width, int height) {
+        QImage image(width, height, QImage::Format_RGBA8888);
+        image.fill(QColor(kSolidRed, kSolidGreen, kSolidBlue));
+        return image;
+    }
 }
 
 TEST_CASE("cwKtx2Codec round trips a gradient to a block compressed format", "[Ktx2]") {
@@ -194,8 +208,7 @@ TEST_CASE("cwKtx2Codec reports an error for garbage input", "[Ktx2]") {
 }
 
 TEST_CASE("cwKtx2Codec preserves a solid color through the mip chain", "[Ktx2]") {
-    QImage image(kSolidSize, kSolidSize, QImage::Format_RGBA8888);
-    image.fill(QColor(kSolidRed, kSolidGreen, kSolidBlue));
+    const QImage image = solidImage(kSolidSize, kSolidSize);
 
     const auto encoded = cw::ktx2::encodeRgba(image);
     REQUIRE_FALSE(encoded.hasError());
@@ -328,7 +341,7 @@ TEST_CASE("cwKtx2Codec loads streamed levels out of the disk cache", "[Ktx2Codec
     const cwStreamedTexture texture = streamedTexture(tempDir.path(), key);
 
     SECTION("A stored entry transcodes to the requested levels") {
-        const auto loaded = cw::ktx2::loadStreamedLevels(texture, QRhiTexture::BC7, kSliceLevel);
+        const auto loaded = cw::ktx2::loadStreamedLevels(texture, QRhiTexture::BC7, kSliceLevel, []() { return false; });
         REQUIRE_FALSE(loaded.hasError());
         CHECK(loaded.value().size == QSize(kSlicedWidth, kSlicedHeight));
         CHECK(loaded.value().mipLevels.size() == kGradientMipCount - kSliceLevel);
@@ -338,7 +351,7 @@ TEST_CASE("cwKtx2Codec loads streamed levels out of the disk cache", "[Ktx2Codec
         cwStreamedTexture missing = texture;
         missing.key.id = QStringLiteral("not-cached");
 
-        const auto loaded = cw::ktx2::loadStreamedLevels(missing, QRhiTexture::BC7, 0);
+        const auto loaded = cw::ktx2::loadStreamedLevels(missing, QRhiTexture::BC7, 0, []() { return false; });
         CHECK(loaded.hasError());
         CHECK(loaded.errorMessage().contains(QStringLiteral("not-cached")));
     }
@@ -347,15 +360,14 @@ TEST_CASE("cwKtx2Codec loads streamed levels out of the disk cache", "[Ktx2Codec
         cwStreamedTexture wrongChecksum = texture;
         wrongChecksum.key.checksum = QStringLiteral("stale-checksum");
 
-        const auto loaded = cw::ktx2::loadStreamedLevels(wrongChecksum, QRhiTexture::BC7, 0);
+        const auto loaded = cw::ktx2::loadStreamedLevels(wrongChecksum, QRhiTexture::BC7, 0, []() { return false; });
         CHECK(loaded.hasError());
         CHECK_FALSE(loaded.errorMessage().isEmpty());
     }
 }
 
 TEST_CASE("cwKtx2Codec slices an RGBA8 chain for devices without block compression", "[Ktx2Codec]") {
-    QImage image(kGradientWidth, kGradientHeight, QImage::Format_RGBA8888);
-    image.fill(QColor(kSolidRed, kSolidGreen, kSolidBlue));
+    const QImage image = solidImage(kGradientWidth, kGradientHeight);
 
     const auto encoded = cw::ktx2::encodeRgba(image);
     REQUIRE_FALSE(encoded.hasError());
@@ -639,4 +651,391 @@ TEST_CASE("A worker waiting on the encode lane frees its pool slot", "[Ktx2][Enc
 
     REQUIRE(encodeFinished(encode, kEncodeTimeoutMs));
     CHECK_FALSE(encode.result().hasError());
+}
+
+namespace {
+    //! A narrow pool keeps the encode long next to one chunk on any machine
+    constexpr int kQueueProbeThreads = 2;
+    //! 2048 x 2048 makes a 12-level chain of 1371 chunks: 1024 + 256 + 64 + 16 + 4 + 1 + six one-chunk tails
+    constexpr int kQueueProbeSize = 2048;
+    //! Well above one chunk (about 6 ms) and well below the whole encode on kQueueProbeThreads threads
+    constexpr int kChunkWaitBudgetMs = 500;
+}
+
+TEST_CASE("A pool item queued during an encode starts within one chunk", "[Ktx2][EncodeLane]") {
+    const QImage image = gradientImage(kQueueProbeSize, kQueueProbeSize);
+    cwThreadCountRestorer threadCount(kQueueProbeThreads);
+
+    const EncodeFuture encode = cwConcurrent::run([image]() {
+        return cw::ktx2::encodeRgba(image);
+    });
+
+    //The lane runs only the chunk loop, so a busy lane and a busy pool mean the chunks are queuing
+    REQUIRE(waitUntil([]() {
+        return cw::ktx2::encodeLane()->activeThreadCount() >= kSingleThread
+               && cwTask::threadPool()->activeThreadCount() >= kQueueProbeThreads;
+    }, kLaneOccupiedTimeoutMs));
+
+    //The probe settles behind the first wave; once it has run, the encode is in steady state
+    const QFuture<int> probe = cwConcurrent::run([]() { return 1; });
+    REQUIRE(waitUntil([&probe]() { return probe.isFinished(); }, kEncodeTimeoutMs));
+
+    const QFuture<int> trivial = cwConcurrent::run([]() { return 1; });
+
+    CHECK(waitUntil([&trivial]() { return trivial.isFinished(); }, kChunkWaitBudgetMs));
+    CHECK_FALSE(encode.isFinished());
+
+    REQUIRE(encodeFinished(encode, kEncodeTimeoutMs));
+    CHECK_FALSE(encode.result().hasError());
+}
+
+namespace {
+    //! The RGBA8 bytes of every mip level of an encodeRgba result
+    QList<QByteArray> decodedLevels(const QByteArray& ktx2Bytes)
+    {
+        const auto transcoded = cw::ktx2::transcode(ktx2Bytes, QRhiTexture::RGBA8);
+        REQUIRE_FALSE(transcoded.hasError());
+        return transcoded.value().mipLevels;
+    }
+}
+
+TEST_CASE("A one-thread pool encodes the same pixels as the default pool", "[Ktx2][EncodeLane]") {
+    const QImage image = gradientImage(kGradientWidth, kGradientHeight);
+
+    const auto defaultEncode = cw::ktx2::encodeRgba(image);
+    REQUIRE_FALSE(defaultEncode.hasError());
+
+    const auto singleThreadEncode = [&image]() {
+        cwThreadCountRestorer threadCount(kSingleThread);
+        return cw::ktx2::encodeRgba(image);
+    }();
+    REQUIRE_FALSE(singleThreadEncode.hasError());
+
+    const QList<QByteArray> defaultLevels = decodedLevels(defaultEncode.value());
+    REQUIRE(defaultLevels.size() == kGradientMipCount);
+    CHECK(decodedLevels(singleThreadEncode.value()) == defaultLevels);
+}
+
+namespace {
+    using cw::ktx2::UastcEncoder;
+
+    constexpr int kKernelWidth = 37;
+    constexpr int kKernelHeight = 29;
+    constexpr qsizetype kDfdOffsetField = 48;
+    constexpr qsizetype kDfdLengthField = 52;
+    constexpr qsizetype kWordBytes = 4;
+    constexpr int kPoolBlockerCount = 2;
+
+    //! A gradient whose alpha ramps from transparent to opaque down the image
+    QImage translucentGradientImage(int width, int height) {
+        QImage image = gradientImage(width, height);
+        for(int y = 0; y < height; y++) {
+            const int alpha = (y * kMaxChannel) / std::max(1, height - 1);
+            for(int x = 0; x < width; x++) {
+                QColor color = image.pixelColor(x, y);
+                color.setAlpha(alpha);
+                image.setPixelColor(x, y, color);
+            }
+        }
+        return image;
+    }
+
+    quint32 headerWord(const QByteArray& ktx2Bytes, qsizetype offset) {
+        return qFromLittleEndian<quint32>(ktx2Bytes.constData() + offset);
+    }
+
+    //! The KTX2 data format descriptor as hex words, so a mismatch prints both side by side
+    std::string dfdHex(const QByteArray& ktx2Bytes) {
+        if(ktx2Bytes.size() < kDfdLengthField + kWordBytes) {
+            return "short file";
+        }
+        const qsizetype offset = headerWord(ktx2Bytes, kDfdOffsetField);
+        const qsizetype length = headerWord(ktx2Bytes, kDfdLengthField);
+        if(offset + length > ktx2Bytes.size()) {
+            return "truncated DFD";
+        }
+
+        QStringList words;
+        for(qsizetype at = offset; at + kWordBytes <= offset + length; at += kWordBytes) {
+            words.append(QStringLiteral("%1").arg(headerWord(ktx2Bytes, at), 8, 16, QLatin1Char('0')));
+        }
+        return words.join(QLatin1Char(' ')).toStdString();
+    }
+
+    //! Holds every thread of cwTask::threadPool() and queues the rest behind them until released
+    class PoolBlockers {
+    public:
+        explicit PoolBlockers(int count) :
+            m_count(count)
+        {
+            for(int i = 0; i < m_count; i++) {
+                cwTask::threadPool()->start([this]() {
+                    m_entered.release();
+                    m_gate.acquire();
+                    m_left.release();
+                });
+            }
+        }
+
+        ~PoolBlockers()
+        {
+            release();
+        }
+
+        int enteredCount() const
+        {
+            return m_entered.available();
+        }
+
+        //! Opens every gate, then returns once every blocker has run and left
+        void release()
+        {
+            if(!m_released) {
+                m_released = true;
+                m_gate.release(m_count);
+                m_left.acquire(m_count);
+            }
+        }
+
+        PoolBlockers(const PoolBlockers&) = delete;
+        PoolBlockers& operator=(const PoolBlockers&) = delete;
+
+    private:
+        const int m_count;
+        QSemaphore m_entered;
+        QSemaphore m_gate;
+        QSemaphore m_left;
+        bool m_released = false;
+    };
+}
+
+TEST_CASE("Both UASTC encoders produce the same KTX2 bytes", "[Ktx2][EncodeLane]") {
+    const int quality = GENERATE(cw::ktx2::kDefaultUastcQuality,
+                                 static_cast<int>(KTX_PACK_UASTC_LEVEL_DEFAULT));
+    const int fixture = GENERATE(0, 1, 2);
+    const QImage image = [fixture]() {
+        switch(fixture) {
+        case 0:
+            return gradientImage(kKernelWidth, kKernelHeight);
+        case 1:
+            return solidImage(kSolidSize, kSolidSize);
+        default:
+            return translucentGradientImage(kKernelWidth, kKernelHeight);
+        }
+    }();
+    INFO("quality " << quality << ", fixture " << fixture);
+
+    const auto taskPool = cw::ktx2::encodeRgba(image, quality, UastcEncoder::TaskPool);
+    const auto libktx = cw::ktx2::encodeRgba(image, quality, UastcEncoder::Libktx);
+    INFO("task-pool error: " << taskPool.errorMessage().toStdString());
+    REQUIRE_FALSE(taskPool.hasError());
+    REQUIRE_FALSE(libktx.hasError());
+
+    CHECK(dfdHex(taskPool.value()) == dfdHex(libktx.value()));
+    CHECK(taskPool.value() == libktx.value());
+}
+
+TEST_CASE("The task-pool encoder honors a one-thread pool", "[Ktx2][EncodeLane]") {
+    const QImage image = gradientImage(kKernelWidth, kKernelHeight);
+    cwThreadCountRestorer threadCount(kSingleThread);
+
+    const auto libktx = cw::ktx2::encodeRgba(image, cw::ktx2::kDefaultUastcQuality, UastcEncoder::Libktx);
+    REQUIRE_FALSE(libktx.hasError());
+
+    SECTION("from the test thread") {
+        const auto taskPool = cw::ktx2::encodeRgba(image, cw::ktx2::kDefaultUastcQuality, UastcEncoder::TaskPool);
+        INFO("task-pool error: " << taskPool.errorMessage().toStdString());
+        REQUIRE_FALSE(taskPool.hasError());
+        CHECK(taskPool.value() == libktx.value());
+    }
+
+    SECTION("from the pool's only worker") {
+        const EncodeFuture encode = cwConcurrent::run([image]() {
+            return cw::ktx2::encodeRgba(image, cw::ktx2::kDefaultUastcQuality, UastcEncoder::TaskPool);
+        });
+        REQUIRE(encodeFinished(encode, kEncodeTimeoutMs));
+
+        const Monad::Result<QByteArray> taskPool = encode.result();
+        INFO("task-pool error: " << taskPool.errorMessage().toStdString());
+        REQUIRE_FALSE(taskPool.hasError());
+        CHECK(taskPool.value() == libktx.value());
+    }
+}
+
+TEST_CASE("The task-pool encoder is the default", "[Ktx2][EncodeLane]") {
+    const QImage image = gradientImage(kKernelWidth, kKernelHeight);
+
+    //The two backends write the same bytes, so the default shows itself by
+    //needing the task pool: with every pool thread held, its blocks cannot run.
+    //The second blocker queues behind the first and takes any slot the caller
+    //frees while it waits on the lane.
+    Monad::Result<QByteArray> defaultEncode;
+    std::atomic<bool> defaultFinished { false };
+    {
+        cwThreadCountRestorer threadCount(kSingleThread);
+        PoolBlockers blockers(kPoolBlockerCount);
+        REQUIRE(waitUntil([&blockers]() { return blockers.enteredCount() >= kSingleThread; },
+                          kLaneOccupiedTimeoutMs));
+
+        std::thread caller([&image, &defaultEncode, &defaultFinished]() {
+            defaultEncode = cw::ktx2::encodeRgba(image);
+            defaultFinished = true;
+        });
+
+        CHECK_FALSE(waitUntil([&defaultFinished]() { return defaultFinished.load(); }, kBlockedProbeMs));
+
+        blockers.release();
+        caller.join();
+    }
+
+    REQUIRE(defaultFinished);
+    INFO("default error: " << defaultEncode.errorMessage().toStdString());
+    REQUIRE_FALSE(defaultEncode.hasError());
+
+    const auto taskPool = cw::ktx2::encodeRgba(image, cw::ktx2::kDefaultUastcQuality, UastcEncoder::TaskPool);
+    REQUIRE_FALSE(taskPool.hasError());
+    CHECK(defaultEncode.value() == taskPool.value());
+    CHECK_FALSE(cw::ktx2::transcode(defaultEncode.value(), QRhiTexture::RGBA8).hasError());
+}
+
+namespace {
+    //! The child drains its whole encode once shutdown waits for it, so leave room for that
+    constexpr int kChildTimeoutMs = 120000;
+
+    //! A known PROJ false positive aborts every ASan run at startup without this
+    const QString kContainerOverflowOption = QStringLiteral("detect_container_overflow");
+
+    QProcessEnvironment childEnvironment()
+    {
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        const QString asanOptionsName = QStringLiteral("ASAN_OPTIONS");
+        const QString asanOptions = environment.value(asanOptionsName);
+        if(!asanOptions.contains(kContainerOverflowOption)) {
+            const QString separator = asanOptions.isEmpty() ? QString() : QStringLiteral(":");
+            environment.insert(asanOptionsName,
+                               asanOptions + separator + kContainerOverflowOption + QStringLiteral("=0"));
+        }
+        return environment;
+    }
+}
+
+TEST_CASE("Quitting with an encode in flight exits cleanly", "[Ktx2][EncodeLane][EncodeShutdown]") {
+    QProcess child;
+    child.setProcessEnvironment(childEnvironment());
+    child.start(QStringLiteral(CW_ENCODE_SHUTDOWN_CHILD_PATH), QStringList());
+    REQUIRE(child.waitForStarted());
+
+    const bool finished = child.waitForFinished(kChildTimeoutMs);
+    const QString output = QString::fromUtf8(child.readAllStandardOutput());
+    const QString errors = QString::fromUtf8(child.readAllStandardError());
+    INFO("child stdout:\n" << output.toStdString());
+    INFO("child stderr:\n" << errors.toStdString());
+    REQUIRE(finished);
+
+    //Separates the shutdown under test from a child that died before its encode started
+    REQUIRE(output.contains(QString::fromLatin1(cw::encodeShutdownChild::kInFlightMarker)));
+
+    CHECK_FALSE(errors.contains(QStringLiteral("AddressSanitizer")));
+    CHECK(child.exitStatus() == QProcess::NormalExit);
+    CHECK(child.exitCode() == 0);
+}
+
+namespace {
+    //! A canceled encode stops after at most a wave or two, a small slice of the
+    //! whole encode; comparing against a whole encode on the same pool keeps the
+    //! check independent of machine speed and load
+    constexpr int kCancelSpeedup = 10;
+
+    bool encodeIsOnPool()
+    {
+        return cw::ktx2::encodeLane()->activeThreadCount() >= kSingleThread
+               && cwTask::threadPool()->activeThreadCount() >= kQueueProbeThreads;
+    }
+
+    //! Milliseconds an uncanceled encode of image takes on the current pool
+    qint64 wholeEncodeMs(const QImage& image)
+    {
+        QElapsedTimer timer;
+        timer.start();
+        EncodeFuture encode = cwConcurrent::run([image]() { return cw::ktx2::encodeRgba(image); });
+        REQUIRE(encodeFinished(encode, kEncodeTimeoutMs));
+        REQUIRE_FALSE(encode.result().hasError());
+        return timer.elapsed();
+    }
+}
+
+TEST_CASE("An encode that is already canceled returns an error", "[Ktx2][EncodeLane][EncodeCancel]") {
+    const QImage image = gradientImage(kQueueProbeSize, kQueueProbeSize);
+
+    const auto encoded = cw::ktx2::encodeRgba(image,
+                                              cw::ktx2::kDefaultUastcQuality,
+                                              cw::ktx2::kDefaultUastcEncoder,
+                                              []() { return true; });
+    CHECK(encoded.hasError());
+}
+
+TEST_CASE("A canceled encode stops between waves", "[Ktx2][EncodeLane][EncodeCancel]") {
+    const QImage image = gradientImage(kQueueProbeSize, kQueueProbeSize);
+    cwThreadCountRestorer threadCount(kQueueProbeThreads);
+
+    const qint64 wholeMs = wholeEncodeMs(image);
+
+    std::optional<Monad::Result<QByteArray>> outcome;
+    QFuture<void> encode = cwConcurrent::run([image, &outcome](QPromise<void>& promise) {
+        outcome = cw::ktx2::encodeRgba(image,
+                                       cw::ktx2::kDefaultUastcQuality,
+                                       cw::ktx2::kDefaultUastcEncoder,
+                                       [&promise]() { return promise.isCanceled(); });
+    });
+
+    REQUIRE(waitUntil(encodeIsOnPool, kLaneOccupiedTimeoutMs));
+    REQUIRE_FALSE(encode.isFinished());
+
+    QElapsedTimer sinceCancel;
+    sinceCancel.start();
+    encode.cancel();
+
+    REQUIRE(waitUntil([&encode]() { return encode.isFinished(); }, kEncodeTimeoutMs));
+    const qint64 cancelMs = sinceCancel.elapsed();
+
+    INFO("stopped " << cancelMs << " ms after the cancel; a whole encode takes " << wholeMs << " ms");
+    CHECK(cancelMs * kCancelSpeedup < wholeMs);
+    REQUIRE(outcome.has_value());
+    CHECK(outcome->hasError());
+}
+
+TEST_CASE("A canceled ensureEncodedEntry leaves no cache entry", "[Ktx2][EncodeLane][EncodeCancel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString cachePath = tempDir.path();
+    const cwDiskCacher::Key key = streamedKey(QStringLiteral("canceled-checksum"));
+    cwThreadCountRestorer threadCount(kQueueProbeThreads);
+
+    const qint64 wholeMs = wholeEncodeMs(gradientImage(kQueueProbeSize, kQueueProbeSize));
+
+    std::optional<Monad::ResultBase> outcome;
+    QFuture<void> ensure = cwConcurrent::run([cachePath, key, &outcome](QPromise<void>& promise) {
+        cwDiskCacher cacher{cachePath};
+        outcome = cw::ktx2::ensureEncodedEntry(cacher, key, []() {
+            return gradientImage(kQueueProbeSize, kQueueProbeSize);
+        }, {}, [&promise]() { return promise.isCanceled(); });
+    });
+
+    REQUIRE(waitUntil(encodeIsOnPool, kLaneOccupiedTimeoutMs));
+    REQUIRE_FALSE(ensure.isFinished());
+
+    QElapsedTimer sinceCancel;
+    sinceCancel.start();
+    ensure.cancel();
+
+    REQUIRE(waitUntil([&ensure]() { return ensure.isFinished(); }, kEncodeTimeoutMs));
+    const qint64 cancelMs = sinceCancel.elapsed();
+
+    INFO("stopped " << cancelMs << " ms after the cancel; a whole encode takes " << wholeMs << " ms");
+    CHECK(cancelMs * kCancelSpeedup < wholeMs);
+    REQUIRE(outcome.has_value());
+    CHECK(outcome->hasError());
+
+    const cwDiskCacher cacher{cachePath};
+    CHECK_FALSE(cacher.hasEntry(key));
 }

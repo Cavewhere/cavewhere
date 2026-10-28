@@ -128,6 +128,9 @@ public:
     TriangulatedScrapRun triangulateScraps(const QList<cwScrap*>& scraps,
                                            const cwProgressNodePtr& progressRoot = {});
 
+    //! The latest dispatched run's scraps; default before the first run
+    AsyncFuture::Limited<cwTriangulatedData> triangulationRun() const;
+
     cwTriangulateWarping* warpingSettings() const { return m_warpingSettings; }
 
     bool isTrackingSketch(cwSketch* sketch) const { return m_sketchDerivedScraps.contains(sketch); }
@@ -188,6 +191,9 @@ private:
     //The task that'll be run
     cwProject* Project;
     AsyncFuture::Restarter<void> TriangulateRestarter;
+
+    //The latest dispatched run; a restart cancels it before starting the next
+    AsyncFuture::Limited<cwTriangulatedData> m_triangulationRun;
 
     //The run's progress tree, and the job the task list watches. The run grows
     //it as it works, so nothing here declares how many steps a scrap takes.

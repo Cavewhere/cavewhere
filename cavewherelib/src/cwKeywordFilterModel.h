@@ -45,13 +45,12 @@ private:
     QVector<Row> mRows;
     QHash<QObject*, int> mRowOfObject;
 
-    QMetaObject::Connection mDataChanged;
-    QMetaObject::Connection mRowsAboutToBeRemoved;
-    QMetaObject::Connection mModelAboutToBeReset;
+    QList<QMetaObject::Connection> mSourceConnections;
 
     void removeByObject(QObject* object);
     void removeBySourceIndex(const QModelIndex& sourceIndex);
     void eraseRow(int row);
+    void forwardKeywordsChanged(const QModelIndex& sourceIndex);
     void disconnectSource();
 
     static QObject* toObject(const QModelIndex& sourceIndex)

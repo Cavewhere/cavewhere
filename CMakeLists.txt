@@ -311,6 +311,32 @@ if(BUILD_TESTING)
 
     cw_bundle_proj_data(cavewhere-test proj)
 
+    #### cavewhere-encode-shutdown-child ####
+    # Quits with a UASTC encode in flight; test_cwKtx2Codec runs it to check shutdown
+    qt_add_executable(cavewhere-encode-shutdown-child
+        testcases/helpers/cwEncodeShutdownChild.cpp
+        testcases/helpers/cwEncodeShutdownChild.h
+    )
+
+    target_link_libraries(cavewhere-encode-shutdown-child
+        PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        cavewherelib
+    )
+
+    cw_link_absl_static(cavewhere-encode-shutdown-child)
+
+    add_dependencies(cavewhere-test cavewhere-encode-shutdown-child)
+
+    target_include_directories(cavewhere-test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/testcases/helpers
+    )
+
+    target_compile_definitions(cavewhere-test PRIVATE
+        CW_ENCODE_SHUTDOWN_CHILD_PATH="$<TARGET_FILE:cavewhere-encode-shutdown-child>"
+    )
+
     #### Cavewhere qml tests ####
     # Add the executable
     qt_add_executable(cavewhere-qml-test)

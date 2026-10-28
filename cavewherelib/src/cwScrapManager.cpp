@@ -125,6 +125,7 @@ cwScrapManager::~cwScrapManager()
     //from ~Restarter, which cancels the inner future synchronously as
     //TriangulateRestarter is destroyed.
     TriangulateRestarter.future().cancel();
+    m_triangulationRun.cancel();
 
     //The row would otherwise outlive the run that feeds it
     if(m_progressRoot) {
@@ -1122,6 +1123,11 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
     runIfStandalone();
 }
 
+AsyncFuture::Limited<cwTriangulatedData> cwScrapManager::triangulationRun() const
+{
+    return m_triangulationRun;
+}
+
 cwScrapManager::TriangulatedScrapRun cwScrapManager::triangulateScraps(const QList<cwScrap *> &scraps,
                                                                        const cwProgressNodePtr& progressRoot)
 {
@@ -1206,8 +1212,11 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     }
 
     auto startTask = [this]() {
-        //Tagged with the generation this run takes below
-        cwTaskContextScope traceScope(QStringLiteral("scraps"), m_runGeneration + 1);
+        m_runGeneration++;
+        const quint64 generation = m_runGeneration;
+        m_triangulationRun.cancel();
+
+        cwTaskContextScope traceScope(QStringLiteral("scraps"), generation);
 
         //Running
         auto dirtyScrapsRange =
@@ -1228,15 +1237,14 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
             m_progressRoot->expectChildren(dirtyScraps.size());
         }
 
-        const auto triangulationResults = triangulateScraps(dirtyScraps, m_progressRoot).scraps;
+        const TriangulatedScrapRun run = triangulateScraps(dirtyScraps, m_progressRoot);
+        m_triangulationRun = run.limited;
+        const QList<TriangulatedScrapResult>& triangulationResults = run.scraps;
 
         if(triangulationResults.isEmpty()) {
             finishScrapTask();
             return AsyncFuture::completed();
         }
-
-        m_runGeneration++;
-        const quint64 generation = m_runGeneration;
 
         QList<QFuture<cwTriangulatedData>> futures;
         QList<cwScrap*> scrapsToUpdate;
@@ -1253,8 +1261,8 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
             scrapsToUpdate.append(result.scrap);
 
             //Deliver this scrap the moment it's triangulated, rather than
-            //waiting on the whole batch. A restart cancels the combine, leaving
-            //these futures running, so the generation check drops their results.
+            //waiting on the whole batch. A restart cancels this run; a result
+            //that lands anyway is dropped by the generation check.
             cwScrap* scrap = result.scrap;
             AsyncFuture::observe(result.data).context(this, [this, scrap, generation, future = result.data]()
             {
@@ -1271,8 +1279,13 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 
         auto combine = AsyncFuture::combine() << futures;
 
-        auto finalFuture = combine.context(this, [this, scrapsToUpdate]()
+        auto finalFuture = combine.context(this, [this, scrapsToUpdate, generation]()
         {
+            //The delivered scraps live in the render items; holding the run
+            //would keep a second copy of every result until the next restart
+            if(generation == m_runGeneration) {
+                m_triangulationRun = {};
+            }
             taskFinished(scrapsToUpdate);
         }).future();
 

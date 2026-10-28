@@ -13,13 +13,18 @@
 //Std includes
 #include <algorithm>
 
+namespace {
+// One core for the main thread, one for the render thread
+constexpr int kThreadsReservedForUi = 2;
+}
+
 cwJobSettings* cwJobSettings::Settings = nullptr;
 
 cwJobSettings::cwJobSettings(QObject* parent) :
     QObject(parent)
 {
     QSettings settings;
-    int threadCount = settings.value(threadCountKey(), QThread::idealThreadCount()).toInt();
+    int threadCount = settings.value(threadCountKey(), defaultThreadCount()).toInt();
     setThreadCountPrivate(threadCount);
     AutomaticUpdate = settings.value(automaticUpdateKey(), AutomaticUpdate).toBool();
     m_memoryBudgetMb = std::max(settings.value(memoryBudgetMbKey(), m_memoryBudgetMb).toInt(), 0);
@@ -36,7 +41,6 @@ void cwJobSettings::applyMemoryBudget()
 void cwJobSettings::setThreadCountPrivate(int count)
 {
     if(isThreadCountValid(count)) {
-        QThreadPool::globalInstance()->setMaxThreadCount(count);
         cwTask::threadPool()->setMaxThreadCount(count);
     }
 }
@@ -57,6 +61,10 @@ int cwJobSettings::idleThreadCount() const {
     return QThread::idealThreadCount();
 }
 
+int cwJobSettings::defaultThreadCount() const {
+    return std::max(1, QThread::idealThreadCount() - kThreadsReservedForUi);
+}
+
 cwJobSettings *cwJobSettings::instance()
 {
     return Settings;
@@ -72,8 +80,7 @@ void cwJobSettings::initialize()
 }
 
 int cwJobSettings::threadCount() const {
-    Q_ASSERT(QThreadPool::globalInstance()->maxThreadCount() == cwTask::threadPool()->maxThreadCount());
-    return QThreadPool::globalInstance()->maxThreadCount();
+    return cwTask::threadPool()->maxThreadCount();
 }
 
 void cwJobSettings::setAutomaticUpdate(bool automaticUpdate) {
@@ -119,11 +126,11 @@ int cwJobSettings::totalMemoryMb() const
 }
 
 bool cwJobSettings::isAtDefaults() const {
-    return threadCount() == idleThreadCount() && automaticUpdate() && memoryBudgetMb() == 0;
+    return threadCount() == defaultThreadCount() && automaticUpdate() && memoryBudgetMb() == 0;
 }
 
 void cwJobSettings::resetToDefaults() {
-    setThreadCount(idleThreadCount());
+    setThreadCount(defaultThreadCount());
     setAutomaticUpdate(true);
     setMemoryBudgetMb(0);
 }

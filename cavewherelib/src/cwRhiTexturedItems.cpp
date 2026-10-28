@@ -492,9 +492,8 @@ void cwRhiTexturedItems::releaseStreamedResources()
             continue;
         }
 
-        // Cancel first: the streamer bumps the item's generation, so a load
-        // already in flight finishes into the void instead of landing on an item
-        // that has given everything back.
+        // Cancel first: the streamer cancels a load already in flight, so it
+        // lands on nothing instead of on an item that has given everything back.
         m_streamer.cancel(it.key());
 
         item->streaming.releaseAll();

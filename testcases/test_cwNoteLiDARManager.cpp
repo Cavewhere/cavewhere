@@ -47,6 +47,7 @@
 #include "SurveyTreeTestHelper.h"
 #include "LiDARTestHelpers.h"
 #include "cwThreadCountRestorer.h"
+#include "LimitedRunTestHelper.h"
 
 TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation", "[cwNoteLiDARManager][Issue371]")
 {
@@ -1052,13 +1053,15 @@ namespace {
         QObject m_context;
     };
 
-    //A loaded project with one freshly copied scan on its only LiDAR note: what
-    //both runs below start from. The copy keeps the texture cache cold, so the
-    //first run of a test is the one that compresses.
+    constexpr int kOneNote = 1;
+
+    //A loaded project with noteCount freshly copied scans, one per LiDAR note
+    //of its only trip: what the runs below start from. The copies keep the
+    //texture cache cold, so the first run of a test is the one that compresses.
     class LiDARProject
     {
     public:
-        LiDARProject()
+        explicit LiDARProject(int noteCount = kOneNote)
         {
             cwJobSettings::initialize();
             REQUIRE(cwJobSettings::instance()->automaticUpdate());
@@ -1078,23 +1081,31 @@ namespace {
             auto* lidarModel = trip->notesLiDAR();
             REQUIRE(lidarModel != nullptr);
 
-            const QString lidarFile =
-                m_helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
-            REQUIRE_FALSE(lidarFile.isEmpty());
+            QList<QUrl> lidarFiles;
+            for (int i = 0; i < noteCount; i++) {
+                const QString lidarFile =
+                    m_helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
+                REQUIRE_FALSE(lidarFile.isEmpty());
+                lidarFiles.append(QUrl::fromLocalFile(lidarFile));
+            }
 
-            lidarModel->addFromFiles({ QUrl::fromLocalFile(lidarFile) });
+            lidarModel->addFromFiles(lidarFiles);
             m_rootData->futureManagerModel()->waitForFinished();
-            REQUIRE(lidarModel->rowCount() == 1);
+            REQUIRE(lidarModel->rowCount() == noteCount);
 
-            m_note = qobject_cast<cwNoteLiDAR*>(
-                lidarModel->data(lidarModel->index(0, 0), cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>());
-            REQUIRE(m_note != nullptr);
+            for (int row = 0; row < noteCount; row++) {
+                auto* note = qobject_cast<cwNoteLiDAR*>(
+                    lidarModel->data(lidarModel->index(row, 0), cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>());
+                REQUIRE(note != nullptr);
+                m_notes.append(note);
+            }
             REQUIRE(manager() != nullptr);
         }
 
         cwRootData* rootData() const { return m_rootData.get(); }
         cwCave* cave() const { return m_cave; }
-        cwNoteLiDAR* note() const { return m_note; }
+        cwNoteLiDAR* note() const { return m_notes.first(); }
+        const QList<cwNoteLiDAR*>& notes() const { return m_notes; }
         cwNoteLiDARManager* manager() const { return m_rootData->noteLiDARManager(); }
         cwFutureManagerModel* futureManagerModel() const { return m_rootData->futureManagerModel(); }
 
@@ -1105,7 +1116,7 @@ namespace {
         TestHelper m_helper;
         std::unique_ptr<cwRootData> m_rootData;
         cwCave* m_cave = nullptr;
-        cwNoteLiDAR* m_note = nullptr;
+        QList<cwNoteLiDAR*> m_notes;
     };
 }
 
@@ -1262,4 +1273,71 @@ TEST_CASE("A LiDAR run reaches completion on a one-thread pool", "[cwNoteLiDARMa
     project.manager()->waitForFinish();
 
     CHECK_FALSE(project.manager()->renderItemIds(project.note()).isEmpty());
+}
+
+TEST_CASE("A restart cancels the superseded LiDAR run", "[cwNoteLiDARManager]")
+{
+    // A restart cancels the run it supersedes, so a note that run had yet to
+    // admit never launches. On one thread the run admits one note at a time, so
+    // the second note is still waiting when the restart lands.
+    cwThreadCountRestorer threadCount(kSingleThread);
+
+    constexpr int kTwoNotes = 2;
+    constexpr int kRunStartTimeoutMs = 30000;
+    //A launched note's cold texture encode alone can outlast two minutes under CPU load
+    constexpr int kRunSettleTimeoutMs = 600000;
+    LiDARProject project(kTwoNotes);
+    cwNoteLiDARManager* manager = project.manager();
+
+    // Station every note before the event loop runs again, so the restarter's
+    // queued start covers them all in one run.
+    for (cwNoteLiDAR* note : project.notes()) {
+        cwNoteLiDARStation station;
+        station.setName(QStringLiteral("6"));
+        station.setPositionOnNote(QVector3D(0.19147f, -0.720703f, -2.15723f));
+        note->addStation(station);
+    }
+
+    REQUIRE(spinFinelyUntil([&]() {
+        return manager->triangulationRun().items.size() == kTwoNotes;
+    }, kRunStartTimeoutMs));
+
+    const AsyncFuture::Limited<cwTriangulateLiDARTask::Result> superseded = manager->triangulationRun();
+
+    // The second note is admitted only once the first settles
+    REQUIRE_FALSE(isSettled(superseded.items.at(0)));
+    REQUIRE_FALSE(isSettled(superseded.items.at(1)));
+
+    // Marking a busy pipeline makes it Dirty, and a Dirty pipeline's drive
+    // restarts the run
+    manager->updateLiDARForCave(project.cave());
+    manager->runIfNeeded();
+
+    // A launched note stops only at its worker's next poll, so the run is
+    // waited on until it settles
+    REQUIRE(waitUntil([&]() { return superseded.all.isFinished(); }, kRunSettleTimeoutMs));
+    CHECK(superseded.all.isCanceled());
+    CHECK(superseded.items.at(1).isCanceled());
+    CHECK(superseded.items.at(1).resultCount() == 0);
+
+    // The manager releases a run once it completes, so the new run is
+    // captured while it is still the current one
+    REQUIRE(spinFinelyUntil([&]() {
+        const AsyncFuture::Limited<cwTriangulateLiDARTask::Result> current = manager->triangulationRun();
+        return current.items.size() == kTwoNotes && !current.all.isCanceled();
+    }, kRunStartTimeoutMs));
+    const AsyncFuture::Limited<cwTriangulateLiDARTask::Result> latest = manager->triangulationRun();
+
+    REQUIRE(project.pumpUntilSettled());
+
+    CHECK(manager->triangulationRun().items.isEmpty());
+    REQUIRE(latest.items.size() == kTwoNotes);
+    CHECK(latest.all.isFinished());
+    CHECK_FALSE(latest.all.isCanceled());
+    for (const QFuture<cwTriangulateLiDARTask::Result>& note : latest.items) {
+        CHECK(note.resultCount() == 1);
+    }
+    for (cwNoteLiDAR* note : project.notes()) {
+        CHECK_FALSE(manager->renderItemIds(note).isEmpty());
+    }
 }

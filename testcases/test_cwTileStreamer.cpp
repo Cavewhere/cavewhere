@@ -4,6 +4,7 @@
 //Qt includes
 #include <QByteArray>
 #include <QElapsedTimer>
+#include <QFuture>
 #include <QList>
 #include <QMutex>
 #include <QMutexLocker>
@@ -19,6 +20,7 @@
 
 //Our includes
 #include "cwRenderMemoryLedger.h"
+#include "cwTask.h"
 #include "cwTileStreamer.h"
 
 namespace {
@@ -28,7 +30,6 @@ namespace {
     constexpr int kQuietPeriodMs = 30;
     constexpr int kPayloadBytes = 64;
     constexpr qint64 kTinyCpuCap = 1;
-    constexpr int kGateDelayMs = 50;
     constexpr auto kCategory = cwRenderMemoryLedger::Category::PointCloudGeometry;
 
     struct FakeSource
@@ -53,6 +54,7 @@ namespace {
         int concurrent = 0;
         int maxConcurrent = 0;
         int finished = 0;
+        int canceled = 0;
 
         int callCount()
         {
@@ -66,6 +68,12 @@ namespace {
             return finished;
         }
 
+        int canceledCount()
+        {
+            QMutexLocker locker(&mutex);
+            return canceled;
+        }
+
         QList<int> sourceIds()
         {
             QMutexLocker locker(&mutex);
@@ -75,7 +83,9 @@ namespace {
 
     Streamer::Loader makeLoader(const std::shared_ptr<LoaderState>& state)
     {
-        return [state](const FakeSource& source, int level) -> Monad::Result<QByteArray> {
+        return [state](const FakeSource& source,
+                       int level,
+                       const std::function<bool()>& isCanceled) -> Monad::Result<QByteArray> {
             {
                 QMutexLocker locker(&state->mutex);
                 state->calledSourceIds.append(source.id);
@@ -83,8 +93,16 @@ namespace {
                 state->maxConcurrent = std::max(state->maxConcurrent, state->concurrent);
             }
 
+            //A gated load waits for the gate or a cancel, whichever comes first
             if (state->gated) {
-                state->gate.acquire();
+                while (!state->gate.tryAcquire(1, kPollIntervalMs)) {
+                    if (isCanceled()) {
+                        QMutexLocker locker(&state->mutex);
+                        --state->concurrent;
+                        ++state->canceled;
+                        return Monad::Result<QByteArray>(QStringLiteral("canceled"));
+                    }
+                }
             }
 
             QString errorMessage;
@@ -129,6 +147,68 @@ namespace {
         {
             state->gate.release(kTeardownPermits);
         }
+    };
+
+    // Runs teardown, opening the gate if teardown is still blocked after
+    // kWaitTimeoutMs, so a teardown that waits out a gated load fails its
+    // checks instead of hanging the test.
+    template <typename Teardown>
+    void teardownWithWatchdog(const std::shared_ptr<LoaderState>& state, Teardown teardown)
+    {
+        QSemaphore returned;
+        std::thread watchdog([&returned, state]() {
+            if (!returned.tryAcquire(1, kWaitTimeoutMs)) {
+                state->gate.release();
+            }
+        });
+
+        teardown();
+        returned.release();
+        watchdog.join();
+    }
+
+    // Occupies every thread of cwTask's pool, so a load launched meanwhile
+    // stays queued in the pool without starting. Declared after the streamer so
+    // a failed assertion frees the pool before the streamer's destructor runs.
+    class PoolBlocker
+    {
+    public:
+        PoolBlocker() :
+            m_threadCount(cwTask::threadPool()->maxThreadCount())
+        {
+            for (int i = 0; i < m_threadCount; i++) {
+                m_futures.append(cwConcurrent::run([this]() {
+                    m_started.release();
+                    m_gate.acquire();
+                }));
+            }
+        }
+
+        ~PoolBlocker()
+        {
+            release();
+        }
+
+        bool waitForStarted()
+        {
+            return m_started.tryAcquire(m_threadCount, kWaitTimeoutMs);
+        }
+
+        void release()
+        {
+            m_gate.release(m_threadCount - m_released);
+            m_released = m_threadCount;
+            for (QFuture<void> future : std::as_const(m_futures)) {
+                future.waitForFinished();
+            }
+        }
+
+    private:
+        const int m_threadCount;
+        int m_released = 0;
+        QSemaphore m_started;
+        QSemaphore m_gate;
+        QList<QFuture<void>> m_futures;
     };
 
     template <typename Predicate>
@@ -238,9 +318,9 @@ TEST_CASE("cwTileStreamer supersedes a request for a different level", "[TileStr
     streamer.request(kItemId, source, kFinalLevel, kPriority);
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
-    //Both loads are in flight, each holding the estimate for its own level
-    CHECK(streamer.pending().cpuBytes
-          == expectedBytes(source, kStaleLevel) + expectedBytes(source, kFinalLevel));
+    //The superseded load gave its bytes back, so only the final level's
+    //estimate is held
+    CHECK(streamer.pending().cpuBytes == expectedBytes(source, kFinalLevel));
 
     state->gate.release(2);
 
@@ -254,8 +334,7 @@ TEST_CASE("cwTileStreamer supersedes a request for a different level", "[TileStr
     CHECK(ledgerCpuBytes() == baselineBytes);
 }
 
-TEST_CASE("cwTileStreamer keeps the superseding load while the stale one finishes",
-          "[TileStreamer]") {
+TEST_CASE("cwTileStreamer stops a superseded load in flight", "[TileStreamer]") {
     auto state = std::make_shared<LoaderState>();
     state->gated = true;
     Streamer streamer(makeLoader(state), makeEstimator(), kCategory);
@@ -273,11 +352,10 @@ TEST_CASE("cwTileStreamer keeps the superseding load while the stale one finishe
     streamer.request(kItemId, source, kFinalLevel, kPriority);
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
-    //Let only the stale load finish — the superseding one is still in flight
-    state->gate.release();
-    REQUIRE(waitFor([&]() { return state->finishedCount() == 1; }));
-    QThread::msleep(kQuietPeriodMs);
-
+    //The stale load stops with the gate still closed; the superseding one is
+    //still in flight
+    REQUIRE(waitFor([&]() { return state->canceledCount() == 1; }));
+    CHECK(state->finishedCount() == 0);
     CHECK(streamer.hasWork());
     CHECK(streamer.takeReady().isEmpty());
 
@@ -307,8 +385,8 @@ TEST_CASE("cwTileStreamer reloads a canceled item asked for again", "[TileStream
 
     streamer.cancel(kItemId);
 
-    //The canceled load is still in flight, but its result is doomed, so asking
-    //for the same level again has to start a fresh load
+    //The canceled load's result is doomed even if its worker is still running,
+    //so asking for the same level again has to start a fresh load
     streamer.request(kItemId, source, kLevel, kPriority);
     REQUIRE(waitFor([&]() { return state->callCount() == 2; }));
 
@@ -535,7 +613,7 @@ TEST_CASE("cwTileStreamer ignores a repeat of a request still queued", "[TileStr
     CHECK_FALSE(streamer.hasWork());
 }
 
-TEST_CASE("cwTileStreamer cancel returns while the load is still running", "[TileStreamer]") {
+TEST_CASE("cwTileStreamer cancel stops the load in flight", "[TileStreamer]") {
     auto state = std::make_shared<LoaderState>();
     state->gated = true;
     Streamer streamer(makeLoader(state), makeEstimator(), kCategory);
@@ -549,14 +627,13 @@ TEST_CASE("cwTileStreamer cancel returns while the load is still running", "[Til
     REQUIRE(waitFor([&]() { return state->callCount() == 1; }));
 
     streamer.cancel(kItemId);
+
+    //The loader sees the cancel with the gate still closed
+    REQUIRE(waitFor([&]() { return state->canceledCount() == 1; }));
     CHECK(state->finishedCount() == 0);
 
-    state->gate.release();
-    REQUIRE(waitFor([&]() { return state->finishedCount() == 1; }));
-    QThread::msleep(kQuietPeriodMs);
-
+    REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
     CHECK(streamer.takeReady().isEmpty());
-    CHECK_FALSE(streamer.hasWork());
 }
 
 TEST_CASE("cwTileStreamer cancel drops a result waiting to be drained", "[TileStreamer]") {
@@ -588,7 +665,7 @@ TEST_CASE("cwTileStreamer cancel drops a result waiting to be drained", "[TileSt
     CHECK(ledgerCpuBytes() == baselineBytes);
 }
 
-TEST_CASE("cwTileStreamer cancelAll waits for the load in flight", "[TileStreamer]") {
+TEST_CASE("cwTileStreamer cancelAll stops the load in flight", "[TileStreamer]") {
     auto state = std::make_shared<LoaderState>();
     state->gated = true;
     Streamer streamer(makeLoader(state), makeEstimator(), kCategory);
@@ -601,24 +678,15 @@ TEST_CASE("cwTileStreamer cancelAll waits for the load in flight", "[TileStreame
     streamer.request(kItemId, FakeSource {67}, kLevel, kPriority);
     REQUIRE(waitFor([&]() { return state->callCount() == 1; }));
 
-    QElapsedTimer timer;
-    timer.start();
+    //cancelAll returns once the loader sees the cancel, with the gate still closed
+    teardownWithWatchdog(state, [&]() { streamer.cancelAll(); });
 
-    std::thread opener([state]() {
-        QThread::msleep(kGateDelayMs);
-        state->gate.release();
-    });
-
-    streamer.cancelAll();
-    const qint64 elapsed = timer.elapsed();
-    opener.join();
-
-    CHECK(elapsed >= kGateDelayMs);
-    CHECK(state->finishedCount() == 1);
+    CHECK(state->canceledCount() == 1);
+    CHECK(state->finishedCount() == 0);
     CHECK_FALSE(streamer.hasWork());
 }
 
-TEST_CASE("cwTileStreamer destructor waits for the load in flight", "[TileStreamer]") {
+TEST_CASE("cwTileStreamer destructor stops the load in flight", "[TileStreamer]") {
     auto state = std::make_shared<LoaderState>();
     state->gated = true;
 
@@ -633,19 +701,42 @@ TEST_CASE("cwTileStreamer destructor waits for the load in flight", "[TileStream
     streamer->request(kItemId, FakeSource {71}, kLevel, kPriority);
     REQUIRE(waitFor([&]() { return state->callCount() == 1; }));
 
-    QElapsedTimer timer;
-    timer.start();
+    //The destructor returns once the loader sees the cancel, with the gate still closed
+    teardownWithWatchdog(state, [&]() { streamer.reset(); });
 
-    std::thread opener([state]() {
-        QThread::msleep(kGateDelayMs);
-        state->gate.release();
-    });
-
-    streamer.reset();
-    const qint64 elapsed = timer.elapsed();
-    opener.join();
-
-    CHECK(elapsed >= kGateDelayMs);
-    CHECK(state->finishedCount() == 1);
+    CHECK(state->canceledCount() == 1);
+    CHECK(state->finishedCount() == 0);
     CHECK(ledgerCpuBytes() == baselineBytes);
+}
+
+TEST_CASE("cwTileStreamer frees the slot of a load canceled before it started",
+          "[TileStreamer]") {
+    auto state = std::make_shared<LoaderState>();
+    Streamer streamer(makeLoader(state), makeEstimator(), kCategory);
+    PoolBlocker poolBlocker;
+    REQUIRE(poolBlocker.waitForStarted());
+
+    constexpr quint32 kCanceledItemId = 73;
+    constexpr quint32 kNextItemId = 79;
+    constexpr int kNextSourceId = 79;
+    constexpr int kLevel = 1;
+    constexpr quint64 kPriority = 1;
+    const qint64 baselineBytes = ledgerCpuBytes();
+
+    //Every pool thread is busy, so this load takes a streamer slot but sits in
+    //the pool queue without starting
+    streamer.request(kCanceledItemId, FakeSource {73}, kLevel, kPriority);
+    streamer.cancel(kCanceledItemId);
+
+    poolBlocker.release();
+
+    REQUIRE(waitFor([&]() { return !streamer.hasWork(); }));
+    CHECK(state->callCount() == 0);
+    CHECK(streamer.pending().loads == 0);
+    CHECK(ledgerCpuBytes() == baselineBytes);
+
+    //The slot is free for the next load
+    streamer.request(kNextItemId, FakeSource {kNextSourceId}, kLevel, kPriority);
+    REQUIRE(drain(streamer, 1).size() == 1);
+    CHECK(state->sourceIds() == QList<int> {kNextSourceId});
 }

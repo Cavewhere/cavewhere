@@ -236,9 +236,9 @@ void cwScopeStationListModel::rebuildRows()
 
 void cwScopeStationListModel::appendNodeRows()
 {
-    //Restates the accepted-name set of cwSurvexExporterCaveTask::writeFixStations
-    //on the live tree, with knownStations() in place of the snapshot's chunks
-    //and harvest; keep the two in step.
+    //Restates the accepted-name set of cwSurvexExporterCaveTask::AnchorPlan's
+    //fix validation on the live tree, with knownStations() in place of the
+    //snapshot's chunks and harvest; keep the two in step.
     const QHash<QString, QString> fileFixed = m_node->fileFixedStations();
     const cwStationPositionLookup solved = m_node->scopedPositions();
     QSet<QString> seen;

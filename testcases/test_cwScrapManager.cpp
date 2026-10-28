@@ -51,6 +51,7 @@
 #include <QEventLoop>
 #include "cwSignalSpy.h"
 #include "cwThreadCountRestorer.h"
+#include "LimitedRunTestHelper.h"
 
 //Std includes
 #include <algorithm>
@@ -1505,4 +1506,95 @@ TEST_CASE("A scrap run reaches completion on a one-thread pool", "[cwScrapManage
 
     REQUIRE(scrapManager->renderScrapCount() > 0);
     CHECK(deliveredScrapCount(renderItems) == scrapManager->renderScrapCount());
+}
+
+namespace {
+    //Copies scrap onto note, shifted by offset in note coordinates, so a test
+    //has a second scrap of the same shape to triangulate
+    cwScrap* addShiftedCopy(cwNote* note, const cwScrap* scrap, const QPointF& offset)
+    {
+        auto* copy = new cwScrap();
+
+        const QList<QPointF> points = scrap->points();
+        for(int pointIndex = 0; pointIndex < points.size(); pointIndex++) {
+            copy->insertPoint(pointIndex, points.at(pointIndex) + offset);
+        }
+
+        const QList<cwNoteStation> stations = scrap->stations();
+        for(const cwNoteStation& station : stations) {
+            cwNoteStation shifted = station;
+            shifted.setPositionOnNote(station.positionOnNote() + offset);
+            copy->addStation(shifted);
+        }
+
+        note->addScrap(copy);
+        return copy;
+    }
+}
+
+TEST_CASE("A restart cancels the superseded scrap run", "[cwScrapManager]") {
+    // A restart cancels the run it supersedes, so a scrap that run had yet to
+    // admit never launches. On one thread the run admits one scrap at a time,
+    // so the second scrap is still waiting when the restart lands.
+    requireAutomaticUpdatesEnabled();
+    cwThreadCountRestorer threadCount(kSingleThread);
+
+    constexpr qsizetype kTwoScraps = 2;
+    constexpr int kRunStartTimeoutMs = 30000;
+    const QPointF kCopyOffset(0.02, 0.0);
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto scrapManager = rootData->scrapManager();
+    REQUIRE(scrapManager != nullptr);
+    auto renderItems = rootData->regionSceneManager()->items();
+    REQUIRE(renderItems != nullptr);
+
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+    REQUIRE(pumpUntilScrapsSettle(rootData.get(), scrapManager));
+
+    auto note = project->cavingRegion()->cave(0)->trip(0)->notes()->notes().first();
+    REQUIRE(note->scraps().size() == 1);
+    addShiftedCopy(note, note->scraps().first(), kCopyOffset);
+    REQUIRE(pumpUntilScrapsSettle(rootData.get(), scrapManager));
+    REQUIRE(scrapManager->renderScrapCount() == kTwoScraps);
+
+    computeAllScraps(scrapManager);
+    REQUIRE(spinFinelyUntil([&]() {
+        return scrapManager->triangulationRun().items.size() == kTwoScraps;
+    }, kRunStartTimeoutMs));
+
+    const AsyncFuture::Limited<cwTriangulatedData> superseded = scrapManager->triangulationRun();
+
+    // The second scrap is admitted only once the first settles
+    REQUIRE_FALSE(isSettled(superseded.items.at(0)));
+    REQUIRE_FALSE(isSettled(superseded.items.at(1)));
+
+    computeAllScraps(scrapManager);
+
+    // A launched scrap stops only at its worker's next poll, so the run is
+    // waited on until it settles
+    REQUIRE(waitUntil([&]() { return superseded.all.isFinished(); }, kLimitedRunTimeoutMs));
+    CHECK(superseded.all.isCanceled());
+    CHECK(superseded.items.at(1).isCanceled());
+    CHECK(superseded.items.at(1).resultCount() == 0);
+
+    // The manager releases a run once it completes, so the new run is
+    // captured while it is still the current one
+    REQUIRE(spinFinelyUntil([&]() {
+        const AsyncFuture::Limited<cwTriangulatedData> current = scrapManager->triangulationRun();
+        return current.items.size() == kTwoScraps && !current.all.isCanceled();
+    }, kRunStartTimeoutMs));
+    const AsyncFuture::Limited<cwTriangulatedData> latest = scrapManager->triangulationRun();
+
+    REQUIRE(pumpUntilScrapsSettle(rootData.get(), scrapManager));
+
+    CHECK(scrapManager->triangulationRun().items.isEmpty());
+    REQUIRE(latest.items.size() == kTwoScraps);
+    CHECK(latest.all.isFinished());
+    CHECK_FALSE(latest.all.isCanceled());
+    for(const QFuture<cwTriangulatedData>& scrap : latest.items) {
+        CHECK(scrap.resultCount() == 1);
+    }
+    CHECK(deliveredScrapCount(renderItems) == kTwoScraps);
 }

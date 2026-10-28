@@ -11,7 +11,6 @@
 
 //Std includes
 #include <memory>
-#include <cstring>
 
 //Our includes
 #include "cwCaptureViewport.h"
@@ -26,8 +25,8 @@
 #include "cwCaptureLabelItem.h"
 #include "cwCaptureLabelPlacer.h"
 #include "cwCaptureLeadLines.h"
+#include "cwCaptureTileRun.h"
 #include "cwGraphicsImageItem.h"
-#include "cwPhaseJob.h"
 #include "cwCompressedImage.h"
 #include "cwCompressedImageItem.h"
 #include "cwDebug.h"
@@ -36,9 +35,6 @@
 #include "cwCavingRegion.h"
 #include "cwConcurrent.h"
 #include "cwLabelPlacementControl.h"
-
-//AsyncFuture includes
-#include "asyncfuture.h"
 
 //undef these because micrsoft is fucking retarded...
 #ifdef Q_OS_WIN
@@ -215,7 +211,6 @@ void cwCaptureViewport::capture()
         return;
     }
     CapturingImages = true;
-    m_cancelRequested = false;
     m_runIsPreview = previewCapture();
     m_runIsRelabel = false;
 
@@ -234,8 +229,8 @@ void cwCaptureViewport::capture()
     };
 
     // isEmpty() (not isValid()) rejects a zero-area viewport too: QSize(0,0) is
-    // "valid", but it would yield zero tiles, and a combine() with no futures
-    // never fires its continuation — leaving the capture wedged.
+    // "valid", but it would yield zero tiles, and a run with no tiles never
+    // fires a settle handler — leaving the capture wedged.
     if(viewport().size().isEmpty()) {
         abort(QStringLiteral("export viewport is empty: %1x%2")
                   .arg(viewport().width()).arg(viewport().height()));
@@ -322,15 +317,12 @@ void cwCaptureViewport::capture()
     const QMatrix4x4 viewMatrix = camera->viewMatrix();
 
     // Render every tile offscreen from the resident scene as an independent
-    // QFuture<QImage>; combine() below fires once they have all settled. No
-    // camera swap and no grabToImage — the offscreen path renders straight from
-    // the supplied matrices, so the live view is never disturbed. backgroundColor
-    // is left at its transparent default (see cwOffscreenRenderParameters).
-    struct Tile {
-        QPointF origin;
-        QFuture<QImage> future;
-    };
-    QList<Tile> tiles;
+    // QFuture<QImage>; cwCaptureTileRun processes each one as it lands. No
+    // camera swap and no grabToImage — the offscreen path renders straight
+    // from the supplied matrices, so the live view is never disturbed.
+    // backgroundColor is left at its transparent default (see
+    // cwOffscreenRenderParameters).
+    QList<cwCaptureTileRun::Tile> tiles;
     tiles.reserve(rows * columns);
     for(int column = 0; column < columns; column++) {
         for(int row = 0; row < rows; row++) {
@@ -354,64 +346,49 @@ void cwCaptureViewport::capture()
             parameters.sampleCount = sampleCount;
             parameters.hiddenObjectIds = hiddenObjectIds;
 
-            tiles.append(Tile{QPointF(originX, originY), scene->renderOffscreen(parameters)});
+            tiles.append(cwCaptureTileRun::Tile{QPointF(originX, originY),
+                                                scene->renderOffscreen(parameters)});
         }
     }
 
-    // Defensive: the viewport guard above keeps this unreachable, but a combine()
-    // with no futures never fires its continuation, so never leave the capture
+    // Defensive: the viewport guard above keeps this unreachable, but a run
+    // with no tiles never fires a settle handler, so never leave the capture
     // state machine to depend on a non-empty list having been built.
     if(tiles.isEmpty()) {
         abort(QStringLiteral("export produced no tiles to render"));
         return;
     }
 
-    // Surface the tile-rendering phase as a job (name + progress + runtime) in
-    // the app's job list — on a whole-page export it is thousands of tiles and
-    // usually the longest visible wait. The job runs for every capture so the
-    // completion/cancel paths below stay unconditional, but previews pass an
-    // invalid token so they don't register (same rationale as the placement
-    // job: they fire rapidly and would spam the job list). The continuation's
-    // capture keeps the job alive until it settles the run; if this viewport
-    // is destroyed first, cwPhaseJob's destructor safety net finishes the job
-    // so no stuck job-list row is left behind.
-    auto tileJob = std::make_shared<cwPhaseJob>();
-    tileJob->start(QStringLiteral("Rendering map tiles"),
-                   rows * columns,
-                   m_runIsPreview ? cwFutureManagerToken()
-                                  : m_futureManagerToken);
-    m_tileGrabFuture = tileJob->future();
-
-    // AllSettled: a single failed tile must not abort the others, so the export
-    // degrades to a missing tile rather than no image at all. Placing every tile
-    // here (rather than as each future arrives) keeps placeLabelsAfterTiles()
-    // strictly after the last tile lands, with no ordering race against combine.
     // Bind the destination group by value now, at schedule time, off this run's
-    // m_runIsPreview snapshot. The continuation fires after the tiles settle, by
-    // which point cwCaptureManager may have flipped setPreviewCapture() for the
+    // m_runIsPreview snapshot. The run settles after the tiles land, by which
+    // point cwCaptureManager may have flipped setPreviewCapture() for the
     // full-res export; reading previewCapture()/Item at fire-time could select
     // the wrong group and dereference it in addToGroup.
     QGraphicsItemGroup* const parent = m_runIsPreview ? PreviewItem : Item;
 
-    // Tick the tile job as each tile settles so the job list shows live
-    // progress. setProgressValue on a finished job is a no-op, so a tick that
-    // dispatches after the continuation below has settled the job is harmless.
-    auto tilesSettled = std::make_shared<int>(0);
-    auto combine = AsyncFuture::combine(AsyncFuture::AllSettled);
-    for(const Tile& tile : tiles) {
-        AsyncFuture::observe(tile.future).context(this, [tileJob, tilesSettled]() {
-            (*tilesSettled)++;
-            tileJob->setProgressValue(*tilesSettled);
-        });
-        combine << tile.future;
+    // One cwCaptureTileRun per capture: it owns the streaming, the counting,
+    // and the "Rendering map tiles" job row (previews pass an invalid token so
+    // rapid-fire runs don't spam the job list — same rationale as the
+    // placement job). The previous run has fully terminated (the
+    // CapturingImages guard above), but its finished() handler may be this
+    // very frame that called back into capture() — deleteLater, not delete,
+    // so the restart path can't free the object it is emitting from.
+    if(m_tileRun != nullptr) {
+        m_tileRun->deleteLater();
     }
-    combine.context(this, [this, tiles, imageScale, tileJob, parent]() {
-        if(m_cancelRequested) {
+    m_tileRun = new cwCaptureTileRun(this);
+
+    // The viewport keeps the policy the run reports into: restart-or-cancel,
+    // then label placement. CapturingImages stays true through the async
+    // placement so re-entrant capture() calls stay blocked; the placement's
+    // GUI-thread continuation clears the flag and emits finishedCapture()
+    // (or captureCanceled()) — nothing here blocks.
+    cwCaptureTileRun* const run = m_tileRun;
+    connect(run, &cwCaptureTileRun::finished, this, [this, run, imageScale, parent]() {
+        if(run->isCanceled()) {
             // Canceled during the tile phase (there is no placement future to
-            // cancel yet). Drop the rendered tiles and skip label placement.
-            // cancelCapture() already canceled the tile-grab future (which
-            // resolves its job-list entry); finishing the job settles it.
-            tileJob->finish();
+            // cancel yet): the run already deleted the tiles it placed, so
+            // skip label placement.
             CapturingImages = false;
             if(m_captureAgainWhenDone) {
                 // This run was superseded (typically an export superseding
@@ -425,108 +402,23 @@ void cwCaptureViewport::capture()
             return;
         }
 
-        int failed = 0;
-        for(const Tile& tile : tiles) {
-            const QFuture<QImage>& future = tile.future;
-            if(!future.isFinished() || future.resultCount() != 1 || future.result().isNull()) {
-                qWarning() << "Map export tile at" << tile.origin << "produced no image; it will be missing from the export";
-                failed++;
-                continue;
-            }
-
-            const QImage image = future.result();
-            if(m_runIsPreview) {
-                // Preview tiles are few and screen-sized, and repaint
-                // interactively in the layout scene, so they stay raw. (They
-                // are also always kept: the preview's bounding box derives
-                // from its tile items.)
-                cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
-                graphicsImage->setImage(image);
-                graphicsImage->setPos(tile.origin);
-                parent->addToGroup(graphicsImage);
-            } else {
-                // Export tiles are what ran whole-page exports out of
-                // application memory: O(page area) of raw pixels held until
-                // saveScene renders them, exactly once. So: normalize to a
-                // known QRgb format (the offscreen RHI readback is already
-                // ARGB32_Premultiplied on Metal — the conversion only fires on
-                // foreign backends whose byte order a raw QRgb scan would
-                // misread), drop fully transparent tiles (on a sparse
-                // whole-cave page that is MOST of them — the ink scan exits at
-                // the first opaque pixel), and store the survivors
-                // zlib-compressed. Transparent premultiplied pixels are zero
-                // runs, so inked tiles shrink by orders of magnitude.
-                const QImage normalized =
-                    (image.format() == QImage::Format_ARGB32
-                     || image.format() == QImage::Format_ARGB32_Premultiplied)
-                        ? image
-                        : image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
-                auto tileHasInk = [](const QImage& img) {
-                    if(img.format() == QImage::Format_ARGB32_Premultiplied) {
-                        // Premultiplied guarantees alpha 0 ⟹ an all-zero pixel
-                        // word, so the overwhelmingly common case on a sparse
-                        // page — a fully transparent tile — reduces to comparing
-                        // each row against a zero row instead of per-pixel alpha
-                        // reads on the GUI thread.
-                        const qsizetype rowBytes = qsizetype(img.width())
-                                                   * qsizetype(sizeof(QRgb));
-                        const QByteArray zeroRow(rowBytes, '\0');
-                        for(int y = 0; y < img.height(); y++) {
-                            if(memcmp(img.constScanLine(y), zeroRow.constData(),
-                                      size_t(rowBytes)) != 0) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    }
-                    for(int y = 0; y < img.height(); y++) {
-                        const QRgb* row = reinterpret_cast<const QRgb*>(img.constScanLine(y));
-                        for(int x = 0; x < img.width(); x++) {
-                            if(qAlpha(row[x]) != 0) {
-                                return true;
-                            }
-                        }
-                    }
-                    return false;
-                };
-                if(tileHasInk(normalized)) {
-                    auto* tileItem = new cwCompressedImageItem(parent);
-                    tileItem->setImage(normalized);
-                    tileItem->setPos(tile.origin);
-                    parent->addToGroup(tileItem);
-                }
-            }
-        }
-
-        // Surface a wholly- or partly-failed render: the manager has no failure
-        // channel, so without this the user only discovers a blank/holed export
-        // by opening the saved file. The run still completes below so the
-        // export pipeline advances rather than stalling on this layer.
-        if(failed == tiles.size()) {
-            qWarning() << "Map export image is empty: all" << tiles.size()
-                       << "tiles failed to render";
-        } else if(failed > 0) {
-            qWarning() << "Map export image is missing" << failed
-                       << "of" << tiles.size() << "tiles";
-        }
-
-        //Finished capturing tiles. CapturingImages stays true through the
-        //async label placement below so re-entrant capture() calls are
-        //blocked until it finishes — its continuation clears the flag.
-        //Settle the tile-rendering job; the placement job takes over from
-        //here (placeLabelsAfterTiles registers it).
-        tileJob->finish();
-
         if(m_runIsPreview) {
             updateBoundingBox();
         }
 
         // Lay out the label overlays on a worker thread now that the tile
-        // alpha is available as an obstacle source. This emits
-        // finishedCapture() (or captureCanceled()) from its GUI-thread
-        // continuation — it does NOT block here.
+        // alpha is available as an obstacle source: the run's finished()
+        // guarantees every tile item already exists in parent, so the
+        // placer's obstacle snapshot (TileAlphaInput per tile item) is
+        // complete.
         placeLabelsAfterTiles(parent, imageScale);
     });
+
+    run->start(tiles,
+               parent,
+               m_runIsPreview,
+               m_runIsPreview ? cwFutureManagerToken()
+                              : m_futureManagerToken);
 }
 
 /**
@@ -685,12 +577,14 @@ void cwCaptureViewport::deleteSceneItems()
     m_labelPlacementFuture.cancel();
     m_labelPlacementFuture.waitForFinished();
 
-    // Also resolve a tile-phase job-list row. The grab chain's shared_ptr
-    // self-reference means its cwPhaseJob is never destroyed, so a viewport
-    // destroyed mid-grab (e.g. ~cwCaptureManager deleting its layers without
-    // cancelCapture()) would otherwise leave a stuck "Rendering map tiles"
-    // row forever — the job list removes rows on the future's cancel.
-    m_tileGrabFuture.cancel();
+    // Also resolve a tile-phase job-list row and stop the run from placing
+    // into the groups deleted below. A viewport destroyed mid-render (e.g.
+    // ~cwCaptureManager deleting its layers without cancelCapture()) would
+    // otherwise leave a stuck "Rendering map tiles" row until the run — a
+    // child of this viewport — is destroyed with it.
+    if(m_tileRun != nullptr) {
+        m_tileRun->cancel();
+    }
 
     if(PreviewItem != nullptr) {
         delete PreviewItem;
@@ -1030,11 +924,12 @@ void cwCaptureViewport::cancelCapture()
     // An explicit cancel also drops any queued restart (capture() re-latches
     // m_captureAgainWhenDone after calling this when it supersedes a preview).
     m_captureAgainWhenDone = false;
-    m_cancelRequested = true;
-    // Resolve the tile-rendering job-list entry right away; the run itself
-    // still ends at the next tile boundary (the grab chain polls
-    // m_cancelRequested), which also finishes the promise.
-    m_tileGrabFuture.cancel();
+    // The run resolves its job-list entry right away but still counts through
+    // to finished(), where the viewport's cancel policy runs. Canceling a
+    // finished run (a cancel during the label phase) is harmless.
+    if(m_tileRun != nullptr) {
+        m_tileRun->cancel();
+    }
     m_labelPlacementFuture.cancel();
 }
 
@@ -1335,7 +1230,6 @@ void cwCaptureViewport::relabelPreview()
 
     deletePreviewLabelItems();
     CapturingImages = true;
-    m_cancelRequested = false;
     m_runIsPreview = true;
     m_runIsRelabel = true;
     placeLabelsAfterTiles(PreviewItem, kPreviewImageScale);

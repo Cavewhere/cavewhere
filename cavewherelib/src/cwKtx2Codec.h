@@ -57,19 +57,44 @@ namespace cw::ktx2 {
     constexpr int kDefaultUastcQuality = 0;
 
     /**
-     * The pool every UASTC compress runs on. It has one thread, so encodes run
-     * one at a time and each one is free to use every core through libktx.
-     * Exposed so callers can see whether an encode is active
+     * The backends that produce UASTC blocks. Both write the same KTX2 bytes at
+     * the same quality.
+     *
+     * TaskPool runs basisu's per-block UASTC kernel itself, spreading runs of
+     * 256 blocks over cwTask::threadPool(), so the encode follows the pool's
+     * thread count. Libktx hands the texture to ktxTexture2_CompressBasisEx,
+     * the reference the kernel is checked against and the route for encodes
+     * the kernel does not cover.
+     */
+    enum class UastcEncoder {
+        TaskPool,
+        Libktx
+    };
+
+    constexpr UastcEncoder kDefaultUastcEncoder = UastcEncoder::TaskPool;
+
+    /**
+     * The pool every UASTC encode runs on. It has one thread, so encodes run
+     * one at a time; the TaskPool encoder's blocks run on the task pool while
+     * the lane waits. Exposed so callers can see whether an encode is active
      * (activeThreadCount) or queued.
      */
     CAVEWHERE_LIB_EXPORT QThreadPool* encodeLane();
 
     /**
-     * Encodes image as a UASTC supercompressed .ktx2 file with a full mip chain
-     * (built CPU-side, halving down to 1x1) and returns the serialized bytes.
+     * Encodes image as a UASTC .ktx2 file with a full mip chain (built
+     * CPU-side, halving down to 1x1) and returns the serialized bytes. encoder
+     * picks the backend; both give the same bytes at the same quality.
+     *
+     * isCanceled is polled between waves of the encode, and once it is true
+     * the encode stops and returns an error Result. A caller running under the
+     * QPromise& form of cwConcurrent::run passes its promise's isCanceled, so
+     * canceling the future reaches the encode. Empty never cancels.
      */
     CAVEWHERE_LIB_EXPORT Monad::Result<QByteArray> encodeRgba(const QImage& image,
-                                                              int quality = kDefaultUastcQuality);
+                                                              int quality = kDefaultUastcQuality,
+                                                              UastcEncoder encoder = kDefaultUastcEncoder,
+                                                              const std::function<bool()>& isCanceled = {});
 
     /**
      * Transcodes .ktx2 bytes produced by encodeRgba() into target, which must be
@@ -96,10 +121,14 @@ namespace cw::ktx2 {
      * dataRootPath and transcodeLevels() them. A missing or damaged entry is an
      * error Result naming the file — producers own the encode, so this never
      * writes to the cache. Pure and safe to call from a worker thread.
+     *
+     * Checks isCanceled after the read and after the transcode, and returns an
+     * error Result once it is true.
      */
     CAVEWHERE_LIB_EXPORT Monad::Result<cwCompressedTexture> loadStreamedLevels(const cwStreamedTexture& texture,
                                                                                QRhiTexture::Format target,
-                                                                               int firstLevel);
+                                                                               int firstLevel,
+                                                                               const std::function<bool()>& isCanceled);
 
     /**
      * Returns BC7 when rhi supports it, otherwise ASTC_4x4, otherwise
@@ -151,11 +180,17 @@ namespace cw::ktx2 {
      *
      * `progressParent` gets a "Compressing texture" child only when an encode
      * runs, so a cache hit leaves it childless. Null leaves the encode untracked.
+     *
+     * isCanceled reaches the encode as in encodeRgba(); a canceled call inserts
+     * nothing and returns an error Result. A call that waits on another
+     * caller's encode of the same entry wakes when that encode finishes or is
+     * canceled, then sees its own cancel. Empty never cancels.
      */
     CAVEWHERE_LIB_EXPORT Monad::ResultBase ensureEncodedEntry(cwDiskCacher& cacher,
                                                               const cwDiskCacher::Key& key,
                                                               const std::function<QImage()>& source,
-                                                              const cwProgressNodePtr& progressParent = {});
+                                                              const cwProgressNodePtr& progressParent = {},
+                                                              const std::function<bool()>& isCanceled = {});
 }
 
 #endif // CWKTX2CODEC_H

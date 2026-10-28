@@ -42,17 +42,29 @@ public:
     {
     public:
         //! \a nodes are the snapshot's top-level nodes and \a labels the pool
-        //! built from that same snapshot. \a externalStationLabels is
+        //! built from that same snapshot. \a equates are the ties the driver
+        //! writes after its blocks, which AnchorPlan reads to group the blocks.
+        //! \a externalStationLabels is
         //! cwSurvexExporterRegion::Options::externalStationLabels: per owner,
         //! cavern's label of each harvested spelling whose label differs.
         DriverTree(const QList<cwCaveData>& nodes,
                    const cwScopeLabels& labels,
                    const QSet<QUuid>& excludedExternalOwners = {},
+                   const QList<cwEquate>& equates = {},
                    const QHash<QUuid, QHash<QString, QString>>& externalStationLabels = {});
         Q_DISABLE_COPY_MOVE(DriverTree)
 
         const cwScopeLabels& labels() const { return m_labels; }
         const QSet<QUuid>& excludedExternalOwners() const { return m_excludedExternalOwners; }
+        const QList<cwEquate>& equates() const { return m_equates; }
+
+        //! Cavern's label of the harvested station \a spelling of \a ownerId's
+        //! file, or \a spelling itself when the two agree.
+        QString externalStationLabel(const QUuid& ownerId, const QString& spelling) const
+        {
+            return m_externalStationLabels.value(ownerId).value(spelling, spelling);
+        }
+        const QList<cwCaveData>& nodes() const { return m_nodes; }
 
         //! True when \a nodeId's subtree gives cavern something to read: a
         //! station, or an *include the driver does not exclude. A fix counts
@@ -103,6 +115,7 @@ public:
         const QList<cwCaveData> m_nodes;
         const cwScopeLabels m_labels;
         const QSet<QUuid> m_excludedExternalOwners;
+        const QList<cwEquate> m_equates;
         const QHash<QUuid, QHash<QString, QString>> m_externalStationLabels;
         QSet<QUuid> m_emittingNodeIds;
         QHash<QUuid, Owner> m_nodeOwners;
@@ -113,6 +126,60 @@ public:
         void indexSourcedSubtree(const cwCaveData& root, const cwCaveData& node,
                                  bool scopeClosed);
         QString sourcedTripOperand(const Owner& owner, const QString& tail) const;
+    };
+
+    //! Which blocks of one driver write a fallback *fix. A block is a
+    //! candidate by the top-down rule: a native node or sourced root that keeps
+    //! no validated fix and that no enclosing block anchors, or an attached
+    //! file under an unanchored node. Stations join as cavern joins them: along
+    //! a chunk's shots, across each attached file as one piece, and through
+    //! every tie DriverTree::equates() writes, so a tie operand naming a
+    //! station no block holds joins nothing. A candidate keeps its fallback
+    //! only when no validated fix, no file that fixes itself and no earlier
+    //! candidate in output order reaches its station. Built from the tree and
+    //! the export options alone, so the line-plot worker can read it too.
+    class AnchorPlan
+    {
+    public:
+        //! \a externalFixedStations maps each attached file's owner to the
+        //! stations the file fixes itself (Options::externalFixedStations).
+        AnchorPlan(const DriverTree& tree, const QHash<QUuid, QStringList>& externalFixedStations);
+        Q_DISABLE_COPY_MOVE(AnchorPlan)
+
+        //! A node's fixes after validation, known before any block is written.
+        struct NodeFixes {
+            //! The fixes validation kept, after the file-collision drop, in
+            //! the node's order.
+            QList<cwFixStation> kept;
+            //! The kept fixes the node's block writes itself: every kept fix
+            //! except those in makFixes.
+            QList<cwFixStation> direct;
+            //! The kept fixes on an attached Compass .mak's stations, keyed by
+            //! owner (the node or its trip), named within the owner's scope.
+            QHash<QUuid, QList<cwFixStation>> makFixes;
+            //! Why each dropped fix was dropped.
+            QStringList errors;
+        };
+
+        //! The validated fixes of the emitting node \a nodeId; empty for any
+        //! other id.
+        const NodeFixes& fixes(const QUuid& nodeId) const;
+
+        //! The station \a blockId's block fixes at the origin, for a native
+        //! node, a sourced root or an attached trip; empty when the block is
+        //! no candidate or something else anchors that station.
+        QString fallbackStation(const QUuid& blockId) const;
+
+        //! The attached-file owners (trip ids and sourced-root node ids) whose
+        //! *include the driver fixes at the origin.
+        const QSet<QUuid>& originFixedOwners() const { return m_originFixedOwners; }
+
+    private:
+        class Builder;
+
+        QHash<QUuid, NodeFixes> m_fixes;
+        QHash<QUuid, QString> m_fallbackStations;
+        QSet<QUuid> m_originFixedOwners;
     };
 
     //! The single-cave export: \a cave and its subtree, standing alone, labeled
@@ -130,10 +197,11 @@ public:
     // its *include, then every native trip of its subtree as a block of its
     // own; its derived nodes are never blocks. A node that emits nothing
     // (DriverTree::emits) writes nothing at all. \a node is one of \a tree's
-    // top-level nodes.
+    // top-level nodes, and \a plan is built from \a tree.
     bool writeNode(QTextStream& stream,
                    const cwCaveData& node,
                    const DriverTree& tree,
+                   const AnchorPlan& plan,
                    const QString& globalCS = QString());
 
     // Per-call options forwarded from cwSurvexExporterRegion. The
@@ -179,9 +247,6 @@ protected:
 private:
     //! What a node's block hands down to the blocks nested in it.
     struct Inherited {
-        //! Some enclosing block already fixes a station, so this one adds no
-        //! fallback fix: a second anchor would pin a connected survey twice.
-        bool anchored = false;
         //! An enclosing block already wrote `*declination auto`, which cavern
         //! scopes to that block and every block nested in it.
         bool autoDeclinationInScope = false;
@@ -201,6 +266,7 @@ private:
     bool writeNodeBlock(QTextStream& stream,
                         const cwCaveData& node,
                         const DriverTree& tree,
+                        const AnchorPlan& plan,
                         const QString& globalCS,
                         const Inherited& inherited,
                         const cwSurvexExporterUtils::CsScope& enclosingScope);
@@ -216,22 +282,12 @@ private:
     //! refuses the file's bare fixes when nothing is chosen for them.
     bool scopeReachesInheritingInclude(const cwCaveData& node, const DriverTree& tree) const;
 
-    struct WrittenFixes {
-        //! The node's fixes that validation kept, in the order written.
-        QList<cwFixStation> kept;
-        //! A fix was written — one of the node's own, or the fallback on its
-        //! first station when nothing above is anchored.
-        bool anchored = false;
-        //! The kept fixes on an attached Compass .mak's stations, left for
-        //! writeExternalInclude to write inside the .mak's translation. Keyed
-        //! by owner (the node or its trip), named within the owner's scope.
-        QHash<QUuid, QList<cwFixStation>> makFixes;
-    };
-
-    WrittenFixes writeFixStations(QTextStream& stream, const cwCaveData& node,
-                                  const DriverTree& tree,
-                                  const QString& globalCS, bool anchoredAbove,
-                                  cwSurvexExporterUtils::CsScope& scope);
+    //! Writes \a node's validated fixes from \a plan, and its fallback when
+    //! the plan gives it one, appending the validation errors to Errors.
+    const AnchorPlan::NodeFixes& writeFixStations(QTextStream& stream, const cwCaveData& node,
+                                                  const AnchorPlan& plan,
+                                                  const QString& globalCS,
+                                                  cwSurvexExporterUtils::CsScope& scope);
 
     //! Puts an input system in scope for the *include of \a ownerId's file, so
     //! a *fix in it with no *cs of its own reads in the system chosen for the

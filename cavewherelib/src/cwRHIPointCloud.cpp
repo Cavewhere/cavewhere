@@ -169,8 +169,9 @@ cwRHIPointCloud::cwRHIPointCloud(std::shared_ptr<cwPointOctreePickSet> pickSet) 
 
 cwRHIPointCloud::~cwRHIPointCloud()
 {
-    // The only place cancelAll() is allowed: it blocks until the loads in
-    // flight finish, and nothing may land on a table that is going away.
+    // The only place cancelAll() is allowed: it cancels the loads in flight and
+    // blocks until their workers return, so nothing lands on a table that is
+    // going away.
     m_streamer.cancelAll();
 
     // Nothing draws once this object is gone, so nothing may be picked either
@@ -1474,9 +1475,9 @@ bool cwRHIPointCloud::residencyReady(const RenderData& jobRenderData)
 
 void cwRHIPointCloud::releaseStreamedResources()
 {
-    // Per node rather than cancelAll(): that one waits for the disk reads in
-    // flight, and the render thread is the wrong place to wait. The streamer
-    // bumps each node's generation, so a load already in flight lands on nothing.
+    // Per node rather than cancelAll(): that one joins the workers in flight,
+    // and the render thread is the wrong place to wait. The streamer cancels
+    // each node's load in flight, so it lands on nothing.
     for (const int index : std::as_const(m_requested)) {
         m_streamer.cancel(quint32(index));
         if (m_nodes.at(index).state == NodeState::Requested) {
@@ -2173,7 +2174,9 @@ cwRhiPipelineKey cwRHIPointCloud::buildPipelineKey(QRhiRenderPassDescriptor* ren
 }
 
 Monad::Result<cwPointOctreeNodePayload> cwRHIPointCloud::loadNode(
-    const cwPointOctreeNodeSource& source, int /*level*/)
+    const cwPointOctreeNodeSource& source,
+    int /*level*/,
+    const std::function<bool()>& isCanceled)
 {
     const bool profiling = lcProfileLoad().isDebugEnabled();
     QElapsedTimer timer;
@@ -2193,6 +2196,10 @@ Monad::Result<cwPointOctreeNodePayload> cwRHIPointCloud::loadNode(
         return Monad::Result<cwPointOctreeNodePayload>(
             QStringLiteral("read %1 bytes where the manifest says %2")
                 .arg(bytes.size()).arg(source.byteSize));
+    }
+
+    if (isCanceled()) {
+        return Monad::Result<cwPointOctreeNodePayload>(QStringLiteral("Canceled the node load"));
     }
 
     // The index costs one pass over bytes this worker just read, so the render

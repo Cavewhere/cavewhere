@@ -29,6 +29,7 @@
 #include <QSet>
 #include <QPoint>
 #include <QDir>
+#include <QPromise>
 #include <cmath>
 #include <type_traits>
 #include <utility>
@@ -276,6 +277,12 @@ private:
                                                       const QDir& dataRootDir,
                                                       cwTextureUploadTask::Format format,
                                                       const cwProgressNodePtr& scrapNode);
+
+    static void triangulateIfRunning(QPromise<cwTriangulatedData>& promise,
+                                     const cwTriangulateInData& scrap,
+                                     const cwCropImageTask::Result& croppedResult,
+                                     const cwItemTexture& texture,
+                                     const cwProgressNodePtr& scrapNode);
 
     static cwTriangulatedData triangulateGeometry(const cwTriangulateInData& scrap,
                                                   const cwCropImageTask::Result& croppedResult,

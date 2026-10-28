@@ -54,20 +54,26 @@ AsyncFuture::Limited<cwTriangulateLiDARTask::Result> cwTriangulateLiDARTask::tri
                                                                                          const QList<cwTriangulateLiDARInData> &liDARs,
                                                                                          const cwProgressNodePtr& progressRoot)
 {
-    const auto triangulateOne = [progressRoot](const cwTriangulateLiDARInData& data) {
+    //The QPromise form lets a cancel reach the worker: it polls after the load
+    //and between meshes, and a canceled note adds no result
+    const auto triangulateOne = [progressRoot](QPromise<Result>& promise, const cwTriangulateLiDARInData& data) {
         //The scope names the scan, and hands the note's node back on every
         //return below
         cwProgressScope noteScope(progressRoot, QFileInfo(data.gltfFilename()).fileName());
         noteScope.expectChildren(kNoteSteps);
 
         if(data.stationLookup().positions().size() == 0) {
-            return Result("Station Lookup not set");
+            promise.addResult(Result("Station Lookup not set"));
+            return;
         }
 
         cw::gltf::LoadOptions options = {
             cwRenderTexturedItems::geometryLayout()
         };
         auto gltf = cw::gltf::Loader::loadGltf(data.gltfFilename(), options, noteScope);
+        if(promise.isCanceled()) {
+            return;
+        }
 
         auto visibleStations = cwTriangulateTask::buildStationsWithInterpolatedShots(data);
 
@@ -91,7 +97,8 @@ AsyncFuture::Limited<cwTriangulateLiDARTask::Result> cwTriangulateLiDARTask::tri
         QVector<cwRenderTexturedItems::Item> renderItems = reserveRenderItems(gltf.meshes);
         const cwGltfBaseColorTexture baseColorTexture(data.dataRootPath(),
                                                       data.gltfFilename(),
-                                                      noteScope);
+                                                      noteScope,
+                                                      [&promise]() { return promise.isCanceled(); });
 
         //Both loops run once per geometry, so both know their count. They fill
         //two slots of the note at once, since a geometry is morphed and then
@@ -107,6 +114,10 @@ AsyncFuture::Limited<cwTriangulateLiDARTask::Result> cwTriangulateLiDARTask::tri
         //Morph the vertexes
         for(auto& mesh : gltf.meshes) {
             for(auto& geometry : mesh.geometries) {
+                if(promise.isCanceled()) {
+                    return;
+                }
+
                 {
                     cwProgressScope meshScope(morphing,
                                               QStringLiteral("Mesh %1").arg(geometryIndex + 1));
@@ -133,7 +144,10 @@ AsyncFuture::Limited<cwTriangulateLiDARTask::Result> cwTriangulateLiDARTask::tri
             }
         }
 
-        return Result(renderItems);
+        if(promise.isCanceled()) {
+            return;
+        }
+        promise.addResult(Result(renderItems));
     };
 
     const auto launch = [triangulateOne](const cwTriangulateLiDARInData& data) {

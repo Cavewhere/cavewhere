@@ -40,8 +40,6 @@
 #include "cwLinePlotTripVisibility.h"
 #include "cwNameUtils.h"
 #include "cwStation.h"
-#include "cwSurvexExporterCaveTask.h"
-#include "cwSurvexExporterUtils.h"
 #include "asyncfuture.h"
 
 #include <QDateTime>
@@ -104,110 +102,9 @@ ResolvedResults resolveResultsToLive(const cwCavingRegion* region,
     return resolved;
 }
 
-using ExternalInputs = cwLinePlotTask::ExternalCenterlineInputs;
-
-QSet<QString> nativeStationKeys(const cwSurveyNode* node)
-{
-    QSet<QString> keys;
-    for (const cwTrip* trip : node->trips()) {
-        for (const cwSurveyChunk* chunk : trip->chunks()) {
-            for (int i = 0; i < chunk->stationCount(); ++i) {
-                const cwStation station = chunk->station(i);
-                if (station.isValid()) {
-                    keys.insert(cwStation::canonicalKey(station.name()));
-                }
-            }
-        }
-    }
-    return keys;
-}
-
-//! An attachment the solve reads that the driver fixes at the origin when
-//! nothing else anchors it.
-bool isUnfixedAttachment(const QUuid& ownerId, const cwExternalCenterline& centerline,
-                         const QStringList& stations, const ExternalInputs& inputs)
-{
-    return !inputs.excludedExternalOwners.contains(ownerId)
-           && !cwSurvexExporterCaveTask::originStation(
-                   centerline, stations, inputs.externalFixedStations.value(ownerId))
-                   .isEmpty();
-}
-
-//! Whether the driver keeps one of \a node's own fixes, by the rules of
-//! cwSurvexExporterCaveTask::writeFixStations: the fix validates against the
-//! stations the node's block knows, and names none an attached file fixes.
-bool keepsAFix(const cwSurveyNode* node, const QSet<QString>& nativeKeys,
-               const ExternalInputs& inputs)
-{
-    const QList<cwFixStation>& fixes = node->fixStations()->fixStations();
-    if (fixes.isEmpty()) {
-        return false;
-    }
-
-    QSet<QString> knownKeys = nativeKeys;
-    QSet<QString> fileFixedKeys;
-    const auto addFile = [&](const QUuid& ownerId, const QString& scope, const QStringList& stations) {
-        const QHash<QString, QString> keys =
-            cwSurvexExporterUtils::stationKeysBySpelling(scope, stations);
-        for (const QString& key : keys) {
-            knownKeys.insert(key);
-        }
-        for (const QString& fixed : inputs.externalFixedStations.value(ownerId)) {
-            fileFixedKeys.insert(keys.value(fixed, cwStation::canonicalKey(scope + fixed)));
-        }
-    };
-    for (const cwTrip* trip : node->trips()) {
-        if (!trip->externalCenterline().isEmpty()
-            && !inputs.excludedExternalOwners.contains(trip->id())) {
-            addFile(trip->id(), trip->scopePrefix(), trip->externalStations());
-        }
-    }
-    addFile(node->id(), QString(), node->externalStations());
-
-    QStringList errors;
-    const QList<cwFixStation> valid =
-        cwSurvexExporterUtils::validateFixStations(fixes, knownKeys, errors);
-    return std::any_of(valid.cbegin(), valid.cend(), [&](const cwFixStation& fix) {
-        return !fileFixedKeys.contains(cwStation::keyIn(fix.stationName().trimmed(), knownKeys));
-    });
-}
-
 QString entryFileName(const cwExternalCenterline& centerline)
 {
     return QFileInfo(centerline.entryFile()).fileName();
-}
-
-//! Per node, the attached files the driver fixes at the origin because they
-//! fix nothing themselves: a sourced root, or a trip's file in a block, that
-//! no enclosing block, node fix, or native station anchors
-//! (cwSurvexExporterCaveTask::writeNodeBlock).
-void collectFilesAtOrigin(const cwSurveyNode* node, bool anchoredAbove,
-                          const ExternalInputs& inputs,
-                          QHash<const cwSurveyNode*, QStringList>& files)
-{
-    const QSet<QString> nativeKeys = nativeStationKeys(node);
-    const bool keepsOwnFix = keepsAFix(node, nativeKeys, inputs);
-    if (!node->externalCenterline().isEmpty()) {
-        if (!anchoredAbove && !keepsOwnFix
-            && isUnfixedAttachment(node->id(), node->externalCenterline(),
-                                   node->externalStations(), inputs)) {
-            files[node].append(entryFileName(node->externalCenterline()));
-        }
-        return;
-    }
-
-    const bool anchored = anchoredAbove || keepsOwnFix || !nativeKeys.isEmpty();
-    if (!anchored) {
-        for (const cwTrip* trip : node->trips()) {
-            if (isUnfixedAttachment(trip->id(), trip->externalCenterline(),
-                                    trip->externalStations(), inputs)) {
-                files[node].append(entryFileName(trip->externalCenterline()));
-            }
-        }
-    }
-    for (const cwSurveyNode* child : node->childNodes()) {
-        collectFilesAtOrigin(child, anchored, inputs, files);
-    }
 }
 
 } // namespace
@@ -898,6 +795,9 @@ void cwLinePlotManager::publishResults(const cwLinePlotTask::LinePlotResultData&
     if (results.ExternalScopesChecked) {
         m_hangingStations = results.Hanging;
     }
+    if (results.OriginFixedOwners.has_value()) {
+        publishUnfixedFileWarnings(*results.OriginFixedOwners);
+    }
     publishUnconnectedStationWarnings();
 }
 
@@ -1078,7 +978,6 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
         return;
     }
 
-    const bool georeferenced = Region->geoReference()->hasCoordinateSystem();
     // Any output system, a local grid's included, places a file whose fixes
     // name no system at the origin.
     const bool placesAtOrigin =
@@ -1123,13 +1022,6 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
         }
     };
 
-    QHash<const cwSurveyNode*, QStringList> filesAtOrigin;
-    if (georeferenced) {
-        for (const cwSurveyNode* cave : Region->rootNode()->childNodes()) {
-            collectFilesAtOrigin(cave, false, inputs, filesAtOrigin);
-        }
-    }
-
     for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
         QStringList messages;
         if (placesAtOrigin) {
@@ -1137,13 +1029,6 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
             for (const cwTrip* trip : node->trips()) {
                 addWarning(messages, trip->id(), trip->scopePrefix(), trip->externalCenterline());
             }
-        }
-
-        QStringList unfixedMessages;
-        for (const QString& file : filesAtOrigin.value(node)) {
-            unfixedMessages.append(QStringLiteral("%1 has no fixed station, so it sits at the "
-                                                  "origin — fix one of its stations.")
-                                       .arg(file));
         }
 
         QStringList defaultDatumMessages;
@@ -1158,11 +1043,43 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
             cwErrorListModel* errors = node->errorModel()->errors();
             errors->setTypedWarning(cwErrorTypeId::AttachedFileFixWithoutCS,
                                     messages.join(QLatin1Char('\n')));
-            errors->setTypedWarning(cwErrorTypeId::AttachedFileUnfixed,
-                                    unfixedMessages.join(QLatin1Char('\n')));
             errors->setTypedWarning(cwErrorTypeId::AttachedFileDefaultDatum,
                                     defaultDatumMessages.join(QLatin1Char('\n')));
         }
+    }
+}
+
+void cwLinePlotManager::publishUnfixedFileWarnings(const QSet<QUuid>& originFixedOwners)
+{
+    if (Region == nullptr) {
+        return;
+    }
+
+    const bool georeferenced = Region->geoReference()->hasCoordinateSystem();
+    const auto unfixedMessage = [](const cwExternalCenterline& centerline) {
+        return QStringLiteral("%1 has no fixed station, so it sits at the origin — fix one of "
+                              "its stations.")
+            .arg(entryFileName(centerline));
+    };
+
+    for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
+        if (node->errorModel() == nullptr) {
+            continue;
+        }
+
+        QStringList messages;
+        if (georeferenced) {
+            if (!node->externalCenterline().isEmpty() && originFixedOwners.contains(node->id())) {
+                messages.append(unfixedMessage(node->externalCenterline()));
+            }
+            for (const cwTrip* trip : node->trips()) {
+                if (originFixedOwners.contains(trip->id())) {
+                    messages.append(unfixedMessage(trip->externalCenterline()));
+                }
+            }
+        }
+        node->errorModel()->errors()->setTypedWarning(cwErrorTypeId::AttachedFileUnfixed,
+                                                      messages.join(QLatin1Char('\n')));
     }
 }
 

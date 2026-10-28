@@ -21,10 +21,12 @@
 //Qt includes
 #include <QAtomicInt>
 #include <QHash>
+#include <QPromise>
 #include <QQueue>
 #include <QSet>
 #include <QUuid>
 #include <algorithm>
+#include <functional>
 
 namespace {
 
@@ -216,11 +218,10 @@ struct SolvedComponent {
     cwSurveyNetwork network;
 };
 
-// Runs cwLinePlotTask synchronously on the current (worker) thread and
-// returns the only cave's solve, named as the trip names its stations. On
-// cavern failure / empty positions, returns empty values — caller treats as
-// skip.
-SolvedComponent runLinePlot(cwLinePlotTask::Input input)
+// Solves inline on the current (worker) thread and returns the only cave's
+// solve, named as the trip names its stations. On cavern failure, empty
+// positions, or cancel, returns empty values — caller treats as skip.
+SolvedComponent runLinePlot(cwLinePlotTask::Input input, const std::function<bool()> &isCanceled)
 {
     // Synthetic input always has exactly one cave, holding one native trip, so
     // the cave's label path is all that separates a region key from a trip's
@@ -228,12 +229,10 @@ SolvedComponent runLinePlot(cwLinePlotTask::Input input)
     const QString cavePrefix =
         cwScopeLabels(input.regionData).prefix(input.regionData.caves.constFirst().id);
 
-    auto future = cwLinePlotTask::run(std::move(input));
-    future.waitForFinished(); // worker-thread block, not a QEventLoop spin
-    if (future.isCanceled() || future.resultCount() == 0) {
+    const auto result = cwLinePlotTask::runInline(std::move(input), isCanceled);
+    if (isCanceled()) {
         return SolvedComponent();
     }
-    const auto result = future.result();
     return SolvedComponent{result.regionStationPositions().scoped(cavePrefix),
                            result.regionNetwork().scoped(cavePrefix)};
 }
@@ -257,15 +256,25 @@ Input buildInput(const cwTrip *trip)
 
 QFuture<QList<TripComponent>> run(Input pipelineInput)
 {
-    return cwConcurrent::run([input = std::move(pipelineInput)]() {
+    // The QPromise form is what lets a superseded run stop: cancel is polled
+    // between components and between each solve's phases, and a canceled run
+    // publishes no result.
+    return cwConcurrent::run([input = std::move(pipelineInput)]
+                             (QPromise<QList<TripComponent>> &promise) {
+        const std::function<bool()> isCanceled = [&promise]() { return promise.isCanceled(); };
+
         QList<TripComponent> results;
         if (input.chunks.isEmpty()) {
-            return results;
+            promise.addResult(std::move(results));
+            return;
         }
 
         const auto componentIndexLists = splitIntoComponents(input.chunks);
 
         for (const auto &componentIndices : componentIndexLists) {
+            if (isCanceled()) {
+                return;
+            }
             if (componentIndices.isEmpty()) {
                 continue;
             }
@@ -273,7 +282,7 @@ QFuture<QList<TripComponent>> run(Input pipelineInput)
             auto lpInput = buildLinePlotInput(input.tripName,
                                               input.calibration,
                                               broken.chunks);
-            const SolvedComponent caveResult = runLinePlot(std::move(lpInput));
+            const SolvedComponent caveResult = runLinePlot(std::move(lpInput), isCanceled);
             if (caveResult.positions.isEmpty()) {
                 // cavern refused this component (unparseable shots, etc.).
                 // Skip — per the plan, we tolerate per-component failure
@@ -322,7 +331,10 @@ QFuture<QList<TripComponent>> run(Input pipelineInput)
                       return a.network.stations().size() > b.network.stations().size();
                   });
 
-        return results;
+        if (isCanceled()) {
+            return;
+        }
+        promise.addResult(std::move(results));
     });
 }
 

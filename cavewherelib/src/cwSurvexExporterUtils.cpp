@@ -358,6 +358,26 @@ void writeStationLine(QTextStream& stream, const QString& name, const QString& l
 
 } // namespace
 
+QString StationKeyUnion::root(const QString& key) const
+{
+    QString current = key;
+    QString parent = m_parents.value(current, current);
+    while (parent != current) {
+        current = parent;
+        parent = m_parents.value(current, current);
+    }
+    return current;
+}
+
+void StationKeyUnion::join(const QString& first, const QString& second)
+{
+    const QString firstRoot = root(first);
+    m_parents.insert(root(second), firstRoot);
+    // Point both keys straight at the root so later walks stay short.
+    m_parents.insert(first, firstRoot);
+    m_parents.insert(second, firstRoot);
+}
+
 void writeFixStations(QTextStream& stream,
                       const QList<cwFixStation>& fixes,
                       const QString& fallbackFirstStation,

@@ -119,7 +119,9 @@ AsyncFuture::Limited<cwTriangulatedData> cwTriangulateTask::triangulate(QObject*
             //USING this will cause UB!
             .subscribe(cwTaskContextScope::wrap([dataRootDir, cropFuture, scrap, scrapNode]()
                      {
-                         const auto croppedResult = cropFuture.result();
+                         const auto croppedResult = cropFuture.resultCount() == 0
+                                                        ? cwCropImageTask::Result()
+                                                        : cropFuture.result();
 
                          if(!croppedResult.image) {
                              qDebug() << "Problem cropping image, does it not exist";
@@ -136,14 +138,12 @@ AsyncFuture::Limited<cwTriangulatedData> cwTriangulateTask::triangulate(QObject*
                                  = cwStreamedTexture(dataRootDir.absolutePath(),
                                                      croppedResult.compressedKey,
                                                      croppedResult.croppedSize);
-                             return cwConcurrent::run([scrap, cropFuture, streamed, scrapNode]()
+                             return cwConcurrent::run([scrap, cropFuture, streamed, scrapNode]
+                                                      (QPromise<cwTriangulatedData>& promise)
                                                       {
                                                           //The scope hands the scrap's node back when the geometry is done
                                                           cwProgressScope scope(scrapNode);
-                                                          return triangulateGeometry(scrap,
-                                                                                     cropFuture.result(),
-                                                                                     streamed,
-                                                                                     scrapNode);
+                                                          triangulateIfRunning(promise, scrap, cropFuture.result(), streamed, scrapNode);
                                                       });
                          }
 
@@ -156,17 +156,26 @@ AsyncFuture::Limited<cwTriangulatedData> cwTriangulateTask::triangulate(QObject*
                          return AsyncFuture::observe(uploadFuture)
                              .subscribe(
                                  cwTaskContextScope::wrap([scrap, cropFuture, uploadFuture, scrapNode]() {
-                                     return cwConcurrent::run([scrap, cropFuture, uploadFuture, scrapNode]()
+                                     return cwConcurrent::run([scrap, cropFuture, uploadFuture, scrapNode]
+                                                              (QPromise<cwTriangulatedData>& promise)
                                                               {
                                                                   cwProgressScope scope(scrapNode);
-                                                                  return triangulateGeometry(scrap,
-                                                                                             cropFuture.result(),
-                                                                                             uploadFuture.result().image,
-                                                                                             scrapNode);
+                                                                  triangulateIfRunning(promise,
+                                                                                       scrap,
+                                                                                       cropFuture.result(),
+                                                                                       uploadFuture.result().image,
+                                                                                       scrapNode);
                                                               });
                                  })).future();
 
-                     })).future();
+                     }),
+                     //A canceled scrap never reaches the geometry's scope, so hand its node back here
+                     [scrapNode]()
+                     {
+                         if(scrapNode) {
+                             scrapNode->finish();
+                         }
+                     }).future();
     };
 
     QList<ScrapInput> inputs;
@@ -194,6 +203,24 @@ QFuture<cwCropImageTask::Result> cwTriangulateTask::cropScrap(const cwTriangulat
     cropTask.setRectF(cropArea);
 
     return cropTask.crop();
+}
+
+void cwTriangulateTask::triangulateIfRunning(QPromise<cwTriangulatedData>& promise,
+                                             const cwTriangulateInData& scrap,
+                                             const cwCropImageTask::Result& croppedResult,
+                                             const cwItemTexture& texture,
+                                             const cwProgressNodePtr& scrapNode)
+{
+    if(promise.isCanceled()) {
+        return;
+    }
+
+    cwTriangulatedData data = triangulateGeometry(scrap, croppedResult, texture, scrapNode);
+
+    if(promise.isCanceled()) {
+        return;
+    }
+    promise.addResult(std::move(data));
 }
 
 cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInData &scrap,

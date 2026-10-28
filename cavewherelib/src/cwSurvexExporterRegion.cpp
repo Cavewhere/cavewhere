@@ -18,7 +18,8 @@
 Monad::ResultBase
 cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
                                      const QString& outputPath,
-                                     const Options& options)
+                                     const Options& options,
+                                     QSet<QUuid>* originFixedOwners)
 {
     if (region.caves.isEmpty()) {
         return Monad::ResultBase(QStringLiteral("No caves to do loop closure"),
@@ -66,14 +67,16 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     // lines and the equate operands below both have to name the same ones.
     const cwSurvexExporterCaveTask::DriverTree tree(region.caves, cwScopeLabels(region),
                                                     options.excludedExternalOwners,
+                                                    region.equates,
                                                     options.externalStationLabels);
+    const cwSurvexExporterCaveTask::AnchorPlan plan(tree, options.externalFixedStations);
 
     cwSurvexExporterCaveTask nodeExporter;
     nodeExporter.setExportOptions(options);
     nodeExporter.setSidecarWriter(&sidecars);
 
     for (const cwCaveData& node : region.caves) {
-        if (!nodeExporter.writeNode(stream, node, tree, outputCS)) {
+        if (!nodeExporter.writeNode(stream, node, tree, plan, outputCS)) {
             stream.flush();
             outputFile.close();
             QString message = nodeExporter.errors().join(QStringLiteral("; "));
@@ -88,7 +91,7 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     // every fully-qualified operand is in scope. Cavern merges the tied
     // stations to one coordinate; the decode then routes each qualified name
     // back to its node.
-    cwSurvexExporterCaveTask::writeEquates(stream, region.equates, tree);
+    cwSurvexExporterCaveTask::writeEquates(stream, tree.equates(), tree);
 
     stream << "*end" << Qt::endl;
     stream.flush();
@@ -100,5 +103,8 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
         return Monad::ResultBase(sidecarError, static_cast<int>(LinePlotErrorCode::ExportFailed));
     }
 
+    if (originFixedOwners != nullptr) {
+        *originFixedOwners = plan.originFixedOwners();
+    }
     return Monad::ResultBase();
 }
