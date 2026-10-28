@@ -1,11 +1,10 @@
 // Pins the entrance markers, a cwMarkerView fed by a cwEntranceMarkerSource:
 // every placed fix whose station the solve placed draws one tip-down pin in the
 // view's keyed sprite layer, its name above the pin in the keyed text layer
-// ("name" style) and, for an Entrance, a length and depth line under the name in
-// the stats text layer ("stats" style), and carries one keyword item that can
-// hide it. In the scene's declutter pass ([cwLabelDeclutter]) its pins and text
-// blocks claim screen space before the station labels of a participating
-// Label3dView.
+// ("name" style) and a length and depth line under the name in the stats text
+// layer ("stats" style), and carries one keyword item that can hide it. In the
+// scene's declutter pass ([cwLabelDeclutter]) its pins and text blocks claim
+// screen space before the station labels of a participating Label3dView.
 //
 // The view is built in QML because its EntrancePoint tap targets come from QML.
 // The window is never shown and there is no QRhi: every check reads the CPU side
@@ -38,6 +37,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwEntranceMarkerSource.h"
+#include "cwEntranceModel.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwGeometryItersecter.h"
@@ -102,7 +102,7 @@ const QColor kStatsColor(85, 85, 85);
 const QColor kStatsOutlineColor(240, 240, 240);
 const QColor kOtherStatsColor(201, 201, 201);
 
-// The one sprite slot every entrance draws, whatever its fix's Kind.
+// The one sprite slot every entrance draws.
 constexpr uint32_t kPinSlot = 0;
 
 // The layer keys and text style keys GLTerrainRenderer gives the entrance view.
@@ -365,7 +365,7 @@ TEST_CASE("The entrance MarkerView draws a placed, solved fix at its solved posi
     CHECK(point->property("stationName").toString() == kStation);
 }
 
-TEST_CASE("The entrance MarkerView names a fix by its label, else its node", "[cwEntranceMarkerSource]")
+TEST_CASE("The entrance MarkerView names an entrance by its entrance label, else its cave", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -374,13 +374,16 @@ TEST_CASE("The entrance MarkerView names a fix by its label, else its node", "[c
     CHECK(joined(f.drawnTexts()) == joined({kCaveName}));
     CHECK(joined(f.drawnStatsTexts()) == joined({kCaveStats}));
 
+    cwEntranceModel* entrances = cave->entrances();
+    const int entranceRow = entrances->addEntrance(kStation);
+    REQUIRE(entranceRow >= 0);
+
     const QString label = QStringLiteral("North Shaft");
-    cwFixStationModel* fixes = cave->fixStations();
     QSignalSpy changedSpy(f.source, &cwMarkerSource::markersChanged);
     QSignalSpy insertedSpy(f.source, &cwMarkerSource::markersInserted);
     QSignalSpy removedSpy(f.source, &cwMarkerSource::markersRemoved);
     QSignalSpy resetSpy(f.source, &cwMarkerSource::markersReset);
-    REQUIRE(fixes->setData(fixes->index(0), label, cwFixStationModel::LabelRole));
+    REQUIRE(entrances->setData(entrances->index(entranceRow), label, cwEntranceModel::LabelRole));
 
     REQUIRE(waitUntil([&] { return f.drawnTexts() == QStringList{label}; }));
     // One pass changes the one marker in place.
@@ -388,15 +391,34 @@ TEST_CASE("The entrance MarkerView names a fix by its label, else its node", "[c
     CHECK(insertedSpy.count() == 0);
     CHECK(removedSpy.count() == 0);
     CHECK(resetSpy.count() == 0);
-    // The label names the fix; the stats line stays the cave's.
+    // The label names the entrance; the stats line stays the cave's.
     CHECK(joined(f.drawnStatsTexts()) == joined({kCaveStats}));
 
     REQUIRE(f.keywords.rowCount() == 1);
     CHECK(keywordPairs(f.keywords.item(0)).contains(QStringLiteral("Name=North Shaft")));
 
-    // Clearing the label falls back to the node's name again.
-    REQUIRE(fixes->setData(fixes->index(0), QString(), cwFixStationModel::LabelRole));
+    // Clearing the label falls back to the cave's name, in one more pass.
+    REQUIRE(entrances->setData(entrances->index(entranceRow), QString(), cwEntranceModel::LabelRole));
     REQUIRE(waitUntil([&] { return f.drawnTexts() == QStringList{kCaveName}; }));
+    CHECK(changedSpy.count() == 2);
+}
+
+TEST_CASE("The entrance MarkerView names a fix on a section by its cave", "[cwEntranceMarkerSource]")
+{
+    EntranceFixture f;
+    cwCave* cave = f.addCave(kCaveName);
+    const QString sectionName = QStringLiteral("Upper Section");
+    cwCave* section = SurveyTreeTestHelper::addNode(&f.region, cave, cwSurveyNode::Kind::Folder,
+                                                    sectionName);
+    section->fixStations()->appendFixStation(placedFix(kStation));
+    f.solve(section, {{kStation, kSolvedPosition}});
+    REQUIRE(section->scopedPositions().position(kStation) == kSolvedPosition);
+
+    REQUIRE(f.waitForOneEntrance());
+    CHECK(joined(f.drawnTexts()) == joined({kCaveName}));
+
+    REQUIRE(f.keywords.rowCount() == 1);
+    CHECK(keywordPairs(f.keywords.item(0)).contains(QStringLiteral("Type=Entrance")));
 }
 
 TEST_CASE("The entrance MarkerView redraws the stats line when the cave's length changes", "[cwEntranceMarkerSource]")
@@ -451,56 +473,6 @@ TEST_CASE("The entrance MarkerView draws nothing for a fix the solve missed or t
     CHECK(f.point() != nullptr);
     CHECK(f.point(QStringLiteral("entrancePoint_B1")) == nullptr);
     CHECK(f.point(QStringLiteral("entrancePoint_C1")) == nullptr);
-}
-
-TEST_CASE("The entrance MarkerView draws a Well by name alone", "[cwEntranceMarkerSource]")
-{
-    EntranceFixture f;
-    cwCave* cave = f.addEntranceCave();
-    REQUIRE(f.waitForOneEntrance());
-    // The positive control: as an Entrance it draws a stats line.
-    CHECK(f.statsTexts()->billboardCount() == 1);
-
-    cwFixStationModel* fixes = cave->fixStations();
-    REQUIRE(fixes->setData(fixes->index(0), int(cwFixStation::Well), cwFixStationModel::KindRole));
-
-    // The rebuild that hands the point its kind pushes the pin in the same pass.
-    QQuickItem* point = f.point();
-    REQUIRE(point != nullptr);
-    REQUIRE(waitUntil([&] { return point->property("kind").toInt() == int(cwFixStation::Well); }));
-    CHECK(joined(f.drawnTexts()) == joined({kCaveName}));
-    CHECK(f.statsTexts()->billboardCount() == 0);
-    const auto instances = f.pins()->buildInstances();
-    REQUIRE(instances.size() == 1);
-    CHECK(instances.at(0).worldPosition == kSolvedPosition);
-
-    REQUIRE(f.keywords.rowCount() == 1);
-    const QStringList pairs = keywordPairs(f.keywords.item(0));
-    CHECK(pairs.contains(QStringLiteral("Type=Well")));
-    CHECK_FALSE(pairs.contains(QStringLiteral("Type=Entrance")));
-}
-
-TEST_CASE("The entrance MarkerView draws the one pin for a fix of every Kind", "[cwEntranceMarkerSource]")
-{
-    const auto kind = GENERATE(cwFixStation::Entrance, cwFixStation::Well,
-                               cwFixStation::RadioLocation, cwFixStation::Other);
-    INFO("kind " << cwFixStation::kindName(kind).toStdString());
-
-    EntranceFixture f;
-    cwCave* cave = f.addEntranceCave();
-    REQUIRE(f.waitForOneEntrance());
-    QQuickItem* point = f.point();
-    REQUIRE(point != nullptr);
-
-    cwFixStationModel* fixes = cave->fixStations();
-    const bool kindWritten = fixes->setData(fixes->index(0), int(kind), cwFixStationModel::KindRole);
-    CHECK((kindWritten || kind == cwFixStation::Entrance));
-    REQUIRE(waitUntil([&] { return point->property("kind").toInt() == int(kind); }));
-
-    const auto instances = f.pins()->buildInstances();
-    REQUIRE(instances.size() == 1);
-    CHECK(instances.at(0).spriteIndex == kPinSlot);
-    CHECK(instances.at(0).worldPosition == kSolvedPosition);
 }
 
 TEST_CASE("The entrance pin carries the cave glyph and the per-kind pins are gone", "[cwEntranceMarkerSource]")
@@ -862,7 +834,7 @@ TEST_CASE("The entrance MarkerView clears its selected point from a manager it r
     CHECK(otherSelection.selectedItem() == nullptr);
 }
 
-TEST_CASE("The entrance MarkerView hands each point its display name and kind", "[cwEntranceMarkerSource]")
+TEST_CASE("The entrance MarkerView hands each point its display name and no kind", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -871,17 +843,17 @@ TEST_CASE("The entrance MarkerView hands each point its display name and kind", 
     REQUIRE(point != nullptr);
 
     CHECK(point->property("displayName").toString() == kCaveName);
-    CHECK(point->property("kind").toInt() == int(cwFixStation::Entrance));
-    CHECK(point->property("kindName").toString() == cwFixStation::kindName(cwFixStation::Entrance));
+    // Kind is gone from the point and its popup.
+    CHECK_FALSE(point->property("kind").isValid());
+    CHECK_FALSE(point->property("kindName").isValid());
 
-    cwFixStationModel* fixes = cave->fixStations();
+    cwEntranceModel* entrances = cave->entrances();
+    const int entranceRow = entrances->addEntrance(kStation);
+    REQUIRE(entranceRow >= 0);
     const QString label = QStringLiteral("North Shaft");
-    REQUIRE(fixes->setData(fixes->index(0), label, cwFixStationModel::LabelRole));
-    REQUIRE(fixes->setData(fixes->index(0), int(cwFixStation::Well), cwFixStationModel::KindRole));
+    REQUIRE(entrances->setData(entrances->index(entranceRow), label, cwEntranceModel::LabelRole));
 
-    CHECK(waitUntil([&] { return point->property("kind").toInt() == int(cwFixStation::Well); }));
-    CHECK(point->property("kindName").toString() == cwFixStation::kindName(cwFixStation::Well));
-    CHECK(point->property("displayName").toString() == label);
+    CHECK(waitUntil([&] { return point->property("displayName").toString() == label; }));
 }
 
 namespace {

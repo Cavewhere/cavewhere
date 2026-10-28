@@ -27,6 +27,7 @@
 #include "cwExternalSource.h"
 #include "cwExternalCenterline.h"
 #include "cwFixStation.h"
+#include "cwEntrance.h"
 #include "cwGeoPoint.h"
 
 //Forward declarations
@@ -58,6 +59,7 @@ class PenStroke;
 class Scale;
 class Sketch;
 class FixStation;
+class Entrance;
 class DoubleVector3d;
 class Equate;
 class ExternalSource;
@@ -180,6 +182,8 @@ CAVEWHERE_LIB_EXPORT cwSketchData  fromProtoSketch   (const CavewhereProto::Sket
 // Fix stations / world origin
 CAVEWHERE_LIB_EXPORT void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fix);
 CAVEWHERE_LIB_EXPORT cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix);
+CAVEWHERE_LIB_EXPORT void saveEntrance(CavewhereProto::Entrance* protoEntrance, const cwEntrance& entrance);
+CAVEWHERE_LIB_EXPORT cwEntrance fromProtoEntrance(const CavewhereProto::Entrance& protoEntrance);
 
 // Equates
 CAVEWHERE_LIB_EXPORT void saveEquate(CavewhereProto::Equate* protoEquate, const cwEquate& equate);

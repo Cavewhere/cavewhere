@@ -13,6 +13,7 @@
 //Our includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwEntranceModel.h"
 #include "cwExternalCenterline.h"
 #include "cwFixStation.h"
 #include "cwFutureManagerModel.h"
@@ -83,6 +84,23 @@ inline cwFixStation fixAt(const QString& stationName)
     cwFixStation fix;
     fix.setStationName(stationName);
     return fix;
+}
+
+inline cwEntrance entranceOn(const QString& stationName, const QString& label = QString())
+{
+    cwEntrance entrance;
+    entrance.setStationName(stationName);
+    entrance.setLabel(label);
+    return entrance;
+}
+
+inline QStringList entranceNames(const cwEntranceModel* model)
+{
+    QStringList names;
+    for (const cwEntrance& entrance : model->entrances()) {
+        names.append(entrance.stationName());
+    }
+    return names;
 }
 
 //! \a count bare fixes a file lists, named <prefix>1, <prefix>2, ….

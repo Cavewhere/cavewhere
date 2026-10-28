@@ -4,6 +4,7 @@
 //Our includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwEntranceModel.h"
 #include "cwEquateModel.h"
 #include "cwFixStationModel.h"
 #include "cwNote.h"
@@ -59,6 +60,8 @@ cwTrip* addTrip(cwSurveyNode* node, const QString& name, const QStringList& stat
 }
 
 using SurveyTreeTestHelper::attachedFixes;
+using SurveyTreeTestHelper::entranceNames;
+using SurveyTreeTestHelper::entranceOn;
 using SurveyTreeTestHelper::fixAt;
 
 QStringList fixNames(const cwSurveyNode* node)
@@ -353,6 +356,121 @@ TEST_CASE("Moving a node to the region root hands its qualified fixes to the nod
         CHECK(fixNames(tree.sideCave).isEmpty());
         CHECK(fixNames(root).isEmpty());
     }
+}
+
+TEST_CASE("An entrance whose station leaves with a trip moves to the destination's entrance list",
+          "[SurveyNode][cwEntranceModel]")
+{
+    Tree tree;
+    const QString label = QStringLiteral("Lower Entrance");
+    tree.sideCave->entrances()->setEntrances({entranceOn(QStringLiteral("a1"), label),
+                                              entranceOn(QStringLiteral("b1")),
+                                              entranceOn(QStringLiteral("a2"))});
+    REQUIRE(entranceNames(tree.sideCave->entrances())
+            == QStringList({QStringLiteral("a1"), QStringLiteral("b1"), QStringLiteral("a2")}));
+    const cwEntrance a1Entrance = tree.sideCave->entrances()->entranceAt(0);
+
+    //An entrance needs no fix to travel, and adds nothing to the question.
+    CHECK(tree.otherCave->moveConsequences(tree.trip1)
+          == QStringLiteral("Move Trip 1 to Other Cave? 1 station shared with Side Cave becomes a tie."));
+
+    REQUIRE(tree.otherCave->moveHere(tree.trip1));
+
+    //a1 left with Trip 1; b1 and a2 still have Trip 2 in Side Cave.
+    CHECK(entranceNames(tree.sideCave->entrances()) == QStringList({QStringLiteral("b1"), QStringLiteral("a2")}));
+    REQUIRE(entranceNames(tree.otherCave->entrances()) == QStringList({QStringLiteral("a1")}));
+    CHECK(tree.otherCave->entrances()->entranceAt(0) == a1Entrance);
+
+    tree.undoStack.undo();
+
+    CHECK(entranceNames(tree.sideCave->entrances())
+          == QStringList({QStringLiteral("a1"), QStringLiteral("b1"), QStringLiteral("a2")}));
+    CHECK(tree.sideCave->entrances()->entranceAt(0) == a1Entrance);
+    CHECK(tree.otherCave->entrances()->count() == 0);
+
+    tree.undoStack.redo();
+
+    CHECK(entranceNames(tree.otherCave->entrances()) == QStringList({QStringLiteral("a1")}));
+
+    SECTION("a station the destination already marks keeps that entrance") {
+        tree.undoStack.undo();
+        tree.otherCave->entrances()->appendEntrance(entranceOn(QStringLiteral("A1")));
+        REQUIRE(tree.otherCave->moveHere(tree.trip1));
+        CHECK(entranceNames(tree.sideCave->entrances()).contains(QStringLiteral("a1")));
+        CHECK(entranceNames(tree.otherCave->entrances()) == QStringList({QStringLiteral("A1")}));
+    }
+}
+
+TEST_CASE("A fix and its entrance leave with a trip together", "[SurveyNode][cwEntranceModel]")
+{
+    Tree tree;
+    tree.sideCave->fixStations()->appendFixStation(fixAt(QStringLiteral("a1")));
+    tree.sideCave->entrances()->appendEntrance(entranceOn(QStringLiteral("a1")));
+    REQUIRE(tree.sideCave->entrances()->count() == 1);
+
+    REQUIRE(tree.otherCave->moveHere(tree.trip1));
+
+    CHECK(fixNames(tree.otherCave) == QStringList({QStringLiteral("a1")}));
+    CHECK(entranceNames(tree.otherCave->entrances()) == QStringList({QStringLiteral("a1")}));
+    CHECK(fixNames(tree.sideCave).isEmpty());
+    CHECK(entranceNames(tree.sideCave->entrances()).isEmpty());
+
+    tree.undoStack.undo();
+
+    CHECK(fixNames(tree.sideCave) == QStringList({QStringLiteral("a1")}));
+    CHECK(entranceNames(tree.sideCave->entrances()) == QStringList({QStringLiteral("a1")}));
+    CHECK(tree.otherCave->entrances()->count() == 0);
+}
+
+TEST_CASE("Moving a node carries its qualified entrances one level up", "[SurveyNode][cwEntranceModel]")
+{
+    Tree tree;
+    const QString oldLabel = tree.sideCave->childScopeLabels().value(tree.upperLevel->id());
+    REQUIRE_FALSE(oldLabel.isEmpty());
+
+    const QString label = QStringLiteral("Upper Entrance");
+    tree.sideCave->entrances()->setEntrances({entranceOn(oldLabel + QStringLiteral(".s1"), label),
+                                              entranceOn(QStringLiteral("b1"))});
+    REQUIRE(tree.sideCave->entrances()->count() == 2);
+    const QUuid movedId = tree.sideCave->entrances()->entranceAt(0).id();
+
+    REQUIRE(tree.otherCave->moveHere(tree.upperLevel));
+
+    const QString newLabel = tree.otherCave->childScopeLabels().value(tree.upperLevel->id());
+    CHECK(entranceNames(tree.sideCave->entrances()) == QStringList({QStringLiteral("b1")}));
+    REQUIRE(entranceNames(tree.otherCave->entrances()) == QStringList({newLabel + QStringLiteral(".s1")}));
+    CHECK(tree.otherCave->entrances()->entranceAt(0).id() == movedId);
+    CHECK(tree.otherCave->entrances()->entranceAt(0).label() == label);
+
+    tree.undoStack.undo();
+
+    CHECK(entranceNames(tree.sideCave->entrances()) == QStringList({oldLabel + QStringLiteral(".s1"), QStringLiteral("b1")}));
+    CHECK(tree.sideCave->entrances()->entranceAt(0).label() == label);
+    CHECK(tree.otherCave->entrances()->count() == 0);
+}
+
+TEST_CASE("Moving a section to the region root hands its qualified entrances to the section",
+          "[SurveyNode][cwEntranceModel]")
+{
+    Tree tree;
+    cwSurveyNode* root = tree.region.rootNode();
+    const QString oldLabel = tree.sideCave->childScopeLabels().value(tree.upperLevel->id());
+    REQUIRE_FALSE(oldLabel.isEmpty());
+    tree.sideCave->entrances()->setEntrances({entranceOn(oldLabel + QStringLiteral(".s1")),
+                                              entranceOn(QStringLiteral("b1"))});
+    REQUIRE(tree.sideCave->entrances()->count() == 2);
+
+    REQUIRE(root->moveHere(tree.upperLevel));
+
+    CHECK(entranceNames(root->entrances()).isEmpty());
+    CHECK(entranceNames(tree.upperLevel->entrances()) == QStringList({QStringLiteral("s1")}));
+    CHECK(entranceNames(tree.sideCave->entrances()) == QStringList({QStringLiteral("b1")}));
+
+    tree.undoStack.undo();
+
+    CHECK(entranceNames(tree.sideCave->entrances()) == QStringList({oldLabel + QStringLiteral(".s1"), QStringLiteral("b1")}));
+    CHECK(entranceNames(tree.upperLevel->entrances()).isEmpty());
+    CHECK(entranceNames(root->entrances()).isEmpty());
 }
 
 TEST_CASE("Move to… carries a node's fix count from one branch to the other", "[SurveyNode]")

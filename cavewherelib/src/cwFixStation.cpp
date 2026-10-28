@@ -32,8 +32,6 @@ public:
     QString InputCS;
     double HorizontalVariance = 0.0;
     double VerticalVariance = 0.0;
-    cwFixStation::Kind Kind = cwFixStation::Entrance;
-    QString Label;
 
     //! The coordinate, as it was written.
     QString Coordinate;
@@ -145,9 +143,7 @@ bool cwFixStation::operator==(const cwFixStation& other) const
             && data->InputCS == other.data->InputCS
             && data->Coordinate == other.data->Coordinate
             && data->HorizontalVariance == other.data->HorizontalVariance
-            && data->VerticalVariance == other.data->VerticalVariance
-            && data->Kind == other.data->Kind
-            && data->Label == other.data->Label;
+            && data->VerticalVariance == other.data->VerticalVariance;
 }
 
 QUuid cwFixStation::id() const { return data->Id; }
@@ -200,23 +196,6 @@ void cwFixStation::setNorthing(double v) { data->Northing = v; data->reformat();
 
 double cwFixStation::elevation() const { return data->Elevation; }
 void cwFixStation::setElevation(double v) { data->Elevation = v; data->reformat(); }
-
-cwFixStation::Kind cwFixStation::kind() const { return data->Kind; }
-void cwFixStation::setKind(Kind kind) { data->Kind = kind; }
-
-QString cwFixStation::label() const { return data->Label; }
-void cwFixStation::setLabel(const QString& label) { data->Label = label; }
-
-QString cwFixStation::kindName(Kind kind)
-{
-    switch (kind) {
-    case Entrance:      return QStringLiteral("Entrance");
-    case Well:          return QStringLiteral("Well");
-    case RadioLocation: return QStringLiteral("Radio Location");
-    case Other:         return QStringLiteral("Other");
-    }
-    return {};
-}
 
 cwGeoPoint cwFixStation::position() const
 {

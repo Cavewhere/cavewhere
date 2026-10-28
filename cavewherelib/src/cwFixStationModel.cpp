@@ -120,8 +120,6 @@ QVariant cwFixStationModel::data(const QModelIndex& index, int role) const
     case VerticalVarianceRole:   return fix.verticalVariance();
     case IdRole:                 return fix.id();
     case CoordinateTextRole:     return fix.coordinate();
-    case KindRole:               return static_cast<int>(fix.kind());
-    case LabelRole:              return fix.label();
     default:                     return QVariant();
     }
 }
@@ -203,27 +201,6 @@ bool cwFixStationModel::setData(const QModelIndex& index, const QVariant& value,
         }
         break;
     }
-    case KindRole: {
-        bool ok = false;
-        const int v = value.toInt(&ok);
-        if (!ok || v < cwFixStation::Entrance || v > cwFixStation::Other) {
-            return false;
-        }
-        const auto kind = static_cast<cwFixStation::Kind>(v);
-        if (fix.kind() != kind) {
-            fix.setKind(kind);
-            changed = true;
-        }
-        break;
-    }
-    case LabelRole: {
-        const QString s = value.toString();
-        if (fix.label() != s) {
-            fix.setLabel(s);
-            changed = true;
-        }
-        break;
-    }
     default:
         return false;
     }
@@ -244,16 +221,6 @@ Qt::ItemFlags cwFixStationModel::flags(const QModelIndex& index) const
     return index.isValid() ? base | Qt::ItemIsEditable : base;
 }
 
-QStringList cwFixStationModel::kindNames()
-{
-    return {
-        cwFixStation::kindName(cwFixStation::Entrance),
-        cwFixStation::kindName(cwFixStation::Well),
-        cwFixStation::kindName(cwFixStation::RadioLocation),
-        cwFixStation::kindName(cwFixStation::Other)
-    };
-}
-
 QHash<int, QByteArray> cwFixStationModel::roleNames() const
 {
     return {
@@ -265,9 +232,7 @@ QHash<int, QByteArray> cwFixStationModel::roleNames() const
         {HorizontalVarianceRole, "horizontalVariance"},
         {VerticalVarianceRole,   "verticalVariance"},
         {IdRole,                 "id"},
-        {CoordinateTextRole,     "coordinateText"},
-        {KindRole,               "kind"},
-        {LabelRole,              "label"}
+        {CoordinateTextRole,     "coordinateText"}
     };
 }
 

@@ -195,6 +195,52 @@ MainWindowTest {
             tryCompare(badge, "visible", false)
         }
 
+        // Marking a station Fixed from the menu also marks it an entrance, and
+        // Remove Fix takes the entrance with the fix.
+        function test_markStationFixedMarksAnEntranceAndRemoveFixRemovesIt() {
+            const context = gotoSurveyTable()
+            const entrances = context.cave.entrances
+            compare(entrances.count, 0)
+
+            let menu = openFixMenu(focusedStationBox(context, 0))
+            menu.mark.triggered()
+
+            tryCompare(context.cave.fixStations, "count", 1)
+            tryVerify(() => entrances.isEntrance("A1"), 5000,
+                      "Mark Station as Fixed should mark A1 an entrance")
+            compare(entrances.count, 1)
+
+            const popup = fixStationPopup()
+            tryCompare(popup, "opened", true)
+            popup.close()
+            tryCompare(popup, "opened", false)
+
+            menu = openFixMenu(focusedStationBox(context, 0))
+            menu.remove.triggered()
+
+            tryCompare(context.cave.fixStations, "count", 0)
+            tryCompare(entrances, "count", 0)
+        }
+
+        // Editing the coordinates of a fix the user left un-entranced marks no
+        // entrance.
+        function test_editingAnExistingFixMarksNoEntrance() {
+            const context = gotoSurveyTable()
+            context.cave.fixStations.addFixStation("A1")
+            tryCompare(context.cave.fixStations, "count", 1)
+            compare(context.cave.entrances.count, 0)
+
+            const menu = openFixMenu(focusedStationBox(context, 0))
+            compare(menu.mark.text, "Edit Fixed Coordinates...")
+            menu.mark.triggered()
+
+            const popup = fixStationPopup()
+            tryCompare(popup, "opened", true)
+            compare(popup.row, 0, "the popup edits the existing fix")
+            compare(context.cave.fixStations.count, 1)
+            compare(context.cave.entrances.count, 0)
+        }
+
         function test_popupEditsTheFixInPlace() {
             const context = gotoSurveyTable()
 

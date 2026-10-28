@@ -869,12 +869,6 @@ void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fi
     if (!fix.coordinate().isEmpty()) {
         saveString(protoFix->mutable_coordinate(), fix.coordinate());
     }
-    if (fix.kind() != cwFixStation::Entrance) {
-        protoFix->set_kind(static_cast<CavewhereProto::FixStation_Kind>(fix.kind()));
-    }
-    if (!fix.label().isEmpty()) {
-        saveString(protoFix->mutable_label(), fix.label());
-    }
 }
 
 cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
@@ -903,14 +897,37 @@ cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
     if (protoFix.has_coordinate()) {
         fix.setCoordinate(QString::fromStdString(protoFix.coordinate()));
     }
-    if (protoFix.has_kind() && CavewhereProto::FixStation_Kind_IsValid(protoFix.kind())) {
-        fix.setKind(static_cast<cwFixStation::Kind>(protoFix.kind()));
-    }
-    if (protoFix.has_label()) {
-        fix.setLabel(QString::fromStdString(protoFix.label()));
-    }
-
     return fix;
+}
+
+void saveEntrance(CavewhereProto::Entrance* protoEntrance, const cwEntrance& entrance)
+{
+    if (!entrance.id().isNull()) {
+        saveQUuid(protoEntrance->mutable_id(), entrance.id());
+    }
+    if (!entrance.stationName().isEmpty()) {
+        saveString(protoEntrance->mutable_stationname(), entrance.stationName());
+    }
+    if (!entrance.label().isEmpty()) {
+        saveString(protoEntrance->mutable_label(), entrance.label());
+    }
+}
+
+cwEntrance fromProtoEntrance(const CavewhereProto::Entrance& protoEntrance)
+{
+    cwEntrance entrance;
+    if (protoEntrance.has_id()) {
+        entrance.setId(toUuid(protoEntrance.id()));
+    } else {
+        entrance.setId(QUuid());
+    }
+    if (protoEntrance.has_stationname()) {
+        entrance.setStationName(QString::fromStdString(protoEntrance.stationname()));
+    }
+    if (protoEntrance.has_label()) {
+        entrance.setLabel(QString::fromStdString(protoEntrance.label()));
+    }
+    return entrance;
 }
 
 void saveEquate(CavewhereProto::Equate* protoEquate, const cwEquate& equate)

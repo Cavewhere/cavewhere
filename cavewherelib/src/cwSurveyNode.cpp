@@ -56,6 +56,7 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
     m_depth(new cwLength(this)),
     m_errorModel(new cwErrorModel(this)),
     m_fixStations(new cwFixStationModel(this)),
+    m_entrances(new cwEntranceModel(this)),
     m_fixStationDiagnostics(new cwFixStationDiagnosticsModel(this)),
     m_attachedFixes(new cwAttachedFixModel(this)),
     m_fixStationTable(new QConcatenateTablesProxyModel(this)),
@@ -1617,6 +1618,64 @@ QHash<QString, QString> cwSurveyNode::fileFixedStations() const
     return stations;
 }
 
+int cwSurveyNode::addFixedEntrance(const QString& stationName)
+{
+    const int existingRow = m_fixStations->indexOf(stationName);
+    if (existingRow >= 0) {
+        return existingRow;
+    }
+
+    const int row = m_fixStations->addFixStation(stationName);
+    if (row >= 0) {
+        m_entrances->addEntrance(stationName);
+    }
+    return row;
+}
+
+void cwSurveyNode::removeFixAndEntrance(const QString& stationName)
+{
+    m_fixStations->removeFixStation(stationName);
+    m_entrances->removeEntrance(stationName);
+}
+
+void cwSurveyNode::removeFixAndEntranceAt(int fixRow)
+{
+    if (fixRow < 0 || fixRow >= m_fixStations->count()) {
+        return;
+    }
+    const QString stationName = m_fixStations->fixStationAt(fixRow).stationName();
+    m_fixStations->removeAt(fixRow);
+    m_entrances->removeEntrance(stationName);
+}
+
+bool cwSurveyNode::setFixStationName(int fixRow, const QString& stationName)
+{
+    if (fixRow < 0 || fixRow >= m_fixStations->count()) {
+        return false;
+    }
+
+    const QString oldName = m_fixStations->fixStationAt(fixRow).stationName();
+    if (!m_fixStations->setData(m_fixStations->index(fixRow), stationName,
+                                cwFixStationModel::StationNameRole)) {
+        return false;
+    }
+
+    if (stationName.trimmed().isEmpty() || m_entrances->isEntrance(stationName)) {
+        return true;
+    }
+
+    if (oldName.trimmed().isEmpty()) {
+        m_entrances->addEntrance(stationName);
+    } else {
+        const int entranceRow = m_entrances->indexOf(oldName);
+        if (entranceRow >= 0) {
+            m_entrances->setData(m_entrances->index(entranceRow), stationName.trimmed(),
+                                 cwEntranceModel::StationNameRole);
+        }
+    }
+    return true;
+}
+
 cwCaveData cwSurveyNode::data() const
 {
     return {
@@ -1626,6 +1685,7 @@ cwCaveData cwSurveyNode::data() const
         static_cast<cwUnits::LengthUnit>(length()->unit()),
         static_cast<cwUnits::LengthUnit>(depth()->unit()),
         m_fixStations->fixStations(),
+        m_entrances->entrances(),
         m_externalCenterline,
         cwData::toDataList<cwCaveData>(m_childNodes),
         m_kind,
@@ -1653,6 +1713,7 @@ void cwSurveyNode::setData(const cwCaveData &data)
     clearTrips();
 
     m_fixStations->setFixStations(data.fixStations);
+    m_entrances->setEntrances(data.entrances);
 
     //Each child is filled in before it is inserted, so the whole subtree exists
     //by the time this node says a row appeared — the way the trips are filled

@@ -24,14 +24,16 @@ class cwSurveyNode;
 
 /**
  * @brief The entrance markers: one marker per placed fix whose station the
- * solve placed below the fix's node.
+ * solve placed below the fix's node. Every such fix counts as an entrance.
  *
- * A marker's text is the fix's display name (its label, else the node's name)
- * in the "name" style and, for an Entrance, the cwEntranceLabel length and
- * depth line under it in the "stats" style. Its keyword item extends the node's
- * keywords with Type = the kind name and Name = the display name. Model, solve,
- * name, size and unit changes coalesce into one queued rebuild that emits at
- * most one signal of each kind.
+ * A marker's text is its display name in the "name" style and the
+ * cwEntranceLabel length and depth line under it in the "stats" style. The
+ * display name is the label of the node's entrance entry for the station when
+ * it has one, else the name of the nearest enclosing Cave node, else the fix's
+ * own node's name. Its keyword item extends the node's keywords with
+ * Type = "Entrance" and Name = the display name. Model, solve, name, kind, size
+ * and unit changes coalesce into one queued rebuild that emits at most one
+ * signal of each kind.
  */
 class CAVEWHERE_LIB_EXPORT cwEntranceMarkerSource : public cwMarkerSource
 {
@@ -63,8 +65,7 @@ private:
         QString stationName;
         QVector3D position;
         QString displayName;
-        QString statsText; //!< set for an Entrance, empty otherwise
-        cwFixStation::Kind kind = cwFixStation::Entrance;
+        QString statsText;
 
         bool operator==(const Entrance&) const = default;
     };

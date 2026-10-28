@@ -189,21 +189,17 @@ An **Add a fix station or a geospatial layer** link says what to do about it.
 ## Entrance markers
 
 Every fix that has a coordinate and a solved station gets a pin in the 3D
-view, tip down on the station, with its name above it. An entrance gets a
-second, smaller gray line under the name, such as `→1.2 km  ↓85 m`: the
-cave's length and its depth, in the project's units. Lengths under 1 km (or
-1 mi) show whole meters (or feet).
+view, tip down on the station, with the cave's name above it. A second,
+smaller gray line under the name, such as `→1.2 km  ↓85 m`, gives the cave's
+length and depth in the project's units. Lengths under 1 km (or 1 mi) show
+whole meters (or feet). Every marker draws the same cave pin.
 
-Every marker draws the same cave pin. Two columns on the **Fix Stations**
-page shape its text. **Kind** picks one of `Entrance`, `Well`,
-`Radio Location` or `Other`. Only an Entrance gets the length and depth; the
-others show the name alone. **Label** names the marker. Leave it blank and the
-marker uses the cave's name, which is what you want for a cave with one
-entrance.
+**Mark Station as Fixed** also marks the station an entrance, and **Remove
+Fix** takes the entrance away with the fix. Renaming a fix on the **Fix
+Stations** page carries its entrance to the new station.
 
-Click a pin to see the cave icon, its name and kind, plus the cave's length
-and depth for an entrance, with a link that opens the cave's page. Click empty
-space to close it.
+Click a pin to see the cave icon, its name, the cave's length and depth, and a
+link that opens the cave's page. Click empty space to close it.
 
 Pins always draw. Where entrances crowd together, only one name and its
 length and depth line show in each spot; the other pins keep their place and
@@ -215,8 +211,8 @@ nothing. Fixes that come from an attached Survex, Compass or Walls file get
 no marker yet.
 
 To hide markers, open the **Layers** tab, group by **Type** and untick
-`Entrance` (or `Well`, `Radio Location`, `Other`). Each marker also carries a
-`Name` keyword with its label, so you can hide one entrance on its own.
+`Entrance`. Each marker also carries a `Name` keyword with its name, so you can
+hide one entrance on its own.
 
 ## Next steps
 

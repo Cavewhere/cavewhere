@@ -26,6 +26,7 @@ class cwKeywordModel;
 #include "cwCaveData.h"
 #include "cwSurveyNodeKind.h"
 #include "cwFixStationModel.h"
+#include "cwEntranceModel.h"
 #include "cwFixStationDiagnosticsModel.h"
 #include "cwAttachedFixModel.h"
 #include "cwSiblingLabelCache.h"
@@ -68,6 +69,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel, public cwUn
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
     Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)
+    Q_PROPERTY(cwEntranceModel* entrances READ entrances CONSTANT)
     Q_PROPERTY(cwFixStationDiagnosticsModel* fixStationDiagnostics READ fixStationDiagnostics CONSTANT)
     Q_PROPERTY(cwGridConvergence* gridConvergence READ gridConvergence CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
@@ -237,6 +239,33 @@ public:
 
     cwErrorModel* errorModel() const;
     cwFixStationModel* fixStations() const { return m_fixStations; }
+
+    //! The stations this node marks as entrances, each with an optional label.
+    //! Independent of fixStations(): an entrance needs no fix, and a fix needs
+    //! no entrance.
+    cwEntranceModel* entrances() const { return m_entrances; }
+
+    //! The user's "Mark Station as Fixed". Returns the fix row, as
+    //! cwFixStationModel::addFixStation(name) does. When this creates the fix it
+    //! also marks the station an entrance, unless it already is one. A station
+    //! already fixed is left as it is (Edit Fixed Coordinates). -1 for an
+    //! empty name.
+    Q_INVOKABLE int addFixedEntrance(const QString& stationName);
+
+    //! The user's "Remove Fix": removes the fix on \a stationName and the
+    //! station's entrance entry.
+    Q_INVOKABLE void removeFixAndEntrance(const QString& stationName);
+
+    //! The Fix Stations page's row-addressed remove: removes fix row \a fixRow
+    //! and, when the row names a station, that station's entrance entry.
+    Q_INVOKABLE void removeFixAndEntranceAt(int fixRow);
+
+    //! The Fix Stations page's name commit for fix row \a fixRow, written through
+    //! cwFixStationModel::setData so its dataChanged roles stay the same. Naming
+    //! a blank row marks the new station an entrance unless it is one. Renaming
+    //! an entrance station onto a station that is no entrance moves the
+    //! entrance entry, keeping its id and label. Returns whether the fix changed.
+    Q_INVOKABLE bool setFixStationName(int fixRow, const QString& stationName);
 
     /// The fix stations plus their read-only, computed warnings (coordinate
     /// domain, station reference). A proxy over fixStations() that the
@@ -601,6 +630,7 @@ private:
 
     cwErrorModel* m_errorModel;
     cwFixStationModel* m_fixStations;
+    cwEntranceModel* m_entrances;
     //! Declared after m_fixStations, which it proxies.
     cwFixStationDiagnosticsModel* const m_fixStationDiagnostics;
     cwAttachedFixModel* const m_attachedFixes;
@@ -707,6 +737,9 @@ private:
         QString leavingLabel;
         //! Rows of the source's fix table whose station leaves with the subject.
         QList<int> leavingFixRows;
+        //! Rows of the source's entrance list whose station leaves with the
+        //! subject, chosen the way leavingFixRows is.
+        QList<int> leavingEntranceRows;
     };
     MovePlan planMove(const QObject* subject) const;
 
@@ -864,6 +897,12 @@ private:
             cwFixStation after;
         };
 
+        struct EntranceEdit {
+            int sourceRow;
+            cwEntrance before;
+            cwEntrance after;
+        };
+
         //! Works out the equate re-keys and fix edits once the subject hangs
         //! in its new place, where a node's new scope label is known.
         void finishPlan();
@@ -871,7 +910,7 @@ private:
         QObject* SubjectPtr;
         cwSurveyNode* SourcePtr;
         cwSurveyNode* DestinationPtr;
-        //! Where the carried fixes land: the destination, or the moved node
+        //! Where the carried fixes and entrances land: the destination, or the moved node
         //! itself when the destination holds no fixes (the region root).
         cwSurveyNode* FixHolderPtr;
         QPointer<cwCavingRegion> Region;
@@ -880,6 +919,7 @@ private:
         bool Planned = false;
         QList<EquateEdit> EquateEdits;
         QList<FixEdit> FixEdits;
+        QList<EntranceEdit> EntranceEdits;
     };
 
 };

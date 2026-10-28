@@ -8,6 +8,7 @@
 //Our includes
 #include "cwEntranceMarkerSource.h"
 #include "cwEntranceLabel.h"
+#include "cwEntranceModel.h"
 #include "cwFixStationModel.h"
 #include "cwKeywordModel.h"
 #include "cwLength.h"
@@ -29,11 +30,34 @@ constexpr float kEntranceDepthBias = 2.0f;
 const QString kNameStyle = QStringLiteral("name");
 const QString kStatsStyle = QStringLiteral("stats");
 
+// The keyword type every entrance marker carries.
+const QString kEntranceType = QStringLiteral("Entrance");
+
 double toMeters(const cwLength* length)
 {
     return cwUnits::convert(length->value(),
                             static_cast<cwUnits::LengthUnit>(length->unit()),
                             cwUnits::Meters);
+}
+
+// The name of the nearest Cave at or above @a node, else @a node's own name
+// when no Cave encloses it.
+QString caveName(const cwSurveyNode* node)
+{
+    for(const cwSurveyNode* n = node; n != nullptr && !n->isRoot(); n = n->parentNode()) {
+        if(n->kind() == cwSurveyNodeKind::Kind::Cave) {
+            return n->name();
+        }
+    }
+    return node->name();
+}
+
+// The label of @a node's entrance entry on @a stationName, else its cave's name.
+QString displayName(const cwSurveyNode* node, const QString& stationName)
+{
+    const cwEntranceModel* entrances = node->entrances();
+    const QString label = entrances->entranceAt(entrances->indexOf(stationName)).label();
+    return label.isEmpty() ? caveName(node) : label;
 }
 }
 
@@ -142,6 +166,7 @@ void cwEntranceMarkerSource::syncNodeConnections()
 
         connect(node, &QObject::destroyed, this, &cwEntranceMarkerSource::nodeDestroyed);
         connect(node, &cwSurveyNode::nameChanged, this, &cwEntranceMarkerSource::scheduleRebuild);
+        connect(node, &cwSurveyNode::kindChanged, this, &cwEntranceMarkerSource::scheduleRebuild);
         connect(node->length(), &cwLength::valueChanged, this, &cwEntranceMarkerSource::scheduleRebuild);
         connect(node->length(), &cwLength::unitChanged, this, &cwEntranceMarkerSource::scheduleRebuild);
         connect(node->depth(), &cwLength::valueChanged, this, &cwEntranceMarkerSource::scheduleRebuild);
@@ -152,6 +177,12 @@ void cwEntranceMarkerSource::syncNodeConnections()
         connect(fixes, &QAbstractItemModel::rowsRemoved, this, &cwEntranceMarkerSource::scheduleRebuild);
         connect(fixes, &QAbstractItemModel::dataChanged, this, &cwEntranceMarkerSource::scheduleRebuild);
         connect(fixes, &QAbstractItemModel::modelReset, this, &cwEntranceMarkerSource::scheduleRebuild);
+
+        cwEntranceModel* entrances = node->entrances();
+        connect(entrances, &QAbstractItemModel::rowsInserted, this, &cwEntranceMarkerSource::scheduleRebuild);
+        connect(entrances, &QAbstractItemModel::rowsRemoved, this, &cwEntranceMarkerSource::scheduleRebuild);
+        connect(entrances, &QAbstractItemModel::dataChanged, this, &cwEntranceMarkerSource::scheduleRebuild);
+        connect(entrances, &QAbstractItemModel::modelReset, this, &cwEntranceMarkerSource::scheduleRebuild);
     }
 }
 
@@ -161,6 +192,7 @@ void cwEntranceMarkerSource::disconnectNode(cwSurveyNode* node)
     disconnect(node->length(), nullptr, this, nullptr);
     disconnect(node->depth(), nullptr, this, nullptr);
     disconnect(node->fixStations(), nullptr, this, nullptr);
+    disconnect(node->entrances(), nullptr, this, nullptr);
 }
 
 void cwEntranceMarkerSource::nodeDestroyed(QObject* node)
@@ -192,6 +224,7 @@ QList<cwEntranceMarkerSource::Entrance> cwEntranceMarkerSource::desiredEntrances
         const cwStationPositionLookup positions = node->scopedPositions();
         const double lengthMeters = toMeters(node->length());
         const double depthMeters = toMeters(node->depth());
+        const QString statsText = cwEntranceLabel::statsText(lengthMeters, depthMeters, unitSystem);
         for(const cwFixStation& fix : fixes) {
             if(!fix.hasPlacedCoordinate() || !positions.hasPosition(fix.stationName())) {
                 continue;
@@ -202,10 +235,8 @@ QList<cwEntranceMarkerSource::Entrance> cwEntranceMarkerSource::desiredEntrances
             entrance.node = node;
             entrance.stationName = fix.stationName();
             entrance.position = positions.position(fix.stationName());
-            entrance.kind = fix.kind();
-            entrance.displayName = fix.label().isEmpty() ? node->name() : fix.label();
-            entrance.statsText = cwEntranceLabel::statsText(entrance.kind, lengthMeters, depthMeters,
-                                                            unitSystem);
+            entrance.displayName = displayName(node, fix.stationName());
+            entrance.statsText = statsText;
             desired.append(entrance);
         }
     }
@@ -215,11 +246,10 @@ QList<cwEntranceMarkerSource::Entrance> cwEntranceMarkerSource::desiredEntrances
 /**
  * The marker of one entrance: the pin at its solved position, the display name
  * over the stats line, and a keyword item of its own that extends its node's
- * keywords with its kind and name.
+ * keywords with the Entrance type and its name.
  */
 cwMarker cwEntranceMarkerSource::toMarker(const Entrance& entrance)
 {
-    const QString kindName = cwFixStation::kindName(entrance.kind);
     const QString fixId = entrance.fixId.toString(QUuid::WithoutBraces);
 
     cwMarker marker;
@@ -229,14 +259,12 @@ cwMarker cwEntranceMarkerSource::toMarker(const Entrance& entrance)
                         {entrance.statsText, kStatsStyle}};
     marker.visibilityGroup = fixId;
     marker.keywordExtension = entrance.node != nullptr ? entrance.node->keywordModel() : nullptr;
-    marker.keywords = {cwKeyword(cwKeywordModel::TypeKey, kindName),
+    marker.keywords = {cwKeyword(cwKeywordModel::TypeKey, kEntranceType),
                        cwKeyword(cwKeywordModel::NameKey, entrance.displayName)};
     marker.delegateProperties = {{QStringLiteral("node"), QVariant::fromValue(entrance.node)},
                                  {QStringLiteral("stationName"), entrance.stationName},
                                  {QStringLiteral("fixId"), fixId},
-                                 {QStringLiteral("displayName"), entrance.displayName},
-                                 {QStringLiteral("kind"), static_cast<int>(entrance.kind)},
-                                 {QStringLiteral("kindName"), kindName}};
+                                 {QStringLiteral("displayName"), entrance.displayName}};
     return marker;
 }
 

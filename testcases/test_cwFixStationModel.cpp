@@ -3,6 +3,7 @@
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
+#include "cwEntranceModel.h"
 #include "cwProtoUtils.h"
 #include "cavewhere.pb.h"
 #include "cwCave.h"
@@ -14,12 +15,6 @@
 #include "cwGeoPoint.h"
 #include "cwSurveyNetwork.h"
 #include "cwFutureManagerModel.h"
-#include "cwLinePlotManager.h"
-#include "cwShot.h"
-#include "cwStation.h"
-#include "cwSurveyChunk.h"
-#include "cwTrip.h"
-#include "cwUpdatable.h"
 
 //Test helpers
 #include "LoadProjectHelper.h"
@@ -45,15 +40,6 @@ namespace {
     //field 11, wire type 0 (varint), carrying what MEAN_SEA_LEVEL was.
     constexpr char kRetiredElevationReferenceTag = 11 << 3;
     constexpr char kRetiredMeanSeaLevelValue = 2;
-
-    //A kind past the last enumerator, as a hand-edited file or a newer build
-    //might hold.
-    constexpr int kKindPastTheEnum = 7;
-
-    //How long a line plot solve of a one-shot cave gets on a loaded machine.
-    constexpr int kSolveWaitMs = 30000;
-
-    const QString kNorthSink = QStringLiteral("North sink");
 }
 
 TEST_CASE("cwFixStationModel starts empty", "[FixStation][cwFixStationModel]") {
@@ -124,177 +110,14 @@ TEST_CASE("cwFixStationModel exposes role names for QML", "[FixStation][cwFixSta
     CHECK(roles.value(cwFixStationModel::ElevationRole) == "elevation");
     CHECK(roles.value(cwFixStationModel::IdRole) == "id");
     CHECK(roles.value(cwFixStationModel::CoordinateTextRole) == "coordinateText");
-    CHECK(roles.value(cwFixStationModel::KindRole) == "kind");
-    CHECK(roles.value(cwFixStationModel::LabelRole) == "label");
+    //Kind is gone and a label belongs to the station's entrance entry.
+    CHECK_FALSE(roles.values().contains("kind"));
+    CHECK_FALSE(roles.values().contains("label"));
 
     // Only persisted roles live here. The read-only warnings derived from the
     // solve are added by cwFixStationDiagnosticsModel, so that dataChanged on
     // this model keeps meaning "save this".
-    CHECK(roles.size() == 11);
-}
-
-TEST_CASE("cwFixStationModel reads and writes a fix's kind and label",
-          "[FixStation][cwFixStationModel]") {
-    cwFixStationModel model;
-    model.addFixStation();
-    const QModelIndex idx = model.index(0);
-    QSignalSpy spy(&model, &QAbstractItemModel::dataChanged);
-
-    SECTION("a new row is an unlabeled Entrance") {
-        CHECK(model.data(idx, cwFixStationModel::KindRole)
-              == QVariant(static_cast<int>(cwFixStation::Entrance)));
-        const QVariant label = model.data(idx, cwFixStationModel::LabelRole);
-        CHECK(label.typeId() == QMetaType::QString);
-        CHECK(label.toString().isEmpty());
-    }
-
-    SECTION("a kind written as an int, the way a combo hands it over") {
-        REQUIRE(model.setData(idx, static_cast<int>(cwFixStation::Well), cwFixStationModel::KindRole));
-        CHECK(model.data(idx, cwFixStationModel::KindRole).toInt() == cwFixStation::Well);
-        CHECK(model.fixStationAt(0).kind() == cwFixStation::Well);
-        REQUIRE(spy.count() == 1);
-        CHECK(spy.first().at(2).value<QList<int>>() == QList<int>({cwFixStationModel::KindRole}));
-    }
-
-    SECTION("a kind written as text, the way commitEdit hands it over") {
-        REQUIRE(model.setData(idx, QStringLiteral("2"), cwFixStationModel::KindRole));
-        CHECK(model.data(idx, cwFixStationModel::KindRole).toInt() == cwFixStation::RadioLocation);
-        CHECK(spy.count() == 1);
-    }
-
-    SECTION("a label is stored as typed") {
-        REQUIRE(model.setData(idx, kNorthSink, cwFixStationModel::LabelRole));
-        CHECK(model.data(idx, cwFixStationModel::LabelRole).toString() == kNorthSink);
-        CHECK(model.fixStationAt(0).label() == kNorthSink);
-        REQUIRE(spy.count() == 1);
-        CHECK(spy.first().at(2).value<QList<int>>() == QList<int>({cwFixStationModel::LabelRole}));
-    }
-
-    SECTION("writing the value a row already holds writes nothing") {
-        REQUIRE(model.setData(idx, static_cast<int>(cwFixStation::Well), cwFixStationModel::KindRole));
-        REQUIRE(model.setData(idx, kNorthSink, cwFixStationModel::LabelRole));
-        REQUIRE(spy.count() == 2);
-
-        CHECK_FALSE(model.setData(idx, static_cast<int>(cwFixStation::Well), cwFixStationModel::KindRole));
-        CHECK_FALSE(model.setData(idx, kNorthSink, cwFixStationModel::LabelRole));
-        CHECK(spy.count() == 2);
-    }
-
-    SECTION("a kind outside the enum is refused") {
-        CHECK_FALSE(model.setData(idx, kKindPastTheEnum, cwFixStationModel::KindRole));
-        CHECK_FALSE(model.setData(idx, -1, cwFixStationModel::KindRole));
-        CHECK_FALSE(model.setData(idx, QStringLiteral("Well"), cwFixStationModel::KindRole));
-        CHECK(spy.count() == 0);
-        CHECK(model.data(idx, cwFixStationModel::KindRole)
-              == QVariant(static_cast<int>(cwFixStation::Entrance)));
-    }
-
-    SECTION("a label leaves the station and coordinate alone") {
-        REQUIRE(model.setData(idx, QStringLiteral("A1"), cwFixStationModel::StationNameRole));
-        const QString coordinate = model.data(idx, cwFixStationModel::CoordinateTextRole).toString();
-        REQUIRE(model.setData(idx, kNorthSink, cwFixStationModel::LabelRole));
-        CHECK(model.data(idx, cwFixStationModel::StationNameRole).toString() == QStringLiteral("A1"));
-        CHECK(model.data(idx, cwFixStationModel::CoordinateTextRole).toString() == coordinate);
-    }
-}
-
-TEST_CASE("A kind or label edit leaves the line plot solved",
-          "[FixStation][cwFixStationModel]") {
-    // A kind or a label is an annotation: it changes nothing cavern reads, so
-    // committing one must not re-solve the whole project.
-    cwCavingRegion region;
-    auto* cave = new cwCave();
-    cave->setName(QStringLiteral("Annotated Cave"));
-    region.addCave(cave);
-
-    auto* trip = new cwTrip();
-    trip->setName(QStringLiteral("Trip 1"));
-    cave->addTrip(trip);
-
-    auto* chunk = new cwSurveyChunk();
-    trip->addChunk(chunk);
-
-    cwShot shot;
-    shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
-    shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
-    shot.setClino(cwClinoReading(QStringLiteral("0.0")));
-    chunk->appendShot(cwStation(QStringLiteral("a1")), cwStation(QStringLiteral("a2")), shot);
-
-    cwFixStationModel* fixes = cave->fixStations();
-    REQUIRE(fixes->addFixStation(QStringLiteral("a1")) == 0);
-    const QModelIndex idx = fixes->index(0);
-
-    auto plotManager = std::make_unique<cwLinePlotManager>();
-    plotManager->setRegion(&region);
-    // The first solve chains behind the external-centerline scan, so the
-    // manager reads Clean before it starts; drain both before measuring.
-    plotManager->waitToFinish();
-    REQUIRE(waitUntil([&]() { return plotManager->updateState() == cwUpdatable::State::Clean; },
-                      kSolveWaitMs));
-    REQUIRE(cave->scopedPositions().hasPosition(QStringLiteral("a1")));
-
-    QSignalSpy stateSpy(plotManager.get(), &cwLinePlotManager::updateStateChanged);
-
-    REQUIRE(fixes->setData(idx, static_cast<int>(cwFixStation::Well), cwFixStationModel::KindRole));
-    REQUIRE(fixes->setData(idx, kNorthSink, cwFixStationModel::LabelRole));
-    REQUIRE(waitForQueuedEvents());
-    CHECK(stateSpy.count() == 0);
-    CHECK(plotManager->updateState() == cwUpdatable::State::Clean);
-
-    // The control: a renamed station is something cavern reads.
-    REQUIRE(fixes->setData(idx, QStringLiteral("a2"), cwFixStationModel::StationNameRole));
-    CHECK(stateSpy.count() >= 1);
-    REQUIRE(waitUntil([&]() { return plotManager->updateState() == cwUpdatable::State::Clean; },
-                      kSolveWaitMs));
-}
-
-TEST_CASE("A kind or label edit on a saved project survives reopening it",
-          "[FixStation][cwFixStationModel][cwSaveLoad]") {
-    auto creatorRoot = std::make_unique<cwRootData>();
-    auto creatorProject = creatorRoot->project();
-    auto creatorRegion = creatorProject->cavingRegion();
-    creatorRegion->addCave();
-    cwCave* cave = creatorRegion->cave(0);
-    REQUIRE(cave != nullptr);
-    cave->setName(QStringLiteral("Annotated Cave"));
-
-    cwFixStation fix;
-    fix.setStationName(QStringLiteral("W1"));
-    fix.setInputCS(QStringLiteral("EPSG:32612"));
-    fix.setCoordinate(QStringLiteral("500123.456, 4194567.89, 2750.5m"));
-    cave->fixStations()->setFixStations({fix});
-
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-    const QString projectPath = QDir(tempDir.path())
-                                    .filePath(QStringLiteral("fixstations-annotated-%1.cwproj")
-                                                  .arg(QCoreApplication::applicationPid()));
-    REQUIRE(creatorProject->saveAs(projectPath));
-    creatorRoot->futureManagerModel()->waitForFinished();
-    creatorProject->waitSaveToFinish();
-
-    // Edited after the save, so only the model's own save trigger can carry
-    // these to disk.
-    cwFixStationModel* fixes = cave->fixStations();
-    REQUIRE(fixes->setData(fixes->index(0), static_cast<int>(cwFixStation::Well),
-                           cwFixStationModel::KindRole));
-    REQUIRE(fixes->setData(fixes->index(0), kNorthSink, cwFixStationModel::LabelRole));
-    creatorRoot->futureManagerModel()->waitForFinished();
-    creatorProject->waitSaveToFinish();
-
-    auto loaderRoot = std::make_unique<cwRootData>();
-    auto loaderProject = loaderRoot->project();
-    addTokenManager(loaderProject);
-    loaderProject->loadOrConvert(creatorProject->filename());
-    loaderRoot->futureManagerModel()->waitForFinished();
-    loaderProject->waitLoadToFinish();
-
-    REQUIRE(loaderProject->cavingRegion()->caveCount() == 1);
-    cwFixStationModel* loaded = loaderProject->cavingRegion()->cave(0)->fixStations();
-    REQUIRE(loaded->count() == 1);
-    CHECK(loaded->fixStationAt(0).kind() == cwFixStation::Well);
-    CHECK(loaded->fixStationAt(0).label() == kNorthSink);
-    CHECK(loaded->fixStationAt(0).stationName() == QStringLiteral("W1"));
+    CHECK(roles.size() == 9);
 }
 
 TEST_CASE("cwFixStationModel setFixStations replaces contents", "[FixStation][cwFixStationModel]") {
@@ -771,76 +594,6 @@ TEST_CASE("cwFixStation proto round-trip preserves all fields", "[FixStation][pr
     CHECK(restored == original);
 }
 
-TEST_CASE("cwFixStation proto round-trip keeps the kind and label",
-          "[FixStation][cwFixStationModel][proto]") {
-    SECTION("a labeled Well comes back a labeled Well") {
-        cwFixStation original;
-        original.setStationName(QStringLiteral("W1"));
-        original.setKind(cwFixStation::Well);
-        original.setLabel(kNorthSink);
-
-        CavewhereProto::FixStation proto;
-        cwProtoUtils::saveFixStation(&proto, original);
-        CHECK(proto.has_kind());
-        CHECK(proto.kind() == CavewhereProto::FixStation_Kind_Well);
-        CHECK(QString::fromStdString(proto.label()) == kNorthSink);
-
-        const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-        CHECK(restored.kind() == cwFixStation::Well);
-        CHECK(restored.label() == kNorthSink);
-        CHECK(restored == original);
-    }
-
-    SECTION("every kind survives") {
-        for (const cwFixStation::Kind kind : {cwFixStation::Entrance, cwFixStation::Well,
-                                              cwFixStation::RadioLocation, cwFixStation::Other}) {
-            cwFixStation original;
-            original.setKind(kind);
-            original.setLabel(cwFixStation::kindName(kind));
-            REQUIRE_FALSE(original.label().isEmpty());
-
-            CavewhereProto::FixStation proto;
-            cwProtoUtils::saveFixStation(&proto, original);
-            const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-            INFO("kind " << static_cast<int>(kind));
-            CHECK(restored.kind() == kind);
-            CHECK(restored.label() == original.label());
-        }
-    }
-
-    SECTION("a message with no kind reads as an unlabeled Entrance") {
-        // Every fix saved before kinds existed, which is every fix today.
-        CavewhereProto::FixStation proto;
-        cwProtoUtils::saveString(proto.mutable_stationname(), QStringLiteral("E1"));
-        REQUIRE_FALSE(proto.has_kind());
-        REQUIRE_FALSE(proto.has_label());
-
-        const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-        CHECK(restored.kind() == cwFixStation::Entrance);
-        CHECK(restored.label().isEmpty());
-    }
-
-    SECTION("an unlabeled Entrance writes neither field, so existing files keep their bytes") {
-        cwFixStation entrance;
-        entrance.setStationName(QStringLiteral("E1"));
-
-        CavewhereProto::FixStation proto;
-        cwProtoUtils::saveFixStation(&proto, entrance);
-        CHECK_FALSE(proto.has_kind());
-        CHECK_FALSE(proto.has_label());
-    }
-
-    SECTION("a kind past the enum reads as Entrance, and the label still comes back") {
-        CavewhereProto::FixStation proto;
-        proto.set_kind(static_cast<CavewhereProto::FixStation_Kind>(kKindPastTheEnum));
-        cwProtoUtils::saveString(proto.mutable_label(), kNorthSink);
-
-        const cwFixStation restored = cwProtoUtils::fromProtoFixStation(proto);
-        CHECK(restored.kind() == cwFixStation::Entrance);
-        CHECK(restored.label() == kNorthSink);
-    }
-}
-
 TEST_CASE("cwFixStation loads a row nobody ever filled in as having no coordinate",
           "[FixStation][proto]") {
     //"Mark Station as Fixed" writes a row before the user types anything, so a
@@ -903,8 +656,8 @@ TEST_CASE("cwFixStation keeps a coordinate it has no system to read",
 
 TEST_CASE("Loading a project does not re-save the cave file",
           "[FixStation][cwSaveLoad]") {
-    // Regression guard: cwSaveLoad::connectCave wires fix-station model
-    // signals (rowsInserted/rowsRemoved/modelReset/dataChanged) to a per-cave
+    // Regression guard: cwSaveLoad::connectCave wires fix-station and entrance
+    // model signals (rowsInserted/rowsRemoved/modelReset/dataChanged) to a per-cave
     // save lambda. If connectCave were ever invoked before the cave's data
     // was populated during load, the modelReset emitted by setFixStations()
     // would fire that lambda and rewrite the cave's .cwcave file mid-load.
@@ -926,6 +679,12 @@ TEST_CASE("Loading a project does not re-save the cave file",
     a.setNorthing(4194567.89);
     a.setElevation(2750.5);
     cave->fixStations()->setFixStations({a});
+
+    // The entrance list's save trigger must stay quiet through a load too.
+    cwEntrance entrance;
+    entrance.setStationName(QStringLiteral("A1"));
+    entrance.setLabel(QStringLiteral("North Shaft"));
+    cave->entrances()->setEntrances({entrance});
 
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());

@@ -418,12 +418,13 @@ void cwCavingRegion::removeCave(int index) {
 }
 
 /**
-  \brief Empties the root node: its child nodes, its trips and its own fix stations
+  \brief Empties the root node: its child nodes, its trips and its own fix stations and entrances
   */
 void cwCavingRegion::clearCaves() {
     m_root->clearNodes();
     m_root->clearTrips();
     m_root->fixStations()->setFixStations({});
+    m_root->entrances()->setEntrances({});
 }
 
 /**

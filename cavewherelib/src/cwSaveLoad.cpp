@@ -2382,6 +2382,9 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
         cwProtoUtils::saveFixStation(protoCave->add_fixstations(), fix);
     }
+    for (const cwEntrance& entrance : cave->entrances()->entrances()) {
+        cwProtoUtils::saveEntrance(protoCave->add_entrances(), entrance);
+    }
 
     if (!cave->externalCenterline().isEmpty()) {
         cwProtoUtils::saveExternalCenterline(protoCave->mutable_external_centerline(),
@@ -3786,6 +3789,10 @@ cwCaveData cwSaveLoad::caveDataFromProtoCave(const CavewhereProto::Cave& cavePro
     for (const auto& protoFix : caveProto.fixstations()) {
         cave.fixStations.append(cwProtoUtils::fromProtoFixStation(protoFix));
     }
+    cave.entrances.reserve(caveProto.entrances_size());
+    for (const auto& protoEntrance : caveProto.entrances()) {
+        cave.entrances.append(cwProtoUtils::fromProtoEntrance(protoEntrance));
+    }
     return cave;
 }
 
@@ -5132,9 +5139,10 @@ void cwSaveLoad::connectCave(cwCave *cave)
     });
 
     // connectCave runs after the cave's data is loaded, so watching modelReset
-    // is safe here (the load-time setFixStations() reset fires before these
-    // connections exist).
+    // is safe here (the load-time setFixStations()/setEntrances() resets fire
+    // before these connections exist).
     connectListModelSaveTrigger(cave->fixStations(), WatchReset::Yes, saveCave);
+    connectListModelSaveTrigger(cave->entrances(), WatchReset::Yes, saveCave);
 }
 
 

@@ -128,18 +128,14 @@ message FixStation {
     // Held for the fix-station twin of StationShot.ignoredWarnings; drop this
     // line when that field lands.
     reserved 12;
+}
 
-    // What the fixed station marks on the surface. Absent reads as Entrance.
-    enum Kind {
-        Entrance = 0;
-        Well = 1;
-        RadioLocation = 2;
-        Other = 3;
-    }
-    optional Kind kind = 13;
-
-    // The name the user gave the fix. Absent or empty means the owning node's name.
-    optional string label = 14;
+// A station a survey node marks as a cave entrance.
+message Entrance {
+    optional string id = 1;
+    optional string stationName = 2;
+    // The name the user gave the entrance. Absent or empty means the cave's name.
+    optional string label = 3;
 }
 
 message ExternalCenterline {
@@ -208,6 +204,7 @@ message Cave {
     optional QtProto.QString legacy_name = 1;
 
     repeated FixStation fixStations = 11;
+    repeated Entrance entrances = 17;
 
     // Attached external centerline (Survex/Compass/Walls). Absent for
     // Native caves; present (and entry_file set) for Attached/Scope.

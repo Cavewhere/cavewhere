@@ -239,8 +239,8 @@ MainWindowTest {
                       "the entrance should return when the Entrance Type is re-enabled")
         }
 
-        // Tapping the pin opens a popup naming the entrance, its kind, and the
-        // cave's length and depth.
+        // Tapping the pin opens a popup naming the entrance and the cave's length
+        // and depth, with no Kind row.
         function test_tapEntranceShowsPopup() {
             const {point} = addSolvedEntrance("Gypsum Hollow")
 
@@ -250,32 +250,33 @@ MainWindowTest {
                    "the tapped entrance should be the view's selection")
 
             tryCompare(findChild(quoteBox, "entranceName"), "text", "Gypsum Hollow")
-            tryCompare(findChild(quoteBox, "entranceKind"), "text", "Entrance")
+            compare(findChild(quoteBox, "entranceKind"), null, "the popup has no Kind row")
 
             for (const statName of ["entranceLength", "entranceDepth"]) {
                 const stat = findChild(quoteBox, statName)
                 verify(stat !== null, statName + " should be in the popup")
-                verify(stat.visible, statName + " should show for an Entrance")
+                verify(stat.visible, statName + " should show for every entrance")
                 const value = findChild(stat, "value")
                 verify(parseFloat(value.text) > 0, statName + " should show the cave's value")
             }
         }
 
-        // A Well's popup names it and its kind, without the cave's length and depth.
-        function test_wellPopupShowsNameAndKind() {
+        // A labeled entrance's popup leads with its label, from the cave's
+        // entrance entry, and still shows the cave's length and depth.
+        function test_labeledEntrancePopupShowsTheLabel() {
             const {cave, point} = addSolvedEntrance("Gypsum Hollow")
-            const fixes = cave.fixStations
-            verify(fixes.setData(fixes.index(0), FixStation.Well, FixStationModel.KindRole))
-            verify(fixes.setData(fixes.index(0), "North Sink", FixStationModel.LabelRole))
-            tryVerify(() => point.kind === FixStation.Well && point.displayName === "North Sink",
-                      5000, "the point should follow the fix's kind and label")
+            const entrances = cave.entrances
+            const row = entrances.addEntrance("A1")
+            verify(row >= 0, "A1 should be marked an entrance")
+            verify(entrances.setData(entrances.index(row), "North Sink", EntranceModel.LabelRole))
+            tryCompare(point, "displayName", "North Sink", 5000,
+                       "the point should follow the entrance's label")
 
             const quoteBox = openEntrancePopup(point)
             tryCompare(findChild(quoteBox, "entranceName"), "text", "North Sink")
-            tryCompare(findChild(quoteBox, "entranceKind"), "text", "Well")
             for (const statName of ["entranceLength", "entranceDepth"]) {
                 const stat = findChild(quoteBox, statName)
-                verify(stat === null || !stat.visible, statName + " should be hidden for a Well")
+                verify(stat !== null && stat.visible, statName + " should show for a labeled entrance")
             }
         }
 
@@ -290,7 +291,7 @@ MainWindowTest {
             compare(view.layerKey, "entrances")
         }
 
-        // Every entrance draws the one cave pin, whatever its fix's Kind.
+        // Every entrance draws the one cave pin.
         function test_entranceViewDeclaresOnePin() {
             const view = entranceView()
             verify(view !== null, "the renderer should host an entrance MarkerView")
@@ -298,28 +299,16 @@ MainWindowTest {
             compare(String(view.sprites[0].source), "qrc:/icons/svg/entrancePin.svg")
         }
 
-        // The popup leads with the cave icon for a fix of every Kind.
-        function test_popupShowsCaveIconForEveryKind() {
-            const {cave, point} = addSolvedEntrance("Gypsum Hollow")
-            const fixes = cave.fixStations
-            for (const kind of [FixStation.Entrance, FixStation.Well,
-                                FixStation.RadioLocation, FixStation.Other]) {
-                fixes.setData(fixes.index(0), kind, FixStationModel.KindRole)
-                tryVerify(() => point.kind === kind && point.visible, 5000,
-                          "the point should follow the fix's kind " + kind)
+        // The popup leads with the cave icon.
+        function test_popupShowsTheCaveIcon() {
+            const {point} = addSolvedEntrance("Gypsum Hollow")
 
-                const quoteBox = openEntrancePopup(point)
-                const icon = findChild(quoteBox, "entranceIcon")
-                verify(icon !== null, "the popup should show an icon for kind " + kind)
-                compare(String(icon.source), String(Theme.kindIconCave),
-                        "the popup icon should be the cave icon for kind " + kind)
-                verify(icon.visible, "the popup icon should show for kind " + kind)
-
-                mouseClick(point.marker)
-                tryVerify(() => !point.selected, 5000, "tapping the selected entrance should close it")
-                tryVerify(() => findChild(point, "entranceQuoteBox") === null, 5000,
-                          "the popup should close before the next kind")
-            }
+            const quoteBox = openEntrancePopup(point)
+            const icon = findChild(quoteBox, "entranceIcon")
+            verify(icon !== null, "the popup should show an icon")
+            compare(String(icon.source), String(Theme.kindIconCave),
+                    "the popup icon should be the cave icon")
+            verify(icon.visible, "the popup icon should show")
         }
 
         // The popup's link opens the owning cave's page.

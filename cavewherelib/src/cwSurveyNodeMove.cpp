@@ -20,6 +20,19 @@
 
 namespace {
 
+//The rows of \a entries, fixes or entrances, whose station name \a matches.
+template<typename Entry, typename Predicate>
+QList<int> rowsMatching(const QList<Entry>& entries, Predicate matches)
+{
+    QList<int> rows;
+    for(int row = 0; row < entries.size(); ++row) {
+        if(matches(entries.at(row).stationName())) {
+            rows.append(row);
+        }
+    }
+    return rows;
+}
+
 //The station names of \a trips, keyed canonically, each with the spelling its
 //first trip writes it in. Scoped trips name their stations under a prefix, so
 //only flat trips share the node's own namespace.
@@ -150,12 +163,11 @@ cwSurveyNode::MovePlan cwSurveyNode::planMove(const QObject* subject) const
         plan.source = node->parentNode();
         plan.leavingLabel = plan.source->childScopeLabels().value(node->id());
 
-        const QList<cwFixStation>& fixes = plan.source->fixStations()->fixStations();
-        for(int row = 0; row < fixes.size(); ++row) {
-            if(!tailUnderLabel(fixes.at(row).stationName(), plan.leavingLabel).isEmpty()) {
-                plan.leavingFixRows.append(row);
-            }
-        }
+        const auto underLeavingLabel = [&](const QString& name) {
+            return !tailUnderLabel(name, plan.leavingLabel).isEmpty();
+        };
+        plan.leavingFixRows = rowsMatching(plan.source->fixStations()->fixStations(), underLeavingLabel);
+        plan.leavingEntranceRows = rowsMatching(plan.source->entrances()->entrances(), underLeavingLabel);
         return plan;
     }
 
@@ -186,16 +198,19 @@ cwSurveyNode::MovePlan cwSurveyNode::planMove(const QObject* subject) const
         }
     }
 
-    //A station already fixed here keeps that fix, so a second one is not
-    //carried in to fight it.
-    const QList<cwFixStation>& fixes = plan.source->fixStations()->fixStations();
-    for(int row = 0; row < fixes.size(); ++row) {
-        const QString name = fixes.at(row).stationName().trimmed();
-        if(plan.leavingNames.contains(cwStation::canonicalKey(name))
-                && m_fixStations->indexOf(name) < 0) {
-            plan.leavingFixRows.append(row);
-        }
-    }
+    const auto leaves = [&](const QString& name) {
+        return plan.leavingNames.contains(cwStation::canonicalKey(name.trimmed()));
+    };
+    //A station already fixed or marked here keeps that entry, so a second one
+    //is not carried in to fight it.
+    plan.leavingFixRows = rowsMatching(plan.source->fixStations()->fixStations(),
+                                       [&](const QString& name) {
+        return leaves(name) && m_fixStations->indexOf(name) < 0;
+    });
+    plan.leavingEntranceRows = rowsMatching(plan.source->entrances()->entrances(),
+                                            [&](const QString& name) {
+        return leaves(name) && m_entrances->indexOf(name) < 0;
+    });
 
     return plan;
 }
@@ -356,15 +371,27 @@ void cwSurveyNode::MoveToCommand::finishPlan()
         }
     }
 
+    const auto arrivingAtHolder = [&](const QString& name) {
+        const QString arriving = FixHolderPtr != DestinationPtr
+                ? tailUnderLabel(name, Plan.leavingLabel)
+                : arrivingName(name);
+        return arriving.trimmed();
+    };
+
     const QList<cwFixStation>& fixes = SourcePtr->fixStations()->fixStations();
     for(int row : std::as_const(Plan.leavingFixRows)) {
         const cwFixStation& before = fixes.at(row);
         cwFixStation after = before;
-        const QString arriving = FixHolderPtr != DestinationPtr
-                ? tailUnderLabel(before.stationName(), Plan.leavingLabel)
-                : arrivingName(before.stationName());
-        after.setStationName(arriving.trimmed());
+        after.setStationName(arrivingAtHolder(before.stationName()));
         FixEdits.append({row, before, after});
+    }
+
+    const QList<cwEntrance>& entrances = SourcePtr->entrances()->entrances();
+    for(int row : std::as_const(Plan.leavingEntranceRows)) {
+        const cwEntrance& before = entrances.at(row);
+        cwEntrance after = before;
+        after.setStationName(arrivingAtHolder(before.stationName()));
+        EntranceEdits.append({row, before, after});
     }
 
     Planned = true;
@@ -397,6 +424,14 @@ void cwSurveyNode::MoveToCommand::redo()
         FixHolderPtr->fixStations()->appendFixStation(edit.after);
     }
 
+    cwEntranceModel* sourceEntrances = SourcePtr->entrances();
+    for(const EntranceEdit& edit : std::as_const(EntranceEdits)) {
+        sourceEntrances->removeAt(sourceEntrances->indexOf(edit.before.id()));
+    }
+    for(const EntranceEdit& edit : std::as_const(EntranceEdits)) {
+        FixHolderPtr->entrances()->appendEntrance(edit.after);
+    }
+
     if(Region != nullptr) {
         emit Region->surveyMoved(SubjectPtr);
     }
@@ -404,6 +439,14 @@ void cwSurveyNode::MoveToCommand::redo()
 
 void cwSurveyNode::MoveToCommand::undo()
 {
+    cwEntranceModel* holderEntrances = FixHolderPtr->entrances();
+    for(auto it = EntranceEdits.crbegin(); it != EntranceEdits.crend(); ++it) {
+        holderEntrances->removeAt(holderEntrances->indexOf(it->after.id()));
+    }
+    for(const EntranceEdit& edit : std::as_const(EntranceEdits)) {
+        SourcePtr->entrances()->insertEntrance(edit.sourceRow, edit.before);
+    }
+
     cwFixStationModel* holderFixes = FixHolderPtr->fixStations();
     for(auto it = FixEdits.crbegin(); it != FixEdits.crend(); ++it) {
         holderFixes->removeAt(holderFixes->indexOf(it->after.id()));

@@ -13,23 +13,20 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
-#include "cwFixStation.h"
 #include "cwUnits.h"
 
 /**
  * @brief The stats line an entrance marker draws under its name in the 3D view.
  *
- * For an Entrance: "→<length>  ↓<depth>" in @a unitSystem, the length in the
+ * "→<length>  ↓<depth>" in @a unitSystem, the length in the
  * large unit (km / mi) at one decimal once it reaches one large unit and in the
  * small unit (m / ft) at no decimals below that, the depth always in the small
- * unit at no decimals. Every other kind gives an empty string and draws its
- * name alone.
+ * unit at no decimals.
  */
 class CAVEWHERE_LIB_EXPORT cwEntranceLabel
 {
 public:
-    static QString statsText(cwFixStation::Kind kind,
-                             double lengthMeters,
+    static QString statsText(double lengthMeters,
                              double depthMeters,
                              cwUnits::UnitSystem unitSystem);
 };

@@ -11,6 +11,7 @@
 #include "cwTripData.h"
 #include "cwUnits.h"
 #include "cwFixStation.h"
+#include "cwEntrance.h"
 #include "cwSurveyNodeKind.h"
 
 struct cwCaveData {
@@ -20,6 +21,7 @@ struct cwCaveData {
     cwUnits::LengthUnit lengthUnit = cwUnits::Meters;
     cwUnits::LengthUnit depthUnit = cwUnits::Meters;
     QList<cwFixStation> fixStations;
+    QList<cwEntrance> entrances;
     cwExternalCenterline externalCenterline;
 
     //! This node's child nodes, in row order. Each is saved under

@@ -22,15 +22,10 @@ QString formatMeters(double meters, cwUnits::LengthUnit unit, int decimals)
 }
 }
 
-QString cwEntranceLabel::statsText(cwFixStation::Kind kind,
-                                   double lengthMeters,
+QString cwEntranceLabel::statsText(double lengthMeters,
                                    double depthMeters,
                                    cwUnits::UnitSystem unitSystem)
 {
-    if(kind != cwFixStation::Entrance) {
-        return QString();
-    }
-
     const cwUnits::LengthUnit lengthUnit = cwUnits::magnitudeUnit(lengthMeters, unitSystem);
     const int lengthDecimals = lengthUnit == cwUnits::largeLengthUnit(unitSystem)
                                    ? kLargeUnitDecimals

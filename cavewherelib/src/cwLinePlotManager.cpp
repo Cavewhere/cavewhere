@@ -239,21 +239,10 @@ void cwLinePlotManager::connectFixStations(cwSurveyNode* node) {
     if (!node) { return; }
     auto* model = node->fixStations();
     if (!model) { return; }
-    connect(model, &cwFixStationModel::dataChanged,  this, &cwLinePlotManager::fixStationDataChanged, Qt::UniqueConnection);
+    connect(model, &cwFixStationModel::dataChanged,  this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
     connect(model, &cwFixStationModel::rowsInserted, this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
     connect(model, &cwFixStationModel::rowsRemoved,  this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
     connect(model, &cwFixStationModel::modelReset,   this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
-}
-
-void cwLinePlotManager::fixStationDataChanged(const QModelIndex&, const QModelIndex&, const QList<int>& roles)
-{
-    //A kind or a label annotates the fix; the solve never reads either.
-    const auto isSolveInput = [](int role) {
-        return role != cwFixStationModel::KindRole && role != cwFixStationModel::LabelRole;
-    };
-    if (roles.isEmpty() || std::any_of(roles.cbegin(), roles.cend(), isSolveInput)) {
-        runSurvex();
-    }
 }
 
 void cwLinePlotManager::connectEquates(cwEquateModel* equates) {

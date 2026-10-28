@@ -8,8 +8,8 @@ import cavewherelib
 // The 2D stand-in for one entrance marker. The pin and its text draw as
 // billboards of the entrance MarkerView's keyed layers; cwMarkerView reads this
 // item's marker visibility for both and places the item at the fix's solved
-// position. Tapping the pin opens a popup with the cave icon, the fix's name,
-// kind and its node's stats, and a link to the node's page.
+// position. Tapping the pin opens a popup with the cave icon, the entrance's
+// name, its node's stats, and a link to the node's page.
 PositionItem {
     id: pointId
     objectName: "entrancePoint_" + stationName
@@ -19,8 +19,6 @@ PositionItem {
     property string fixId
     property bool selected: false //Set by selectionManager
     property string displayName
-    property int kind //A FixStation.Kind
-    property string kindName
     required property SelectionManager selectionManager //Injected by cwMarkerView
     required property MarkerView markerView //Injected by cwMarkerView
 
@@ -105,11 +103,6 @@ PositionItem {
                         }
                     }
 
-                    QC.Label {
-                        objectName: "entranceKind"
-                        text: pointId.kindName
-                    }
-
                     QQ.Rectangle {
                         Layout.fillWidth: true
                         implicitHeight: Theme.entrancePopupDividerThickness
@@ -118,14 +111,12 @@ PositionItem {
 
                     SelectableCaveStat {
                         objectName: "entranceLength"
-                        visible: pointId.kind === FixStation.Entrance
                         label: "Length:"
                         unitValue: pointId.node ? pointId.node.length : null
                     }
 
                     SelectableCaveStat {
                         objectName: "entranceDepth"
-                        visible: pointId.kind === FixStation.Entrance
                         label: "Depth:"
                         unitValue: pointId.node ? pointId.node.depth : null
                         depth: true

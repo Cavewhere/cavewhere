@@ -99,15 +99,15 @@ QC.Popup {
 
     // Opens the editor for `name`, anchored under `anchorItem`, marking the
     // station Fixed first if it isn't already — for an unfixed station, creating
-    // the fix is the point of opening this.
+    // the fix is the point of opening this, and it marks the station an
+    // entrance too (cwSurveyNode::addFixedEntrance).
     function openFor(name: string, anchorItem: QQ.Item): void {
-        const model = popupId.fixStations
-        if (model === null) {
+        if (popupId.cave === null) {
             return
         }
 
         popupId.stationName = name
-        popupId.row = model.addFixStation(name)
+        popupId.row = popupId.cave.addFixedEntrance(name)
         if (popupId.row < 0) {
             return
         }
@@ -117,20 +117,20 @@ QC.Popup {
         popupId.open()
     }
 
-    // Drops the fix anchoring `name`. The survey table's Remove Fix goes through
-    // the editor rather than reaching past it for the model, so a cell only ever
-    // needs the one handle. Closes first when it's the row on screen — the popup
-    // edits by row index, which the removal invalidates.
+    // Drops the fix anchoring `name` and the station's entrance. The survey
+    // table's Remove Fix goes through the editor rather than reaching past it for
+    // the model, so a cell only ever needs the one handle. Closes first when it's
+    // the row on screen — the popup edits by row index, which the removal
+    // invalidates.
     function removeFixFor(name: string): void {
-        const model = popupId.fixStations
-        if (model === null) {
+        if (popupId.cave === null) {
             return
         }
 
         if (popupId.opened && popupId.stationName === name) {
             popupId.close()
         }
-        model.removeFixStation(name)
+        popupId.cave.removeFixAndEntrance(name)
     }
 
     // Positioned by hand rather than with a parent anchor: the caret that opens
