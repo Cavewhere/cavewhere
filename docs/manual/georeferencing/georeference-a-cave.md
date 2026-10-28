@@ -189,10 +189,10 @@ An **Add a fix station or a geospatial layer** link says what to do about it.
 ## Entrance markers
 
 Every fix that has a coordinate and a solved station gets a pin in the 3D
-view, tip down on the station, with one line of text above it. For an
-entrance the line reads `Gypsum Hollow  →1.2 km  ↓85 m`: the name, the cave's
-length and its depth, in the project's units. Lengths under 1 km (or 1 mi)
-show whole meters (or feet).
+view, tip down on the station, with its name above it. An entrance gets a
+second, smaller gray line under the name, such as `→1.2 km  ↓85 m`: the
+cave's length and its depth, in the project's units. Lengths under 1 km (or
+1 mi) show whole meters (or feet).
 
 Two columns on the **Fix Stations** page shape the marker. **Kind** picks
 one of `Entrance`, `Well`, `Radio Location` or `Other`, and each kind draws

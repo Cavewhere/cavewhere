@@ -192,6 +192,7 @@ void cwBillboardOverlayItem::setScene(cwScene* scene) {
     m_renderBillboards = nullptr;
     m_renderSpriteBillboards = nullptr;
     m_renderTextBillboards = nullptr;
+    m_extraTextLayers.clear();
 
     pushSpritesToLayer();
     repositionBillboards();
@@ -235,6 +236,11 @@ void cwBillboardOverlayItem::itemChange(ItemChange change, const ItemChangeData&
         }
         if(m_renderTextBillboards != nullptr) {
             m_renderTextBillboards->setWindow(value.window);
+        }
+        for(const QPointer<cwRenderTextBillboards>& layer : std::as_const(m_extraTextLayers)) {
+            if(!layer.isNull()) {
+                layer->setWindow(value.window);
+            }
         }
         pushSpritesToLayer();
         repositionBillboards();
@@ -307,10 +313,31 @@ cwRenderTextBillboards* cwBillboardOverlayItem::ensureRenderTextBillboards() {
     return m_renderTextBillboards;
 }
 
-void cwBillboardOverlayItem::setTextBillboard(cwTextBillboardHandle& handle, const QString& text,
-                                              const QVector3D& worldPosition, float depthBias,
-                                              const QPointF& pixelOffset) {
-    if(m_renderTextBillboards == nullptr) {
+cwRenderTextBillboards* cwBillboardOverlayItem::ensureRenderTextBillboards(const QString& key) {
+    if(key == m_layerKey) {
+        return ensureRenderTextBillboards();
+    }
+
+    const QPointer<cwRenderTextBillboards> cached = m_extraTextLayers.value(key);
+    if(!cached.isNull()) {
+        return cached;
+    }
+
+    QQuickWindow* quickWindow = window();
+    if(quickWindow == nullptr || m_scene.isNull()) {
+        return nullptr;
+    }
+
+    cwRenderTextBillboards* layer = m_scene->textBillboardLayer(key);
+    layer->setWindow(quickWindow);
+    m_extraTextLayers.insert(key, layer);
+    return layer;
+}
+
+void cwBillboardOverlayItem::setTextBillboard(cwRenderTextBillboards* layer, cwTextBillboardHandle& handle,
+                                              const QString& text, const QVector3D& worldPosition,
+                                              float depthBias, const QPointF& pixelOffset) {
+    if(layer == nullptr) {
         return;
     }
 
@@ -321,5 +348,11 @@ void cwBillboardOverlayItem::setTextBillboard(cwTextBillboardHandle& handle, con
     billboard.pixelOffset = pixelOffset;
 
     // Adds on first call, updates after; the handle removes it on teardown.
-    handle.set(m_renderTextBillboards, billboard);
+    handle.set(layer, billboard);
+}
+
+void cwBillboardOverlayItem::setTextBillboard(cwTextBillboardHandle& handle, const QString& text,
+                                              const QVector3D& worldPosition, float depthBias,
+                                              const QPointF& pixelOffset) {
+    setTextBillboard(m_renderTextBillboards, handle, text, worldPosition, depthBias, pixelOffset);
 }

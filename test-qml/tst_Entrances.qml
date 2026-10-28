@@ -165,6 +165,33 @@ MainWindowTest {
             return checkbox
         }
 
+        // The renderer styles the name line a step above station labels and the
+        // stats line under it smaller and gray, with the outline that flips with
+        // the theme, all through Theme tokens.
+        function test_entranceTextStylesComeFromTheme() {
+            const view = entranceView()
+            verify(view !== null, "the renderer should host an EntranceView")
+
+            verify(Theme.entranceNameFontSize > Theme.fontSizeUI,
+                   "an entrance name should be larger than a station label")
+            verify(Theme.entranceStatsFontSize < Theme.entranceNameFontSize,
+                   "the stats line should be smaller than the name")
+            verify(Qt.colorEqual(Theme.entranceStatsColor, Theme.textSecondary),
+                   "the stats line should be the secondary text gray")
+            verify(Qt.colorEqual(Theme.entranceStatsOutlineColor, Theme.textInverse),
+                   "the stats outline should be the inverse text color")
+
+            compare(view.font.pixelSize, Theme.entranceNameFontSize)
+            verify(Qt.colorEqual(view.color, Theme.textInverse), "the name keeps the inverse text fill")
+            verify(Qt.colorEqual(view.outlineColor, Theme.text), "the name keeps the text outline")
+
+            compare(view.statsFont.pixelSize, Theme.entranceStatsFontSize)
+            verify(Qt.colorEqual(view.statsColor, Theme.entranceStatsColor),
+                   "the view's stats fill should come from Theme.entranceStatsColor")
+            verify(Qt.colorEqual(view.statsOutlineColor, Theme.entranceStatsOutlineColor),
+                   "the view's stats outline should come from Theme.entranceStatsOutlineColor")
+        }
+
         // Unchecking the Entrance Type hides the fix's marker and rechecking it
         // brings the marker back. Hiding keeps the entrance in the view's drawn
         // set; only its pin, text and tap target go.

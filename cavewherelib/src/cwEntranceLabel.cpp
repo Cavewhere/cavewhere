@@ -22,14 +22,13 @@ QString formatMeters(double meters, cwUnits::LengthUnit unit, int decimals)
 }
 }
 
-QString cwEntranceLabel::text(const QString& name,
-                              cwFixStation::Kind kind,
-                              double lengthMeters,
-                              double depthMeters,
-                              cwUnits::UnitSystem unitSystem)
+QString cwEntranceLabel::statsText(cwFixStation::Kind kind,
+                                   double lengthMeters,
+                                   double depthMeters,
+                                   cwUnits::UnitSystem unitSystem)
 {
     if(kind != cwFixStation::Entrance) {
-        return name;
+        return QString();
     }
 
     const cwUnits::LengthUnit lengthUnit = cwUnits::magnitudeUnit(lengthMeters, unitSystem);
@@ -37,8 +36,7 @@ QString cwEntranceLabel::text(const QString& name,
                                    ? kLargeUnitDecimals
                                    : kSmallUnitDecimals;
 
-    return name
-           + kPartSeparator + kLengthArrow + formatMeters(lengthMeters, lengthUnit, lengthDecimals)
+    return kLengthArrow + formatMeters(lengthMeters, lengthUnit, lengthDecimals)
            + kPartSeparator + kDepthArrow
            + formatMeters(depthMeters, cwUnits::depthUnit(unitSystem), kSmallUnitDecimals);
 }

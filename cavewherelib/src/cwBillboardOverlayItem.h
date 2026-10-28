@@ -23,6 +23,7 @@
 //Qt includes
 #include <QQuickItem>
 #include <QQmlEngine>
+#include <QHash>
 #include <QPointer>
 #include <QPointF>
 #include <QQmlListProperty>
@@ -115,6 +116,10 @@ protected:
     // every update pass.
     cwRenderTextBillboards* ensureRenderTextBillboards();
 
+    // The scene's text layer of @a key, bound to the hosting window like the
+    // overlay's own (which layerKey() returns); null while either is missing.
+    cwRenderTextBillboards* ensureRenderTextBillboards(const QString& key);
+
     // Adds @a handle's billboard on the first call and updates it thereafter,
     // pushing it into the shared item layer, which is fetched here on first use.
     // ScreenConstant size. A no-op while the window or scene is missing, or when
@@ -136,6 +141,12 @@ protected:
     // logical pixels, y-up.
     void setTextBillboard(cwTextBillboardHandle& handle, const QString& text,
                           const QVector3D& worldPosition, float depthBias,
+                          const QPointF& pixelOffset = QPointF());
+
+    // setTextBillboard into @a layer, a layer from ensureRenderTextBillboards(key).
+    // A no-op for a null layer.
+    void setTextBillboard(cwRenderTextBillboards* layer, cwTextBillboardHandle& handle,
+                          const QString& text, const QVector3D& worldPosition, float depthBias,
                           const QPointF& pixelOffset = QPointF());
 
 private:
@@ -163,6 +174,7 @@ private:
     QPointer<cwRenderBillboards> m_renderBillboards; //!< shared, owned by m_scene
     QPointer<cwRenderSpriteBillboards> m_renderSpriteBillboards; //!< shared, owned by m_scene
     QPointer<cwRenderTextBillboards> m_renderTextBillboards; //!< shared, owned by m_scene
+    QHash<QString, QPointer<cwRenderTextBillboards>> m_extraTextLayers; //!< by key, owned by m_scene
 };
 
 #endif // CWBILLBOARDOVERLAYITEM_H

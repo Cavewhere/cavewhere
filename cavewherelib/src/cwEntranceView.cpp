@@ -30,6 +30,7 @@
 
 namespace {
 const QString kEntranceLayerKey = QStringLiteral("entrances");
+const QString kEntranceStatsLayerKey = QStringLiteral("entranceStats");
 
 // The pin's tip is the bottom center of its sprite, so the tip sits on the station.
 const QPointF kPinAnchor(0.5, 1.0);
@@ -39,6 +40,25 @@ const QPointF kPinAnchor(0.5, 1.0);
 constexpr float kEntranceDepthBias = 2.0f;
 constexpr float kPinOpacity = 1.0f;
 constexpr qreal kHalf = 0.5;
+
+// Returns true when @a layer's style changed.
+bool pushStyle(cwRenderTextBillboards* layer, const QFont& font, const QColor& color,
+               const QColor& outlineColor)
+{
+    if(layer == nullptr) {
+        return false;
+    }
+
+    cwRenderTextBillboards::Style style;
+    style.font = font;
+    style.color = color;
+    style.outlineColor = outlineColor;
+    if(layer->style() == style) {
+        return false;
+    }
+    layer->setStyle(style);
+    return true;
+}
 
 double toMeters(const cwLength* length)
 {
@@ -159,6 +179,56 @@ void cwEntranceView::setOutlineColor(const QColor& outlineColor)
     m_outlineColor = outlineColor;
     emit outlineColorChanged();
     restyle();
+}
+
+QFont cwEntranceView::statsFont() const
+{
+    return m_statsFont;
+}
+
+void cwEntranceView::setStatsFont(const QFont& statsFont)
+{
+    if(m_statsFont == statsFont) {
+        return;
+    }
+    m_statsFont = statsFont;
+    emit statsFontChanged();
+    restyle();
+}
+
+QColor cwEntranceView::statsColor() const
+{
+    return m_statsColor;
+}
+
+void cwEntranceView::setStatsColor(const QColor& statsColor)
+{
+    if(m_statsColor == statsColor) {
+        return;
+    }
+    m_statsColor = statsColor;
+    emit statsColorChanged();
+    restyle();
+}
+
+QColor cwEntranceView::statsOutlineColor() const
+{
+    return m_statsOutlineColor;
+}
+
+void cwEntranceView::setStatsOutlineColor(const QColor& statsOutlineColor)
+{
+    if(m_statsOutlineColor == statsOutlineColor) {
+        return;
+    }
+    m_statsOutlineColor = statsOutlineColor;
+    emit statsOutlineColorChanged();
+    restyle();
+}
+
+QString cwEntranceView::statsLayerKey() const
+{
+    return kEntranceStatsLayerKey;
 }
 
 qreal cwEntranceView::textGap() const
@@ -323,8 +393,8 @@ QList<std::pair<QUuid, cwEntranceView::Desired>> cwEntranceView::desiredEntrance
             entry.position = positions.position(fix.stationName());
             entry.kind = fix.kind();
             entry.displayName = fix.label().isEmpty() ? node->name() : fix.label();
-            entry.text = cwEntranceLabel::text(entry.displayName, entry.kind,
-                                               lengthMeters, depthMeters, unitSystem);
+            entry.statsText = cwEntranceLabel::statsText(entry.kind, lengthMeters, depthMeters,
+                                                         unitSystem);
             desired.append({fix.id(), entry});
         }
     }
@@ -334,7 +404,7 @@ QList<std::pair<QUuid, cwEntranceView::Desired>> cwEntranceView::desiredEntrance
 /**
  * The one pass every model, solve, name, size and unit change funnels into. It
  * diffs the drawn fixes against desiredEntrances(): removed fixes lose their pin,
- * text, tap target and keyword item, new ones gain them, and changed ones update
+ * text lines, tap target and keyword item, new ones gain them, and changed ones update
  * in place.
  */
 void cwEntranceView::rebuild()
@@ -361,7 +431,7 @@ void cwEntranceView::rebuild()
             it->second.item->deleteLater();
         }
         m_keywordRegistry.drop(it->first);
-        // Erasing the entry's handles removes its pin and text from the layers.
+        // Erasing the entry's handles removes its pin and both text lines from the layers.
         it = m_entries.erase(it);
         changed = true;
     }
@@ -374,7 +444,7 @@ void cwEntranceView::rebuild()
             entry.node = want.node;
             entry.position = want.position;
             entry.displayName = want.displayName;
-            entry.text = want.text;
+            entry.statsText = want.statsText;
             entry.kind = want.kind;
             entry.item = createItem(id, want);
             m_entries.emplace(id, std::move(entry));
@@ -409,9 +479,10 @@ void cwEntranceView::rebuild()
             if(!entry.item.isNull()) {
                 entry.item->setProperty("displayName", want.displayName);
             }
+            changed = true;
         }
-        if(entry.text != want.text) {
-            entry.text = want.text;
+        if(entry.statsText != want.statsText) {
+            entry.statsText = want.statsText;
             changed = true;
         }
         entry.position = want.position;
@@ -527,31 +598,27 @@ void cwEntranceView::createComponent()
 }
 
 /**
- * Pushes this view's style to its keyed text layer. Returns true when the
- * layer's style changed.
+ * Pushes this view's name style to its keyed text layer and its stats style to
+ * the stats layer. Returns true when either layer's style changed.
  */
 bool cwEntranceView::applyStyle()
 {
-    cwRenderTextBillboards* layer = renderTextBillboards();
-    if(layer == nullptr) {
+    // The stats layer is fetched only after the name layer, which keeps the
+    // layers' registration (draw) order: pins, names, stats.
+    cwRenderTextBillboards* names = renderTextBillboards();
+    if(names == nullptr) {
         return false;
     }
-
-    cwRenderTextBillboards::Style style;
-    style.font = m_font;
-    style.color = m_color;
-    style.outlineColor = m_outlineColor;
-    if(layer->style() == style) {
-        return false;
-    }
-    layer->setStyle(style);
-    return true;
+    const bool nameChanged = pushStyle(names, m_font, m_color, m_outlineColor);
+    const bool statsChanged = pushStyle(ensureRenderTextBillboards(kEntranceStatsLayerKey),
+                                        m_statsFont, m_statsColor, m_statsOutlineColor);
+    return nameChanged || statsChanged;
 }
 
 void cwEntranceView::restyle()
 {
     if(applyStyle()) {
-        // The text height moved, and with it each text's offset above its pin.
+        // A line height moved, and with it each line's offset above its pin.
         updateAllBillboards();
     }
 }
@@ -603,17 +670,32 @@ void cwEntranceView::updateBillboards(Entry& entry)
     setSpriteBillboard(entry.pinBillboard, entry.position, kEntranceDepthBias, kPinOpacity,
                        visible, int(entry.kind));
 
-    // A text billboard has no visible flag, so a hidden fix's text leaves the layer.
-    cwRenderTextBillboards* texts = renderTextBillboards();
-    if(visible && texts != nullptr) {
-        // Text centers on its offset point; lift it so its bottom clears the pin.
-        const qreal lift = spriteSize().height() + m_textGap
-                           + texts->textSize(entry.text).height() * kHalf;
-        setTextBillboard(entry.textBillboard, entry.text, entry.position, kEntranceDepthBias,
-                         QPointF(0.0, lift));
-    } else {
-        entry.textBillboard.reset();
+    // A text billboard has no visible flag, so a hidden fix's lines leave their layers.
+    cwRenderTextBillboards* names = renderTextBillboards();
+    cwRenderTextBillboards* stats = names != nullptr
+                                        ? ensureRenderTextBillboards(kEntranceStatsLayerKey)
+                                        : nullptr;
+    if(!visible || stats == nullptr) {
+        entry.nameBillboard.reset();
+        entry.statsBillboard.reset();
+        return;
     }
+
+    // Each line centers on its offset point. The block of lines sits m_textGap
+    // above the pin: the stats line at its bottom, the name directly above it.
+    qreal blockBottom = spriteSize().height() + m_textGap;
+    if(entry.statsText.isEmpty()) {
+        entry.statsBillboard.reset();
+    } else {
+        const qreal statsHeight = stats->textSize(entry.statsText).height();
+        setTextBillboard(stats, entry.statsBillboard, entry.statsText, entry.position,
+                         kEntranceDepthBias, QPointF(0.0, blockBottom + statsHeight * kHalf));
+        blockBottom += statsHeight;
+    }
+
+    const qreal nameHeight = names->textSize(entry.displayName).height();
+    setTextBillboard(names, entry.nameBillboard, entry.displayName, entry.position,
+                     kEntranceDepthBias, QPointF(0.0, blockBottom + nameHeight * kHalf));
 }
 
 void cwEntranceView::select(cwSurveyNode* node, const QUuid& fixId)

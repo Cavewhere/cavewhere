@@ -39,6 +39,7 @@ public:
     using cwBillboardOverlayItem::ensureRenderTextBillboards;
     using cwBillboardOverlayItem::setBillboard;
     using cwBillboardOverlayItem::setSpriteBillboard;
+    using cwBillboardOverlayItem::setTextBillboard;
 
     int repositionCount = 0;
 
@@ -56,6 +57,7 @@ cwRenderBillboards::Billboard makeBillboard(QQuickItem* content)
 
 const QString kPinKey = QStringLiteral("pins");
 const QString kOtherKey = QStringLiteral("other");
+const QString kExtraTextKey = QStringLiteral("pinStats");
 const QSizeF kPrototypeSize(20.0, 20.0);
 const QSizeF kResizedPrototypeSize(32.0, 24.0);
 
@@ -568,4 +570,50 @@ TEST_CASE("cwBillboardOverlayItem: a destroyed overlay hands its layer an empty 
 
     overlay.reset();
     CHECK(layer->spriteCount() == 0);
+}
+
+TEST_CASE("cwBillboardOverlayItem: a further keyed text layer is wired like the overlay's own",
+          "[cwBillboardOverlayItem]")
+{
+    cwScene scene;
+    TestOverlay overlay(kPinKey);
+    cwTextBillboardHandle handle;
+
+    {
+        QQuickWindow window1;
+        overlay.setParentItem(window1.contentItem());
+        overlay.setScene(&scene);
+
+        // The overlay's own key gives its own text layer.
+        CHECK(overlay.ensureRenderTextBillboards(kPinKey) == overlay.ensureRenderTextBillboards());
+
+        cwRenderTextBillboards* extra = overlay.ensureRenderTextBillboards(kExtraTextKey);
+        REQUIRE(extra == scene.textBillboardLayer(kExtraTextKey));
+        CHECK(extra != scene.textBillboardLayer(kPinKey));
+        CHECK(extra->window() == &window1);
+
+        overlay.setTextBillboard(extra, handle, QStringLiteral("B7"), QVector3D(1, 2, 3), 1.0f,
+                                 QPointF(0.0, 5.0));
+        CHECK(handle.isValid());
+        CHECK(extra->billboardCount() == 1);
+        CHECK(scene.textBillboardLayer(kPinKey)->billboardCount() == 0);
+        handle.reset();
+        CHECK(extra->billboardCount() == 0);
+    }
+
+    // Moving to a second window rebinds the further layer with no new fetch.
+    QQuickWindow window2;
+    overlay.setParentItem(window2.contentItem());
+    CHECK(scene.textBillboardLayer(kExtraTextKey)->window() == &window2);
+
+    // A scene swap fetches the further layer from the new scene.
+    cwScene otherScene;
+    overlay.setScene(&otherScene);
+    cwRenderTextBillboards* swapped = overlay.ensureRenderTextBillboards(kExtraTextKey);
+    CHECK(swapped == otherScene.textBillboardLayer(kExtraTextKey));
+    CHECK(swapped->window() == &window2);
+
+    // A null layer is a no-op.
+    overlay.setTextBillboard(nullptr, handle, QStringLiteral("B7"), QVector3D(1, 2, 3), 1.0f);
+    CHECK_FALSE(handle.isValid());
 }

@@ -514,11 +514,15 @@ QtObject {
     readonly property real disabledOpacity: 0.4
     readonly property real uncheckedToggleOpacity: 0.7
     readonly property real completedLeadOpacity: 0.6
-    // Entrance markers in the 3D view: the pin, and the text line above it.
+    // Entrance markers in the 3D view: the pin, the name line above it, and an
+    // entrance's smaller gray length and depth line between the two.
     readonly property int entrancePinWidth: Math.round(20 * fontScale)
     readonly property int entrancePinHeight: Math.round(28 * fontScale)
     readonly property int entranceTextGap: Math.round(2 * fontScale)
-    readonly property int entranceFontSize: fontSizeBody
+    readonly property int entranceNameFontSize: fontSizeMedium
+    readonly property int entranceStatsFontSize: fontSizeBody
+    readonly property color entranceStatsColor: textSecondary
+    readonly property color entranceStatsOutlineColor: textInverse
     // The entrance popup: the rule under its title, and the "Open <node>" link
     // icon with its gap to the text.
     readonly property int entrancePopupDividerThickness: 1

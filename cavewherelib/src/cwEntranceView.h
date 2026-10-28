@@ -36,15 +36,17 @@ class cwKeywordItem;
 class QQmlComponent;
 
 /**
- * @brief Draws a pin and one line of text at every placed, solved fix station.
+ * @brief Draws a pin and up to two lines of text at every placed, solved fix station.
  *
  * Walks every node of the region and, for each of a node's own fixes whose
  * station has a solved position below that node and whose coordinate places it,
  * draws a tip-down pin in this view's keyed sprite layer (slot = the fix's
- * cwFixStation::Kind) and the cwEntranceLabel text above it in the keyed text
- * layer. Each drawn fix also owns an invisible EntrancePoint item, the tap
- * target, and one cwKeywordItem (Type = kind name, Name = display name,
- * extending the node's keywords) whose cwEntranceVisibility hides that fix.
+ * cwFixStation::Kind) with the fix's display name above it in the keyed text
+ * layer. An Entrance also draws its cwEntranceLabel stats line between the pin
+ * and the name, in the statsLayerKey() text layer with its own style. Each
+ * drawn fix also owns an invisible EntrancePoint item, the tap target, and one
+ * cwKeywordItem (Type = kind name, Name = display name, extending the node's
+ * keywords) whose cwEntranceVisibility hides that fix.
  * Model changes coalesce into one queued rebuild; camera changes only
  * reproject.
  */
@@ -59,6 +61,9 @@ class CAVEWHERE_LIB_EXPORT cwEntranceView : public cwBillboardOverlayItem
     Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged)
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
     Q_PROPERTY(QColor outlineColor READ outlineColor WRITE setOutlineColor NOTIFY outlineColorChanged)
+    Q_PROPERTY(QFont statsFont READ statsFont WRITE setStatsFont NOTIFY statsFontChanged)
+    Q_PROPERTY(QColor statsColor READ statsColor WRITE setStatsColor NOTIFY statsColorChanged)
+    Q_PROPERTY(QColor statsOutlineColor READ statsOutlineColor WRITE setStatsOutlineColor NOTIFY statsOutlineColorChanged)
     Q_PROPERTY(qreal textGap READ textGap WRITE setTextGap NOTIFY textGapChanged)
     Q_PROPERTY(int entranceCount READ entranceCount NOTIFY entrancesChanged)
 
@@ -82,6 +87,20 @@ public:
 
     QColor outlineColor() const;
     void setOutlineColor(const QColor& outlineColor);
+
+    //! The style of the length and depth line under an entrance's name.
+    QFont statsFont() const;
+    void setStatsFont(const QFont& statsFont);
+
+    QColor statsColor() const;
+    void setStatsColor(const QColor& statsColor);
+
+    QColor statsOutlineColor() const;
+    void setStatsOutlineColor(const QColor& statsOutlineColor);
+
+    //! The key of the scene text layer that draws the stats lines; layerKey()
+    //! draws the names.
+    QString statsLayerKey() const;
 
     //! Logical pixels between the top of the pin and the bottom of the text.
     qreal textGap() const;
@@ -111,25 +130,30 @@ signals:
     void fontChanged();
     void colorChanged();
     void outlineColorChanged();
+    void statsFontChanged();
+    void statsColorChanged();
+    void statsOutlineColorChanged();
     void textGapChanged();
-    //! Emitted once per rebuild pass that changed the drawn set, any kind, or any text.
+    //! Emitted once per rebuild pass that changed the drawn set, any kind, any
+    //! name, or any stats line.
     void entrancesChanged();
 
 protected:
     void repositionBillboards() override;
 
 private:
-    // One drawn fix. Move-only: the handles own the fix's pin and text in the
-    // keyed layers and remove them when the entry is erased.
+    // One drawn fix. Move-only: the handles own the fix's pin and text lines in
+    // the keyed layers and remove them when the entry is erased.
     struct Entry {
         QPointer<cwSurveyNode> node;
         QPointer<QQuickItem> item; //!< the EntrancePoint tap target
         QPointer<cwKeywordItem> keywordItem;
         cwSpriteBillboardHandle pinBillboard;
-        cwTextBillboardHandle textBillboard;
+        cwTextBillboardHandle nameBillboard;
+        cwTextBillboardHandle statsBillboard;
         QVector3D position;
         QString displayName;
-        QString text;
+        QString statsText; //!< set for an Entrance, empty otherwise
         cwFixStation::Kind kind = cwFixStation::Entrance;
         bool keywordVisible = true;
     };
@@ -140,7 +164,7 @@ private:
         QString stationName;
         QVector3D position;
         QString displayName;
-        QString text;
+        QString statsText;
         cwFixStation::Kind kind = cwFixStation::Entrance;
     };
 
@@ -149,6 +173,9 @@ private:
     QFont m_font;
     QColor m_color = Qt::white;
     QColor m_outlineColor = Qt::black;
+    QFont m_statsFont;
+    QColor m_statsColor = Qt::gray;
+    QColor m_statsOutlineColor = Qt::white;
     qreal m_textGap = 0.0;
 
     // std::map, not QHash: Entry is move-only and QHash's detach() copies values.

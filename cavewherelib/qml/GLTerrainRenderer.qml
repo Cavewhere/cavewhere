@@ -298,9 +298,12 @@ Item {
         scene: rendererId.scene
         region: RootData.region
         keywordItemModel: RootData.keywordItemModel
-        font.pixelSize: Theme.entranceFontSize
+        font.pixelSize: Theme.entranceNameFontSize
         color: Theme.textInverse
         outlineColor: Theme.text
+        statsFont.pixelSize: Theme.entranceStatsFontSize
+        statsColor: Theme.entranceStatsColor
+        statsOutlineColor: Theme.entranceStatsOutlineColor
         textGap: Theme.entranceTextGap
         sprites: [entrancePin, wellPin, radioLocationPin, otherPin]
 
