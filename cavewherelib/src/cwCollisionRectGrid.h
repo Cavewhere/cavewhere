@@ -43,6 +43,10 @@ public:
     // empty rect returns true and blocks nothing.
     bool addRect(const QRect& rect);
 
+    // Records `rect` without testing it, so it may overlap placed rects; later
+    // addRect calls collide with it. An empty rect is ignored.
+    void insertRect(const QRect& rect);
+
     // Rects recorded since the last reset or clear.
     int rectCount() const;
     QRect bounds() const;
@@ -52,6 +56,13 @@ public:
     static constexpr int kMaxCellsPerAxis = 1024;
 
 private:
+    struct CellRange {
+        int firstColumn;
+        int lastColumn;
+        int firstRow;
+        int lastRow;
+    };
+
     struct Entry {
         QRect rect;
         int next;   // index of the next entry in the same cell, or -1
@@ -64,6 +75,9 @@ private:
     int m_rectCount = 0;
     std::vector<int> m_cellHeads;   // columns * rows, -1 when empty
     std::vector<Entry> m_entries;   // one per cell a rect covers
+
+    CellRange coveredCells(const QRect& rect) const;
+    void link(const QRect& rect, const CellRange& cells);
 };
 
 #endif // CWCOLLISIONRECTGRID_H

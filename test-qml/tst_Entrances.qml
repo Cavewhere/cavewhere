@@ -192,6 +192,24 @@ MainWindowTest {
                    "the view's stats outline should come from Theme.entranceStatsOutlineColor")
         }
 
+        // The renderer's entrances and station labels share the scene's declutter
+        // pass, entrances first.
+        function test_entrancesAndStationLabelsJoinTheDeclutterPass() {
+            const view = entranceView()
+            verify(view !== null, "the renderer should host an EntranceView")
+            compare(view.declutterTier, LabelDeclutter.EntranceTier)
+
+            const siblings = view.parent.children
+            let labelViews = []
+            for (let i = 0; i < siblings.length; ++i) {
+                if (siblings[i] instanceof LinePlotLabelView) {
+                    labelViews.push(siblings[i])
+                }
+            }
+            compare(labelViews.length, 1, "the renderer should host one LinePlotLabelView")
+            compare(labelViews[0].declutterTier, LabelDeclutter.StationLabelTier)
+        }
+
         // Unchecking the Entrance Type hides the fix's marker and rechecking it
         // brings the marker back. Hiding keeps the entrance in the view's drawn
         // set; only its pin, text and tap target go.

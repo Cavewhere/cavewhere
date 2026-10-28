@@ -30,6 +30,7 @@
 
 //Std includes
 #include <map>
+#include <vector>
 
 class cwSurveyNode;
 class cwKeywordItem;
@@ -140,6 +141,7 @@ signals:
 
 protected:
     void repositionBillboards() override;
+    void claimDeclutterSpace(cwCollisionRectGrid& grid) override;
 
 private:
     // One drawn fix. Move-only: the handles own the fix's pin and text lines in
@@ -154,8 +156,19 @@ private:
         QVector3D position;
         QString displayName;
         QString statsText; //!< set for an Entrance, empty otherwise
+        QSizeF nameSize; //!< laid-out size of displayName, valid while textSizesValid
+        QSizeF statsSize; //!< laid-out size of statsText; an empty size for empty statsText
         cwFixStation::Kind kind = cwFixStation::Entrance;
         bool keywordVisible = true;
+        bool textSizesValid = false;
+    };
+
+    // An entry whose text block claims space in a declutter pass, and where.
+    struct TextCandidate {
+        Entry* entry = nullptr;
+        QUuid id;
+        QVector3D qtViewportPosition;
+        bool shown = false; //!< drew its text after the last pass
     };
 
     // What one rebuild pass wants drawn for a fix.
@@ -184,6 +197,7 @@ private:
     cwKeywordItemRegistry<QUuid> m_keywordRegistry;
     QQmlComponent* m_itemComponent = nullptr;
     bool m_rebuildPending = false;
+    std::vector<TextCandidate> m_textCandidates; //!< reused by each declutter pass
 
     void scheduleRebuild();
     void connectRegion();
@@ -199,9 +213,15 @@ private:
     void createComponent();
 
     bool applyStyle();
+    static void measureText(Entry& entry, cwRenderTextBillboards* names, cwRenderTextBillboards* stats);
     void projectItems();
+    bool isEntryVisible(const Entry& entry) const;
+    void updatePin(Entry& entry, bool visible);
+    void updateText(Entry& entry);
+    static void releaseText(Entry& entry);
     void updateBillboards(Entry& entry);
     void updateAllBillboards();
+    void prepareLayers();
     void clearSelectionIfIn(const Entry& entry);
 
 private slots:

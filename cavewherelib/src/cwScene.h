@@ -38,6 +38,7 @@ class cwGeometryItersecter;
 class cwRhiItemRenderer;
 class cwEDLSettings;
 class cwSceneVisibility;
+class cwLabelDeclutter;
 struct cwOffscreenRenderParameters;
 struct cwOffscreenRenderJob;
 
@@ -113,6 +114,10 @@ public:
     // the store migration it runs alongside the legacy per-consumer twins
     // (dual-publish) — see plans/SCENE_VISIBILITY_STORE_PLAN.html.
     cwSceneVisibility* visibility() const;
+
+    // The scene's one declutter pass, shared by the overlays that opt in
+    // through cwBillboardOverlayItem::declutterTier.
+    cwLabelDeclutter* labelDeclutter() const;
 
     // The world-space box a camera should frame: the union of the scene's
     // visible geometry. "What should reset/capture frame" is a scene concern;
@@ -198,6 +203,8 @@ private:
 
     // Live EDL tuning; owned here, read by cwRhiScene::synchroize().
     cwEDLSettings* m_edl;
+
+    cwLabelDeclutter* m_labelDeclutter;
 
     // The shared billboard overlay layer (see billboardLayer()); a render object
     // parented to the scene, created on first request.

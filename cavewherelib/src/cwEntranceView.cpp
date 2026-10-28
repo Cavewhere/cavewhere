@@ -15,6 +15,7 @@
 #include "cwFixStationModel.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordModel.h"
+#include "cwLabelDeclutter.h"
 #include "cwLength.h"
 #include "cwPositionItem.h"
 #include "cwRenderSpriteBillboards.h"
@@ -27,6 +28,10 @@
 #include <QMatrix4x4>
 #include <QQmlComponent>
 #include <QQmlContext>
+#include <QRectF>
+
+//Std includes
+#include <algorithm>
 
 namespace {
 const QString kEntranceLayerKey = QStringLiteral("entrances");
@@ -243,7 +248,11 @@ void cwEntranceView::setTextGap(qreal textGap)
     }
     m_textGap = textGap;
     emit textGapChanged();
-    updateAllBillboards();
+    if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        declutter->schedulePass();
+    } else {
+        updateAllBillboards();
+    }
 }
 
 int cwEntranceView::entranceCount() const
@@ -475,6 +484,7 @@ void cwEntranceView::rebuild()
         }
         if(entry.displayName != want.displayName) {
             entry.displayName = want.displayName;
+            entry.textSizesValid = false;
             replaceKeyword(entry, cwKeywordModel::NameKey, want.displayName);
             if(!entry.item.isNull()) {
                 entry.item->setProperty("displayName", want.displayName);
@@ -483,6 +493,7 @@ void cwEntranceView::rebuild()
         }
         if(entry.statsText != want.statsText) {
             entry.statsText = want.statsText;
+            entry.textSizesValid = false;
             changed = true;
         }
         entry.position = want.position;
@@ -497,7 +508,12 @@ void cwEntranceView::rebuild()
     ensureKeywordItems(needsKeywordItem);
 
     projectItems();
-    updateAllBillboards();
+    if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        declutter->invalidate();
+        declutter->ensurePass(camera());
+    } else {
+        updateAllBillboards();
+    }
 
     if(changed) {
         emit entrancesChanged();
@@ -612,21 +628,136 @@ bool cwEntranceView::applyStyle()
     const bool nameChanged = pushStyle(names, m_font, m_color, m_outlineColor);
     const bool statsChanged = pushStyle(ensureRenderTextBillboards(kEntranceStatsLayerKey),
                                         m_statsFont, m_statsColor, m_statsOutlineColor);
-    return nameChanged || statsChanged;
+    const bool styleChanged = nameChanged || statsChanged;
+    if(styleChanged) {
+        for(auto& [id, entry] : m_entries) {
+            entry.textSizesValid = false;
+        }
+    }
+    return styleChanged;
+}
+
+/**
+ * Lays out the entry's name and stats lines once per text or style change, so
+ * a declutter pass reads sizes without laying out hidden text every frame.
+ */
+void cwEntranceView::measureText(Entry& entry, cwRenderTextBillboards* names, cwRenderTextBillboards* stats)
+{
+    if(entry.textSizesValid) {
+        return;
+    }
+    entry.nameSize = names->textSize(entry.displayName);
+    entry.statsSize = entry.statsText.isEmpty() ? QSizeF() : stats->textSize(entry.statsText);
+    entry.textSizesValid = true;
 }
 
 void cwEntranceView::restyle()
 {
     if(applyStyle()) {
         // A line height moved, and with it each line's offset above its pin.
-        updateAllBillboards();
+        if(cwLabelDeclutter* declutter = labelDeclutter()) {
+            declutter->schedulePass();
+        } else {
+            updateAllBillboards();
+        }
     }
 }
 
 void cwEntranceView::repositionBillboards()
 {
     projectItems();
-    updateAllBillboards();
+    if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        declutter->ensurePass(camera());
+    } else {
+        updateAllBillboards();
+    }
+}
+
+/**
+ * Every visible pin claims its rect unconditionally, so pins never hide. Then
+ * each visible text block claims the union of its name and stats lines: blocks
+ * that drew after the last pass first, the rest after, each group ordered by
+ * viewport depth, y, x and fix id. A block that collides hides both lines and
+ * leaves its pin drawn.
+ */
+void cwEntranceView::claimDeclutterSpace(cwCollisionRectGrid& grid)
+{
+    if(camera() == nullptr) {
+        return;
+    }
+
+    prepareLayers();
+    cwRenderTextBillboards* names = renderTextBillboards();
+    cwRenderTextBillboards* stats = names != nullptr
+                                        ? ensureRenderTextBillboards(kEntranceStatsLayerKey)
+                                        : nullptr;
+
+    const QMatrix4x4 matrix = camera()->qtViewportMatrix() * camera()->viewProjectionMatrix();
+    const QSizeF pinSize = spriteSize();
+    const QPointF pinAnchorOffset(pinSize.width() * kPinAnchor.x(), pinSize.height() * kPinAnchor.y());
+
+    m_textCandidates.clear();
+    for(auto& [id, entry] : m_entries) {
+        const bool visible = isEntryVisible(entry);
+        updatePin(entry, visible);
+
+        const QVector3D qtViewportPosition = matrix.map(entry.position);
+        if(!visible || camera()->isQtViewportCoordinateClipped(qtViewportPosition)) {
+            releaseText(entry);
+            continue;
+        }
+
+        const QPointF tip(qtViewportPosition.x(), qtViewportPosition.y());
+        grid.insertRect(QRectF(tip - pinAnchorOffset, pinSize).toAlignedRect());
+        m_textCandidates.push_back(TextCandidate{&entry, id, qtViewportPosition, entry.nameBillboard.isValid()});
+    }
+
+    if(stats == nullptr) {
+        for(const TextCandidate& candidate : m_textCandidates) {
+            releaseText(*candidate.entry);
+        }
+        return;
+    }
+
+    std::sort(m_textCandidates.begin(), m_textCandidates.end(),
+              [](const TextCandidate& lhs, const TextCandidate& rhs) {
+                  if(lhs.shown != rhs.shown) {
+                      return lhs.shown;
+                  }
+                  const QVector3D& a = lhs.qtViewportPosition;
+                  const QVector3D& b = rhs.qtViewportPosition;
+                  if(a.z() != b.z()) {
+                      return a.z() < b.z();
+                  }
+                  if(a.y() != b.y()) {
+                      return a.y() < b.y();
+                  }
+                  if(a.x() != b.x()) {
+                      return a.x() < b.x();
+                  }
+                  return lhs.id < rhs.id;
+              });
+
+    for(const TextCandidate& candidate : m_textCandidates) {
+        Entry& entry = *candidate.entry;
+        measureText(entry, names, stats);
+        const qreal width = std::max(entry.nameSize.width(), entry.statsSize.width());
+        const qreal height = entry.nameSize.height() + entry.statsSize.height();
+
+        // Qt viewport y grows downward: the block ends m_textGap above the pin.
+        const QPointF tip(candidate.qtViewportPosition.x(), candidate.qtViewportPosition.y());
+        const QRectF pinRect(tip - pinAnchorOffset, pinSize);
+        const qreal blockBottom = pinRect.top() - m_textGap;
+        QRect block = QRectF(tip.x() - width * kHalf, blockBottom - height, width, height).toAlignedRect();
+        // Rounding outward keeps the block at least one pixel clear of its own pin.
+        block.setBottom(std::min(block.bottom(), pinRect.toAlignedRect().top() - 1));
+
+        if(grid.addRect(block)) {
+            updateText(entry);
+        } else {
+            releaseText(entry);
+        }
+    }
 }
 
 void cwEntranceView::projectItems()
@@ -645,7 +776,7 @@ void cwEntranceView::projectItems()
     }
 }
 
-void cwEntranceView::updateAllBillboards()
+void cwEntranceView::prepareLayers()
 {
     if(cwRenderSpriteBillboards* pins = ensureRenderSpriteBillboards()) {
         pins->setAnchor(kPinAnchor);
@@ -653,47 +784,85 @@ void cwEntranceView::updateAllBillboards()
     if(ensureRenderTextBillboards() != nullptr) {
         applyStyle();
     }
+}
 
+void cwEntranceView::updateAllBillboards()
+{
+    prepareLayers();
     for(auto& [id, entry] : m_entries) {
         updateBillboards(entry);
     }
 }
 
-void cwEntranceView::updateBillboards(Entry& entry)
+bool cwEntranceView::isEntryVisible(const Entry& entry) const
 {
     const QQuickItem* marker = entry.item.isNull()
                                    ? nullptr
                                    : entry.item->property("marker").value<QQuickItem*>();
-    const bool visible = marker != nullptr ? marker->isVisible()
-                                           : entry.keywordVisible && isVisible();
+    return marker != nullptr ? marker->isVisible()
+                             : entry.keywordVisible && isVisible();
+}
 
+void cwEntranceView::updatePin(Entry& entry, bool visible)
+{
     setSpriteBillboard(entry.pinBillboard, entry.position, kEntranceDepthBias, kPinOpacity,
                        visible, int(entry.kind));
+}
 
-    // A text billboard has no visible flag, so a hidden fix's lines leave their layers.
+// A text billboard has no visible flag, so a hidden line leaves its layer.
+void cwEntranceView::releaseText(Entry& entry)
+{
+    entry.nameBillboard.reset();
+    entry.statsBillboard.reset();
+}
+
+/**
+ * Outside the scene's declutter pass, draws the entry's pin and text lines as
+ * its visibility says. In the pass, only hides them at once; showing waits
+ * for the one queued pass that decides where text has room.
+ */
+void cwEntranceView::updateBillboards(Entry& entry)
+{
+    const bool visible = isEntryVisible(entry);
+    updatePin(entry, visible);
+
+    if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        if(!visible) {
+            releaseText(entry);
+        }
+        declutter->schedulePass();
+    } else if(visible) {
+        updateText(entry);
+    } else {
+        releaseText(entry);
+    }
+}
+
+void cwEntranceView::updateText(Entry& entry)
+{
     cwRenderTextBillboards* names = renderTextBillboards();
     cwRenderTextBillboards* stats = names != nullptr
                                         ? ensureRenderTextBillboards(kEntranceStatsLayerKey)
                                         : nullptr;
-    if(!visible || stats == nullptr) {
-        entry.nameBillboard.reset();
-        entry.statsBillboard.reset();
+    if(stats == nullptr) {
+        releaseText(entry);
         return;
     }
 
     // Each line centers on its offset point. The block of lines sits m_textGap
     // above the pin: the stats line at its bottom, the name directly above it.
+    measureText(entry, names, stats);
     qreal blockBottom = spriteSize().height() + m_textGap;
     if(entry.statsText.isEmpty()) {
         entry.statsBillboard.reset();
     } else {
-        const qreal statsHeight = stats->textSize(entry.statsText).height();
+        const qreal statsHeight = entry.statsSize.height();
         setTextBillboard(stats, entry.statsBillboard, entry.statsText, entry.position,
                          kEntranceDepthBias, QPointF(0.0, blockBottom + statsHeight * kHalf));
         blockBottom += statsHeight;
     }
 
-    const qreal nameHeight = names->textSize(entry.displayName).height();
+    const qreal nameHeight = entry.nameSize.height();
     setTextBillboard(names, entry.nameBillboard, entry.displayName, entry.position,
                      kEntranceDepthBias, QPointF(0.0, blockBottom + nameHeight * kHalf));
 }

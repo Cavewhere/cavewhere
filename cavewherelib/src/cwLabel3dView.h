@@ -22,7 +22,7 @@
 #include "cwBillboardOverlayItem.h"
 class cwLabel3dGroup;
 
-class cwLabel3dView : public cwBillboardOverlayItem
+class CAVEWHERE_LIB_EXPORT cwLabel3dView : public cwBillboardOverlayItem
 {
     friend class cwLabel3dGroup;
 
@@ -61,11 +61,13 @@ public slots:
 
 protected:
     void repositionBillboards() override;
+    void claimDeclutterSpace(cwCollisionRectGrid& grid) override;
+    QSize declutterCellSize() const override;
 
 private:
     QSet<cwLabel3dGroup*> m_labelGroups;
 
-    cwCollisionRectGrid m_labelGrid;
+    cwCollisionRectGrid m_labelGrid; //!< used only outside the scene's declutter pass
     QSizeF m_averageLabelSize = QSizeF(80.0, 14.0);
 
     QFont m_font;
@@ -73,7 +75,7 @@ private:
     QColor m_outlineColor = Qt::black;
 
     void updateGroup(cwLabel3dGroup* group);
-    void updateGroupPositions(cwLabel3dGroup* group);
+    void updateGroupPositions(cwLabel3dGroup* group, cwCollisionRectGrid& grid);
     cwRenderTextBillboards* textLayer();
     bool applyStyle();
     void restyle();

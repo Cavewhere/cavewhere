@@ -255,6 +255,7 @@ Item {
         region: RootData.region
         keywordItemModel: RootData.keywordItemModel
         visible: RootData.stationsVisible
+        declutterTier: LabelDeclutter.StationLabelTier
         font.pixelSize: Theme.fontSizeUI
         color: Theme.textInverse
         outlineColor: Theme.text
@@ -298,6 +299,7 @@ Item {
         scene: rendererId.scene
         region: RootData.region
         keywordItemModel: RootData.keywordItemModel
+        declutterTier: LabelDeclutter.EntranceTier
         font.pixelSize: Theme.entranceNameFontSize
         color: Theme.textInverse
         outlineColor: Theme.text

@@ -392,6 +392,32 @@ TEST_CASE("cwCollisionRectGrid accepts empty rects without recording them",
     CHECK(grid.rectCount() == 1);
 }
 
+TEST_CASE("cwCollisionRectGrid inserts a rect without testing it",
+          "[cwCollisionRectGrid]")
+{
+    cwCollisionRectGrid grid;
+    grid.reset(kBounds, QSize(25, 25));
+
+    const QRect first(100, 100, 16, 24);
+    const QRect overlapping(108, 110, 16, 24);
+    REQUIRE(first.intersects(overlapping));
+
+    grid.insertRect(first);
+    grid.insertRect(overlapping);
+    CHECK(grid.rectCount() == 2);
+
+    // Both inserted rects block later adds; the space beside them stays open.
+    CHECK_FALSE(grid.addRect(QRect(90, 95, 12, 8)));
+    CHECK_FALSE(grid.addRect(QRect(120, 130, 10, 10)));
+    CHECK(grid.addRect(QRect(140, 100, 10, 10)));
+    CHECK(grid.rectCount() == 3);
+
+    // An empty rect is ignored.
+    grid.insertRect(QRect(300, 300, 0, 10));
+    CHECK(grid.rectCount() == 3);
+    CHECK(grid.addRect(QRect(295, 295, 10, 10)));
+}
+
 TEST_CASE("cwCollisionRectGrid declutter benchmark",
           "[.][Benchmark]")
 {

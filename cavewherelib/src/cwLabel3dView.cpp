@@ -11,6 +11,7 @@
 #include "cwCamera.h"
 #include "cwLabel3dGroup.h"
 #include "cwRenderTextBillboards.h"
+#include "cwLabelDeclutter.h"
 
 //Qt includes
 #include <algorithm>
@@ -33,7 +34,7 @@ constexpr double kInvisibleMarginFactor = 2.0;
 
 // Declutter grid cell sized to one padded average visible label, so an average
 // label covers at most 2x2 cells.
-QSize declutterCellSize(const QSizeF& averageLabelSize)
+QSize paddedLabelCellSize(const QSizeF& averageLabelSize)
 {
     return QSize(int(std::ceil(averageLabelSize.width() * kVisibleMarginFactor)),
                  int(std::ceil(averageLabelSize.height() * kVisibleMarginFactor)));
@@ -157,7 +158,11 @@ void cwLabel3dView::restyle()
 {
     if(applyStyle()) {
         // Placed labels changed size; declutter again with the new rects.
-        updatePositions();
+        if(cwLabelDeclutter* declutter = labelDeclutter()) {
+            declutter->schedulePass();
+        } else {
+            updatePositions();
+        }
     }
 }
 
@@ -188,7 +193,9 @@ void cwLabel3dView::removeGroup(cwLabel3dGroup *group) {
   * @param group
   *
   * Resizes the group's billboard handles to its labels (dropping the billboards
-  * of removed labels) and declutters the group again.
+  * of removed labels) and declutters the group again. In the scene's declutter
+  * pass, a hidden group releases its billboards at once and the rest waits for
+  * one queued pass, so many groups changing in one turn cost one pass.
   */
 void cwLabel3dView::updateGroup(cwLabel3dGroup* group)
 {
@@ -197,22 +204,51 @@ void cwLabel3dView::updateGroup(cwLabel3dGroup* group)
     // New entries are empty handles; dropped ones remove their billboards.
     group->m_billboardHandles.resize(group->m_labels.size());
 
-    updateGroupPositions(group);
+    if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        if(!group->isVisible()) {
+            releaseAll(group->m_billboardHandles);
+        }
+        declutter->schedulePass();
+    } else {
+        updateGroupPositions(group, m_labelGrid);
+    }
 }
 
 void cwLabel3dView::repositionBillboards() {
-    updatePositions();
+    if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        declutter->ensurePass(camera());
+    } else {
+        updatePositions();
+    }
+}
+
+void cwLabel3dView::claimDeclutterSpace(cwCollisionRectGrid& grid)
+{
+    if(!isVisible()) {
+        return;
+    }
+
+    for(cwLabel3dGroup* group : std::as_const(m_labelGroups)) {
+        if(group->isVisible()) {
+            updateGroupPositions(group, grid);
+        }
+    }
+}
+
+QSize cwLabel3dView::declutterCellSize() const
+{
+    return paddedLabelCellSize(m_averageLabelSize);
 }
 
 /**
  * @brief cwLabel3dView::updateGroupPositions
  *
- * Declutters one group's labels into the shared grid and adds, updates or
+ * Declutters one group's labels into @a grid and adds, updates or
  * removes their text billboards to match.
  *
  * If camera is null, this does nothing
  */
-void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
+void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group, cwCollisionRectGrid& grid)
 {
     if(camera() == nullptr) {
         return;
@@ -270,7 +306,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
                                          qtViewportCoordinate.y() - stationNameTextSize.height() * 0.5),
                                  stationNameTextSize);
 
-        if(m_labelGrid.addRect(stationRect.toAlignedRect())) {
+        if(grid.addRect(stationRect.toAlignedRect())) {
             // The billboard's model matrix places the text in 3D, depth-tested
             // against cave geometry. A station's world position is
             // camera-invariant, so this only does real work on first placement.
@@ -350,7 +386,7 @@ void cwLabel3dView::updatePositions()
     if(camera() == nullptr) { return; }
 
     if(isVisible()) {
-        m_labelGrid.reset(camera()->viewport(), declutterCellSize(m_averageLabelSize));
+        m_labelGrid.reset(camera()->viewport(), paddedLabelCellSize(m_averageLabelSize));
 
         for(cwLabel3dGroup* group : std::as_const(m_labelGroups)) {
             // Hidden groups already released their billboards when toggled; skip
@@ -358,7 +394,7 @@ void cwLabel3dView::updatePositions()
             if(!group->isVisible()) {
                 continue;
             }
-            updateGroupPositions(group);
+            updateGroupPositions(group, m_labelGrid);
         }
 
         // Leave the grid empty for updateGroup, which declutters a single group

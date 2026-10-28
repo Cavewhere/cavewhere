@@ -1,7 +1,9 @@
 // Pins cwEntranceView: every placed fix whose station the solve placed draws one
 // tip-down pin in the view's keyed sprite layer, its name above the pin in the
 // keyed text layer and, for an Entrance, a length and depth line under the name
-// in the stats text layer, and carries one keyword item that can hide it.
+// in the stats text layer, and carries one keyword item that can hide it. In
+// the scene's declutter pass ([cwLabelDeclutter]) its pins and text blocks
+// claim screen space before the station labels of a participating Label3dView.
 //
 // The view is built in QML because its EntrancePoint tap targets come from QML.
 // The window is never shown and there is no QRhi: every check reads the CPU side
@@ -10,6 +12,7 @@
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 // Qt
@@ -22,6 +25,7 @@
 #include <QTextLayout>
 
 // Std
+#include <algorithm>
 #include <memory>
 
 // SUT
@@ -35,6 +39,10 @@
 #include "cwKeywordItem.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
+#include "cwLabel3dGroup.h"
+#include "cwLabel3dItem.h"
+#include "cwLabel3dView.h"
+#include "cwLabelDeclutter.h"
 #include "cwLength.h"
 #include "cwRenderSpriteBillboards.h"
 #include "cwRenderTextBillboards.h"
@@ -687,4 +695,419 @@ TEST_CASE("cwEntranceView hands each point its display name and kind", "[cwEntra
     CHECK(waitUntil([&] { return point->property("kind").toInt() == int(cwFixStation::Well); }));
     CHECK(point->property("kindName").toString() == cwFixStation::kindName(cwFixStation::Well));
     CHECK(point->property("displayName").toString() == label);
+}
+
+namespace {
+
+// Which overlay connects to the camera first, and so repositions first on a
+// camera change.
+enum class CameraOrder {
+    LabelsFirst,
+    EntrancesFirst
+};
+
+// The average label size cwLabel3dView starts from, and the margin it pads a
+// candidate label with: the largest rect a short label can claim.
+const QSizeF kStartingLabelSize(80.0, 14.0);
+constexpr qreal kCandidateMarginFactor = 2.0;
+
+// Pixels between two neighboring entrances: wider than a pin, narrower than a name.
+constexpr qreal kNeighborPixels = 30.0;
+// Pixels below an entrance's station to a station label that has room: below
+// the tip-down pin and its text, and clear of a candidate label on the station.
+constexpr qreal kFarPixels = 80.0;
+const QVector3D kPan(2.0f, 1.0f, 0.0f);
+
+const QString kNeighborCaveName = QStringLiteral("Calcite Hollow");
+const QString kLabelOnPin = QStringLiteral("p1");
+const QString kLabelOnText = QStringLiteral("t1");
+const QString kLabelFar = QStringLiteral("f1");
+const QString kPrivateLabel = QStringLiteral("n1");
+const QString kPrivateLabelTwin = QStringLiteral("n2");
+
+QString declutterQml()
+{
+    return QStringLiteral(
+               "import QtQuick\n"
+               "import cavewherelib\n"
+               "Item {\n"
+               "  width: %1; height: %1\n"
+               "  Label3dView {\n"
+               "    objectName: \"stationLabelView\"\n"
+               "    anchors.fill: parent\n"
+               "    declutterTier: LabelDeclutter.StationLabelTier\n"
+               "  }\n"
+               "  Label3dView {\n"
+               "    objectName: \"privateLabelView\"\n"
+               "    anchors.fill: parent\n"
+               "  }\n"
+               "  EntranceView {\n"
+               "    objectName: \"entranceView\"\n"
+               "    anchors.fill: parent\n"
+               "    declutterTier: LabelDeclutter.EntranceTier\n"
+               "    sprites: [entrancePin, wellPin, radioLocationPin, otherPin]\n"
+               "    Item { id: entrancePin; width: %2; height: %3 }\n"
+               "    Item { id: wellPin; width: %2; height: %3 }\n"
+               "    Item { id: radioLocationPin; width: %2; height: %3 }\n"
+               "    Item { id: otherPin; width: %2; height: %3 }\n"
+               "  }\n"
+               "}\n")
+        .arg(kViewportSize)
+        .arg(kPinSize.width())
+        .arg(kPinSize.height());
+}
+
+QRectF centeredRect(const QPointF& center, const QSizeF& size)
+{
+    return QRectF(center - QPointF(size.width() / 2.0, size.height() / 2.0), size);
+}
+
+// One EntranceView and two Label3dViews in one scene: "stationLabelView" joins
+// the scene's declutter pass after the entrances, "privateLabelView" keeps its
+// own placement.
+struct DeclutterFixture
+{
+    cwCavingRegion region;
+    cwKeywordItemModel keywords;
+    cwScene scene;
+    cwCamera camera;
+    QQmlEngine engine;
+    QQuickWindow window;
+    std::unique_ptr<QObject> root;
+    cwEntranceView* view = nullptr;
+    cwLabel3dView* labelView = nullptr;
+    cwLabel3dView* privateLabelView = nullptr;
+
+    explicit DeclutterFixture(CameraOrder order = CameraOrder::EntrancesFirst)
+    {
+        camera.setViewport(QRect(0, 0, kViewportSize, kViewportSize));
+        camera.setProjection(camera.orthoProjectionDefault());
+        window.resize(kViewportSize, kViewportSize);
+
+        QQmlComponent component(&engine);
+        component.setData(declutterQml().toUtf8(), QUrl());
+        root.reset(component.create());
+        INFO(component.errorString().toStdString());
+        REQUIRE(root != nullptr);
+        auto* rootItem = qobject_cast<QQuickItem*>(root.get());
+        REQUIRE(rootItem != nullptr);
+        rootItem->setParentItem(window.contentItem());
+
+        view = root->findChild<cwEntranceView*>(QStringLiteral("entranceView"));
+        labelView = root->findChild<cwLabel3dView*>(QStringLiteral("stationLabelView"));
+        privateLabelView = root->findChild<cwLabel3dView*>(QStringLiteral("privateLabelView"));
+        REQUIRE(view != nullptr);
+        REQUIRE(labelView != nullptr);
+        REQUIRE(privateLabelView != nullptr);
+        REQUIRE(view->declutterTier() == cwLabelDeclutter::EntranceTier);
+        REQUIRE(labelView->declutterTier() == cwLabelDeclutter::StationLabelTier);
+        REQUIRE(privateLabelView->declutterTier() == cwLabelDeclutter::NoTier);
+
+        QFont nameFont;
+        nameFont.setPixelSize(kNameFontPixels);
+        view->setFont(nameFont);
+        QFont statsFont;
+        statsFont.setPixelSize(kStatsFontPixels);
+        view->setStatsFont(statsFont);
+        view->setTextGap(kTextGap);
+
+        view->setScene(&scene);
+        labelView->setScene(&scene);
+        privateLabelView->setScene(&scene);
+
+        // The camera's change signals reach the overlays in this order.
+        if (order == CameraOrder::LabelsFirst) {
+            labelView->setCamera(&camera);
+            privateLabelView->setCamera(&camera);
+            view->setCamera(&camera);
+        } else {
+            view->setCamera(&camera);
+            labelView->setCamera(&camera);
+            privateLabelView->setCamera(&camera);
+        }
+
+        view->setKeywordItemModel(&keywords);
+        view->setRegion(&region);
+    }
+
+    cwCave* addEntranceCaveAt(const QString& name, const QVector3D& position)
+    {
+        cwCave* cave = SurveyTreeTestHelper::addNode(&region, nullptr, cwSurveyNode::Kind::Cave, name);
+        cave->length()->setUnit(cwUnits::Meters);
+        cave->length()->setValue(kCaveLengthMeters);
+        cave->depth()->setUnit(cwUnits::Meters);
+        cave->depth()->setValue(kCaveDepthMeters);
+        cave->fixStations()->appendFixStation(placedFix(kStation));
+        cwStationPositionLookup lookup;
+        lookup.setPosition(kStation, position);
+        SurveyTreeTestHelper::setScopedPositions(cave, lookup);
+        REQUIRE(cave->scopedPositions().position(kStation) == position);
+        return cave;
+    }
+
+    static cwLabel3dGroup* addLabels(cwLabel3dView* labelView, const QList<cwLabel3dItem>& labels)
+    {
+        auto* group = new cwLabel3dGroup(labelView);
+        group->setLabels(labels);
+        return group;
+    }
+
+    cwRenderSpriteBillboards* pins() { return scene.spriteBillboardLayer(view->layerKey()); }
+    cwRenderTextBillboards* texts() { return scene.textBillboardLayer(view->layerKey()); }
+    cwRenderTextBillboards* statsTexts() { return scene.textBillboardLayer(view->statsLayerKey()); }
+    // Both label views draw on the scene's default text layer.
+    cwRenderTextBillboards* stationTexts() { return scene.textBillboardLayer(); }
+
+    QStringList drawnNames() { return EntranceFixture::drawnTexts(texts()); }
+    QStringList drawnStats() { return EntranceFixture::drawnTexts(statsTexts()); }
+    QStringList drawnStationLabels()
+    {
+        QStringList labels = EntranceFixture::drawnTexts(stationTexts());
+        labels.sort();
+        return labels;
+    }
+    bool isStationLabelDrawn(const QString& text) { return drawnStationLabels().contains(text); }
+
+    int pinCount() { return int(pins()->buildInstances().size()); }
+
+    // The world position that projects @a pixelOffset (y-down) from @a origin's
+    // projection, in the plane of @a origin.
+    QVector3D worldAtPixelOffset(const QVector3D& origin, const QPointF& pixelOffset) const
+    {
+        const QPointF base = camera.project(origin);
+        const qreal pixelsPerX = camera.project(origin + QVector3D(1.0f, 0.0f, 0.0f)).x() - base.x();
+        const qreal pixelsPerY = camera.project(origin + QVector3D(0.0f, 1.0f, 0.0f)).y() - base.y();
+        return origin + QVector3D(float(pixelOffset.x() / pixelsPerX),
+                                  float(pixelOffset.y() / pixelsPerY),
+                                  0.0f);
+    }
+
+    QRectF pinRect(const QVector3D& position) const
+    {
+        const QPointF tip = camera.project(position);
+        return QRectF(tip - QPointF(kPinSize.width() * kPinAnchor.x(), kPinSize.height() * kPinAnchor.y()),
+                      kPinSize);
+    }
+
+    // The name and stats lines of an Entrance named @a name, as one block kTextGap above its pin.
+    QRectF textBlockRect(const QVector3D& position, const QString& name)
+    {
+        const QSizeF nameSize = texts()->textSize(name);
+        const QSizeF statsSize = statsTexts()->textSize(kCaveStats);
+        const QPointF tip = camera.project(position);
+        const qreal width = std::max(nameSize.width(), statsSize.width());
+        const qreal height = nameSize.height() + statsSize.height();
+        const qreal bottom = tip.y() - kPinSize.height() - kTextGap;
+        return QRectF(tip.x() - width / 2.0, bottom - height, width, height);
+    }
+
+    // The station label's laid-out text, centered on its station.
+    QRectF labelTextRect(const QVector3D& position, const QString& text)
+    {
+        return centeredRect(camera.project(position), stationTexts()->textSize(text));
+    }
+
+    // The largest rect the station label can claim: a candidate's padded rect.
+    QRectF labelReachRect(const QVector3D& position, const QString& text)
+    {
+        const QSizeF textSize = stationTexts()->textSize(text);
+        const QSizeF largest(std::max(textSize.width(), kStartingLabelSize.width()),
+                             std::max(textSize.height(), kStartingLabelSize.height()));
+        return centeredRect(camera.project(position), largest * kCandidateMarginFactor);
+    }
+
+    void pan()
+    {
+        QMatrix4x4 panned = camera.viewMatrix();
+        panned.translate(kPan);
+        camera.setViewMatrix(panned);
+    }
+};
+
+} // namespace
+
+TEST_CASE("A station label over an entrance pin hides and the pin stays", "[cwLabelDeclutter]")
+{
+    DeclutterFixture f;
+    const QVector3D farPosition = f.worldAtPixelOffset(kSolvedPosition, QPointF(0.0, kFarPixels));
+    DeclutterFixture::addLabels(f.labelView, {cwLabel3dItem(kLabelOnPin, kSolvedPosition),
+                                              cwLabel3dItem(kLabelFar, farPosition)});
+
+    // The positive control: with no entrance, the label has room.
+    REQUIRE(waitUntil([&] { return f.isStationLabelDrawn(kLabelOnPin) && f.isStationLabelDrawn(kLabelFar); }));
+
+    f.addEntranceCaveAt(kCaveName, kSolvedPosition);
+    REQUIRE(waitUntil([&] { return f.pinCount() == 1 && f.drawnNames().size() == 1; }));
+    REQUIRE(f.labelTextRect(kSolvedPosition, kLabelOnPin).intersects(f.pinRect(kSolvedPosition)));
+    REQUIRE_FALSE(f.labelReachRect(farPosition, kLabelFar).intersects(f.pinRect(kSolvedPosition)));
+    REQUIRE_FALSE(f.labelReachRect(farPosition, kLabelFar).intersects(f.textBlockRect(kSolvedPosition, kCaveName)));
+    REQUIRE_FALSE(f.labelReachRect(farPosition, kLabelFar).intersects(f.labelReachRect(kSolvedPosition, kLabelOnPin)));
+
+    INFO("station labels: " << joined(f.drawnStationLabels()));
+    CHECK(waitUntil([&] { return !f.isStationLabelDrawn(kLabelOnPin); }));
+    CHECK(f.isStationLabelDrawn(kLabelFar));
+    CHECK(f.pinCount() == 1);
+    CHECK(joined(f.drawnNames()) == joined({kCaveName}));
+    CHECK(joined(f.drawnStats()) == joined({kCaveStats}));
+
+    // A camera change runs the pass again with the same outcome.
+    f.pan();
+    CHECK_FALSE(f.isStationLabelDrawn(kLabelOnPin));
+    CHECK(f.isStationLabelDrawn(kLabelFar));
+    CHECK(f.pinCount() == 1);
+    CHECK(joined(f.drawnNames()) == joined({kCaveName}));
+}
+
+TEST_CASE("A station label over an entrance's text hides and the text stays", "[cwLabelDeclutter]")
+{
+    DeclutterFixture f;
+    f.addEntranceCaveAt(kCaveName, kSolvedPosition);
+    REQUIRE(waitUntil([&] { return f.pinCount() == 1 && f.drawnNames().size() == 1; }));
+
+    // Centered on the pin, just high enough that even a candidate's padded rect
+    // stays clear of the pin.
+    const QRectF pin = f.pinRect(kSolvedPosition);
+    const QRectF block = f.textBlockRect(kSolvedPosition, kCaveName);
+    const qreal reachHalfHeight = f.labelReachRect(kSolvedPosition, kLabelOnText).height() / 2.0;
+    const QPointF labelPixel(0.0, pin.top() - 1.0 - reachHalfHeight - f.camera.project(kSolvedPosition).y());
+    const QVector3D labelPosition = f.worldAtPixelOffset(kSolvedPosition, labelPixel);
+
+    DeclutterFixture::addLabels(f.labelView, {cwLabel3dItem(kLabelOnText, labelPosition)});
+    REQUIRE(waitForQueuedEvents());
+
+    INFO("pin " << pin.x() << "," << pin.y() << " " << pin.width() << "x" << pin.height()
+         << " block " << block.x() << "," << block.y() << " " << block.width() << "x" << block.height());
+    REQUIRE_FALSE(f.labelReachRect(labelPosition, kLabelOnText).intersects(pin));
+    REQUIRE(f.labelTextRect(labelPosition, kLabelOnText).intersects(block));
+
+    INFO("station labels: " << joined(f.drawnStationLabels()));
+    CHECK(waitUntil([&] { return !f.isStationLabelDrawn(kLabelOnText); }));
+    CHECK(joined(f.drawnNames()) == joined({kCaveName}));
+    CHECK(joined(f.drawnStats()) == joined({kCaveStats}));
+    CHECK(f.pinCount() == 1);
+
+    f.pan();
+    CHECK_FALSE(f.isStationLabelDrawn(kLabelOnText));
+    CHECK(joined(f.drawnNames()) == joined({kCaveName}));
+    CHECK(joined(f.drawnStats()) == joined({kCaveStats}));
+}
+
+TEST_CASE("Two entrances whose text overlaps keep both pins and one text block", "[cwLabelDeclutter]")
+{
+    DeclutterFixture f;
+    const QVector3D neighbor = f.worldAtPixelOffset(kSolvedPosition, QPointF(-kNeighborPixels, 0.0));
+    f.addEntranceCaveAt(kCaveName, kSolvedPosition);
+    f.addEntranceCaveAt(kNeighborCaveName, neighbor);
+    REQUIRE(waitUntil([&] { return f.pinCount() == 2; }));
+    REQUIRE(waitForQueuedEvents());
+
+    // The pins clear each other and each other's text; only the text blocks meet.
+    REQUIRE_FALSE(f.pinRect(kSolvedPosition).intersects(f.pinRect(neighbor)));
+    REQUIRE_FALSE(f.pinRect(kSolvedPosition).intersects(f.textBlockRect(neighbor, kNeighborCaveName)));
+    REQUIRE_FALSE(f.pinRect(neighbor).intersects(f.textBlockRect(kSolvedPosition, kCaveName)));
+    REQUIRE(f.textBlockRect(kSolvedPosition, kCaveName).intersects(f.textBlockRect(neighbor, kNeighborCaveName)));
+
+    INFO("names: " << joined(f.drawnNames()) << " stats: " << joined(f.drawnStats()));
+    CHECK(waitUntil([&] { return f.drawnNames().size() == 1; }));
+    CHECK(f.pinCount() == 2);
+    const auto nameSlots = f.texts()->buildRenderSlots();
+    const auto statsSlots = f.statsTexts()->buildRenderSlots();
+    REQUIRE(nameSlots.size() == 1);
+    REQUIRE(statsSlots.size() == 1);
+    // The name and stats lines left are one entrance's block.
+    CHECK(nameSlots.at(0).worldPosition == statsSlots.at(0).worldPosition);
+
+    f.pan();
+    CHECK(f.pinCount() == 2);
+    CHECK(f.drawnNames().size() == 1);
+    CHECK(f.drawnStats().size() == 1);
+
+    // The entrance whose text hid keeps its tappable pin.
+    const QVector3D hiddenPosition = nameSlots.at(0).worldPosition == kSolvedPosition ? neighbor
+                                                                                     : kSolvedPosition;
+    const QPointF tap = f.camera.project(hiddenPosition) + kOnPinBody;
+    CHECK_FALSE(f.view->isOccluded(hiddenPosition, tap));
+}
+
+TEST_CASE("The declutter outcome is the same whichever overlay repositions first", "[cwLabelDeclutter]")
+{
+    const auto order = GENERATE(CameraOrder::LabelsFirst, CameraOrder::EntrancesFirst);
+    INFO((order == CameraOrder::LabelsFirst ? "labels first" : "entrances first"));
+
+    DeclutterFixture f(order);
+    const QVector3D farPosition = f.worldAtPixelOffset(kSolvedPosition, QPointF(0.0, kFarPixels));
+    DeclutterFixture::addLabels(f.labelView, {cwLabel3dItem(kLabelOnPin, kSolvedPosition),
+                                              cwLabel3dItem(kLabelFar, farPosition)});
+    f.addEntranceCaveAt(kCaveName, kSolvedPosition);
+    REQUIRE(waitUntil([&] { return f.pinCount() == 1 && f.drawnNames().size() == 1; }));
+    REQUIRE(waitForQueuedEvents());
+
+    // One camera change, checked before any later event-loop turn: the pass it
+    // ran is complete whichever overlay's slot ran first.
+    f.pan();
+    INFO("station labels: " << joined(f.drawnStationLabels()));
+    CHECK_FALSE(f.isStationLabelDrawn(kLabelOnPin));
+    CHECK(f.isStationLabelDrawn(kLabelFar));
+    CHECK(f.pinCount() == 1);
+    CHECK(joined(f.drawnNames()) == joined({kCaveName}));
+    CHECK(joined(f.drawnStats()) == joined({kCaveStats}));
+}
+
+TEST_CASE("Entrance text shown last frame keeps its place over a newly arriving entrance",
+          "[cwLabelDeclutter]")
+{
+    DeclutterFixture f;
+    f.addEntranceCaveAt(kCaveName, kSolvedPosition);
+    REQUIRE(waitUntil([&] { return f.drawnNames() == QStringList{kCaveName}; }));
+
+    // The newcomer would win a tie-break by viewport z, then y, then x: same
+    // depth and height, further left.
+    const QVector3D neighbor = f.worldAtPixelOffset(kSolvedPosition, QPointF(-kNeighborPixels, 0.0));
+    const QMatrix4x4 matrix = f.camera.qtViewportMatrix() * f.camera.viewProjectionMatrix();
+    const QVector3D shownViewport = matrix.map(kSolvedPosition);
+    const QVector3D newViewport = matrix.map(neighbor);
+    REQUIRE(newViewport.z() == shownViewport.z());
+    REQUIRE(qAbs(newViewport.y() - shownViewport.y()) < kOffsetTolerance);
+    REQUIRE(newViewport.x() < shownViewport.x());
+
+    f.addEntranceCaveAt(kNeighborCaveName, neighbor);
+    REQUIRE(waitUntil([&] { return f.pinCount() == 2; }));
+    REQUIRE(f.textBlockRect(kSolvedPosition, kCaveName).intersects(f.textBlockRect(neighbor, kNeighborCaveName)));
+
+    INFO("names: " << joined(f.drawnNames()));
+    CHECK(waitUntil([&] { return f.drawnNames() == QStringList{kCaveName}; }));
+    CHECK(f.drawnStats().size() == 1);
+
+    // Orbiting keeps the shown entrance's text in place.
+    f.pan();
+    CHECK(joined(f.drawnNames()) == joined({kCaveName}));
+    CHECK(f.pinCount() == 2);
+}
+
+TEST_CASE("A Label3dView outside the declutter pass declutters only against itself",
+          "[cwLabelDeclutter]")
+{
+    DeclutterFixture f;
+    // Twin labels on one station: the private view shows one of them.
+    DeclutterFixture::addLabels(f.privateLabelView, {cwLabel3dItem(kPrivateLabel, kSolvedPosition),
+                                                     cwLabel3dItem(kPrivateLabelTwin, kSolvedPosition)});
+    DeclutterFixture::addLabels(f.labelView, {cwLabel3dItem(kLabelOnPin, kSolvedPosition)});
+
+    // The private view never sees the other view's labels, so both stations draw.
+    REQUIRE(waitUntil([&] { return f.isStationLabelDrawn(kPrivateLabel) && f.isStationLabelDrawn(kLabelOnPin); }));
+    REQUIRE_FALSE(f.isStationLabelDrawn(kPrivateLabelTwin));
+
+    f.addEntranceCaveAt(kCaveName, kSolvedPosition);
+    REQUIRE(waitUntil([&] { return f.pinCount() == 1 && f.drawnNames().size() == 1; }));
+
+    INFO("station labels: " << joined(f.drawnStationLabels()));
+    // The participating label yields to the pin; the private view keeps its own outcome.
+    CHECK(waitUntil([&] { return !f.isStationLabelDrawn(kLabelOnPin); }));
+    CHECK(f.isStationLabelDrawn(kPrivateLabel));
+    CHECK_FALSE(f.isStationLabelDrawn(kPrivateLabelTwin));
+
+    f.pan();
+    CHECK_FALSE(f.isStationLabelDrawn(kLabelOnPin));
+    CHECK(f.isStationLabelDrawn(kPrivateLabel));
+    CHECK_FALSE(f.isStationLabelDrawn(kPrivateLabelTwin));
 }

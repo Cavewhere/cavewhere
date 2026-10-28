@@ -17,12 +17,13 @@
 #include "cwLabel3dItem.h"
 #include "cwTextBillboardHandle.h"
 #include "cwVisibilityProxy.h"
+#include "CaveWhereLibExport.h"
 class cwLabel3dView;
 
 //Std includes
 #include <vector>
 
-class cwLabel3dGroup : public cwVisibilityProxy
+class CAVEWHERE_LIB_EXPORT cwLabel3dGroup : public cwVisibilityProxy
 {
     friend class cwLabel3dView;
 

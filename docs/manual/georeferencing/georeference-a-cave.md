@@ -203,6 +203,11 @@ the cave's name, which is what you want for a cave with one entrance.
 Click a pin to see its name and kind, plus the cave's length and depth for an
 entrance, with a link that opens the cave's page. Click empty space to close it.
 
+Pins always draw. Where entrances crowd together, only one name and its
+length and depth line show in each spot; the other pins keep their place and
+still open their popup when clicked. Station names make room for pins and
+entrance names.
+
 A fix with no coordinate, or on a station the survey never reaches, draws
 nothing. Fixes that come from an attached Survex, Compass or Walls file get
 no marker yet.

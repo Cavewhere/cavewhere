@@ -65,50 +65,61 @@ void cwCollisionRectGrid::clear()
     m_rectCount = 0;
 }
 
+cwCollisionRectGrid::CellRange cwCollisionRectGrid::coveredCells(const QRect& rect) const
+{
+    return CellRange{clampedCell(rect.left(), m_bounds.left(), m_cellSize.width(), m_columns),
+                     clampedCell(rect.right(), m_bounds.left(), m_cellSize.width(), m_columns),
+                     clampedCell(rect.top(), m_bounds.top(), m_cellSize.height(), m_rows),
+                     clampedCell(rect.bottom(), m_bounds.top(), m_cellSize.height(), m_rows)};
+}
+
+void cwCollisionRectGrid::link(const QRect& rect, const CellRange& cells)
+{
+    for (int row = cells.firstRow; row <= cells.lastRow; ++row) {
+        const size_t rowStart = size_t(row) * size_t(m_columns);
+        for (int column = cells.firstColumn; column <= cells.lastColumn; ++column) {
+            int& head = m_cellHeads[rowStart + column];
+            m_entries.push_back(Entry{rect, head});
+            head = int(m_entries.size()) - 1;
+        }
+    }
+    ++m_rectCount;
+}
+
 bool cwCollisionRectGrid::addRect(const QRect& rect)
 {
     if (rect.isEmpty()) {
         return true;
     }
 
-    const int firstColumn = clampedCell(rect.left(), m_bounds.left(), m_cellSize.width(), m_columns);
-    const int lastColumn = clampedCell(rect.right(), m_bounds.left(), m_cellSize.width(), m_columns);
-    const int firstRow = clampedCell(rect.top(), m_bounds.top(), m_cellSize.height(), m_rows);
-    const int lastRow = clampedCell(rect.bottom(), m_bounds.top(), m_cellSize.height(), m_rows);
-
-    // Visits each covered cell's chain head; stops early when `visit` returns false.
-    const auto visitCoveredCells = [&](auto&& visit) {
-        for (int row = firstRow; row <= lastRow; ++row) {
+    const CellRange cells = coveredCells(rect);
+    const auto isClear = [&]() {
+        for (int row = cells.firstRow; row <= cells.lastRow; ++row) {
             const size_t rowStart = size_t(row) * size_t(m_columns);
-            for (int column = firstColumn; column <= lastColumn; ++column) {
-                if (!visit(m_cellHeads[rowStart + column])) {
-                    return false;
+            for (int column = cells.firstColumn; column <= cells.lastColumn; ++column) {
+                for (int entry = m_cellHeads[rowStart + column]; entry != kEmptyChain; entry = m_entries[entry].next) {
+                    if (m_entries[entry].rect.intersects(rect)) {
+                        return false;
+                    }
                 }
             }
         }
         return true;
     };
-
-    const bool isClear = visitCoveredCells([&](const int& head) {
-        for (int entry = head; entry != kEmptyChain; entry = m_entries[entry].next) {
-            if (m_entries[entry].rect.intersects(rect)) {
-                return false;
-            }
-        }
-        return true;
-    });
-    if (!isClear) {
+    if (!isClear()) {
         return false;
     }
 
-    visitCoveredCells([&](int& head) {
-        m_entries.push_back(Entry{rect, head});
-        head = int(m_entries.size()) - 1;
-        return true;
-    });
-
-    ++m_rectCount;
+    link(rect, cells);
     return true;
+}
+
+void cwCollisionRectGrid::insertRect(const QRect& rect)
+{
+    if (rect.isEmpty()) {
+        return;
+    }
+    link(rect, coveredCells(rect));
 }
 
 int cwCollisionRectGrid::rectCount() const

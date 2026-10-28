@@ -27,6 +27,7 @@
 #include <QPointer>
 #include <QPointF>
 #include <QQmlListProperty>
+#include <QSize>
 #include <QSizeF>
 #include <QString>
 #include <QVector3D>
@@ -34,6 +35,7 @@
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwBillboardHandle.h"
+#include "cwLabelDeclutter.h"
 #include "cwSpriteBillboardHandle.h"
 #include "cwTextBillboardHandle.h"
 
@@ -42,6 +44,8 @@ class cwCamera;
 
 class CAVEWHERE_LIB_EXPORT cwBillboardOverlayItem : public QQuickItem
 {
+    friend class cwLabelDeclutter;
+
     Q_OBJECT
     // Not creatable from QML: it's the shared base for LeadView / Label3dView,
     // which inherit its scene and camera properties. QML_ANONYMOUS registers it
@@ -56,6 +60,9 @@ class CAVEWHERE_LIB_EXPORT cwBillboardOverlayItem : public QQuickItem
     // its own size or live content belongs on cwRenderBillboards, see setBillboard.
     Q_PROPERTY(QQmlListProperty<QQuickItem> sprites READ sprites NOTIFY spritesChanged)
     Q_PROPERTY(QSizeF spriteSize READ spriteSize NOTIFY spriteSizeChanged)
+    // Opts this overlay into its scene's shared declutter pass at a tier; a lower
+    // tier claims screen space first. NoTier keeps the overlay's own placement.
+    Q_PROPERTY(cwLabelDeclutter::Tier declutterTier READ declutterTier WRITE setDeclutterTier NOTIFY declutterTierChanged)
 
 public:
     explicit cwBillboardOverlayItem(QQuickItem* parent = nullptr);
@@ -76,11 +83,15 @@ public:
     cwCamera* camera() const;
     void setCamera(cwCamera* camera);
 
+    cwLabelDeclutter::Tier declutterTier() const;
+    void setDeclutterTier(cwLabelDeclutter::Tier tier);
+
 signals:
     void sceneChanged();
     void cameraChanged();
     void spritesChanged();
     void spriteSizeChanged();
+    void declutterTierChanged();
 
 protected:
     void itemChange(ItemChange change, const ItemChangeData& value) override;
@@ -90,6 +101,17 @@ protected:
     // whenever the scene, hosting window, or visibility changes; subclasses also
     // wire their own camera-change signals to it.
     virtual void repositionBillboards() = 0;
+
+    // The scene's declutter pass this overlay takes part in, or null when it
+    // keeps its own placement (NoTier) or has no scene.
+    cwLabelDeclutter* labelDeclutter() const;
+
+    // Claims this overlay's screen space in the scene's shared @a grid during
+    // the declutter pass, placing or hiding its billboards to match.
+    virtual void claimDeclutterSpace(cwCollisionRectGrid& grid);
+
+    // The grid cell size this overlay suggests for the shared pass; empty for none.
+    virtual QSize declutterCellSize() const;
 
     // The scene's shared item layer, or null until setBillboard() has fetched
     // it. Only overlays that draw QQuickItem content fetch it, so a scene whose
@@ -175,6 +197,14 @@ private:
     QPointer<cwRenderSpriteBillboards> m_renderSpriteBillboards; //!< shared, owned by m_scene
     QPointer<cwRenderTextBillboards> m_renderTextBillboards; //!< shared, owned by m_scene
     QHash<QString, QPointer<cwRenderTextBillboards>> m_extraTextLayers; //!< by key, owned by m_scene
+    cwLabelDeclutter::Tier m_declutterTier = cwLabelDeclutter::NoTier;
+
+    void joinDeclutter();
+    void leaveDeclutter();
+    void invalidateDeclutter();
+
+private slots:
+    void onVisibleChanged();
 };
 
 #endif // CWBILLBOARDOVERLAYITEM_H

@@ -25,15 +25,27 @@ cwBillboardOverlayItem::cwBillboardOverlayItem(const QString& layerKey, QQuickIt
     QQuickItem(parent),
     m_layerKey(layerKey)
 {
-    connect(this, &QQuickItem::visibleChanged, this, [this]() {
-        if(isVisible()) {
-            repositionBillboards();
-        }
-    });
+    connect(this, &QQuickItem::visibleChanged, this, &cwBillboardOverlayItem::onVisibleChanged);
+}
+
+void cwBillboardOverlayItem::onVisibleChanged()
+{
+    if(isVisible()) {
+        invalidateDeclutter();
+        repositionBillboards();
+    } else if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        // Later tiers refill the space this overlay gave up.
+        declutter->schedulePass();
+    }
 }
 
 cwBillboardOverlayItem::~cwBillboardOverlayItem()
 {
+    if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        declutter->removeParticipant(this);
+        declutter->schedulePass();
+    }
+
     // The scene's layer outlives this overlay; release the prototypes so the
     // layer drops its subscenes and textures of them.
     if(!m_spriteLayer.isNull()) {
@@ -171,6 +183,7 @@ void cwBillboardOverlayItem::setCamera(cwCamera* camera) {
         connect(m_camera, &cwCamera::projectionChanged, this, &cwBillboardOverlayItem::repositionBillboards);
     }
 
+    invalidateDeclutter();
     repositionBillboards();
     emit cameraChanged();
 }
@@ -179,12 +192,68 @@ cwScene* cwBillboardOverlayItem::scene() const {
     return m_scene;
 }
 
+cwLabelDeclutter::Tier cwBillboardOverlayItem::declutterTier() const {
+    return m_declutterTier;
+}
+
+void cwBillboardOverlayItem::setDeclutterTier(cwLabelDeclutter::Tier tier) {
+    if(m_declutterTier == tier) {
+        return;
+    }
+
+    const bool wasParticipating = labelDeclutter() != nullptr;
+    leaveDeclutter();
+    m_declutterTier = tier;
+    joinDeclutter();
+    emit declutterTierChanged();
+
+    if(wasParticipating && labelDeclutter() == nullptr) {
+        repositionBillboards();
+    }
+}
+
+cwLabelDeclutter* cwBillboardOverlayItem::labelDeclutter() const {
+    if(m_declutterTier == cwLabelDeclutter::NoTier || m_scene.isNull()) {
+        return nullptr;
+    }
+    return m_scene->labelDeclutter();
+}
+
+void cwBillboardOverlayItem::joinDeclutter() {
+    if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        declutter->addParticipant(this);
+        declutter->schedulePass();
+    }
+}
+
+void cwBillboardOverlayItem::leaveDeclutter() {
+    if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        declutter->removeParticipant(this);
+        declutter->schedulePass();
+    }
+}
+
+void cwBillboardOverlayItem::invalidateDeclutter() {
+    if(cwLabelDeclutter* declutter = labelDeclutter()) {
+        declutter->invalidate();
+    }
+}
+
+void cwBillboardOverlayItem::claimDeclutterSpace(cwCollisionRectGrid&) {
+}
+
+QSize cwBillboardOverlayItem::declutterCellSize() const {
+    return QSize();
+}
+
 void cwBillboardOverlayItem::setScene(cwScene* scene) {
     if(m_scene == scene) {
         return;
     }
 
+    leaveDeclutter();
     m_scene = scene;
+    joinDeclutter();
 
     // The billboard layers are owned by the scene, so a scene change means
     // different layers: drop the old references. Each is fetched again from the
@@ -195,6 +264,7 @@ void cwBillboardOverlayItem::setScene(cwScene* scene) {
     m_extraTextLayers.clear();
 
     pushSpritesToLayer();
+    invalidateDeclutter();
     repositionBillboards();
     emit sceneChanged();
 }
@@ -243,6 +313,7 @@ void cwBillboardOverlayItem::itemChange(ItemChange change, const ItemChangeData&
             }
         }
         pushSpritesToLayer();
+        invalidateDeclutter();
         repositionBillboards();
     }
     QQuickItem::itemChange(change, value);

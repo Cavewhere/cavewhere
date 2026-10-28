@@ -21,6 +21,7 @@
 #include "cwOffscreenRenderParameters.h"
 #include "cwOffscreenRenderJob.h"
 #include "cwRenderingSettings.h"
+#include "cwLabelDeclutter.h"
 
 
 //Qt includes
@@ -32,7 +33,8 @@ cwScene::cwScene(QObject *parent) :
     GeometryItersecter(new cwGeometryItersecter(this)),
     m_visibility(new cwSceneVisibility(this)),
     Camera(nullptr),
-    m_edl(new cwEDLSettings(this))
+    m_edl(new cwEDLSettings(this)),
+    m_labelDeclutter(new cwLabelDeclutter(this))
 {
     // Every pick and framing query reads visibility from the store's
     // snapshot. Sibling destruction order is unspecified (see ~cwScene), but
@@ -271,6 +273,11 @@ cwGeometryItersecter *cwScene::geometryItersecter() const
 cwSceneVisibility *cwScene::visibility() const
 {
     return m_visibility;
+}
+
+cwLabelDeclutter* cwScene::labelDeclutter() const
+{
+    return m_labelDeclutter;
 }
 
 QBox3D cwScene::visibleFramingBounds() const
