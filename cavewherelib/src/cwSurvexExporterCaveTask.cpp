@@ -318,7 +318,9 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
     // native trips; calibrations and child nodes are skipped. The included
     // file carries its own *cs, *fix, and *begin/*end structure; emitting our
     // own would either silently shadow theirs (no-op) or fight them (cavern
-    // error).
+    // error). The *include sits in an anonymous block, so the settings the
+    // file sets at its top level (*units, *calibrate, *flags, *case, ...) end
+    // with it and the native trips read their own.
     if (!node.externalCenterline.isEmpty()) {
         if (inherited.autoDeclinationInScope) {
             cwSurvexExporterUtils::writeDeclinationReset(stream);
@@ -345,25 +347,23 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         } else {
             stream << fixesText;
         }
-        cwSurvexExporterUtils::CsScope& scopeAtInclude = fixesLeaveSystem ? includeScope : fixesScope;
-        writeIncludeSystem(stream, node.id, node.externalCenterline, globalCS, scopeAtInclude);
+        // The wrapper's *end restores the system in force before its *begin.
+        cwSurvexExporterUtils::CsScope wrappedScope(fixesLeaveSystem ? includeScope : fixesScope);
+        stream << "*begin" << Qt::endl;
+        writeIncludeSystem(stream, node.id, node.externalCenterline, globalCS, wrappedScope);
         if (!writeExternalInclude(stream, node.id,
                                   ExportOptions.caveAttachmentDirs,
                                   node.externalCenterline.entryFile(),
-                                  node.name, globalCS, scopeAtInclude,
+                                  node.name, globalCS, wrappedScope,
                                   written.makFixes.value(node.id))) {
             return false;
         }
+        stream << "*end" << Qt::endl;
 
         // The native trips anywhere in the subtree, each its own block in the
         // root's scope under a label no scope of the file takes (§7.2 step 5).
-        // The reset above took any auto declination out of scope. A *case the
-        // file sets at its top level stays in force past its *include, so the
-        // trips get cavern's default back.
+        // The reset above took any auto declination out of scope.
         const QList<DriverTree::SourcedTrip> sourcedTrips = tree.sourcedNativeTrips(node.id);
-        if (!sourcedTrips.isEmpty()) {
-            stream << "*case tolower" << Qt::endl;
-        }
         for (const DriverTree::SourcedTrip& sourced : sourcedTrips) {
             const QString tripLabel = labels.tripLabels(sourced.node->id).value(sourced.trip->id);
             stream << "*begin " << tripLabel << " ; " << sourced.trip->name << Qt::endl;
@@ -506,9 +506,10 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
 
 /**
  * Emit a bare `*equate` line per valid tie in `equates`, rendering each handle
- * fully qualified with DriverTree::operand(). No `*export`/`*infer` is needed —
- * a cross-scope `*equate` inside the enclosing block resolves both sibling
- * scopes on its own.
+ * fully qualified with DriverTree::operand(). The operands need no `*export`:
+ * exportRegion writes `*infer exports on`, because an included file that uses
+ * `*export` makes cavern check exports across the whole solve, and it would
+ * then reject each operand as unexported.
  * Structurally-invalid equates, and any whose handle the renderer cannot
  * resolve, are dropped silently (writeEquateLine); station *existence* is not
  * checked here (deferred to the equate UX, master plan §1.2), matching the

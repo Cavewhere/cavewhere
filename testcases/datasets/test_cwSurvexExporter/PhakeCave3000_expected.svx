@@ -1,4 +1,5 @@
 *begin  ;All the caves
+*infer exports on
 *begin phake_cave_3000 ;Phake Cave 3000
 
 *fix a1 0 0 0

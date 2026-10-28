@@ -51,12 +51,14 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QVector3D>
+#include <QtMath>
 
 // Std
 #include <algorithm>
@@ -1369,12 +1371,67 @@ TEST_CASE("A tie into a source root's capitalized Survex block lands on the stat
     CHECK(casePairs::samePoint(lookup.position(nativeN1), lookup.position(QStringLiteral("foo.p2"))));
 }
 
+namespace {
+
+// The leak file's one leg, 5 m north of its fixed s1.
+constexpr double kLeakFileTapeMeters = 5.0;
+// The native probe leg: 10.5 m on a bearing of 90 degrees, 30 degrees up, so a
+// leaked tape, compass or clino setting moves its far end, and a leaked
+// decimal separator misreads its tape.
+constexpr double kProbeTapeMeters = 10.5;
+constexpr double kProbeCompassDegrees = 90.0;
+constexpr double kProbeClinoDegrees = 30.0;
+
+//! Writes a Survex file into \a dir whose sub block fixes s1 and runs one leg
+//! north from it, followed by \a setting at the file's top level.
+QString writeLeakFile(const QTemporaryDir& dir, const QString& setting)
+{
+    const QString path = QDir(dir.path()).filePath(QStringLiteral("leak.svx"));
+    QFile file(path);
+    REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Text));
+    const QString text = QStringLiteral("*begin sub\n*fix s1 0 0 0\ns1 s2 %1 0 0\n*end sub\n%2\n")
+                             .arg(kLeakFileTapeMeters)
+                             .arg(setting);
+    REQUIRE(file.write(text.toUtf8()) > 0);
+    file.close();
+    return path;
+}
+
+//! Adds a meters trip with no calibration under \a cave: one leg \a from ->
+//! \a to along the probe bearing and clino.
+cwTrip* addProbeTrip(cwCave* cave, const QString& from, const QString& to)
+{
+    cwTrip* trip = addEmptyTrip(cave, QStringLiteral("Native"));
+    auto* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+    cwShot shot;
+    shot.setDistance(cwDistanceReading(QString::number(kProbeTapeMeters)));
+    shot.setCompass(cwCompassReading(QString::number(kProbeCompassDegrees)));
+    shot.setClino(cwClinoReading(QString::number(kProbeClinoDegrees)));
+    chunk->appendShot(cwStation(from), cwStation(to), shot);
+    return trip;
+}
+
+//! The keys \a lookup stores under \a scope.
+QStringList keysUnder(const cwStationPositionLookup& lookup, const QString& scope)
+{
+    QStringList keys;
+    for (const QString& key : lookup.positions().keys()) {
+        if (key.startsWith(scope, Qt::CaseInsensitive)) {
+            keys.append(key);
+        }
+    }
+    return keys;
+}
+
+} // namespace
+
 TEST_CASE("A Survex source root's *case setting stays out of its native trips",
           "[LinePlotManager][Attach][SourcedFixtures][CasePairs]")
 {
-    // Both files set *case at their top level. A native trip after the
-    // *include is still read under cavern's default *case tolower, so its A1
-    // and a1 are one station.
+    // Both files set *case at their top level. The *include sits in its own
+    // block, so a native trip after it is read under cavern's default
+    // *case tolower, and its A1 and a1 are one station.
     constexpr double kLeakLegMeters = 10.0;
     constexpr double kEastDegrees = 90.0;
     constexpr double kLevelClinoDegrees = 0.0;
@@ -1405,16 +1462,132 @@ TEST_CASE("A Survex source root's *case setting stays out of its native trips",
     checkNoPhantomStation(project.get());
 
     const QString scope = cwStation::canonicalKey(native->scopePrefix());
-    const QMap<QString, QVector3D> positions = root->scopedPositions().positions();
-    QStringList nativeKeys;
-    for (auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
-        if (it.key().startsWith(scope, Qt::CaseInsensitive)) {
-            nativeKeys.append(it.key());
-        }
-    }
-    CHECK(casePairs::joined(nativeKeys) == casePairs::joined({scope + QStringLiteral("a1"),
+    CHECK(casePairs::joined(keysUnder(root->scopedPositions(), scope)) == casePairs::joined({scope + QStringLiteral("a1"),
                                                               scope + QStringLiteral("n1"),
                                                               scope + QStringLiteral("n2")}));
+}
+
+
+TEST_CASE("A Survex source root's top-level settings stay out of its native trips",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    const QString setting = GENERATE(QStringLiteral("*units tape feet"),
+                                     QStringLiteral("*units tape 2 metres"),
+                                     QStringLiteral("*units compass grads"),
+                                     QStringLiteral("*units clino percent"),
+                                     QStringLiteral("*units clino grads"),
+                                     QStringLiteral("*calibrate tape 1"),
+                                     QStringLiteral("*calibrate compass 10"),
+                                     QStringLiteral("*calibrate clino 5"),
+                                     QStringLiteral("*declination 10 degrees"),
+                                     QStringLiteral("*flags surface"),
+                                     QStringLiteral("*flags duplicate"),
+                                     QStringLiteral("*flags splay"),
+                                     QStringLiteral("*truncate 1"),
+                                     QStringLiteral("*set decimal ,"));
+    INFO("the file ends with " << setting.toStdString());
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    auto project = makeSavedProject(QStringLiteral("survex-settings-leak"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    auto* root = qobject_cast<cwCave*>(attachSourceThroughManager(
+        project.get(), project->project->cavingRegion()->rootNode(), writeLeakFile(sourceDir, setting)));
+    REQUIRE(root != nullptr);
+    drainPipelines(project.get());
+    cwTrip* fileTrip = tripNamedBelow(root, QStringLiteral("sub"));
+
+    cwTrip* native = addProbeTrip(root, QStringLiteral("A1"), QStringLiteral("B"));
+    project->project->cavingRegion()->equates()->appendEquate(
+        cwEquate({native->stationHandle(QStringLiteral("A1")), fileTrip->stationHandle(QStringLiteral("s1"))}));
+    drainPipelines(project.get());
+    requireSolved(project.get());
+
+    const cwLinePlotManager* linePlot = project->rootData->linePlotManager();
+    const QString driver = linePlot->driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    // The *include's own block ends every setting, *case among them.
+    CHECK_FALSE(driver.contains(QStringLiteral("*case tolower")));
+
+    const QString scope = cwStation::canonicalKey(native->scopePrefix());
+    const cwStationPositionLookup lookup = root->scopedPositions();
+    INFO("stored keys: " << casePairs::storedKeys(lookup));
+    REQUIRE(casePairs::joined(keysUnder(lookup, scope))
+            == casePairs::joined({scope + QStringLiteral("a1"), scope + QStringLiteral("b")}));
+
+    // The probe leg lands where its own readings put it.
+    const QVector3D leg = lookup.position(scope + QStringLiteral("b"))
+                          - lookup.position(scope + QStringLiteral("a1"));
+    const double clino = qDegreesToRadians(kProbeClinoDegrees);
+    CHECK(leg.x() == Catch::Approx(kProbeTapeMeters * std::cos(clino)).margin(casePairs::kLegMarginMeters));
+    CHECK(leg.y() == Catch::Approx(0.0).margin(casePairs::kLegMarginMeters));
+    CHECK(leg.z() == Catch::Approx(kProbeTapeMeters * std::sin(clino)).margin(casePairs::kLegMarginMeters));
+    CHECK(casePairs::samePoint(lookup.position(scope + QStringLiteral("a1")),
+                               lookup.position(QStringLiteral("sub.s1"))));
+
+    // Cavern leaves a surface, duplicate or splay leg out of its total, so an
+    // underground, unflagged probe leg counts beside the file's.
+    const QRegularExpression totalLength(
+        QStringLiteral("Total length of survey shots =\\s*%1m")
+            .arg(kLeakFileTapeMeters + kProbeTapeMeters, 0, 'f', 2));
+    CHECK(linePlot->cavernLog().contains(totalLength));
+}
+
+TEST_CASE("A Survex source root that uses *export still takes ties and fixes beside another root",
+          "[LinePlotManager][Attach][SourcedFixtures][SurvexExport]")
+{
+    // survex_exports.svx exports sub.s1 alone; survex_cross_level_equate.svx
+    // ties x.c to y.c from its top level and exports nothing.
+    auto project = makeSavedProject(QStringLiteral("survex-exports"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* regionRoot = project->project->cavingRegion()->rootNode();
+    auto* exporting = qobject_cast<cwCave*>(attachSourceThroughManager(
+        project.get(), regionRoot, fixturePath(QStringLiteral("survex_exports.svx"))));
+    REQUIRE(exporting != nullptr);
+    cwSurveyNode* crossLevel = attachSourceThroughManager(
+        project.get(), regionRoot, fixturePath(QStringLiteral("survex_cross_level_equate.svx")));
+    REQUIRE(crossLevel != nullptr);
+    drainPipelines(project.get());
+
+    cwTrip* sub = tripNamedBelow(exporting, QStringLiteral("sub"));
+    cwTrip* native = addNativeTripWithShot(exporting, QStringLiteral("Native"),
+                                           QStringLiteral("N0"), QStringLiteral("N1"));
+    project->project->cavingRegion()->equates()->appendEquate(
+        cwEquate({native->stationHandle(QStringLiteral("N1")), sub->stationHandle(QStringLiteral("s1"))}));
+    const cwFixStation fix = casePairFix(QStringLiteral("sub.s3"));
+    exporting->fixStations()->appendFixStation(fix);
+    REQUIRE(waitForFrameAndSolve(project.get()));
+    requireSolved(project.get());
+
+    const cwLinePlotManager* linePlot = project->rootData->linePlotManager();
+    const QString driver = linePlot->driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    checkFixesTied(project.get());
+
+    // Once, ahead of every line that names a station.
+    CHECK(driver.count(QStringLiteral("*infer exports on")) == 1);
+    const qsizetype inferAt = driver.indexOf(QStringLiteral("*infer exports on"));
+    REQUIRE(inferAt >= 0);
+    for (const QString& keyword : {QStringLiteral("*fix"), QStringLiteral("*equate"),
+                                   QStringLiteral("*include")}) {
+        INFO("keyword " << keyword.toStdString());
+        CHECK(inferAt < driver.indexOf(keyword));
+    }
+
+    const cwStationPositionLookup lookup = exporting->scopedPositions();
+    INFO("stored keys: " << casePairs::storedKeys(lookup));
+    const QString nativeN1 = cwStation::canonicalKey(native->scopePrefix()) + QStringLiteral("n1");
+    REQUIRE(lookup.hasPosition(nativeN1));
+    REQUIRE(lookup.hasPosition(QStringLiteral("sub.s1")));
+    CHECK(casePairs::samePoint(lookup.position(nativeN1), lookup.position(QStringLiteral("sub.s1"))));
+    checkAtNodeFix(project.get(), exporting, QStringLiteral("sub.s3"), fix);
+
+    const cwStationPositionLookup crossLookup = crossLevel->scopedPositions();
+    INFO("cross-level keys: " << casePairs::storedKeys(crossLookup));
+    CHECK(casePairs::storedKeys(crossLookup) == "x.b, x.c, y.c, y.d");
+    CHECK(casePairs::samePoint(crossLookup.position(QStringLiteral("x.c")),
+                               crossLookup.position(QStringLiteral("y.c"))));
 }
 
 TEST_CASE("A survey file a trip holds inside a source root loads with a warning that it is not solved",

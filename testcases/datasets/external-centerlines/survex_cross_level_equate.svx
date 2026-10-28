@@ -1,0 +1,9 @@
+; Two surveys joined by an equate one level up, with no *export: it solves
+; alone, under cavern's default of no export checks.
+*begin x
+b c 5 180 0
+*end x
+*begin y
+c d 5 180 0
+*end y
+*equate x.c y.c
