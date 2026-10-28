@@ -74,8 +74,7 @@ double toMeters(const cwLength* length)
 }
 
 cwEntranceView::cwEntranceView(QQuickItem* parent) :
-    cwBillboardOverlayItem(kEntranceLayerKey, parent),
-    m_selectionManager(new cwSelectionManager(this))
+    cwBillboardOverlayItem(kEntranceLayerKey, parent)
 {
 }
 
@@ -139,6 +138,30 @@ void cwEntranceView::setKeywordItemModel(cwKeywordItemModel* keywordItemModel)
 cwSelectionManager* cwEntranceView::selectionManager() const
 {
     return m_selectionManager;
+}
+
+void cwEntranceView::setSelectionManager(cwSelectionManager* selectionManager)
+{
+    if(m_selectionManager == selectionManager) {
+        return;
+    }
+
+    if(!m_selectionManager.isNull()) {
+        QQuickItem* selected = m_selectionManager->selectedItem();
+        if(selected != nullptr && selected->parentItem() == this) {
+            m_selectionManager->clear();
+        }
+    }
+
+    m_selectionManager = selectionManager;
+
+    for(const auto& [id, entry] : m_entries) {
+        if(!entry.item.isNull()) {
+            entry.item->setProperty("selectionManager", QVariant::fromValue(selectionManager));
+        }
+    }
+
+    emit selectionManagerChanged();
 }
 
 QFont cwEntranceView::font() const
@@ -565,7 +588,7 @@ QQuickItem* cwEntranceView::createItem(const QUuid& fixId, const Desired& desire
     QQmlContext* context = QQmlEngine::contextForObject(this);
     QQuickItem* item = qobject_cast<QQuickItem*>(
         m_itemComponent->createWithInitialProperties(
-            {{QStringLiteral("selectionManager"), QVariant::fromValue(m_selectionManager)},
+            {{QStringLiteral("selectionManager"), QVariant::fromValue(selectionManager())},
              {QStringLiteral("entranceView"), QVariant::fromValue(this)},
              {QStringLiteral("node"), QVariant::fromValue(desired.node)},
              {QStringLiteral("stationName"), desired.stationName},
@@ -875,7 +898,7 @@ void cwEntranceView::select(cwSurveyNode* node, const QUuid& fixId)
     }
 
     const Entry& entry = it->second;
-    if(entry.node == node && !entry.item.isNull()) {
+    if(entry.node == node && !entry.item.isNull() && !m_selectionManager.isNull()) {
         m_selectionManager->setSelectedItem(entry.item);
     }
 }
@@ -890,7 +913,8 @@ bool cwEntranceView::isOccluded(const QVector3D& worldPosition,
 
 void cwEntranceView::clearSelectionIfIn(const Entry& entry)
 {
-    if(!entry.item.isNull() && m_selectionManager->selectedItem() == entry.item) {
+    if(!entry.item.isNull() && !m_selectionManager.isNull()
+        && m_selectionManager->selectedItem() == entry.item) {
         m_selectionManager->setSelectedItem(nullptr);
     }
 }

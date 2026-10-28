@@ -61,6 +61,10 @@ PositionItem {
                 // always allowed. isOccluded tests the tapped pixel itself, so it
                 // matches the silhouette the billboard is drawn with — map the tap
                 // into the leadView's (viewport) coordinate space for the ray.
+                // A view with no manager leaves its leads unselectable.
+                if (pointId.selectionManager === null) {
+                    return
+                }
                 if (pointId.selected) {
                     pointId.selectionManager.selectedItem = null
                 } else {
@@ -97,7 +101,7 @@ PositionItem {
                 height: contentColumn.height
 
                 // Take the exclusive grab on any tap inside the popup so it can't
-                // bubble up to the LeadView's empty-space handler, which deselects
+                // bubble up to the renderer's empty-space handler, which deselects
                 // (and closes) the popup. A DragThreshold (passive) handler would
                 // not stop propagation; WithinBounds grabs on press.
                 QQ.TapHandler {
@@ -153,7 +157,7 @@ PositionItem {
 
                             // ReleaseWithinBounds: button-style exclusive grab, so
                             // the tap toggles edit mode without bubbling up to the
-                            // LeadView's deselect handler.
+                            // renderer's deselect handler.
                             QQ.TapHandler {
                                 gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
                                 onTapped: quoteBoxId.editMode = !quoteBoxId.editMode

@@ -663,6 +663,197 @@ MainWindowTest {
             }, leadsTestCase.leadSelectTimeout, "popup should close on second tap")
         }
 
+        // Pixels between the lead and entrance pin centers, along the screen
+        // axis where they lie farthest apart. Past the widest popup, neither
+        // popup can cover the other pin.
+        readonly property int markerSpreadTarget: 320
+        readonly property real markerZoomStep: 0.5
+        readonly property int maxMarkerZoomSteps: 8
+
+        function markerCenter(marker, renderer) {
+            return marker.mapToItem(renderer, marker.width / 2, marker.height / 2)
+        }
+
+        function markerSpread(renderer, leadPoint, entrancePoint) {
+            const leadCenter = markerCenter(leadPoint.marker, renderer)
+            const entranceCenter = markerCenter(entrancePoint.marker, renderer)
+            return Math.max(Math.abs(leadCenter.x - entranceCenter.x),
+                            Math.abs(leadCenter.y - entranceCenter.y))
+        }
+
+        // Centers the camera between the two pins and zooms in until they lie
+        // markerSpreadTarget apart. Ortho zooms in on a negative delta and
+        // perspective on a positive one, so a step that pulls the pins together
+        // flips the sign.
+        function spreadMarkers(renderer, leadPoint, entrancePoint) {
+            const interaction = renderer.turnTableInteraction
+            interaction.centerOn(leadPoint.position3D.plus(entrancePoint.position3D).times(0.5), false)
+            const center = Qt.point(renderer.width / 2, renderer.height / 2)
+            let zoomInDelta = -leadsTestCase.markerZoomStep
+            for (let step = 0; step < leadsTestCase.maxMarkerZoomSteps; ++step) {
+                const before = markerSpread(renderer, leadPoint, entrancePoint)
+                if (before >= leadsTestCase.markerSpreadTarget) {
+                    break
+                }
+                interaction.zoom(center, zoomInDelta)
+                tryVerify(() => markerSpread(renderer, leadPoint, entrancePoint) !== before, 5000,
+                          "zooming should move the pins")
+                if (markerSpread(renderer, leadPoint, entrancePoint) < before) {
+                    zoomInDelta = -zoomInDelta
+                }
+            }
+            verify(markerSpread(renderer, leadPoint, entrancePoint) >= leadsTestCase.markerSpreadTarget,
+                   "zooming in should spread the lead and entrance pins apart")
+            verify(renderer.contains(markerCenter(leadPoint.marker, renderer)),
+                   "the lead pin should stay inside the renderer")
+            verify(renderer.contains(markerCenter(entrancePoint.marker, renderer)),
+                   "the entrance pin should stay inside the renderer")
+        }
+
+        // Phake Cave 3000 has leads and no fix. A fix on the cave's first station
+        // adds an entrance, so the renderer shows a lead pin and an entrance pin,
+        // spread apart so neither popup covers the other pin.
+        // Returns {renderer, leadPoint, entrancePoint}.
+        function loadLeadAndEntrance() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            const renderer = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer")
+            verify(renderer !== null, "found the renderer")
+
+            const cave = RootData.region.cave(0)
+            const stationName = cave.trip(0).chunk(0).data(SurveyChunk.StationNameRole, 0)
+            verify(stationName !== "", "the first chunk should name its first station")
+            const fixes = cave.fixStations
+            const row = fixes.addFixStation(stationName)
+            verify(row >= 0, "the fix should be added")
+            fixes.setData(fixes.index(row), "EPSG:4326", FixStationModel.InputCSRole)
+            compare(fixes.setCoordinateText(row, "37.0, -84.0, 300m", Units.Metric), "")
+
+            let entrancePoint = null
+            tryVerify(() => {
+                entrancePoint = findChild(renderer.entranceView, "entrancePoint_" + stationName)
+                return entrancePoint !== null && entrancePoint.visible
+            }, 20000, "the solved fix should get a visible entrance point")
+
+            let leadPoint = null
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1")
+                return leadPoint !== null && leadPoint.marker.visible
+            }, leadsTestCase.leadSelectTimeout, "the lead marker should exist")
+
+            spreadMarkers(renderer, leadPoint, entrancePoint)
+            return {renderer: renderer, leadPoint: leadPoint, entrancePoint: entrancePoint}
+        }
+
+        // Fails the test when the open popup covers the pin about to be tapped, so
+        // a missed tap never reads as a selection bug.
+        function verifyPopupLeavesMarkerUncovered(quoteBox, marker, message) {
+            const center = marker.mapToItem(quoteBox, marker.width / 2, marker.height / 2)
+            const body = quoteBox.bodyRect
+            const covered = center.x >= body.x && center.x <= body.x + body.width
+                            && center.y >= body.y && center.y <= body.y + body.height
+            verify(!covered, message)
+        }
+
+        // Taps the entrance pin until it selects, then waits for its popup.
+        // Returns the quote box.
+        function openEntrancePopup(entrancePoint) {
+            tryVerify(() => {
+                if (entrancePoint.selected) {
+                    return true
+                }
+                mouseClick(entrancePoint.marker)
+                return entrancePoint.selected
+            }, leadsTestCase.leadSelectTimeout, "the entrance should select after tapping its pin")
+
+            let quoteBox = null
+            tryVerify(() => {
+                quoteBox = findChild(entrancePoint, "entranceQuoteBox")
+                return quoteBox !== null
+            }, leadsTestCase.leadSelectTimeout, "the entrance popup should open after selecting the pin")
+            return quoteBox
+        }
+
+        // Taps empty space: the renderer corner farthest from both pins.
+        function tapEmptySpace(renderer, leadPoint, entrancePoint) {
+            const leadCenter = markerCenter(leadPoint.marker, renderer)
+            const entranceCenter = markerCenter(entrancePoint.marker, renderer)
+            const midX = (leadCenter.x + entranceCenter.x) / 2
+            const midY = (leadCenter.y + entranceCenter.y) / 2
+            const cornerX = (midX > renderer.width * 0.5) ? 5 : renderer.width - 5
+            const cornerY = (midY > renderer.height * 0.5) ? 5 : renderer.height - 5
+            mouseClick(renderer, cornerX, cornerY)
+        }
+
+        // The renderer hands both marker views one selection, so one popup is
+        // open at a time across leads and entrances.
+        function test_leadAndEntranceViewsShareOneSelection() {
+            const renderer = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer")
+            verify(renderer !== null, "found the renderer")
+            verify(renderer.leadView.selectionManager !== null, "the lead view should have a selection manager")
+            verify(renderer.leadView.selectionManager === renderer.entranceView.selectionManager,
+                   "the lead and entrance views should share one selection manager")
+        }
+
+        // Tapping a lead pin while an entrance popup is open closes the entrance
+        // popup and opens the lead's.
+        function test_tappingLeadClosesEntrancePopup() {
+            const {leadPoint, entrancePoint} = loadLeadAndEntrance()
+
+            const entranceQuoteBox = openEntrancePopup(entrancePoint)
+            verifyPopupLeavesMarkerUncovered(entranceQuoteBox, leadPoint.marker,
+                                             "the entrance popup should leave the lead pin uncovered")
+
+            openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
+            tryVerify(() => !entrancePoint.selected, leadsTestCase.leadSelectTimeout,
+                      "tapping a lead should deselect the open entrance")
+            tryVerify(() => findChild(entrancePoint, "entranceQuoteBox") === null, leadsTestCase.leadSelectTimeout,
+                      "tapping a lead should close the entrance popup")
+            verify(leadPoint.selected, "the tapped lead should stay selected")
+            verify(findChild(leadPoint, "leadQuoteBox") !== null, "the lead popup should stay open")
+        }
+
+        // Tapping an entrance pin while a lead popup is open closes the lead
+        // popup and opens the entrance's.
+        function test_tappingEntranceClosesLeadPopup() {
+            const {leadPoint, entrancePoint} = loadLeadAndEntrance()
+
+            const {quoteBox: leadQuoteBox} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
+            verifyPopupLeavesMarkerUncovered(leadQuoteBox, entrancePoint.marker,
+                                             "the lead popup should leave the entrance pin uncovered")
+
+            openEntrancePopup(entrancePoint)
+            tryVerify(() => !leadPoint.selected, leadsTestCase.leadSelectTimeout,
+                      "tapping an entrance should deselect the open lead")
+            tryVerify(() => findChild(leadPoint, "leadQuoteBox") === null, leadsTestCase.leadSelectTimeout,
+                      "tapping an entrance should close the lead popup")
+            verify(entrancePoint.selected, "the tapped entrance should stay selected")
+            verify(findChild(entrancePoint, "entranceQuoteBox") !== null, "the entrance popup should stay open")
+        }
+
+        // One tap on empty space closes whichever marker popup is open, lead or
+        // entrance.
+        function test_tapAwayClosesLeadAndEntrancePopups() {
+            const {renderer, leadPoint, entrancePoint} = loadLeadAndEntrance()
+
+            openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
+            tapEmptySpace(renderer, leadPoint, entrancePoint)
+            tryVerify(() => !leadPoint.selected && !entrancePoint.selected, leadsTestCase.leadSelectTimeout,
+                      "tapping away from an open lead should leave no marker selected")
+            tryVerify(() => findChild(leadPoint, "leadQuoteBox") === null
+                            && findChild(entrancePoint, "entranceQuoteBox") === null,
+                      leadsTestCase.leadSelectTimeout, "tapping away should close every marker popup")
+
+            openEntrancePopup(entrancePoint)
+            tapEmptySpace(renderer, leadPoint, entrancePoint)
+            tryVerify(() => !leadPoint.selected && !entrancePoint.selected, leadsTestCase.leadSelectTimeout,
+                      "tapping away from an open entrance should leave no marker selected")
+            tryVerify(() => findChild(leadPoint, "leadQuoteBox") === null
+                            && findChild(entrancePoint, "entranceQuoteBox") === null,
+                      leadsTestCase.leadSelectTimeout, "tapping away should close every marker popup")
+        }
+
         // A completed lead hides its marker until it is selected, and a hidden
         // marker is untappable: the marker's visible binding carries both the tap
         // gate and the sprite instance's visible flag.

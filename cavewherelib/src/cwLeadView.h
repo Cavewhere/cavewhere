@@ -52,7 +52,7 @@ class cwLeadView : public cwBillboardOverlayItem
     QML_NAMED_ELEMENT(LeadView)
 
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionModel NOTIFY regionModelChanged)
-    Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager CONSTANT)
+    Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
     Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel WRITE setKeywordItemModel NOTIFY keywordItemModelChanged)
 
 public:
@@ -69,6 +69,7 @@ public:
     void setRegionModel(cwRegionTreeModel* regionModel);
 
     cwSelectionManager* selectionManager() const;
+    void setSelectionManager(cwSelectionManager* selectionManager);
 
     cwKeywordItemModel* keywordItemModel() const;
     void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
@@ -95,6 +96,7 @@ public:
 
 signals:
     void regionModelChanged();
+    void selectionManagerChanged();
     void keywordItemModelChanged();
 
 protected:
@@ -102,7 +104,7 @@ protected:
 
 private:
     QPointer<cwRegionTreeModel> RegionModel; //!<
-    cwSelectionManager* SelectionMananger;
+    QPointer<cwSelectionManager> m_selectionManager;
 
     struct ScrapEntry {
         int scrapLeadId = -1;
@@ -160,11 +162,12 @@ private slots:
 
 /**
  * @brief cwLeadView::selectionManager
- * @return The selection manager that tracks the single selected lead, so lead
- * taps route through it (single selection) and a tap on empty space can clear it.
+ * @return The selection manager shared by every marker view, so one tap selects
+ * one marker across views and a tap on empty space clears it. Null leaves the
+ * leads unselectable.
  */
 inline cwSelectionManager* cwLeadView::selectionManager() const {
-    return SelectionMananger;
+    return m_selectionManager;
 }
 
 #endif // CWLEADVIEW_H

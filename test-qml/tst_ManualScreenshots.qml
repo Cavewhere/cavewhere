@@ -2285,9 +2285,9 @@ MainWindowTest {
             // pins as leadPoint2_1) makes the edit form show real values. Its marker
             // is created once carpeting has positioned the leads (loadRhiViewer drains
             // those jobs).
-            // Select through the live LeadView's selection manager (a CONSTANT
-            // property that is always valid), not the marker's own injected one — in
-            // a full run the marker can be found while still mid-initialisation, when
+            // Select through the live LeadView's selection manager (the renderer's
+            // shared marker selection), not the marker's own injected one — in
+            // a full run the marker can be found while still mid-initialization, when
             // its per-item selectionManager is briefly undefined. Clear any selection
             // an earlier 3D-view test left behind so the popup state is fresh.
             let leadView = glTerrain.leadView;

@@ -24,6 +24,7 @@
 #include <QQuickWindow>
 #include <QRay3D>
 #include <QRect>
+#include <QSignalSpy>
 #include <QVector3D>
 
 // Std
@@ -45,6 +46,7 @@
 #include "TestGeometryBuilders.h"
 #include "cwLeadView.h"
 #include "cwScene.h"
+#include "cwSelectionManager.h"
 
 using namespace Catch;
 
@@ -366,4 +368,52 @@ TEST_CASE("cwLeadView hands the layer an empty list when it goes", "[cwLeadView]
     f.root.reset();
     CHECK(layer->spriteCount() == 0);
     CHECK(layer->sprites().isEmpty());
+}
+
+TEST_CASE("cwLeadView takes a settable selection manager and hands it to its points",
+          "[cwLeadView][selection]")
+{
+    cwSelectionManager selection;
+    SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
+    auto* leadPoint = f.leadView->findChild<QQuickItem*>(kLeadPointName);
+    REQUIRE(leadPoint != nullptr);
+
+    QSignalSpy changedSpy(f.leadView, &cwLeadView::selectionManagerChanged);
+    f.leadView->setSelectionManager(&selection);
+    CHECK(changedSpy.count() == 1);
+    CHECK(f.leadView->selectionManager() == &selection);
+    CHECK(leadPoint->property("selectionManager").value<cwSelectionManager*>() == &selection);
+
+    f.leadView->setSelectionManager(&selection);
+    CHECK(changedSpy.count() == 1);
+}
+
+TEST_CASE("cwLeadView keeps another marker's selection when an unselected lead goes",
+          "[cwLeadView][selection]")
+{
+    cwSelectionManager selection;
+    // Stands in for a marker of another view sharing the manager, such as an
+    // entrance point.
+    QQuickItem otherMarker;
+    SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"));
+    f.leadView->setSelectionManager(&selection);
+
+    cwScrap* scrap = f.region.cave(0)->trip(0)->notes()->notes().at(0)->scraps().at(0);
+    cwLead lead;
+    lead.setDescription(QStringLiteral("Second lead"));
+    lead.setPositionOnNote(QPointF(0.25, 0.25));
+    scrap->addLead(lead);
+    auto* secondLeadPoint = f.leadView->findChild<QQuickItem*>(QStringLiteral("leadPoint1_1"));
+    REQUIRE(secondLeadPoint != nullptr);
+    CHECK(secondLeadPoint->property("selectionManager").value<cwSelectionManager*>() == &selection);
+
+    selection.setSelectedItem(&otherMarker);
+    scrap->removeLead(1);
+    CHECK(selection.selectedItem() == &otherMarker);
+
+    auto* leadPoint = f.leadView->findChild<QQuickItem*>(kLeadPointName);
+    REQUIRE(leadPoint != nullptr);
+    selection.setSelectedItem(leadPoint);
+    scrap->removeLead(0);
+    CHECK(selection.selectedItem() == nullptr);
 }

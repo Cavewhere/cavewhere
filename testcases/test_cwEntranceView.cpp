@@ -150,6 +150,9 @@ struct EntranceFixture
     cwKeywordItemModel keywords;
     cwScene scene;
     cwCamera camera;
+    // The renderer owns the selection every marker view shares; declared before
+    // the view so it outlives it.
+    cwSelectionManager selection;
     QQmlEngine engine;
     QQuickWindow window;
     std::unique_ptr<QObject> root;
@@ -180,6 +183,7 @@ struct EntranceFixture
         view->setScene(&scene);
         view->setCamera(&camera);
         view->setKeywordItemModel(&keywords);
+        view->setSelectionManager(&selection);
         view->setRegion(&region);
     }
 
@@ -673,6 +677,61 @@ TEST_CASE("cwEntranceView selects a fix's point by its node and id", "[cwEntranc
     f.view->select(cave, fixId);
     CHECK(f.view->selectionManager()->selectedItem() == point);
     CHECK(point->property("selected").toBool());
+}
+
+TEST_CASE("cwEntranceView takes a settable selection manager and hands it to its points",
+          "[cwEntranceView]")
+{
+    cwSelectionManager otherSelection;
+    EntranceFixture f;
+    f.addEntranceCave();
+    REQUIRE(f.waitForOneEntrance());
+    QQuickItem* point = f.point();
+    REQUIRE(point != nullptr);
+
+    QSignalSpy changedSpy(f.view, &cwEntranceView::selectionManagerChanged);
+    f.view->setSelectionManager(&otherSelection);
+    CHECK(changedSpy.count() == 1);
+    CHECK(f.view->selectionManager() == &otherSelection);
+    CHECK(point->property("selectionManager").value<cwSelectionManager*>() == &otherSelection);
+
+    f.view->setSelectionManager(&otherSelection);
+    CHECK(changedSpy.count() == 1);
+}
+
+TEST_CASE("cwEntranceView selects nothing without a selection manager", "[cwEntranceView]")
+{
+    EntranceFixture f;
+    cwCave* cave = f.addEntranceCave();
+    REQUIRE(f.waitForOneEntrance());
+    QQuickItem* point = f.point();
+    REQUIRE(point != nullptr);
+    const QUuid fixId = cave->fixStations()->fixStations().at(0).id();
+
+    f.view->setSelectionManager(nullptr);
+    CHECK(f.view->selectionManager() == nullptr);
+
+    f.view->select(cave, fixId);
+    CHECK_FALSE(point->property("selected").toBool());
+}
+
+TEST_CASE("cwEntranceView clears its selected point from a manager it replaces", "[cwEntranceView]")
+{
+    cwSelectionManager otherSelection;
+    EntranceFixture f;
+    cwCave* cave = f.addEntranceCave();
+    REQUIRE(f.waitForOneEntrance());
+    QQuickItem* point = f.point();
+    REQUIRE(point != nullptr);
+    const QUuid fixId = cave->fixStations()->fixStations().at(0).id();
+
+    f.view->select(cave, fixId);
+    CHECK(f.selection.selectedItem() == point);
+
+    f.view->setSelectionManager(&otherSelection);
+    CHECK(f.selection.selectedItem() == nullptr);
+    CHECK_FALSE(point->property("selected").toBool());
+    CHECK(otherSelection.selectedItem() == nullptr);
 }
 
 TEST_CASE("cwEntranceView hands each point its display name and kind", "[cwEntranceView]")

@@ -41,9 +41,34 @@ const QPointF kLeadAnchor(0.5, 0.5);
 }
 
 cwLeadView::cwLeadView(QQuickItem *parent) :
-    cwBillboardOverlayItem(parent),
-    SelectionMananger(new cwSelectionManager(this))
+    cwBillboardOverlayItem(parent)
 {
+}
+
+void cwLeadView::setSelectionManager(cwSelectionManager* selectionManager)
+{
+    if(m_selectionManager == selectionManager) {
+        return;
+    }
+
+    if(!m_selectionManager.isNull()) {
+        QQuickItem* selected = m_selectionManager->selectedItem();
+        if(selected != nullptr && selected->parentItem() == this) {
+            m_selectionManager->clear();
+        }
+    }
+
+    m_selectionManager = selectionManager;
+
+    for(const auto& [scrap, entry] : m_leadItems) {
+        for(auto item : std::as_const(entry.items)) {
+            if(item != nullptr) {
+                item->setProperty("selectionManager", QVariant::fromValue(selectionManager));
+            }
+        }
+    }
+
+    emit selectionManagerChanged();
 }
 
 /**
@@ -207,8 +232,11 @@ void cwLeadView::addScrap(cwScrap *scrap)
         if(end >= entry.items.size()) { return; }
 
         for(int index = end; index >= begin; index--) {
-            SelectionMananger->clear();
-            entry.items.at(index)->deleteLater();
+            QQuickItem* item = entry.items.at(index);
+            if(!m_selectionManager.isNull() && m_selectionManager->selectedItem() == item) {
+                m_selectionManager->clear();
+            }
+            item->deleteLater();
             entry.items.removeAt(index);
             // Erasing the handle removes its billboard from the shared layer.
             entry.billboardHandles.erase(entry.billboardHandles.begin() + index);
@@ -389,10 +417,10 @@ void cwLeadView::setScrapKeywordVisible(cwScrap* scrap, bool visible) {
 
     // The QuoteBox popup is a sibling overlay, not pulled into the billboard, so
     // it would linger pointing at a now-hidden marker. Close it.
-    if(!visible) {
-        QQuickItem* selected = SelectionMananger->selectedItem();
+    if(!visible && !m_selectionManager.isNull()) {
+        QQuickItem* selected = m_selectionManager->selectedItem();
         if(selected != nullptr && entry.items.contains(selected)) {
-            SelectionMananger->setSelectedItem(nullptr);
+            m_selectionManager->setSelectedItem(nullptr);
         }
     }
 }
@@ -411,7 +439,7 @@ QQuickItem* cwLeadView::createItem()
     //and leadView lets the tap handler gate clicks with the occlusion test.
     QQuickItem* item = qobject_cast<QQuickItem*>(
         m_itemComponent->createWithInitialProperties(
-            {{QStringLiteral("selectionManager"), QVariant::fromValue(SelectionMananger)},
+            {{QStringLiteral("selectionManager"), QVariant::fromValue(selectionManager())},
              {QStringLiteral("leadView"), QVariant::fromValue(this)}},
             context));
     if(item == nullptr) {
@@ -637,9 +665,8 @@ void cwLeadView::select(cwScrap *scrap, int index)
     const auto entryIt = m_leadItems.find(scrap);
     if(entryIt != m_leadItems.end()) {
         const ScrapEntry& entry = entryIt->second;
-        if(index < entry.items.size()) {
-            auto item = entry.items.at(index);
-            SelectionMananger->setSelectedItem(item);
+        if(index < entry.items.size() && !m_selectionManager.isNull()) {
+            m_selectionManager->setSelectedItem(entry.items.at(index));
         }
     }
 }

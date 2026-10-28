@@ -77,9 +77,9 @@ Item {
     readonly property int zLabels: 2
     // Top of the stack: in-view chrome (compass + scale bar, and the floating
     // Camera/Layers/Tools buttons the View page reparents in at narrow widths).
-    // Chrome has to sit above zLabels, not merely above the scene: LeadView and
-    // LinePlotLabelView fill this item and carry tap-away handlers, so anything
-    // clickable left below them never sees a press.
+    // Chrome has to sit above zLabels, not merely above the scene: the label and
+    // marker views fill this item and their pins grab presses, so anything
+    // clickable left below them can miss a press.
     readonly property int zOverlay: 3
     // Gap between the view's edges and the floating chrome
     readonly property int chromeMargin: 20
@@ -133,12 +133,18 @@ Item {
         }
     }
 
-    // Tap on empty space closes the open entrance popup. It sits on the renderer
-    // so it runs after every overlay's items; a full-fill handler on EntranceView
-    // takes the press before the controls in LeadView's popups. Pins and popups
-    // grab their own taps, so this fires only off a pin.
+    // Tap on empty space closes the open marker popup, lead or entrance. It sits
+    // on the renderer so it runs after every overlay's items; a full-fill handler
+    // on a marker view would take the press before the controls in the other
+    // view's popups. Pins and popups grab their own taps, so this fires only off
+    // a pin.
     TapHandler {
-        onTapped: entranceViewId.selectionManager.selectedItem = null
+        onTapped: markerSelectionId.selectedItem = null
+    }
+
+    // One selection across every marker view, so only one popup is open.
+    SelectionManager {
+        id: markerSelectionId
     }
 
     RegionViewer {
@@ -266,6 +272,7 @@ Item {
         anchors.fill: parent
         z: rootId.zLabels
         regionModel: RootData.regionTreeModel
+        selectionManager: markerSelectionId
         camera: rendererId.camera
         scene: rendererId.scene
         keywordItemModel: RootData.keywordItemModel
@@ -277,12 +284,6 @@ Item {
         Image {
             id: leadSprite
             source: "qrc:/icons/question.png"
-        }
-
-        // Tap on empty space closes the open lead popup (dialog dismiss). Lead
-        // items grab their taps exclusively, so this only fires off a lead.
-        TapHandler {
-            onTapped: leadViewId.selectionManager.selectedItem = null
         }
     }
 
@@ -299,6 +300,7 @@ Item {
         scene: rendererId.scene
         region: RootData.region
         keywordItemModel: RootData.keywordItemModel
+        selectionManager: markerSelectionId
         declutterTier: LabelDeclutter.EntranceTier
         font.pixelSize: Theme.entranceNameFontSize
         color: Theme.textInverse

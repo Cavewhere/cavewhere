@@ -58,7 +58,7 @@ class CAVEWHERE_LIB_EXPORT cwEntranceView : public cwBillboardOverlayItem
 
     Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
     Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel WRITE setKeywordItemModel NOTIFY keywordItemModelChanged)
-    Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager CONSTANT)
+    Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
     Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged)
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
     Q_PROPERTY(QColor outlineColor READ outlineColor WRITE setOutlineColor NOTIFY outlineColorChanged)
@@ -79,6 +79,7 @@ public:
     void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
 
     cwSelectionManager* selectionManager() const;
+    void setSelectionManager(cwSelectionManager* selectionManager);
 
     QFont font() const;
     void setFont(const QFont& font);
@@ -128,6 +129,7 @@ public:
 signals:
     void regionChanged();
     void keywordItemModelChanged();
+    void selectionManagerChanged();
     void fontChanged();
     void colorChanged();
     void outlineColorChanged();
@@ -182,7 +184,7 @@ private:
     };
 
     QPointer<cwCavingRegion> m_region;
-    cwSelectionManager* m_selectionManager;
+    QPointer<cwSelectionManager> m_selectionManager;
     QFont m_font;
     QColor m_color = Qt::white;
     QColor m_outlineColor = Qt::black;
