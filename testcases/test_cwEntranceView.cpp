@@ -15,6 +15,7 @@
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRay3D>
 #include <QSignalSpy>
 #include <QTextLayout>
 
@@ -29,6 +30,7 @@
 #include "cwEntranceView.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
+#include "cwGeometryItersecter.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
@@ -36,9 +38,11 @@
 #include "cwRenderSpriteBillboards.h"
 #include "cwRenderTextBillboards.h"
 #include "cwScene.h"
+#include "cwSelectionManager.h"
 #include "cwStationPositionLookup.h"
 #include "cwVisibilityProxy.h"
 #include "SurveyTreeTestHelper.h"
+#include "TestGeometryBuilders.h"
 #include "TestHelper.h"
 
 namespace {
@@ -432,4 +436,98 @@ TEST_CASE("cwEntranceView rebuilds once per burst and grows its keyword inserts 
 
     CHECK(small.entrancesChanged == 1);
     CHECK(large.entrancesChanged == 1);
+}
+
+namespace {
+
+// Whole-pixel tap offsets from the station's projection (the occlusion ray
+// rounds to a pixel). With the 24 px pin standing tip-down on the station,
+// kOnPinBody is on the pin; kBelowTip is where a centered sprite would draw its
+// lower half and the pin draws nothing.
+const QPointF kOnPinBody(0.0, -18.0);
+const QPointF kBelowTip(0.0, 6.0);
+
+constexpr uint64_t kWallId = 1;
+constexpr float kWallInFront = 50.0f;
+constexpr float kWallHalfExtent = 30.0f;
+// Off-center so the tested ray doesn't run along the quad's shared diagonal.
+const QVector3D kWallCenterOffset(5.0f, 3.0f, 0.0f);
+
+// A camera-facing wall kWallInFront nearer the eye (the default camera looks
+// down -Z) than the solved station, centered near @a tap's ray.
+void addWallInFront(EntranceFixture& f, const QPointF& tap)
+{
+    const QRay3D ray = f.camera.rayFromQtViewport(tap);
+    const QVector3D center = ray.point(ray.origin().z() - kSolvedPosition.z()) + kWallCenterOffset
+                             + QVector3D(0.0f, 0.0f, kWallInFront);
+    f.scene.geometryItersecter()->addObject(cwGeometryItersecter::Object(
+        nullptr, kWallId, cwTestGeometry::zPlaneQuad(center, kWallHalfExtent)));
+    f.scene.geometryItersecter()->waitForFinish();
+}
+
+} // namespace
+
+TEST_CASE("cwEntranceView tests a tap against its tip-down pin", "[cwEntranceView]")
+{
+    EntranceFixture f;
+    f.addEntranceCave();
+    REQUIRE(f.waitForOneEntrance());
+    REQUIRE(f.view->spriteSize() == kPinSize);
+
+    const QPointF station = f.camera.project(kSolvedPosition);
+    CHECK_FALSE(f.view->isOccluded(kSolvedPosition, station + kOnPinBody));
+    CHECK(f.view->isOccluded(kSolvedPosition, station + kBelowTip));
+}
+
+TEST_CASE("cwEntranceView reports a pin behind a wall as occluded", "[cwEntranceView]")
+{
+    EntranceFixture f;
+    f.addEntranceCave();
+    REQUIRE(f.waitForOneEntrance());
+
+    const QPointF tap = f.camera.project(kSolvedPosition) + kOnPinBody;
+    REQUIRE_FALSE(f.view->isOccluded(kSolvedPosition, tap));
+
+    addWallInFront(f, tap);
+    CHECK(f.view->isOccluded(kSolvedPosition, tap));
+}
+
+TEST_CASE("cwEntranceView selects a fix's point by its node and id", "[cwEntranceView]")
+{
+    EntranceFixture f;
+    cwCave* cave = f.addEntranceCave();
+    cwCave* otherCave = f.addCave(QStringLiteral("Other Cave"));
+    REQUIRE(f.waitForOneEntrance());
+    QQuickItem* point = f.point();
+    REQUIRE(point != nullptr);
+    const QUuid fixId = cave->fixStations()->fixStations().at(0).id();
+
+    f.view->select(otherCave, fixId);
+    CHECK(f.view->selectionManager()->selectedItem() == nullptr);
+
+    f.view->select(cave, fixId);
+    CHECK(f.view->selectionManager()->selectedItem() == point);
+    CHECK(point->property("selected").toBool());
+}
+
+TEST_CASE("cwEntranceView hands each point its display name and kind", "[cwEntranceView]")
+{
+    EntranceFixture f;
+    cwCave* cave = f.addEntranceCave();
+    REQUIRE(f.waitForOneEntrance());
+    QQuickItem* point = f.point();
+    REQUIRE(point != nullptr);
+
+    CHECK(point->property("displayName").toString() == kCaveName);
+    CHECK(point->property("kind").toInt() == int(cwFixStation::Entrance));
+    CHECK(point->property("kindName").toString() == cwFixStation::kindName(cwFixStation::Entrance));
+
+    cwFixStationModel* fixes = cave->fixStations();
+    const QString label = QStringLiteral("North Shaft");
+    REQUIRE(fixes->setData(fixes->index(0), label, cwFixStationModel::LabelRole));
+    REQUIRE(fixes->setData(fixes->index(0), int(cwFixStation::Well), cwFixStationModel::KindRole));
+
+    CHECK(waitUntil([&] { return point->property("kind").toInt() == int(cwFixStation::Well); }));
+    CHECK(point->property("kindName").toString() == cwFixStation::kindName(cwFixStation::Well));
+    CHECK(point->property("displayName").toString() == label);
 }

@@ -29,6 +29,9 @@
 //Std includes
 #include <algorithm>
 
+class cwCamera;
+class cwGeometryItersecter;
+
 enum class cwBillboardSizeMode {
     WorldSized,      // scales with the 3D scene (a fixed world size)
     ScreenConstant,  // fixed pixel size on screen regardless of distance
@@ -115,6 +118,21 @@ private:
     QSizeF m_logicalViewport;
     cwBillboardSightLine m_sightLine;
 };
+
+// True when no drawn pixel of the camera-facing sprite at @a worldPosition lies
+// under @a tapViewportPosition (a Qt-viewport pixel, top-left origin): the tap
+// falls outside the sprite's quad of @a spriteSize logical pixels placed by
+// @a anchor, or solid geometry in @a intersecter is nearer than the sprite's
+// plane, less @a depthBias world units, at that pixel. @a anchor is normalized
+// content space, y-down, like cwRenderSpriteBillboards::anchor. An empty
+// @a spriteSize tests the plane only. False without a camera or intersecter.
+CAVEWHERE_LIB_EXPORT bool isOccluded(const cwGeometryItersecter* intersecter,
+                                     const cwCamera* camera,
+                                     const QVector3D& worldPosition,
+                                     const QPointF& tapViewportPosition,
+                                     const QSizeF& spriteSize,
+                                     const QPointF& anchor,
+                                     float depthBias);
 
 // The NDC depth of @a worldPosition through @a viewProjection, the key the
 // back-to-front sort orders by. Larger is farther from the eye.

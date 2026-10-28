@@ -87,7 +87,9 @@ public:
     // the lead's camera-facing billboard plane, so the test matches the per-pixel
     // silhouette the depth buffer draws — what you see is what you can click. One
     // CPU BVH ray per call (main thread). Used by LeadPoint to ignore taps that
-    // land on a part of the marker hidden behind a wall.
+    // land on a part of the marker hidden behind a wall. Forwards to
+    // cw::billboard::isOccluded, which also reports a tap off the centered marker
+    // as occluded.
     Q_INVOKABLE bool isOccluded(const QVector3D& worldPosition,
                                 const QPointF& tapViewportPosition) const;
 

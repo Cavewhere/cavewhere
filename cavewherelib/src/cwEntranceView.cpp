@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwEntranceView.h"
+#include "cwBillboardGeometry.h"
 #include "cwCamera.h"
 #include "cwDebug.h"
 #include "cwEntranceLabel.h"
@@ -18,6 +19,7 @@
 #include "cwPositionItem.h"
 #include "cwRenderSpriteBillboards.h"
 #include "cwRenderTextBillboards.h"
+#include "cwScene.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNode.h"
 
@@ -395,11 +397,18 @@ void cwEntranceView::rebuild()
         if(entry.kind != want.kind) {
             entry.kind = want.kind;
             replaceKeyword(entry, cwKeywordModel::TypeKey, cwFixStation::kindName(want.kind));
+            if(!entry.item.isNull()) {
+                entry.item->setProperty("kind", static_cast<int>(want.kind));
+                entry.item->setProperty("kindName", cwFixStation::kindName(want.kind));
+            }
             changed = true;
         }
         if(entry.displayName != want.displayName) {
             entry.displayName = want.displayName;
             replaceKeyword(entry, cwKeywordModel::NameKey, want.displayName);
+            if(!entry.item.isNull()) {
+                entry.item->setProperty("displayName", want.displayName);
+            }
         }
         if(entry.text != want.text) {
             entry.text = want.text;
@@ -473,7 +482,10 @@ QQuickItem* cwEntranceView::createItem(const QUuid& fixId, const Desired& desire
              {QStringLiteral("entranceView"), QVariant::fromValue(this)},
              {QStringLiteral("node"), QVariant::fromValue(desired.node)},
              {QStringLiteral("stationName"), desired.stationName},
-             {QStringLiteral("fixId"), fixId.toString(QUuid::WithoutBraces)}},
+             {QStringLiteral("fixId"), fixId.toString(QUuid::WithoutBraces)},
+             {QStringLiteral("displayName"), desired.displayName},
+             {QStringLiteral("kind"), static_cast<int>(desired.kind)},
+             {QStringLiteral("kindName"), cwFixStation::kindName(desired.kind)}},
             context));
     if(item == nullptr) {
         qDebug() << "EntrancePoint.qml didn't compile. THIS IS A BUG!" << m_itemComponent->errorString() << LOCATION;
@@ -602,6 +614,27 @@ void cwEntranceView::updateBillboards(Entry& entry)
     } else {
         entry.textBillboard.reset();
     }
+}
+
+void cwEntranceView::select(cwSurveyNode* node, const QUuid& fixId)
+{
+    const auto it = m_entries.find(fixId);
+    if(it == m_entries.end()) {
+        return;
+    }
+
+    const Entry& entry = it->second;
+    if(entry.node == node && !entry.item.isNull()) {
+        m_selectionManager->setSelectedItem(entry.item);
+    }
+}
+
+bool cwEntranceView::isOccluded(const QVector3D& worldPosition,
+                                const QPointF& tapViewportPosition) const
+{
+    return cw::billboard::isOccluded(scene() ? scene()->geometryItersecter() : nullptr,
+                                     camera(), worldPosition, tapViewportPosition,
+                                     spriteSize(), kPinAnchor, kEntranceDepthBias);
 }
 
 void cwEntranceView::clearSelectionIfIn(const Entry& entry)

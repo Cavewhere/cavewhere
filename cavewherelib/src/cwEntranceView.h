@@ -95,6 +95,16 @@ public:
     //! when it hides the selected fix.
     void setFixKeywordVisible(const QUuid& fixId, bool visible);
 
+    //! Selects the EntrancePoint of @a node's fix @a fixId, opening its popup.
+    //! Does nothing when that fix of that node isn't drawn.
+    Q_INVOKABLE void select(cwSurveyNode* node, const QUuid& fixId);
+
+    //! True when the pin pixel under @a tapViewportPosition (a Qt-viewport pixel
+    //! in this view's coordinates) isn't drawn: the tap misses the tip-down pin,
+    //! or cave geometry hides that pixel. EntrancePoint ignores such taps.
+    Q_INVOKABLE bool isOccluded(const QVector3D& worldPosition,
+                                const QPointF& tapViewportPosition) const;
+
 signals:
     void regionChanged();
     void keywordItemModelChanged();

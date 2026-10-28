@@ -519,6 +519,11 @@ QtObject {
     readonly property int entrancePinHeight: Math.round(28 * fontScale)
     readonly property int entranceTextGap: Math.round(2 * fontScale)
     readonly property int entranceFontSize: fontSizeBody
+    // The entrance popup: the rule under its title, and the "Open <node>" link
+    // icon with its gap to the text.
+    readonly property int entrancePopupDividerThickness: 1
+    readonly property int entrancePopupIconSize: 12
+    readonly property int entrancePopupIconSpacing: 4
     // ---- END style tokens ----
 
     // Legacy values mapped from the previous Theme.js

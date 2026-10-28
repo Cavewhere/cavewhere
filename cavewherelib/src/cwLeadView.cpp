@@ -13,8 +13,7 @@
 #include "cwSelectionManager.h"
 #include "cwCamera.h"
 #include "cwScene.h"
-#include "cwGeometryItersecter.h"
-#include "cwRayHit.h"
+#include "cwBillboardGeometry.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
@@ -26,17 +25,19 @@
 #include <QQmlEngine>
 #include <QQmlContext>
 #include <QMatrix4x4>
-#include <QRay3D>
 
 namespace {
 // Pull the lead marker toward the viewer along the line of sight (screen position
 // and size unaffected) so local scrap/centerline geometry near the lead doesn't
 // draw over it. Same rationale and value as the station-label bias. The click
-// occlusion test (isOccluded) reuses this as its slack so a click is rejected
+// occlusion test (cw::billboard::isOccluded) reuses this as its slack so a click is rejected
 // only when geometry is more than this far in front of the lead — i.e. exactly
 // when the drawn marker is hidden too. A lead sits on its scrap surface, so a
 // generous bias keeps that surface from reporting the lead as self-occluded.
 constexpr float kLeadDepthBias = 1.0f;
+
+// The lead marker is centered on its lead.
+const QPointF kLeadAnchor(0.5, 0.5);
 }
 
 cwLeadView::cwLeadView(QQuickItem *parent) :
@@ -616,62 +617,11 @@ void cwLeadView::markerSpriteIndexChanged() {
     }
 }
 
-/**
- * @brief cwLeadView::isOccluded
- *
- * Casts one CPU ray through the tapped viewport pixel and reports whether cave
- * geometry sits in front of the lead's billboard at that pixel. The marker is a
- * camera-facing quad, so a single eye->center ray cannot match the per-pixel
- * silhouette the depth buffer clips against (a click on a visible rim pixel would
- * be rejected because the center happens to sit behind a fold). Comparing the
- * cave hit to the billboard plane's depth *at the tapped pixel* keeps the click
- * consistent with what is drawn. Main-thread / works offscreen (the BVH is
- * CPU-side). Returns false when there is no camera, scene, or geometry to test.
- */
 bool cwLeadView::isOccluded(const QVector3D& worldPosition,
                             const QPointF& tapViewportPosition) const {
-    if(camera() == nullptr || scene() == nullptr) {
-        return false;
-    }
-
-    cwGeometryItersecter* intersecter = scene()->geometryItersecter();
-    if(intersecter == nullptr) {
-        return false;
-    }
-
-    const QRay3D ray = camera()->rayFromQtViewport(tapViewportPosition);
-
-    // The marker is a camera-facing quad centred on worldPosition; its plane
-    // normal is the camera's view direction (third row of the view matrix). The
-    // tap usually lands off-centre, so the point under the cursor is where the
-    // ray crosses that plane — NOT worldPosition itself. Comparing the cave hit
-    // to the centre's depth would mis-gate off-centre taps under perspective
-    // (the ray through a rim pixel does not pass through the centre). Solve the
-    // ray/plane crossing so the depth is taken at the tapped quad point.
-    const QMatrix4x4 view = camera()->viewMatrix();
-    const QVector3D planeNormal(view(2, 0), view(2, 1), view(2, 2));
-    const double denom = QVector3D::dotProduct(ray.direction(), planeNormal);
-    if(qFuzzyIsNull(denom)) {
-        return false;
-    }
-    // ray.direction() is unit length (cwCamera::frustumRay normalizes it), so
-    // this parameter is a world distance comparable to cwRayHit::tWorld(). The
-    // - kLeadDepthBias slack mirrors the line-of-sight shift the billboard
-    // renders with (cwBillboardSightLine).
-    const double quadDistance =
-        QVector3D::dotProduct(worldPosition - ray.origin(), planeNormal) / denom;
-    if(quadDistance <= 0.0) {
-        return false;
-    }
-
-    // Occlusion is about solid geometry only — a lead behind the centerline is
-    // still visible, so exclude lines from the test.
-    const cwRayHit hit = intersecter->intersectsDetailed(ray, cwPickQuery{.kinds = cwPickQuery::Solid});
-    if(!hit.hit()) {
-        return false;
-    }
-
-    return hit.tWorld() < quadDistance - kLeadDepthBias;
+    return cw::billboard::isOccluded(scene() ? scene()->geometryItersecter() : nullptr,
+                                     camera(), worldPosition, tapViewportPosition,
+                                     spriteSize(), kLeadAnchor, kLeadDepthBias);
 }
 
 /**

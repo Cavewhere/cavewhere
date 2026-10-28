@@ -56,6 +56,18 @@ inline cwGeometry triangles(const QVector<QVector3D>& positions,
     return geometry;
 }
 
+// A two-sided square in the z = center.z() plane: a wall facing a camera that
+// looks down -Z.
+inline cwGeometry zPlaneQuad(const QVector3D& center, float halfExtent)
+{
+    const float z = center.z();
+    return triangles({QVector3D(center.x() - halfExtent, center.y() - halfExtent, z),
+                      QVector3D(center.x() + halfExtent, center.y() - halfExtent, z),
+                      QVector3D(center.x() + halfExtent, center.y() + halfExtent, z),
+                      QVector3D(center.x() - halfExtent, center.y() + halfExtent, z)},
+                     {0, 1, 2, 0, 2, 3}, false);
+}
+
 // A quad in the z = 0 plane carrying the full 0..1 UV range, so its uv density
 // is 1 over a world area of (2 * halfExtent)^2.
 inline cwGeometry texturedQuad(float halfExtent)

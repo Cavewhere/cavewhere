@@ -75,7 +75,7 @@ public:
     //! Nothing catches a miss any more: the near-miss fallback that used to
     //! paper over sub-threshold radii is gone (it snapped picks to points the
     //! ray never touched, which made leads unclickable — see
-    //! cwLeadView::isOccluded). This constant is the only thing keeping a
+    //! cw::billboard::isOccluded). This constant is the only thing keeping a
     //! cloud pickable where it is drawn.
     //!
     //! Deliberately NOT tied to spacingCoverage, which describes the drawn

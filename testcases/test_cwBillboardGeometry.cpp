@@ -4,16 +4,24 @@
 // behavior, so buildModelMatrix is pinned against a frozen copy of the
 // pre-extraction function for the same inputs.
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <QMatrix4x4>
+#include <QRay3D>
+#include <QRect>
 #include <QSize>
 #include <QSizeF>
 #include <QVector4D>
 
 #include "cwBillboardGeometry.h"
+#include "cwCamera.h"
+#include "cwGeometryItersecter.h"
+#include "cwPickQuery.h"
+#include "cwRayHit.h"
 #include "cwRenderBillboards.h"
+#include "TestGeometryBuilders.h"
 
 using Catch::Matchers::WithinAbs;
 
@@ -348,4 +356,175 @@ TEST_CASE("cw::billboard::sortBackToFront orders any slot type farthest-first",
     REQUIRE(renderSlots.at(1).id == cwBillboardId{3});
     REQUIRE(renderSlots.at(2).id == cwBillboardId{4});
     REQUIRE(renderSlots.at(3).id == cwBillboardId{1});
+}
+
+namespace {
+
+// The occlusion cases use cwCamera's default orthographic view: identity view
+// matrix, looking down -Z, so a LARGER z is NEARER the eye, and one logical
+// pixel is half a world unit. requireLookingDownNegativeZ pins that premise.
+constexpr int kOcclusionViewportSize = 400;
+const QSizeF kSpriteSize(16.0, 24.0);
+const QVector3D kStation(0.0f, 0.0f, 0.0f);
+const QPointF kCenteredAnchor(0.5, 0.5);
+const QPointF kTipDownAnchor(0.5, 1.0);
+constexpr float kOcclusionDepthBias = 2.0f;
+
+// Integer pixel offsets from the station's projection (rayFromQtViewport rounds
+// the tap to a whole pixel). With a 24 px tall sprite, kAboveStation is on the
+// body of a tip-down pin and above a centered sprite's top edge; kBelowStation
+// is in a centered sprite's lower half and below a tip-down pin's tip.
+const QPointF kAboveStation(0.0, -18.0);
+const QPointF kBelowStation(0.0, 6.0);
+// Half the sprite height above the tip: the middle of a tip-down pin.
+const QPointF kPinBodyCenter(0.0, -12.0);
+// Far outside any sprite drawn at the station.
+const QPointF kFarFromStation(100.0, 0.0);
+// A unit ray direction component that should be exactly 0 or -1.
+constexpr double kDirectionMargin = 1e-6;
+
+constexpr uint64_t kWallId = 1;
+constexpr uint64_t kGroundId = 2;
+
+// How far in front of the station the wall stands, well past any depth bias.
+constexpr float kWallInFront = 50.0f;
+constexpr float kWallHalfExtent = 30.0f;
+// Off-center so no tested ray runs along the quad's shared diagonal.
+const QVector3D kWallCenterOffset(5.0f, 3.0f, 0.0f);
+
+// The ground is the plane z = -kGroundSlope * y through the station: steep, so
+// world below the station on screen is nearer the eye and world above it is
+// farther.
+constexpr float kGroundSlope = 10.0f;
+constexpr float kGroundHalfExtent = 20.0f;
+
+struct OcclusionFixture
+{
+    cwCamera camera;
+    cwGeometryItersecter intersecter;
+
+    OcclusionFixture()
+    {
+        camera.setViewport(QRect(0, 0, kOcclusionViewportSize, kOcclusionViewportSize));
+        camera.setProjection(camera.orthoProjectionDefault());
+    }
+
+    QPointF tapAt(const QPointF& offset) const { return camera.project(kStation) + offset; }
+
+    bool isOccluded(const QPointF& tap,
+                    const QPointF& anchor,
+                    const QSizeF& spriteSize = kSpriteSize) const
+    {
+        return cw::billboard::isOccluded(&intersecter, &camera, kStation, tap,
+                                         spriteSize, anchor, kOcclusionDepthBias);
+    }
+
+    void addObject(uint64_t id, const cwGeometry& geometry)
+    {
+        intersecter.addObject(cwGeometryItersecter::Object(nullptr, id, geometry));
+        intersecter.waitForFinish();
+    }
+
+    // A camera-facing wall kWallInFront nearer the eye than the station.
+    void addWall(const QVector3D& center)
+    {
+        addObject(kWallId, cwTestGeometry::zPlaneQuad(center + QVector3D(0.0f, 0.0f, kWallInFront),
+                                                      kWallHalfExtent));
+    }
+
+    void addGround()
+    {
+        const float lowZ = -kGroundSlope * -kGroundHalfExtent;
+        const float highZ = -kGroundSlope * kGroundHalfExtent;
+        addObject(kGroundId, cwTestGeometry::triangles(
+                                 {QVector3D(-kGroundHalfExtent, -kGroundHalfExtent, lowZ),
+                                  QVector3D(kGroundHalfExtent, -kGroundHalfExtent, lowZ),
+                                  QVector3D(kGroundHalfExtent, kGroundHalfExtent, highZ),
+                                  QVector3D(-kGroundHalfExtent, kGroundHalfExtent, highZ)},
+                                 {0, 1, 2, 0, 2, 3}, false));
+    }
+
+    // World z where the ray through @a tap hits solid geometry.
+    float hitZ(const QPointF& tap) const
+    {
+        const QRay3D ray = camera.rayFromQtViewport(tap);
+        const cwRayHit hit = intersecter.intersectsDetailed(ray, cwPickQuery{.kinds = cwPickQuery::Solid});
+        REQUIRE(hit.hit());
+        return ray.point(hit.tWorld()).z();
+    }
+
+    void requireLookingDownNegativeZ() const
+    {
+        const QRay3D ray = camera.rayFromQtViewport(tapAt(QPointF()));
+        REQUIRE(ray.direction().x() == Catch::Approx(0.0f).margin(kDirectionMargin));
+        REQUIRE(ray.direction().y() == Catch::Approx(0.0f).margin(kDirectionMargin));
+        REQUIRE(ray.direction().z() == Catch::Approx(-1.0f).margin(kDirectionMargin));
+    }
+};
+
+} // namespace
+
+TEST_CASE("cw::billboard::isOccluded is false on the sprite in open air and true off it",
+          "[cwBillboardGeometry]")
+{
+    OcclusionFixture f;
+    f.requireLookingDownNegativeZ();
+
+    CHECK_FALSE(f.isOccluded(f.tapAt(kPinBodyCenter), kTipDownAnchor));
+
+    // Beside the pin and below its tip no pin pixel is drawn.
+    const QPointF beside(kSpriteSize.width(), kPinBodyCenter.y());
+    CHECK(f.isOccluded(f.tapAt(beside), kTipDownAnchor));
+    CHECK(f.isOccluded(f.tapAt(kBelowStation), kTipDownAnchor));
+}
+
+TEST_CASE("cw::billboard::isOccluded is true behind a wall", "[cwBillboardGeometry]")
+{
+    OcclusionFixture f;
+    f.requireLookingDownNegativeZ();
+
+    const QPointF tap = f.tapAt(kPinBodyCenter);
+    const QRay3D ray = f.camera.rayFromQtViewport(tap);
+    f.addWall(ray.point(ray.origin().z() - kStation.z()) + kWallCenterOffset);
+    REQUIRE(f.hitZ(tap) == Catch::Approx(kStation.z() + kWallInFront));
+
+    CHECK(f.isOccluded(tap, kTipDownAnchor));
+}
+
+TEST_CASE("cw::billboard::isOccluded tests the sprite's anchored quad", "[cwBillboardGeometry]")
+{
+    OcclusionFixture f;
+    f.requireLookingDownNegativeZ();
+    f.addGround();
+
+    const QPointF tapAbove = f.tapAt(kAboveStation);
+    const QPointF tapBelow = f.tapAt(kBelowStation);
+
+    // The ground is behind the sprite plane above the station and in front of it,
+    // by more than the bias, below.
+    REQUIRE(f.hitZ(tapAbove) < kStation.z() - kOcclusionDepthBias);
+    REQUIRE(f.hitZ(tapBelow) > kStation.z() + kOcclusionDepthBias);
+
+    // A tip-down pin stands above the surface: its body is in front of the ground.
+    CHECK_FALSE(f.isOccluded(tapAbove, kTipDownAnchor));
+
+    // A centered sprite draws nothing that high, and its lower half is buried.
+    CHECK(f.isOccluded(tapAbove, kCenteredAnchor));
+    CHECK(f.isOccluded(tapBelow, kCenteredAnchor));
+}
+
+TEST_CASE("cw::billboard::isOccluded tests only the plane for an empty sprite size",
+          "[cwBillboardGeometry]")
+{
+    // cwLeadView forwards its spriteSize, which is empty before any sprite slot
+    // is declared; the plane test alone then decides.
+    OcclusionFixture f;
+    f.requireLookingDownNegativeZ();
+
+    const QPointF farTap = f.tapAt(kFarFromStation);
+    CHECK_FALSE(f.isOccluded(farTap, kCenteredAnchor, QSizeF()));
+
+    const QRay3D ray = f.camera.rayFromQtViewport(farTap);
+    f.addWall(ray.point(ray.origin().z() - kStation.z()) + kWallCenterOffset);
+    CHECK(f.isOccluded(farTap, kCenteredAnchor, QSizeF()));
 }

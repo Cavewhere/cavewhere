@@ -315,6 +315,12 @@ Item {
             id: otherPin
             source: "qrc:/icons/svg/otherPin.svg"
         }
+
+        // Tap on empty space closes the open entrance popup (dialog dismiss).
+        // Entrance items grab their taps exclusively, so this only fires off a pin.
+        TapHandler {
+            onTapped: entranceViewId.selectionManager.selectedItem = null
+        }
     }
 
     // cwLinkGenerator owns the page-address scheme, so the banner's link doesn't

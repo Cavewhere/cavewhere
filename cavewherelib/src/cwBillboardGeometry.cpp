@@ -7,8 +7,14 @@
 
 //Our includes
 #include "cwBillboardGeometry.h"
+#include "cwCamera.h"
+#include "cwGeometryItersecter.h"
+#include "cwPickQuery.h"
+#include "cwRayHit.h"
 
 //Qt includes
+#include <QRay3D>
+#include <QRectF>
 #include <QVector4D>
 
 namespace {
@@ -151,6 +157,59 @@ QMatrix4x4 FrameCamera::modelMatrix(const QVector3D& worldPosition,
     return buildModelMatrix(worldPosition, contentSize, sizeMode, depthBias,
                             m_view, m_projection, m_viewProjection,
                             m_logicalViewport, m_sightLine, pixelOffset);
+}
+
+bool isOccluded(const cwGeometryItersecter* intersecter,
+                const cwCamera* camera,
+                const QVector3D& worldPosition,
+                const QPointF& tapViewportPosition,
+                const QSizeF& spriteSize,
+                const QPointF& anchor,
+                float depthBias)
+{
+    if(intersecter == nullptr || camera == nullptr) {
+        return false;
+    }
+
+    if(!spriteSize.isEmpty()) {
+        const QPointF anchorOffset(anchor.x() * spriteSize.width(),
+                                   anchor.y() * spriteSize.height());
+        const QRectF quad(camera->project(worldPosition) - anchorOffset, spriteSize);
+        if(!quad.contains(tapViewportPosition)) {
+            return true;
+        }
+    }
+
+    const QRay3D ray = camera->rayFromQtViewport(tapViewportPosition);
+
+    // The sprite is a camera-facing quad: every pixel of it, wherever the anchor
+    // places it, lies on the plane through worldPosition whose normal is the
+    // camera's view direction (third row of the view matrix). A single
+    // eye->center ray can't match the per-pixel silhouette the depth buffer clips
+    // against, so the depth is taken where the tap ray crosses that plane.
+    const QMatrix4x4 view = camera->viewMatrix();
+    const QVector3D planeNormal(view(2, 0), view(2, 1), view(2, 2));
+    const double denom = QVector3D::dotProduct(ray.direction(), planeNormal);
+    if(qFuzzyIsNull(denom)) {
+        return false;
+    }
+    // ray.direction() is unit length (cwCamera::frustumRay normalizes it), so
+    // this parameter is a world distance comparable to cwRayHit::tWorld(). The
+    // depthBias slack mirrors the line-of-sight shift the billboard renders with
+    // (cwBillboardSightLine).
+    const double quadDistance =
+        QVector3D::dotProduct(worldPosition - ray.origin(), planeNormal) / denom;
+    if(quadDistance <= 0.0) {
+        return false;
+    }
+
+    // Only solid geometry hides a sprite; one behind the centerline still shows.
+    const cwRayHit hit = intersecter->intersectsDetailed(ray, cwPickQuery{.kinds = cwPickQuery::Solid});
+    if(!hit.hit()) {
+        return false;
+    }
+
+    return hit.tWorld() < quadDistance - depthBias;
 }
 
 float sortDepth(const QVector3D& worldPosition, const QMatrix4x4& viewProjection)

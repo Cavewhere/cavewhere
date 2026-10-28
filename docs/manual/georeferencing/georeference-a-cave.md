@@ -200,6 +200,9 @@ its own pin. Only an Entrance gets the length and depth; the others show the
 name alone. **Label** names the marker. Leave it blank and the marker uses
 the cave's name, which is what you want for a cave with one entrance.
 
+Click a pin to see its name and kind, plus the cave's length and depth for an
+entrance, with a link that opens the cave's page. Click empty space to close it.
+
 A fix with no coordinate, or on a station the survey never reaches, draws
 nothing. Fixes that come from an attached Survex, Compass or Walls file get
 no marker yet.
