@@ -438,6 +438,23 @@ MainWindowTest {
             verify(findChild(quoteBox, "heightText") !== null, "height input should appear")
         }
 
+        // The popup's "Notes" link is a MouseArea-based LinkText. Every overlay
+        // that fills the renderer above LeadView must leave the press to it, so
+        // the link opens the lead's note.
+        function test_notesLinkInView3DOpensNotePage() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let {quoteBox} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
+
+            let notesLink = findChild(quoteBox, "gotoNotes")
+            verify(notesLink !== null, "Notes link should show")
+            mouseClick(notesLink)
+
+            tryVerify(() => RootData.pageView.currentPageItem.objectName === "notePage",
+                      5000, "clicking the Notes link should open the note page")
+        }
+
         function longDescription(sentenceCount) {
             return Array(sentenceCount).fill("The passage continues past a breakdown pile into a low crawl.").join(" ")
         }

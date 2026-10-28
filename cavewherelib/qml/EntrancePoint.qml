@@ -73,7 +73,7 @@ PositionItem {
                 height: contentColumn.height
 
                 // Grabs every tap inside the popup so it can't bubble up to the
-                // EntranceView's empty-space handler, which closes the popup.
+                // renderer's empty-space handler, which closes the popup.
                 QQ.TapHandler {
                     gesturePolicy: QQ.TapHandler.WithinBounds
                 }

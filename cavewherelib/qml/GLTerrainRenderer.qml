@@ -133,6 +133,14 @@ Item {
         }
     }
 
+    // Tap on empty space closes the open entrance popup. It sits on the renderer
+    // so it runs after every overlay's items; a full-fill handler on EntranceView
+    // takes the press before the controls in LeadView's popups. Pins and popups
+    // grab their own taps, so this fires only off a pin.
+    TapHandler {
+        onTapped: entranceViewId.selectionManager.selectedItem = null
+    }
+
     RegionViewer {
         id: rendererId
         anchors.fill: parent
@@ -314,12 +322,6 @@ Item {
         EntrancePin {
             id: otherPin
             source: "qrc:/icons/svg/otherPin.svg"
-        }
-
-        // Tap on empty space closes the open entrance popup (dialog dismiss).
-        // Entrance items grab their taps exclusively, so this only fires off a pin.
-        TapHandler {
-            onTapped: entranceViewId.selectionManager.selectedItem = null
         }
     }
 
