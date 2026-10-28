@@ -155,6 +155,8 @@ TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateT
         auto cave = project->cavingRegion()->cave(0);
         REQUIRE(cave->tripCount() == 1);
         auto trip = cave->trip(0);
+        //Loading only queues the solve; the morph needs its station positions.
+        REQUIRE(waitUntil([&] { return !trip->solvedStationPositions().isEmpty(); }));
         auto notes = trip->notes()->notes();
         REQUIRE(notes.size() >= 2);
         cwNote* note = notes.at(1);
