@@ -55,10 +55,6 @@ public:
 
     void invert();
 
-    // Re-walks every source row. For sources that drop keyword edits, such as
-    // the filter pipeline's acceptedModel(), a cwUniqueValueFilterModel.
-    void updateAllRows();
-
     int rowCount(const QModelIndex& parent = QModelIndex()) const;
     QVariant data(const QModelIndex& index, int role) const;
     Q_INVOKABLE bool setData(const QModelIndex &index, const QVariant &value, int role);
@@ -77,6 +73,9 @@ signals:
     void acceptByDefaultChanged();
 
 private:
+    // Re-walks every source row; used on a key change, a source reset or a new source.
+    void updateAllRows();
+
     class Row {
     public:
         Row() {}

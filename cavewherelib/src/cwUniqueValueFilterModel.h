@@ -73,6 +73,8 @@ private:
 
     void insertSourceRows(int first, int last);
     void releaseRow(int row, const QModelIndex& sourceIndex, int skipFirst, int skipLast);
+    // Duplicate source rows are hidden behind their value's representative, so they emit nothing.
+    void forwardDataChanged(int first, int last, const QList<int>& roles);
 
     inline QVariant uniqueValue(const QModelIndex& index) const {
         return index.data(mUniqueRole);

@@ -40,9 +40,6 @@ public:
     // model. Any model exposing cwKeywordItemModel's roles works.
     void setItemModel(QAbstractItemModel* model);
 
-    // Re-reads every item's keywords, for edits the item model never reported.
-    void regroup();
-
     // An empty key assigns nothing; the proxies keep their last value, which
     // the shader ignores outside keyword mode.
     QString key() const;

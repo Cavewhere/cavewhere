@@ -162,7 +162,6 @@ private:
     QAbstractItemModel* groupingModel() const;
     void updateGroupingModel();
     void updateKeywordGrouping();
-    void scheduleRegroup();
     void loadSettings();
     void saveSettings() const;
 
@@ -188,7 +187,6 @@ private:
     QList<double> m_legendTicks;
     cwColorByUniform m_uniform;
     bool m_rangeUpdatePending = false;
-    bool m_regroupPending = false;
 };
 
 #endif // CWCOLORBY_H
