@@ -36,6 +36,7 @@ layout(std140, binding = 1) uniform SpriteBlock {
     vec2 spriteSizePx;   // every slot's shared size in logical pixels
     float sizeMode;      // kSizeModeWorldSized or screen constant
     float slotCount;     // cells in the atlas row
+    vec2 anchor;         // content point on iWorldPosition, normalized, y-down
 };
 
 const float kSizeModeWorldSized = 0.0;
@@ -56,7 +57,7 @@ void main(void)
     // slot's cell: the atlas has an Image's orientation, so (0,0) is the
     // content's top-left corner. The cells sit side by side in one row.
     vec2 corner = vec2(float(gl_VertexIndex & 1), float(gl_VertexIndex >> 1));
-    vec2 offsetPx = (corner - 0.5) * spriteSizePx;
+    vec2 offsetPx = (corner - anchor) * spriteSizePx;
     vUv = vec2((float(iSpriteIndex) + corner.x) / slotCount, corner.y);
     vOpacity = iOpacity;
 

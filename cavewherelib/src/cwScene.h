@@ -78,20 +78,29 @@ public:
     // stays a no-op only while they agree.
     cwRenderBillboards* billboardLayer();
 
-    // The one sprite billboard layer (lead markers: one instanced draw of one
-    // shared prototype texture) shared by every overlay in this scene, mirroring
+    // The default-key sprite billboard layer (lead markers: one instanced draw of
+    // one shared prototype texture) shared by every default-key overlay, mirroring
     // billboardLayer(). Its depth follows the marker's silhouette, so the layers
     // drawn after it blend through the marker's transparent pixels.
     cwRenderSpriteBillboards* spriteBillboardLayer();
 
-    // The one text billboard layer (station labels) shared by every overlay in
-    // this scene, mirroring billboardLayer(). The item and sprite layers are
+    // The default-key text billboard layer (station labels) shared by every
+    // default-key overlay, mirroring billboardLayer(). The item and sprite layers are
     // registered before it whichever is requested first, so leads draw before
     // labels in the Overlay pass: a label's glyphs depth-test against the lead
     // markers already drawn, showing through their transparent pixels and hidden
     // by their ink, and the text layer's own quad-depth post-pass clips nothing
     // because it runs last.
     cwRenderTextBillboards* textBillboardLayer();
+
+    // One scene-owned sprite or text layer per @a key, created on first request.
+    // A keyed layer has its own slot list, sprite size, style and draw batch. The
+    // empty key is the default layer the no-argument forms return. A keyed text
+    // layer registers its keyed sprite layer first, as the default pair does,
+    // and a keyed layer registers the default item, sprite and text layers
+    // first, so keyed layers draw after the defaults.
+    cwRenderSpriteBillboards* spriteBillboardLayer(const QString& key);
+    cwRenderTextBillboards* textBillboardLayer(const QString& key);
 
     void setCamera(cwCamera* camera);
     cwCamera *camera() const;
@@ -193,8 +202,9 @@ private:
     // The shared billboard overlay layer (see billboardLayer()); a render object
     // parented to the scene, created on first request.
     cwRenderBillboards* m_billboardLayer = nullptr;
-    cwRenderSpriteBillboards* m_spriteBillboardLayer = nullptr;
-    cwRenderTextBillboards* m_textBillboardLayer = nullptr;
+    // Scene children by key (see spriteBillboardLayer(key)).
+    QHash<QString, cwRenderSpriteBillboards*> m_spriteBillboardLayers;
+    QHash<QString, cwRenderTextBillboards*> m_textBillboardLayers;
 
     // Offscreen render requests queued from the GUI thread, drained onto the
     // render thread by cwRhiScene::synchroize() (a friend). shared_ptr so the

@@ -67,6 +67,7 @@ struct SpriteBlock {
     float spriteSizePx[2];
     float sizeMode;
     float slotCount;
+    float anchor[2];
 };
 
 float sizeModeSelector(cwBillboardSizeMode sizeMode)
@@ -160,9 +161,11 @@ public:
 
         const QSizeF spriteSize = renderObject->spriteSize();
         const cwBillboardSizeMode sizeMode = renderObject->sizeMode();
-        if (spriteSize != m_spriteSize || sizeMode != m_sizeMode) {
+        const QPointF anchor = renderObject->anchor();
+        if (spriteSize != m_spriteSize || sizeMode != m_sizeMode || anchor != m_anchor) {
             m_spriteSize = spriteSize;
             m_sizeMode = sizeMode;
+            m_anchor = anchor;
             m_spriteBlockDirty = true;
         }
 
@@ -220,6 +223,8 @@ public:
             block.spriteSizePx[1] = float(m_spriteSize.height());
             block.sizeMode = sizeModeSelector(m_sizeMode);
             block.slotCount = float(m_atlasSlotCount);
+            block.anchor[0] = float(m_anchor.x());
+            block.anchor[1] = float(m_anchor.y());
             batch->updateDynamicBuffer(m_spriteBlockBuffer, 0, sizeof(SpriteBlock), &block);
             m_spriteBlockDirty = false;
         }
@@ -549,6 +554,7 @@ private:
     QVector<cwRenderSpriteBillboards::Instance> m_instances;
     QSizeF m_spriteSize;
     cwBillboardSizeMode m_sizeMode = cwBillboardSizeMode::ScreenConstant;
+    QPointF m_anchor = cwRenderSpriteBillboards::kDefaultAnchor;
     bool m_instancesDirty = false;
     bool m_spriteBlockDirty = true;
 
@@ -636,6 +642,20 @@ void cwRenderSpriteBillboards::setSprites(const QList<QQuickItem*>& prototypes)
 
     warnOnSizeMismatch();
     update();
+}
+
+void cwRenderSpriteBillboards::setAnchor(const QPointF& anchor)
+{
+    if (m_anchor == anchor) {
+        return;
+    }
+    m_anchor = anchor;
+    update();
+}
+
+QPointF cwRenderSpriteBillboards::anchor() const
+{
+    return m_anchor;
 }
 
 QList<QQuickItem*> cwRenderSpriteBillboards::sprites() const

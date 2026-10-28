@@ -19,6 +19,7 @@
 
 //Qt includes
 #include <QMatrix4x4>
+#include <QPointF>
 #include <QSize>
 #include <QSizeF>
 #include <QVector>
@@ -72,7 +73,8 @@ CAVEWHERE_LIB_EXPORT QVector2D worldPerPixel(const QVector3D& worldPosition,
 
 // The billboard's model matrix: a camera-facing quad of @a contentSize content
 // pixels centered on @a worldPosition, pulled toward the viewer by @a depthBias
-// along @a sightLine. Content pixel space is y-down.
+// along @a sightLine, then shifted on screen by @a pixelOffset (content pixels,
+// y-up). Content pixel space is y-down.
 CAVEWHERE_LIB_EXPORT QMatrix4x4 buildModelMatrix(const QVector3D& worldPosition,
                                                  const QSizeF& contentSize,
                                                  cwBillboardSizeMode sizeMode,
@@ -81,7 +83,8 @@ CAVEWHERE_LIB_EXPORT QMatrix4x4 buildModelMatrix(const QVector3D& worldPosition,
                                                  const QMatrix4x4& projection,
                                                  const QMatrix4x4& viewProjection,
                                                  const QSizeF& logicalViewport,
-                                                 const cwBillboardSightLine& sightLine);
+                                                 const cwBillboardSightLine& sightLine,
+                                                 const QPointF& pixelOffset = QPointF());
 
 // The camera state every billboard in one gather shares, resolved once per frame
 // (building the sight line inverts a matrix under perspective) so placing each
@@ -102,7 +105,8 @@ public:
     QMatrix4x4 modelMatrix(const QVector3D& worldPosition,
                            const QSizeF& contentSize,
                            cwBillboardSizeMode sizeMode,
-                           float depthBias) const;
+                           float depthBias,
+                           const QPointF& pixelOffset = QPointF()) const;
 
 private:
     QMatrix4x4 m_view;

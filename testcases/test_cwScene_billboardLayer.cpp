@@ -253,3 +253,85 @@ TEST_CASE("cwScene gathers the sprite layer before the text layer", "[cwScene]")
         CHECK(spriteIndex < textIndex);
     }
 }
+
+namespace {
+const QString kPinKey = QStringLiteral("pins");
+const QString kOtherKey = QStringLiteral("other");
+}
+
+TEST_CASE("cwScene keyed billboard layers are one scene-owned layer per key", "[cwScene]")
+{
+    cwScene scene;
+
+    cwRenderSpriteBillboards* pinSprites = scene.spriteBillboardLayer(kPinKey);
+    cwRenderSpriteBillboards* otherSprites = scene.spriteBillboardLayer(kOtherKey);
+    REQUIRE(pinSprites != nullptr);
+    REQUIRE(otherSprites != nullptr);
+    CHECK(pinSprites != otherSprites);
+    CHECK(pinSprites != scene.spriteBillboardLayer());
+    CHECK(scene.spriteBillboardLayer(kPinKey) == pinSprites);
+    CHECK(pinSprites->parent() == &scene);
+    CHECK(pinSprites->scene() == &scene);
+
+    cwRenderTextBillboards* pinText = scene.textBillboardLayer(kPinKey);
+    cwRenderTextBillboards* otherText = scene.textBillboardLayer(kOtherKey);
+    REQUIRE(pinText != nullptr);
+    REQUIRE(otherText != nullptr);
+    CHECK(pinText != otherText);
+    CHECK(pinText != scene.textBillboardLayer());
+    CHECK(scene.textBillboardLayer(kPinKey) == pinText);
+    CHECK(pinText->parent() == &scene);
+    CHECK(pinText->scene() == &scene);
+
+    // The empty key is the default layer the no-argument forms return.
+    CHECK(scene.spriteBillboardLayer(QString()) == scene.spriteBillboardLayer());
+    CHECK(scene.textBillboardLayer(QString()) == scene.textBillboardLayer());
+}
+
+TEST_CASE("cwScene gathers a keyed sprite layer before its keyed text layer, after the defaults", "[cwScene]")
+{
+    // Registration order is draw order: a keyed pair draws sprite then text, as
+    // the default pair does, and every keyed layer draws after the default ones.
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    SECTION("keyed text layer requested first")
+    {
+        cwRenderTextBillboards* pinText = scene.textBillboardLayer(kPinKey);
+        cwRenderSpriteBillboards* pinSprites = scene.spriteBillboardLayer(kPinKey);
+        cwRenderSpriteBillboards* defaultSprites = scene.spriteBillboardLayer();
+        cwRenderTextBillboards* defaultText = scene.textBillboardLayer();
+
+        CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+
+        const int pinSpriteIndex = gatherIndex(rhiScene, pinSprites);
+        const int pinTextIndex = gatherIndex(rhiScene, pinText);
+        const int defaultSpriteIndex = gatherIndex(rhiScene, defaultSprites);
+        const int defaultTextIndex = gatherIndex(rhiScene, defaultText);
+        REQUIRE(pinSpriteIndex >= 0);
+        REQUIRE(pinTextIndex >= 0);
+        REQUIRE(defaultSpriteIndex >= 0);
+        REQUIRE(defaultTextIndex >= 0);
+        CHECK(pinSpriteIndex < pinTextIndex);
+        CHECK(defaultSpriteIndex < pinSpriteIndex);
+        CHECK(defaultTextIndex < pinSpriteIndex);
+    }
+
+    SECTION("keyed sprite layer requested alone, defaults requested later")
+    {
+        cwRenderSpriteBillboards* pinSprites = scene.spriteBillboardLayer(kPinKey);
+        cwRenderSpriteBillboards* defaultSprites = scene.spriteBillboardLayer();
+        cwRenderTextBillboards* defaultText = scene.textBillboardLayer();
+
+        CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+
+        const int pinSpriteIndex = gatherIndex(rhiScene, pinSprites);
+        const int defaultSpriteIndex = gatherIndex(rhiScene, defaultSprites);
+        const int defaultTextIndex = gatherIndex(rhiScene, defaultText);
+        REQUIRE(pinSpriteIndex >= 0);
+        REQUIRE(defaultSpriteIndex >= 0);
+        REQUIRE(defaultTextIndex >= 0);
+        CHECK(defaultSpriteIndex < pinSpriteIndex);
+        CHECK(defaultTextIndex < pinSpriteIndex);
+    }
+}

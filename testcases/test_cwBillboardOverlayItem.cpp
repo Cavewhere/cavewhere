@@ -9,12 +9,16 @@
 
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QSignalSpy>
+
+#include <memory>
 
 #include "cwBillboardOverlayItem.h"
 #include "cwBillboardHandle.h"
 #include "cwCamera.h"
 #include "cwRenderBillboards.h"
 #include "cwRenderSpriteBillboards.h"
+#include "cwRenderTextBillboards.h"
 #include "cwScene.h"
 #include "cwSpriteBillboardHandle.h"
 
@@ -30,7 +34,9 @@ public:
     using cwBillboardOverlayItem::cwBillboardOverlayItem;
     using cwBillboardOverlayItem::renderBillboards;
     using cwBillboardOverlayItem::renderSpriteBillboards;
+    using cwBillboardOverlayItem::renderTextBillboards;
     using cwBillboardOverlayItem::ensureRenderSpriteBillboards;
+    using cwBillboardOverlayItem::ensureRenderTextBillboards;
     using cwBillboardOverlayItem::setBillboard;
     using cwBillboardOverlayItem::setSpriteBillboard;
 
@@ -46,6 +52,24 @@ cwRenderBillboards::Billboard makeBillboard(QQuickItem* content)
     billboard.content = content;
     billboard.worldPosition = QVector3D(1, 2, 3);
     return billboard;
+}
+
+const QString kPinKey = QStringLiteral("pins");
+const QString kOtherKey = QStringLiteral("other");
+const QSizeF kPrototypeSize(20.0, 20.0);
+const QSizeF kResizedPrototypeSize(32.0, 24.0);
+
+std::unique_ptr<QQuickItem> makePrototype(QQuickWindow& window, const QSizeF& size)
+{
+    auto prototype = std::make_unique<QQuickItem>(window.contentItem());
+    prototype->setSize(size);
+    return prototype;
+}
+
+void appendSprite(cwBillboardOverlayItem& overlay, QQuickItem* prototype)
+{
+    QQmlListProperty<QQuickItem> sprites = overlay.sprites();
+    sprites.append(&sprites, prototype);
 }
 
 // A distinct view matrix per call so cwCamera::setViewMatrix's equality guard
@@ -144,6 +168,7 @@ TEST_CASE("cwBillboardOverlayItem: setSpriteBillboard adds then updates", "[cwBi
     // Attaching the scene fetches nothing; the first push fetches the sprite
     // layer and binds it to the window, the way setBillboard does for items.
     REQUIRE(overlay.renderSpriteBillboards() == nullptr);
+    REQUIRE(scene.findChildren<cwRenderSpriteBillboards*>().isEmpty());
 
     cwSpriteBillboardHandle handle;
     const float depthBias = 1.5f;
@@ -406,4 +431,141 @@ TEST_CASE("cwBillboardOverlayItem: moving to a new window rebinds the shared lay
     overlay.setParentItem(window2.contentItem());
     REQUIRE(overlay.renderBillboards() == scene.billboardLayer());
     REQUIRE(scene.billboardLayer()->window() == &window2);
+}
+
+TEST_CASE("cwBillboardOverlayItem: an overlay's sprites reach its keyed sprite layer in order",
+          "[cwBillboardOverlayItem]")
+{
+    QQuickWindow window;
+    auto first = makePrototype(window, kPrototypeSize);
+    auto second = makePrototype(window, kPrototypeSize);
+    cwScene scene;
+
+    SECTION("listed before the scene arrives")
+    {
+        TestOverlay overlay(kPinKey);
+        REQUIRE(overlay.layerKey() == kPinKey);
+        overlay.setParentItem(window.contentItem());
+        appendSprite(overlay, first.get());
+        appendSprite(overlay, second.get());
+
+        overlay.setScene(&scene);
+
+        cwRenderSpriteBillboards* layer = scene.spriteBillboardLayer(kPinKey);
+        CHECK(layer->sprites() == QList<QQuickItem*>({first.get(), second.get()}));
+        CHECK(layer->window() == &window);
+        CHECK(overlay.renderSpriteBillboards() == layer);
+        CHECK(scene.spriteBillboardLayer()->sprites().isEmpty());
+    }
+
+    SECTION("listed after the scene arrives")
+    {
+        TestOverlay overlay(kPinKey);
+        overlay.setParentItem(window.contentItem());
+        overlay.setScene(&scene);
+
+        QSignalSpy spritesSpy(&overlay, &cwBillboardOverlayItem::spritesChanged);
+        appendSprite(overlay, first.get());
+        appendSprite(overlay, second.get());
+        CHECK(spritesSpy.count() > 0);
+
+        cwRenderSpriteBillboards* layer = scene.spriteBillboardLayer(kPinKey);
+        CHECK(layer->sprites() == QList<QQuickItem*>({first.get(), second.get()}));
+        CHECK(scene.spriteBillboardLayer()->sprites().isEmpty());
+    }
+}
+
+TEST_CASE("cwBillboardOverlayItem: spriteSize follows slot 0", "[cwBillboardOverlayItem]")
+{
+    QQuickWindow window;
+    auto first = makePrototype(window, kPrototypeSize);
+    auto second = makePrototype(window, kResizedPrototypeSize);
+
+    TestOverlay overlay(kPinKey);
+    overlay.setParentItem(window.contentItem());
+    cwScene scene;
+    overlay.setScene(&scene);
+
+    CHECK(overlay.spriteSize() == QSizeF());
+
+    appendSprite(overlay, first.get());
+    appendSprite(overlay, second.get());
+    CHECK(overlay.spriteSize() == kPrototypeSize);
+
+    QSignalSpy sizeSpy(&overlay, &cwBillboardOverlayItem::spriteSizeChanged);
+    first->setSize(kResizedPrototypeSize);
+    CHECK(sizeSpy.count() > 0);
+    CHECK(overlay.spriteSize() == kResizedPrototypeSize);
+}
+
+TEST_CASE("cwBillboardOverlayItem: overlays on different keys hand their own lists to their own layers",
+          "[cwBillboardOverlayItem]")
+{
+    QQuickWindow window;
+    auto pinOpen = makePrototype(window, kPrototypeSize);
+    auto pinClosed = makePrototype(window, kPrototypeSize);
+    auto other = makePrototype(window, kResizedPrototypeSize);
+
+    cwScene scene;
+    TestOverlay pins(kPinKey);
+    TestOverlay others(kOtherKey);
+    pins.setParentItem(window.contentItem());
+    others.setParentItem(window.contentItem());
+    pins.setScene(&scene);
+    others.setScene(&scene);
+
+    appendSprite(pins, pinOpen.get());
+    appendSprite(pins, pinClosed.get());
+    appendSprite(others, other.get());
+
+    cwRenderSpriteBillboards* pinLayer = scene.spriteBillboardLayer(kPinKey);
+    cwRenderSpriteBillboards* otherLayer = scene.spriteBillboardLayer(kOtherKey);
+    REQUIRE(pinLayer != otherLayer);
+    CHECK(pinLayer->sprites() == QList<QQuickItem*>({pinOpen.get(), pinClosed.get()}));
+    CHECK(otherLayer->sprites() == QList<QQuickItem*>({other.get()}));
+    CHECK(pinLayer->spriteSize() == kPrototypeSize);
+    CHECK(otherLayer->spriteSize() == kResizedPrototypeSize);
+    CHECK(pins.spriteSize() == kPrototypeSize);
+    CHECK(others.spriteSize() == kResizedPrototypeSize);
+}
+
+TEST_CASE("cwBillboardOverlayItem: a keyed overlay pushes billboards into its keyed layers",
+          "[cwBillboardOverlayItem]")
+{
+    QQuickWindow window;
+    TestOverlay overlay(kPinKey);
+    overlay.setParentItem(window.contentItem());
+    cwScene scene;
+    overlay.setScene(&scene);
+
+    cwSpriteBillboardHandle handle;
+    overlay.setSpriteBillboard(handle, QVector3D(1, 2, 3), 1.0f, 1.0f, true);
+    REQUIRE(handle.isValid());
+    CHECK(overlay.renderSpriteBillboards() == scene.spriteBillboardLayer(kPinKey));
+    CHECK(scene.spriteBillboardLayer(kPinKey)->billboardCount() == 1);
+    CHECK(scene.spriteBillboardLayer()->billboardCount() == 0);
+
+    cwRenderTextBillboards* textLayer = overlay.ensureRenderTextBillboards();
+    CHECK(textLayer == scene.textBillboardLayer(kPinKey));
+    CHECK(textLayer != scene.textBillboardLayer());
+    CHECK(textLayer->window() == &window);
+}
+
+TEST_CASE("cwBillboardOverlayItem: a destroyed overlay hands its layer an empty list",
+          "[cwBillboardOverlayItem]")
+{
+    QQuickWindow window;
+    auto first = makePrototype(window, kPrototypeSize);
+    cwScene scene;
+
+    auto overlay = std::make_unique<TestOverlay>(kPinKey);
+    overlay->setParentItem(window.contentItem());
+    overlay->setScene(&scene);
+    appendSprite(*overlay, first.get());
+
+    cwRenderSpriteBillboards* layer = scene.spriteBillboardLayer(kPinKey);
+    REQUIRE(layer->spriteCount() == 1);
+
+    overlay.reset();
+    CHECK(layer->spriteCount() == 0);
 }

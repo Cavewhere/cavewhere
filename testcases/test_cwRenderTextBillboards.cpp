@@ -253,3 +253,63 @@ TEST_CASE("cwRenderTextBillboards: removing every billboard empties the snapshot
     REQUIRE(layer.billboardCount() == 0);
     REQUIRE(layer.buildRenderSlots().isEmpty());
 }
+
+TEST_CASE("cwRenderTextBillboards: buildRenderSlots carries each billboard's pixel offset",
+          "[cwRenderTextBillboards]")
+{
+    const QPointF raised(0.0, 24.0);
+    const QPointF shifted(-6.5, 3.25);
+
+    cwRenderTextBillboards layer;
+    layer.setStyle(makeStyle(kBasePixelSize));
+
+    cwRenderTextBillboards::TextBillboard raisedLabel = makeLabel(QStringLiteral("a1"), QVector3D(0, 0, 0));
+    raisedLabel.pixelOffset = raised;
+    const cwBillboardId raisedId = layer.addBillboard(raisedLabel);
+    cwRenderTextBillboards::TextBillboard shiftedLabel = makeLabel(QStringLiteral("a2"), QVector3D(0, 10, 0));
+    shiftedLabel.pixelOffset = shifted;
+    const cwBillboardId shiftedId = layer.addBillboard(shiftedLabel);
+    const cwBillboardId plainId = layer.addBillboard(makeLabel(QStringLiteral("a3"), QVector3D(10, 10, 0)));
+
+    const auto renderSlots = layer.buildRenderSlots();
+    const auto* raisedSlot = slotFor(renderSlots, raisedId);
+    const auto* shiftedSlot = slotFor(renderSlots, shiftedId);
+    const auto* plainSlot = slotFor(renderSlots, plainId);
+    REQUIRE(raisedSlot != nullptr);
+    REQUIRE(shiftedSlot != nullptr);
+    REQUIRE(plainSlot != nullptr);
+    CHECK(raisedSlot->pixelOffset == raised);
+    CHECK(shiftedSlot->pixelOffset == shifted);
+    CHECK(plainSlot->pixelOffset == QPointF());
+}
+
+TEST_CASE("cwRenderTextBillboards: an offset-only change is an update", "[cwRenderTextBillboards]")
+{
+    const QPointF raised(0.0, 24.0);
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    auto* layer = new cwRenderTextBillboards(&scene);
+    layer->setScene(&scene);
+    layer->setStyle(makeStyle(kBasePixelSize));
+
+    const cwRenderTextBillboards::TextBillboard label = makeLabel(QStringLiteral("a1"), QVector3D(1, 2, 3));
+    const cwBillboardId id = layer->addBillboard(label);
+    REQUIRE(id != cwBillboardId{});
+
+    // Drain the pending Add so the next real change queues an Update (and a frame).
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    QSignalSpy frameSpy(&scene, &cwScene::needsRendering);
+
+    cwRenderTextBillboards::TextBillboard moved = label;
+    moved.pixelOffset = raised;
+    layer->updateBillboard(id, moved);
+    CHECK(frameSpy.count() > 0);
+
+    const auto renderSlots = layer->buildRenderSlots();
+    const auto* slot = slotFor(renderSlots, id);
+    REQUIRE(slot != nullptr);
+    CHECK(slot->pixelOffset == raised);
+    CHECK(slot->worldPosition == label.worldPosition);
+}

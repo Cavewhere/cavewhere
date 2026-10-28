@@ -54,6 +54,7 @@
 
 //Qt includes
 #include <QPointer>
+#include <QPointF>
 #include <QSizeF>
 #include <QVector>
 #include <QVector3D>
@@ -120,6 +121,13 @@ public:
     void setSizeMode(cwBillboardSizeMode sizeMode);
     cwBillboardSizeMode sizeMode() const;
 
+    // The content point that sits on each billboard's world position, normalized
+    // in content space (y-down): (0.5, 0.5) centers the sprite, (0.5, 1.0) puts
+    // its bottom-center on the position so the sprite rises above it.
+    static constexpr QPointF kDefaultAnchor{0.5, 0.5};
+    void setAnchor(const QPointF& anchor);
+    QPointF anchor() const;
+
     // Stable-id API, mirroring cwRenderBillboards. updateBillboard is a no-op when
     // nothing changed, so callers may re-push an unchanged billboard each frame.
     cwBillboardId addBillboard(const SpriteBillboard& billboard);
@@ -158,6 +166,7 @@ private:
     bool m_warnedSizeMismatch = false;
     mutable bool m_warnedMissingSlot = false;
     cwBillboardSizeMode m_sizeMode = cwBillboardSizeMode::ScreenConstant;
+    QPointF m_anchor = kDefaultAnchor;
     // Ordered so the instance order is stable across frames.
     std::map<cwBillboardId, SpriteBillboard> m_billboards;
     uint32_t m_nextId = 1;

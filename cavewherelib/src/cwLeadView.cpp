@@ -45,15 +45,6 @@ cwLeadView::cwLeadView(QQuickItem *parent) :
 {
 }
 
-cwLeadView::~cwLeadView()
-{
-    // The scene's layer outlives this view; release the prototype so the layer
-    // drops its subscene and texture of it.
-    if(!m_spriteLayer.isNull()) {
-        m_spriteLayer->setSprites({});
-    }
-}
-
 /**
 * @brief cwLeadView::regionModel
 * @return The regionModel that this leadView looks for leads in
@@ -524,113 +515,13 @@ void cwLeadView::scrapsRemoved(QModelIndex parent, int begin, int end)
 
 
 /**
- * @brief cwLeadView::sprites
- * @return The atlas slots every lead marker can draw, in LeadSprite order.
- */
-QQmlListProperty<QQuickItem> cwLeadView::sprites() {
-    return QQmlListProperty<QQuickItem>(this, nullptr,
-                                        &cwLeadView::appendSprite,
-                                        &cwLeadView::spriteCount,
-                                        &cwLeadView::spriteAt,
-                                        &cwLeadView::clearSprites);
-}
-
-void cwLeadView::appendSprite(QQmlListProperty<QQuickItem>* list, QQuickItem* sprite) {
-    auto view = static_cast<cwLeadView*>(list->object);
-    view->m_sprites.append(sprite);
-    if(view->m_sprites.size() == 1 && sprite != nullptr) {
-        // Slot 0's size is the marker size LeadPoint's tap target follows.
-        connect(sprite, &QQuickItem::widthChanged, view, &cwLeadView::spriteSizeChanged);
-        connect(sprite, &QQuickItem::heightChanged, view, &cwLeadView::spriteSizeChanged);
-    }
-    view->spritesEdited();
-}
-
-qsizetype cwLeadView::spriteCount(QQmlListProperty<QQuickItem>* list) {
-    return static_cast<cwLeadView*>(list->object)->m_sprites.size();
-}
-
-QQuickItem* cwLeadView::spriteAt(QQmlListProperty<QQuickItem>* list, qsizetype index) {
-    return static_cast<cwLeadView*>(list->object)->m_sprites.at(index);
-}
-
-void cwLeadView::clearSprites(QQmlListProperty<QQuickItem>* list) {
-    auto view = static_cast<cwLeadView*>(list->object);
-    if(!view->m_sprites.isEmpty() && !view->m_sprites.at(0).isNull()) {
-        QQuickItem* sizeSource = view->m_sprites.at(0);
-        disconnect(sizeSource, &QQuickItem::widthChanged, view, &cwLeadView::spriteSizeChanged);
-        disconnect(sizeSource, &QQuickItem::heightChanged, view, &cwLeadView::spriteSizeChanged);
-    }
-    view->m_sprites.clear();
-    view->spritesEdited();
-}
-
-void cwLeadView::spritesEdited() {
-    m_spritesEdited = true;
-    // QML assigns a list as a clear plus one append per item; while the
-    // component is being created, componentComplete hands over the whole list once.
-    if(!isComponentComplete()) {
-        return;
-    }
-    pushSpritesToLayer();
-    emit spritesChanged();
-    emit spriteSizeChanged();
-}
-
-/**
- * @brief cwLeadView::spriteSize
- * @return Slot 0's size in logical pixels; empty without a slot.
- */
-QSizeF cwLeadView::spriteSize() const {
-    if(m_sprites.isEmpty() || m_sprites.at(0).isNull()) {
-        return QSizeF();
-    }
-    const QQuickItem* sprite = m_sprites.at(0);
-    return QSizeF(sprite->width(), sprite->height());
-}
-
-void cwLeadView::pushSpritesToLayer() {
-    cwRenderSpriteBillboards* layer = ensureRenderSpriteBillboards();
-    if(layer == nullptr) {
-        return;
-    }
-
-    if(m_spriteLayer == layer && !m_spritesEdited) {
-        return;
-    }
-
-    if(!m_spriteLayer.isNull() && m_spriteLayer != layer) {
-        m_spriteLayer->setSprites({});
-    }
-    m_spriteLayer = layer;
-    m_spritesEdited = false;
-
-    // A destroyed sprite drops out, so the layer sees a list without nulls.
-    QList<QQuickItem*> sprites;
-    sprites.reserve(m_sprites.size());
-    for(const QPointer<QQuickItem>& sprite : std::as_const(m_sprites)) {
-        if(!sprite.isNull()) {
-            sprites.append(sprite.data());
-        }
-    }
-    layer->setSprites(sprites);
-}
-
-void cwLeadView::componentComplete() {
-    cwBillboardOverlayItem::componentComplete();
-    spritesEdited();
-}
-
-/**
 * @brief cwLeadView::repositionBillboards
 *
-* The base calls this on every scene/camera/window/visibility change. The sprite
-* layer may have become reachable (a scene or window arrived), so the prototype
-* is pushed first; then every lead's 2D hit item and sprite instance are
-* reprojected through updateItemPositions().
+* The base calls this on every scene/camera/window/visibility change, after it
+* has handed the sprite slots to the layer; every lead's 2D hit item and sprite
+* instance are reprojected through updateItemPositions().
 */
 void cwLeadView::repositionBillboards() {
-    pushSpritesToLayer();
     updateItemPositions();
 }
 

@@ -6,8 +6,9 @@
 // away, a station label behind a sprite shows through the transparent half and
 // is hidden under the ink, a label in front paints over the blue, the drawn
 // extent is the prototype's size under both projections and scales with an
-// offscreen job's device pixel ratio, and unbinding and rebinding the window
-// drops and rebuilds the layer texture. A two-slot atlas of a solid blue and a
+// offscreen job's device pixel ratio, a bottom-center anchor lifts the sprite
+// above its position, and unbinding and rebinding the window drops and rebuilds
+// the layer texture. A two-slot atlas of a solid blue and a
 // solid red prototype draws each instance from its own slot, and re-skinning one
 // slot changes only the instances that name it. Needs a GPU-backed window;
 // skips under the offscreen QPA, which has no QRhi.
@@ -526,6 +527,29 @@ TEST_CASE("cwRenderSpriteBillboards renders one instanced, silhouette-depth spri
             // The bias moves the sprite toward the viewer, never sideways.
             CHECK(isBackground(image.pixel(center.x(), center.y() + kSpriteHalfSize + kEdgeMargin)));
             CHECK(isBackground(image.pixel(center.x(), center.y() - kSpriteHalfSize - kEdgeMargin)));
+        }
+    }
+
+    SECTION("a bottom-center anchor puts the sprite's bottom edge on its position")
+    {
+        // The blue top half then spans one to one-half sprite heights above the
+        // station, and nothing draws below it, under both projections.
+        const QPointF bottomCenter(0.5, 1.0);
+        layer->setAnchor(bottomCenter);
+        cwSpriteBillboardHandle sprite;
+        sprite.set(layer, makeSprite(kOpenSprite));
+        REQUIRE(framesFrom(kSettleFrames));
+
+        const int blueRowAbove = kSpriteSize - kHalfProbeOffset;
+        const int clearRowBelow = kEdgeMargin;
+        const QMatrix4x4 perspective = perspectiveProjection();
+        for (const QMatrix4x4& projection : {ortho, perspective}) {
+            const QImage image = renderImage(projection);
+            const QPoint station = toPixel(kOpenSprite, projection);
+            INFO("orthographic: " << (projection == ortho));
+            CHECK(isBlue(image.pixel(station.x(), station.y() - blueRowAbove)));
+            CHECK(isBackground(image.pixel(station.x(), station.y() + clearRowBelow)));
+            CHECK(isBackground(image.pixel(station.x(), station.y() - kSpriteSize - kEdgeMargin)));
         }
     }
 

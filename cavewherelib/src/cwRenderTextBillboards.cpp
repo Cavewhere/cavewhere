@@ -169,7 +169,7 @@ public:
             // which bakes x/y into the vertices and drops z, flattening depth.
             const QMatrix4x4 model = frameCamera.modelMatrix(
                 slot.worldPosition, slot.contentSize, cwBillboardSizeMode::ScreenConstant,
-                slot.depthBias);
+                slot.depthBias, slot.pixelOffset);
             it->second.outline->setMatrix(model);
             it->second.fill->setMatrix(model);
         }
@@ -528,6 +528,7 @@ QVector<cwRenderTextBillboards::RenderSlot> cwRenderTextBillboards::buildRenderS
         slot.contentSize = entry.layout->size;
         slot.worldPosition = entry.billboard.worldPosition;
         slot.depthBias = entry.billboard.depthBias;
+        slot.pixelOffset = entry.billboard.pixelOffset;
         renderSlots.append(slot);
     }
     return renderSlots;

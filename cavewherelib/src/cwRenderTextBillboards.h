@@ -35,6 +35,7 @@
 #include <QHash>
 #include <QFont>
 #include <QPointer>
+#include <QPointF>
 #include <QSizeF>
 #include <QString>
 #include <QVector>
@@ -55,6 +56,7 @@ public:
         QString text;
         QVector3D worldPosition;
         float depthBias = 0.0f;   // world units toward the viewer (cwBillboardSightLine)
+        QPointF pixelOffset;      // logical pixels from the projected position, y-up
 
         bool operator==(const TextBillboard&) const = default;
     };
@@ -77,6 +79,7 @@ public:
         QSizeF contentSize;
         QVector3D worldPosition;
         float depthBias = 0.0f;
+        QPointF pixelOffset;
         // Render-thread scratch for cw::billboard::sortBackToFront; buildRenderSlots
         // leaves it 0.
         float sortDepth = 0.0f;

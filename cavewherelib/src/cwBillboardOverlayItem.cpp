@@ -17,13 +17,129 @@
 #include <QQuickWindow>
 
 cwBillboardOverlayItem::cwBillboardOverlayItem(QQuickItem* parent) :
-    QQuickItem(parent)
+    cwBillboardOverlayItem(QString(), parent)
+{
+}
+
+cwBillboardOverlayItem::cwBillboardOverlayItem(const QString& layerKey, QQuickItem* parent) :
+    QQuickItem(parent),
+    m_layerKey(layerKey)
 {
     connect(this, &QQuickItem::visibleChanged, this, [this]() {
         if(isVisible()) {
             repositionBillboards();
         }
     });
+}
+
+cwBillboardOverlayItem::~cwBillboardOverlayItem()
+{
+    // The scene's layer outlives this overlay; release the prototypes so the
+    // layer drops its subscenes and textures of them.
+    if(!m_spriteLayer.isNull()) {
+        m_spriteLayer->setSprites({});
+    }
+}
+
+QString cwBillboardOverlayItem::layerKey() const {
+    return m_layerKey;
+}
+
+QQmlListProperty<QQuickItem> cwBillboardOverlayItem::sprites() {
+    return QQmlListProperty<QQuickItem>(this, nullptr,
+                                        &cwBillboardOverlayItem::appendSprite,
+                                        &cwBillboardOverlayItem::spriteCount,
+                                        &cwBillboardOverlayItem::spriteAt,
+                                        &cwBillboardOverlayItem::clearSprites);
+}
+
+void cwBillboardOverlayItem::appendSprite(QQmlListProperty<QQuickItem>* list, QQuickItem* sprite) {
+    auto overlay = static_cast<cwBillboardOverlayItem*>(list->object);
+    overlay->m_sprites.append(sprite);
+    if(overlay->m_sprites.size() == 1 && sprite != nullptr) {
+        connect(sprite, &QQuickItem::widthChanged, overlay, &cwBillboardOverlayItem::spriteSizeChanged);
+        connect(sprite, &QQuickItem::heightChanged, overlay, &cwBillboardOverlayItem::spriteSizeChanged);
+    }
+    overlay->spritesEdited();
+}
+
+qsizetype cwBillboardOverlayItem::spriteCount(QQmlListProperty<QQuickItem>* list) {
+    return static_cast<cwBillboardOverlayItem*>(list->object)->m_sprites.size();
+}
+
+QQuickItem* cwBillboardOverlayItem::spriteAt(QQmlListProperty<QQuickItem>* list, qsizetype index) {
+    return static_cast<cwBillboardOverlayItem*>(list->object)->m_sprites.at(index);
+}
+
+void cwBillboardOverlayItem::clearSprites(QQmlListProperty<QQuickItem>* list) {
+    auto overlay = static_cast<cwBillboardOverlayItem*>(list->object);
+    if(!overlay->m_sprites.isEmpty() && !overlay->m_sprites.at(0).isNull()) {
+        QQuickItem* sizeSource = overlay->m_sprites.at(0);
+        disconnect(sizeSource, &QQuickItem::widthChanged, overlay, &cwBillboardOverlayItem::spriteSizeChanged);
+        disconnect(sizeSource, &QQuickItem::heightChanged, overlay, &cwBillboardOverlayItem::spriteSizeChanged);
+    }
+    overlay->m_sprites.clear();
+    overlay->spritesEdited();
+}
+
+void cwBillboardOverlayItem::spritesEdited() {
+    m_spritesEdited = true;
+    // QML assigns a list as a clear plus one append per item; while the
+    // component is being created, componentComplete hands over the whole list once.
+    if(!isComponentComplete()) {
+        return;
+    }
+    pushSpritesToLayer();
+    emit spritesChanged();
+    emit spriteSizeChanged();
+}
+
+/**
+ * @brief cwBillboardOverlayItem::spriteSize
+ * @return Slot 0's size in logical pixels; empty without a slot.
+ */
+QSizeF cwBillboardOverlayItem::spriteSize() const {
+    if(m_sprites.isEmpty() || m_sprites.at(0).isNull()) {
+        return QSizeF();
+    }
+    const QQuickItem* sprite = m_sprites.at(0);
+    return QSizeF(sprite->width(), sprite->height());
+}
+
+void cwBillboardOverlayItem::pushSpritesToLayer() {
+    if(m_sprites.isEmpty() && m_spriteLayer.isNull()) {
+        return;
+    }
+
+    cwRenderSpriteBillboards* layer = ensureRenderSpriteBillboards();
+    if(layer == nullptr) {
+        return;
+    }
+
+    if(m_spriteLayer == layer && !m_spritesEdited) {
+        return;
+    }
+
+    if(!m_spriteLayer.isNull() && m_spriteLayer != layer) {
+        m_spriteLayer->setSprites({});
+    }
+    m_spriteLayer = layer;
+    m_spritesEdited = false;
+
+    // A destroyed sprite drops out, so the layer sees a list without nulls.
+    QList<QQuickItem*> sprites;
+    sprites.reserve(m_sprites.size());
+    for(const QPointer<QQuickItem>& sprite : std::as_const(m_sprites)) {
+        if(!sprite.isNull()) {
+            sprites.append(sprite.data());
+        }
+    }
+    layer->setSprites(sprites);
+}
+
+void cwBillboardOverlayItem::componentComplete() {
+    QQuickItem::componentComplete();
+    spritesEdited();
 }
 
 cwCamera* cwBillboardOverlayItem::camera() const {
@@ -77,6 +193,7 @@ void cwBillboardOverlayItem::setScene(cwScene* scene) {
     m_renderSpriteBillboards = nullptr;
     m_renderTextBillboards = nullptr;
 
+    pushSpritesToLayer();
     repositionBillboards();
     emit sceneChanged();
 }
@@ -119,6 +236,7 @@ void cwBillboardOverlayItem::itemChange(ItemChange change, const ItemChangeData&
         if(m_renderTextBillboards != nullptr) {
             m_renderTextBillboards->setWindow(value.window);
         }
+        pushSpritesToLayer();
         repositionBillboards();
     }
     QQuickItem::itemChange(change, value);
@@ -150,7 +268,7 @@ cwRenderSpriteBillboards* cwBillboardOverlayItem::ensureRenderSpriteBillboards()
         return nullptr;
     }
 
-    m_renderSpriteBillboards = m_scene->spriteBillboardLayer();
+    m_renderSpriteBillboards = m_scene->spriteBillboardLayer(m_layerKey);
     m_renderSpriteBillboards->setWindow(quickWindow);
     return m_renderSpriteBillboards;
 }
@@ -184,7 +302,7 @@ cwRenderTextBillboards* cwBillboardOverlayItem::ensureRenderTextBillboards() {
         return nullptr;
     }
 
-    m_renderTextBillboards = m_scene->textBillboardLayer();
+    m_renderTextBillboards = m_scene->textBillboardLayer(m_layerKey);
     m_renderTextBillboards->setWindow(quickWindow);
     return m_renderTextBillboards;
 }

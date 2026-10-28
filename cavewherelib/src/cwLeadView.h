@@ -13,7 +13,6 @@
 #include <QPointer>
 #include <QModelIndex>
 #include <QQmlEngine>
-#include <QQmlListProperty>
 #include <QVector>
 #include <QVector3D>
 #include <QPointF>
@@ -55,15 +54,9 @@ class cwLeadView : public cwBillboardOverlayItem
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionModel NOTIFY regionModelChanged)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager CONSTANT)
     Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel WRITE setKeywordItemModel NOTIFY keywordItemModelChanged)
-    // The atlas slots every lead marker can draw. Slot order is the LeadSprite
-    // enum order. All slots share spriteSize (slot 0's size), the size of
-    // LeadPoint's tap target. A marker needing its own size or live content
-    // belongs on cwRenderBillboards, see cwBillboardOverlayItem::setBillboard.
-    Q_PROPERTY(QQmlListProperty<QQuickItem> sprites READ sprites NOTIFY spritesChanged)
-    Q_PROPERTY(QSizeF spriteSize READ spriteSize NOTIFY spriteSizeChanged)
-
 
 public:
+    // The atlas slots LeadView.sprites declares, in this order.
     enum LeadSprite {
         OpenSprite = 0,
         CompletedSprite = 1
@@ -71,15 +64,11 @@ public:
     Q_ENUM(LeadSprite)
 
     cwLeadView(QQuickItem* parent = 0);
-    ~cwLeadView() override;
 
     cwRegionTreeModel* regionModel() const;
     void setRegionModel(cwRegionTreeModel* regionModel);
 
     cwSelectionManager* selectionManager() const;
-
-    QQmlListProperty<QQuickItem> sprites();
-    QSizeF spriteSize() const;
 
     cwKeywordItemModel* keywordItemModel() const;
     void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
@@ -105,19 +94,13 @@ public:
 signals:
     void regionModelChanged();
     void keywordItemModelChanged();
-    void spritesChanged();
-    void spriteSizeChanged();
 
 protected:
-    void componentComplete() override;
     void repositionBillboards() override;
 
 private:
     QPointer<cwRegionTreeModel> RegionModel; //!<
     cwSelectionManager* SelectionMananger;
-    QList<QPointer<QQuickItem>> m_sprites;
-    QPointer<cwRenderSpriteBillboards> m_spriteLayer; //!< the layer m_sprites was last handed to
-    bool m_spritesEdited = true; //!< m_sprites changed since it was last handed to m_spriteLayer
 
     struct ScrapEntry {
         int scrapLeadId = -1;
@@ -155,19 +138,6 @@ private:
     void createComponent();
 
     QString qmlSource() const;
-
-    static void appendSprite(QQmlListProperty<QQuickItem>* list, QQuickItem* sprite);
-    static qsizetype spriteCount(QQmlListProperty<QQuickItem>* list);
-    static QQuickItem* spriteAt(QQmlListProperty<QQuickItem>* list, qsizetype index);
-    static void clearSprites(QQmlListProperty<QQuickItem>* list);
-    void spritesEdited();
-
-    // Hands the sprite slots to the scene's sprite layer once both exist,
-    // taking them back from the layer of a previous scene first so that layer
-    // drops its subscenes and textures of them. Cheap to call on every
-    // reposition: it returns early unless the list was edited or the layer
-    // changed, so a destroyed sprite keeps its slot in the layer.
-    void pushSpritesToLayer();
 
     void addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* item, const QVector3D& worldPosition);
 

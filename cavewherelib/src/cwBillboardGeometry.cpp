@@ -96,7 +96,8 @@ QVector2D worldPerPixel(const QVector3D& worldPosition,
 // faces the camera; column 1 is negated so the content's y-down pixel space maps
 // to world-down. Column 3 places it at the world position, pulled toward the
 // viewer by the depth bias so a billboard sitting on a wall isn't self-occluded.
-// The trailing translate centers the content on that position.
+// The trailing translate centers the content on that position, shifted by the
+// y-up pixel offset in the y-down content space.
 QMatrix4x4 buildModelMatrix(const QVector3D& worldPosition,
                             const QSizeF& contentSize,
                             cwBillboardSizeMode sizeMode,
@@ -105,7 +106,8 @@ QMatrix4x4 buildModelMatrix(const QVector3D& worldPosition,
                             const QMatrix4x4& projection,
                             const QMatrix4x4& viewProjection,
                             const QSizeF& logicalViewport,
-                            const cwBillboardSightLine& sightLine)
+                            const cwBillboardSightLine& sightLine,
+                            const QPointF& pixelOffset)
 {
     const QVector3D right(view(0, 0), view(0, 1), view(0, 2));
     const QVector3D up(view(1, 0), view(1, 1), view(1, 2));
@@ -120,8 +122,8 @@ QMatrix4x4 buildModelMatrix(const QVector3D& worldPosition,
     model.setColumn(1, QVector4D(-up * scale.y(), 0.0f));
     model.setColumn(2, QVector4D(forward, 0.0f));
     model.setColumn(3, QVector4D(position, 1.0f));
-    model.translate(float(-contentSize.width() / 2.0),
-                    float(-contentSize.height() / 2.0),
+    model.translate(float(pixelOffset.x() - contentSize.width() / 2.0),
+                    float(-pixelOffset.y() - contentSize.height() / 2.0),
                     0.0f);
     return model;
 }
@@ -143,11 +145,12 @@ FrameCamera::FrameCamera(const QMatrix4x4& view,
 QMatrix4x4 FrameCamera::modelMatrix(const QVector3D& worldPosition,
                                     const QSizeF& contentSize,
                                     cwBillboardSizeMode sizeMode,
-                                    float depthBias) const
+                                    float depthBias,
+                                    const QPointF& pixelOffset) const
 {
     return buildModelMatrix(worldPosition, contentSize, sizeMode, depthBias,
                             m_view, m_projection, m_viewProjection,
-                            m_logicalViewport, m_sightLine);
+                            m_logicalViewport, m_sightLine, pixelOffset);
 }
 
 float sortDepth(const QVector3D& worldPosition, const QMatrix4x4& viewProjection)

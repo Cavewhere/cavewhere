@@ -121,24 +121,46 @@ cwRenderBillboards* cwScene::billboardLayer()
 
 cwRenderSpriteBillboards* cwScene::spriteBillboardLayer()
 {
-    if (m_spriteBillboardLayer == nullptr) {
-        m_spriteBillboardLayer = new cwRenderSpriteBillboards(this);
-        m_spriteBillboardLayer->setScene(this);
+    return spriteBillboardLayer(QString());
+}
+
+cwRenderSpriteBillboards* cwScene::spriteBillboardLayer(const QString& key)
+{
+    if (auto* layer = m_spriteBillboardLayers.value(key)) {
+        return layer;
     }
-    return m_spriteBillboardLayer;
+
+    if (!key.isEmpty()) {
+        // Registration order is gather order: the default layers register
+        // first, so keyed layers draw after them whichever overlay asks first.
+        textBillboardLayer();
+    }
+
+    auto* layer = new cwRenderSpriteBillboards(this);
+    layer->setScene(this);
+    m_spriteBillboardLayers.insert(key, layer);
+    return layer;
 }
 
 cwRenderTextBillboards* cwScene::textBillboardLayer()
 {
-    if (m_textBillboardLayer == nullptr) {
-        // Registration order is gather order, so the item and sprite layers are
-        // registered first to draw before this one.
-        billboardLayer();
-        spriteBillboardLayer();
-        m_textBillboardLayer = new cwRenderTextBillboards(this);
-        m_textBillboardLayer->setScene(this);
+    return textBillboardLayer(QString());
+}
+
+cwRenderTextBillboards* cwScene::textBillboardLayer(const QString& key)
+{
+    if (auto* layer = m_textBillboardLayers.value(key)) {
+        return layer;
     }
-    return m_textBillboardLayer;
+
+    // Registration order is gather order, so the item and sprite layers are
+    // registered first to draw before this one.
+    billboardLayer();
+    spriteBillboardLayer(key);
+    auto* layer = new cwRenderTextBillboards(this);
+    layer->setScene(this);
+    m_textBillboardLayers.insert(key, layer);
+    return layer;
 }
 
 /**

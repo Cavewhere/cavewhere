@@ -615,3 +615,42 @@ TEST_CASE("cwRenderSpriteBillboards: buildInstances carries each billboard's slo
     REQUIRE(oneSlot.size() == 1);
     CHECK(oneSlot.at(0).spriteIndex == uint32_t(kOpenSlot));
 }
+
+TEST_CASE("cwRenderSpriteBillboards: the anchor defaults to the center and round-trips",
+          "[cwRenderSpriteBillboards]")
+{
+    const QPointF center(0.5, 0.5);
+    const QPointF bottomCenter(0.5, 1.0);
+
+    cwRenderSpriteBillboards layer;
+    CHECK(layer.anchor() == center);
+
+    layer.setAnchor(bottomCenter);
+    CHECK(layer.anchor() == bottomCenter);
+
+    layer.setAnchor(center);
+    CHECK(layer.anchor() == center);
+}
+
+TEST_CASE("cwRenderSpriteBillboards: an anchor change asks for a frame and an unchanged one does not",
+          "[cwRenderSpriteBillboards]")
+{
+    const QPointF bottomCenter(0.5, 1.0);
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+    auto* layer = new cwRenderSpriteBillboards(&scene);
+    layer->setScene(&scene);
+
+    // Drain the pending Add so each change below queues its own Update (and a frame).
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    QSignalSpy frameSpy(&scene, &cwScene::needsRendering);
+
+    layer->setAnchor(bottomCenter);
+    CHECK(frameSpy.count() > 0);
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    frameSpy.clear();
+    layer->setAnchor(bottomCenter);
+    CHECK(frameSpy.count() == 0);
+}

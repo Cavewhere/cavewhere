@@ -248,6 +248,65 @@ TEST_CASE("cw::billboard::FrameCamera places billboards like buildModelMatrix",
     }
 }
 
+TEST_CASE("cw::billboard::buildModelMatrix shifts the content by a y-up pixel offset",
+          "[cwBillboardGeometry]")
+{
+    // The offset is in logical pixels, y-up, applied after projection: the
+    // content's center lands offset.x() right of and offset.y() above the
+    // station on the y-down screen, under either projection and at any depth.
+    const QPointF pixelOffset(7.0, 23.0);
+    const QPointF contentCenter(kContentSize.width() / 2.0, kContentSize.height() / 2.0);
+    constexpr float kDevicePixelRatio = 1.0f;
+    const QSize pixelSize = kLogicalViewport.toSize();
+    const QMatrix4x4 view = makeView();
+
+    const auto check = [&](const QMatrix4x4& projection) {
+        const QMatrix4x4 viewProjection = projection * view;
+        const cwBillboardSightLine sightLine(view, projection);
+        const QPointF station = toLogicalPixels(viewProjection, kWorldPosition);
+        const QPointF expected = station + QPointF(pixelOffset.x(), -pixelOffset.y());
+
+        const auto centerOf = [&](const QMatrix4x4& model) {
+            return toLogicalPixels(
+                viewProjection,
+                model.map(QVector3D(float(contentCenter.x()), float(contentCenter.y()), 0.0f)));
+        };
+
+        const QMatrix4x4 model = cw::billboard::buildModelMatrix(
+            kWorldPosition, kContentSize, cwBillboardSizeMode::ScreenConstant, 0.0f,
+            view, projection, viewProjection, kLogicalViewport, sightLine, pixelOffset);
+        const QPointF center = centerOf(model);
+        CHECK_THAT(center.x(), WithinAbs(expected.x(), kPixelEpsilon));
+        CHECK_THAT(center.y(), WithinAbs(expected.y(), kPixelEpsilon));
+
+        // The content keeps its size; only its placement moves.
+        const QPointF topLeft = toLogicalPixels(viewProjection, model.map(QVector3D(0, 0, 0)));
+        const QPointF bottomRight = toLogicalPixels(
+            viewProjection,
+            model.map(QVector3D(float(kContentSize.width()), float(kContentSize.height()), 0)));
+        CHECK_THAT(bottomRight.x() - topLeft.x(), WithinAbs(kContentSize.width(), kPixelEpsilon));
+        CHECK_THAT(bottomRight.y() - topLeft.y(), WithinAbs(kContentSize.height(), kPixelEpsilon));
+
+        // FrameCamera forwards the offset.
+        const cw::billboard::FrameCamera frameCamera(view, projection, viewProjection,
+                                                     pixelSize, kDevicePixelRatio);
+        const QPointF frameCenter = centerOf(frameCamera.modelMatrix(
+            kWorldPosition, kContentSize, cwBillboardSizeMode::ScreenConstant, 0.0f, pixelOffset));
+        CHECK_THAT(frameCenter.x(), WithinAbs(expected.x(), kPixelEpsilon));
+        CHECK_THAT(frameCenter.y(), WithinAbs(expected.y(), kPixelEpsilon));
+    };
+
+    SECTION("perspective")
+    {
+        check(makePerspective());
+    }
+
+    SECTION("orthographic")
+    {
+        check(makeOrtho());
+    }
+}
+
 TEST_CASE("cw::billboard::sortDepth is the NDC depth of the world position",
           "[cwBillboardGeometry]")
 {
