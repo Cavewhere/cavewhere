@@ -308,7 +308,8 @@ cwRenderTextBillboards* cwBillboardOverlayItem::ensureRenderTextBillboards() {
 }
 
 void cwBillboardOverlayItem::setTextBillboard(cwTextBillboardHandle& handle, const QString& text,
-                                              const QVector3D& worldPosition, float depthBias) {
+                                              const QVector3D& worldPosition, float depthBias,
+                                              const QPointF& pixelOffset) {
     if(m_renderTextBillboards == nullptr) {
         return;
     }
@@ -317,6 +318,7 @@ void cwBillboardOverlayItem::setTextBillboard(cwTextBillboardHandle& handle, con
     billboard.text = text;
     billboard.worldPosition = worldPosition;
     billboard.depthBias = depthBias;
+    billboard.pixelOffset = pixelOffset;
 
     // Adds on first call, updates after; the handle removes it on teardown.
     handle.set(m_renderTextBillboards, billboard);

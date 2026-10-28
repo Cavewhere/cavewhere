@@ -2,7 +2,7 @@
 title: Glossary
 summary: Definitions of the cave-surveying and CaveWhere terms used throughout the manual.
 problem: Understand the survey and CaveWhere vocabulary the rest of the manual assumes.
-keywords: [glossary, terms, station, shot, lrud, scrap, declination, grid convergence, loop closure, backsight, trip, lead, morphing, warping]
+keywords: [glossary, terms, station, shot, lrud, scrap, declination, grid convergence, loop closure, backsight, trip, lead, morphing, warping, entrance marker]
 related: [../getting-started/why-cavewhere.md]
 ---
 
@@ -91,6 +91,12 @@ up with the surface world and other datasets.
 ### Fixed station
 A [station](#station) pinned to a real-world coordinate. Fixing a station is how
 a cave gets placed on the map.
+
+### Entrance marker
+The pin and line of text the 3D view draws on a [fixed station](#fixed-station)
+once the survey solves it. Its kind (Entrance, Well, Radio Location, Other)
+picks the pin, and an entrance's line adds the cave's length and depth. See
+[Georeference a Cave](../georeferencing/georeference-a-cave.md#entrance-markers).
 
 ## Notes and drawings
 

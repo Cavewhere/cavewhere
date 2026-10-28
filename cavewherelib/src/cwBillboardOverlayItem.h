@@ -24,6 +24,7 @@
 #include <QQuickItem>
 #include <QQmlEngine>
 #include <QPointer>
+#include <QPointF>
 #include <QQmlListProperty>
 #include <QSizeF>
 #include <QString>
@@ -131,9 +132,11 @@ protected:
 
     // Text counterpart of setBillboard: adds @a handle's label to the shared text
     // layer on the first call and updates it thereafter. A no-op until the text
-    // layer exists.
+    // layer exists. @a pixelOffset moves the label from its projected position in
+    // logical pixels, y-up.
     void setTextBillboard(cwTextBillboardHandle& handle, const QString& text,
-                          const QVector3D& worldPosition, float depthBias);
+                          const QVector3D& worldPosition, float depthBias,
+                          const QPointF& pixelOffset = QPointF());
 
 private:
     cwRenderBillboards* ensureRenderBillboards();

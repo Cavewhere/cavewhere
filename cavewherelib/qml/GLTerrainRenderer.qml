@@ -22,6 +22,7 @@ Item {
     property alias measurementReadoutPopup: measurementPopupId
     property alias interactionManager: interactionManagerId
     property alias leadView: leadViewId
+    property alias entranceView: entranceViewId
     property alias renderer: rendererId
     property alias projectionTransition: projectionTransitionId
     property alias scene: rendererId.scene
@@ -273,6 +274,46 @@ Item {
         // items grab their taps exclusively, so this only fires off a lead.
         TapHandler {
             onTapped: leadViewId.selectionManager.selectedItem = null
+        }
+    }
+
+    component EntrancePin: Image {
+        sourceSize: Qt.size(Theme.entrancePinWidth, Theme.entrancePinHeight)
+    }
+
+    EntranceView {
+        id: entranceViewId
+        objectName: "entranceView"
+        anchors.fill: parent
+        z: rootId.zLabels
+        camera: rendererId.camera
+        scene: rendererId.scene
+        region: RootData.region
+        keywordItemModel: RootData.keywordItemModel
+        font.pixelSize: Theme.entranceFontSize
+        color: Theme.textInverse
+        outlineColor: Theme.text
+        textGap: Theme.entranceTextGap
+        sprites: [entrancePin, wellPin, radioLocationPin, otherPin]
+
+        // One pin per cwFixStation::Kind, in enum order. Referenced into the 3D
+        // pass as textures, so they are hidden from the 2D tree. All four share
+        // one size: the layer draws every slot at slot 0's size.
+        EntrancePin {
+            id: entrancePin
+            source: "qrc:/icons/svg/entrancePin.svg"
+        }
+        EntrancePin {
+            id: wellPin
+            source: "qrc:/icons/svg/wellPin.svg"
+        }
+        EntrancePin {
+            id: radioLocationPin
+            source: "qrc:/icons/svg/radioLocationPin.svg"
+        }
+        EntrancePin {
+            id: otherPin
+            source: "qrc:/icons/svg/otherPin.svg"
         }
     }
 
