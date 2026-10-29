@@ -366,5 +366,120 @@ MainWindowTest {
             tryCompare(fixedBadge, "visible", false)
             tryCompare(badge, "visible", false)
         }
+
+        // Opens the fix editor on A1 through the station caret and returns the
+        // open popup and its Entrance box. The one caret verb doubles as Edit
+        // Fixed Coordinates... when A1 already has a fix.
+        function openFixEditor(context) {
+            const menu = openStationMenu(focusedStationBox(context, 0))
+            menu.markFixed.triggered()
+
+            const popup = surveyEditorPopup("fixStationPopup")
+            tryCompare(popup, "opened", true)
+            compare(popup.stationName, "A1")
+
+            const box = findChild(popup, "fixStationPopupEntrance")
+            verify(box !== null, "the fix editor should offer an Entrance box")
+            return { popup: popup, box: box }
+        }
+
+        // A1 fixed with no entrance, the state Edit Fixed Coordinates... opens on.
+        function fixWithoutEntrance(context) {
+            compare(context.cave.fixStations.addFixStation("A1"), 0)
+            compare(context.cave.entrances.count, 0)
+        }
+
+        function compareFixKept(context) {
+            const fixStations = context.cave.fixStations
+            compare(fixStations.count, 1, "the fix stays")
+            compare(fixStations.data(fixStations.index(0), FixStationModel.StationNameRole), "A1",
+                    "with its station")
+        }
+
+        function test_fixPopupEntranceBoxCheckedForNewFix() {
+            const context = gotoSurveyTable()
+
+            const editor = openFixEditor(context)
+            tryCompare(context.cave.entrances, "count", 1)
+            compare(editor.box.enabled, true)
+            tryCompare(editor.box, "checked", true, 5000,
+                       "marking a station fixed marks it an entrance, and the box shows it")
+
+            closePopup(editor.popup)
+        }
+
+        function test_fixPopupEntranceBoxReflectsExistingFix() {
+            const context = gotoSurveyTable()
+            const entrances = context.cave.entrances
+            fixWithoutEntrance(context)
+
+            const plain = openFixEditor(context)
+            compare(plain.box.checked, false, "a fix with no entrance opens unchecked")
+            compare(entrances.count, 0, "reopening an existing fix leaves its entrance alone")
+            closePopup(plain.popup)
+
+            entrances.addEntrance("A1")
+            const marked = openFixEditor(context)
+            tryCompare(marked.box, "checked", true, 5000,
+                       "a fix that is an entrance opens checked")
+            compare(entrances.count, 1)
+            closePopup(marked.popup)
+        }
+
+        function test_fixPopupEntranceToggleKeepsFix() {
+            const context = gotoSurveyTable()
+            const entrances = context.cave.entrances
+            fixWithoutEntrance(context)
+
+            const editor = openFixEditor(context)
+            compare(editor.box.checked, false)
+            waitForRendering(rootId)
+
+            mouseClick(editor.box)
+            tryVerify(() => entrances.isEntrance("A1"), 5000, "checking marks A1 an entrance")
+            compare(entrances.count, 1)
+            compareFixKept(context)
+            tryCompare(editor.box, "checked", true)
+            compare(editor.popup.opened, true, "the editor stays open")
+
+            mouseClick(editor.box)
+            tryVerify(() => !entrances.isEntrance("A1"), 5000, "unchecking removes A1's entrance")
+            compare(entrances.count, 0)
+            compareFixKept(context)
+            tryCompare(editor.box, "checked", false)
+            compare(editor.popup.opened, true, "the editor stays open")
+
+            closePopup(editor.popup)
+        }
+
+        function test_fixPopupEntranceFollowsModelWhileOpen() {
+            const context = gotoSurveyTable()
+            const entrances = context.cave.entrances
+            fixWithoutEntrance(context)
+
+            const editor = openFixEditor(context)
+            compare(editor.box.checked, false)
+
+            entrances.addEntrance("A1")
+            tryCompare(editor.box, "checked", true, 5000,
+                       "an entrance added elsewhere checks the open box")
+            entrances.removeEntrance("A1")
+            tryCompare(editor.box, "checked", false, 5000,
+                       "an entrance removed elsewhere clears the open box")
+
+            // A click sets checked itself; the box must follow the model after it.
+            waitForRendering(rootId)
+            mouseClick(editor.box)
+            tryVerify(() => entrances.isEntrance("A1"), 5000, "checking marks A1 an entrance")
+            entrances.removeEntrance("A1")
+            tryCompare(editor.box, "checked", false, 5000,
+                       "after a click, a removal elsewhere still clears the box")
+            entrances.addEntrance("A1")
+            tryCompare(editor.box, "checked", true, 5000,
+                       "after a click, an addition elsewhere still checks the box")
+            compareFixKept(context)
+
+            closePopup(editor.popup)
+        }
     }
 }

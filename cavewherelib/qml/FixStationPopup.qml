@@ -15,7 +15,8 @@ import cavewherelib
 // Inline coordinate entry for one fix station, so marking a station Fixed from
 // the survey table doesn't send the user to FixStationPage and back. Edits go
 // straight to the cave's cwFixStationModel — the same rows FixStationPage shows,
-// so the two surfaces can't disagree.
+// so the two surfaces can't disagree. Its Entrance checkbox marks or unmarks
+// the station through the cave's cwEntranceModel and leaves the fix alone.
 //
 // Hosted at page level (SurveyEditor) rather than inside the StationBox that
 // opens it: the survey table destroys cell delegates as they scroll out of view,
@@ -29,6 +30,10 @@ QC.Popup {
     readonly property FixStationModel fixStations: popupId.cave !== null
                                                    ? popupId.cave.fixStations
                                                    : null
+
+    readonly property EntranceModel entrances: popupId.cave !== null
+                                               ? popupId.cave.entrances
+                                               : null
 
     // Edits go to fixStations; the warnings come from the diagnostics proxy
     // over it, the same rows FixStationPage reads (U12). Row indices pass
@@ -85,6 +90,10 @@ QC.Popup {
     property string stationName: ""
     property int row: -1
 
+    // Whether the open station is an entrance. reloadEntrance() is its only
+    // writer, since isEntrance() is an invokable no binding can depend on.
+    property bool stationIsEntrance: false
+
     focus: true
     padding: Theme.statsPadding
     // Not CloseOnPressOutside: the coordinate-system picker opens popups of its
@@ -113,6 +122,7 @@ QC.Popup {
         }
 
         popupId.reload()
+        popupId.reloadEntrance()
         popupId.moveTo(anchorItem)
         popupId.open()
     }
@@ -198,6 +208,25 @@ QC.Popup {
         return model.data(model.index(popupId.row), FixStationModel.CoordinateTextRole)
     }
 
+    function reloadEntrance(): void {
+        const model = popupId.entrances
+        popupId.stationIsEntrance = model !== null
+                && popupId.stationName !== ""
+                && model.isEntrance(popupId.stationName)
+    }
+
+    function setEntrance(isEntrance: bool): void {
+        const model = popupId.entrances
+        if (model === null || popupId.stationName === "") {
+            return
+        }
+        if (isEntrance) {
+            model.addEntrance(popupId.stationName)
+        } else {
+            model.removeEntrance(popupId.stationName)
+        }
+    }
+
     // The derived warnings, unlike the coordinate, change without anyone
     // touching this popup — a re-solve or a CS change moves them — so they are
     // re-read whenever the proxy says so, not only on open.
@@ -259,6 +288,14 @@ QC.Popup {
             if (popupId.row >= topLeft.row && popupId.row <= bottomRight.row) {
                 popupId.reloadErrors()
             }
+        }
+    }
+
+    QQ.Connections {
+        target: popupId.entrances
+
+        function onEntranceStationsChanged(): void {
+            popupId.reloadEntrance()
         }
     }
 
@@ -416,11 +453,32 @@ QC.Popup {
             }
         }
 
-        QC.Button {
-            objectName: "fixStationPopupDone"
-            Layout.alignment: Qt.AlignRight
-            text: qsTr("Done")
-            onClicked: popupId.close()
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.flowSpacing
+
+            QC.CheckBox {
+                id: entranceBoxId
+                objectName: "fixStationPopupEntrance"
+                text: qsTr("Entrance")
+                enabled: popupId.entrances !== null && popupId.row >= 0
+                checked: popupId.stationIsEntrance
+
+                onToggled: {
+                    popupId.setEntrance(entranceBoxId.checked)
+                    entranceBoxId.checked = Qt.binding(() => popupId.stationIsEntrance)
+                }
+            }
+
+            QQ.Item {
+                Layout.fillWidth: true
+            }
+
+            QC.Button {
+                objectName: "fixStationPopupDone"
+                text: qsTr("Done")
+                onClicked: popupId.close()
+            }
         }
     }
 }

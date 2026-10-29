@@ -199,8 +199,10 @@ whole meters (or feet). Every marker draws the same cave pin.
 
 **Mark Station as Fixed** also marks the station an entrance, and **Remove
 Fix** takes the entrance away with the fix. The **Entrance** checkbox on the
-**Fix Stations** page marks or unmarks one on its own. Renaming a fix on the **Fix
-Stations** page carries its entrance to the new station.
+**Fix Stations** page marks or unmarks one on its own, and so does the
+**Entrance** checkbox in the coordinate editor that **Mark Station as Fixed**
+and **Edit Fixed Coordinates...** open; the fix stays either way. Renaming a
+fix on the **Fix Stations** page carries its entrance to the new station.
 
 The caret on a station cell in the survey table also offers **Mark Station as
 Entrance** and **Remove Entrance**. Marking opens a small editor with one
