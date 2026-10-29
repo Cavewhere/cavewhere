@@ -632,7 +632,7 @@ TEST_CASE("A MarkerView's cost of a reset grows linearly with the markers", "[cw
 
 namespace {
 
-constexpr float kDefaultXRayOpacity = 0.3f;
+constexpr float kDefaultXRayOpacity = 0.35f;
 constexpr int kEditedXRayOpacityPercent = 55;
 constexpr float kEditedXRayOpacity = 0.55f;
 
@@ -684,7 +684,7 @@ TEST_CASE("A MarkerView draws its layers in the marker knobs' depth mode and sta
         CHECK(f.scene.spriteBillboardLayer()->depthMode() == cwBillboardDepthMode());
     };
 
-    // The defaults ghost a hidden marker at 30 percent.
+    // The defaults ghost a hidden marker at 35 percent.
     checkMarkerLayers(f, true, true, kDefaultXRayOpacity);
     checkStationLabelsKeepTheDefault();
 

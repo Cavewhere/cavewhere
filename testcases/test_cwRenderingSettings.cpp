@@ -1027,7 +1027,7 @@ TEST_CASE("cwRenderingSettings announces every budget knob through budgetsChange
     settings->resetToDefaults();
 }
 
-TEST_CASE("cwRenderingSettings marker knobs default to a depth-tested x-ray at 30 percent",
+TEST_CASE("cwRenderingSettings marker knobs default to a depth-tested x-ray at 35 percent",
           "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
@@ -1035,10 +1035,10 @@ TEST_CASE("cwRenderingSettings marker knobs default to a depth-tested x-ray at 3
     REQUIRE(settings);
     settings->resetToDefaults();
 
-    constexpr int kDefaultOpacityPercent = 30;
+    constexpr int kDefaultOpacityPercent = 35;
     constexpr int kMinimumOpacityPercent = 5;
     constexpr int kMaximumOpacityPercent = 100;
-    constexpr float kDefaultOpacity = 0.3f;
+    constexpr float kDefaultOpacity = 0.35f;
 
     CHECK(settings->markerDepthTest());
     CHECK(settings->markerXRay());
@@ -1195,7 +1195,7 @@ TEST_CASE("cwRenderingSettings clamps the marker x-ray opacity to 5-100 percent"
     settings->resetMarkerKnobsToDefaults();
 }
 
-TEST_CASE("cwRenderingSettings marker ramp knobs default to a 60-90 degree ramp up to full opacity",
+TEST_CASE("cwRenderingSettings marker ramp knobs default to a 60-85 degree ramp up to full opacity",
           "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
@@ -1204,13 +1204,13 @@ TEST_CASE("cwRenderingSettings marker ramp knobs default to a 60-90 degree ramp 
     settings->resetToDefaults();
 
     constexpr int kDefaultRampStartTilt = 60;
-    constexpr int kDefaultRampEndTilt = 90;
+    constexpr int kDefaultRampEndTilt = 85;
     constexpr int kDefaultOverheadOpacityPercent = 100;
     constexpr int kMinimumTilt = 0;
     constexpr int kMaximumTilt = 90;
     constexpr int kMinimumOpacityPercent = 5;
     constexpr int kMaximumOpacityPercent = 100;
-    constexpr float kDefaultOpacity = 0.3f;
+    constexpr float kDefaultOpacity = 0.35f;
 
     CHECK(settings->markerXRayRampStartTiltDegrees() == kDefaultRampStartTilt);
     CHECK(settings->markerXRayRampEndTiltDegrees() == kDefaultRampEndTilt);
@@ -1304,7 +1304,7 @@ TEST_CASE("cwRenderingSettings resets the marker knobs with every knob but not w
     settings->resetToDefaults();
 
     constexpr int kEditedOpacityPercent = 55;
-    constexpr int kDefaultOpacityPercent = 30;
+    constexpr int kDefaultOpacityPercent = 35;
     constexpr float kEditedOpacity = 0.55f;
 
     SECTION("markerDepthMode carries the three knobs, the opacity as a factor") {
@@ -1354,7 +1354,7 @@ TEST_CASE("cwRenderingSettings resets the marker knobs with every knob but not w
         constexpr int kEditedRampStartTilt = 30;
         constexpr int kEditedRampEndTilt = 70;
         constexpr int kDefaultRampStartTilt = 60;
-        constexpr int kDefaultRampEndTilt = 90;
+        constexpr int kDefaultRampEndTilt = 85;
         constexpr int kDefaultOverheadOpacityPercent = 100;
 
         const auto moveRampKnobs = [&]() {

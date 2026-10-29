@@ -38,11 +38,11 @@ namespace cw::billboard {
 
 constexpr bool kDefaultMarkerDepthTest = true;
 constexpr bool kDefaultMarkerXRay = true;
-constexpr int kDefaultXRayOpacityPercent = 30;
+constexpr int kDefaultXRayOpacityPercent = 35;
 constexpr int kMinXRayOpacityPercent = 5;
 constexpr int kMaxXRayOpacityPercent = 100;
 constexpr int kDefaultXRayRampStartTiltDegrees = 60;
-constexpr int kDefaultXRayRampEndTiltDegrees = 90;
+constexpr int kDefaultXRayRampEndTiltDegrees = 85;
 constexpr int kMinXRayRampTiltDegrees = 0;
 constexpr int kMaxXRayRampTiltDegrees = 90;
 constexpr int kDefaultXRayOverheadOpacityPercent = 100;

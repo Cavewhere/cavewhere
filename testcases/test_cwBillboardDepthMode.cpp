@@ -17,21 +17,21 @@
 
 namespace {
 
-constexpr int kDefaultOpacityPercent = 30;
-constexpr float kDefaultOpacity = 0.3f;
+constexpr int kDefaultOpacityPercent = 35;
+constexpr float kDefaultOpacity = 0.35f;
 constexpr int kHalfOpacityPercent = 50;
 constexpr float kHalfOpacity = 0.5f;
 constexpr int kFullOpacityPercent = 100;
 
-// The ramp knobs' defaults: ghosted at 30 percent up to a 60 degree tilt, then
-// rising to full opacity looking straight down.
+// The ramp knobs' defaults: ghosted at 35 percent up to a 60 degree tilt, then
+// rising to full opacity at an 85 degree tilt.
 constexpr int kRampStartTilt = 60;
-constexpr int kRampEndTilt = 90;
+constexpr int kRampEndTilt = 85;
 constexpr double kStraightDownTilt = 90.0;
 constexpr double kLevelTilt = 0.0;
 constexpr double kStraightUpTilt = -90.0;
-constexpr double kMidRampTilt = 75.0;
-constexpr float kMidRampOpacity = 0.65f;
+constexpr double kMidRampTilt = 72.5;
+constexpr float kMidRampOpacity = 0.675f;
 constexpr double kHalfwayDownTilt = 45.0;
 constexpr float kOverheadOpacity = 1.0f;
 
@@ -88,7 +88,7 @@ TEST_CASE("The marker knobs map to a depth mode with the opacity as a factor", "
     CHECK(depthTestedOnly.xRayOpacity == Catch::Approx(kHalfOpacity));
 }
 
-TEST_CASE("The default marker depth mode is the knobs' defaults: x-ray at 30 percent", "[cwBillboardDepthMode]")
+TEST_CASE("The default marker depth mode is the knobs' defaults: x-ray at 35 percent", "[cwBillboardDepthMode]")
 {
     CHECK(cw::billboard::kDefaultMarkerDepthTest);
     CHECK(cw::billboard::kDefaultMarkerXRay);
@@ -161,7 +161,7 @@ TEST_CASE("The x-ray ghost ramps from the base opacity to the overhead opacity a
     SECTION("an overhead opacity below the base ramps down") {
         constexpr int kLowOverheadPercent = 10;
         constexpr float kLowOverhead = 0.1f;
-        constexpr float kMidwayToLow = 0.2f;
+        constexpr float kMidwayToLow = 0.225f;
         CHECK(cw::billboard::rampedXRayOpacity(kStraightDownTilt, kDefaultOpacityPercent, kLowOverheadPercent,
                                                kRampStartTilt, kRampEndTilt)
               == Catch::Approx(kLowOverhead).margin(kOpacityTolerance));

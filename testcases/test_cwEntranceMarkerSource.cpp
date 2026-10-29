@@ -939,16 +939,16 @@ TEST_CASE("The entrance MarkerView takes a tap on a pin behind a wall while the 
 namespace {
 
 // The marker knobs' ghost opacities as 0-1 factors and readout percents.
-constexpr float kBaseGhostOpacity = 0.3f;
+constexpr float kBaseGhostOpacity = 0.35f;
 constexpr float kOverheadGhostOpacity = 1.0f;
-constexpr float kMidRampGhostOpacity = 0.65f;
+constexpr float kMidRampGhostOpacity = 0.675f;
 constexpr float kGhostOpacityTolerance = 1e-4f;
 constexpr double kPercentScale = 100.0;
 
 // Camera tilts below the horizon, in degrees.
 constexpr double kStraightDownTilt = 90.0;
 constexpr double kLevelTilt = 0.0;
-constexpr double kMidRampTilt = 75.0;
+constexpr double kMidRampTilt = 72.5;
 constexpr double kHalfwayDownTilt = 45.0;
 
 // A view matrix tilted @a tiltDegrees below the horizon, the turntable's pitch:
@@ -1035,9 +1035,9 @@ TEST_CASE("The entrance MarkerView ramps its x-ray ghost with the camera tilt an
     SECTION("each ramp knob reaches the view at once") {
         constexpr int kHalfOverheadPercent = 50;
         constexpr float kHalfOverheadOpacity = 0.5f;
-        constexpr int kEarlyRampStart = 30;
-        // A quarter of the way from 30 to 50 percent, at 45 degrees on a 30-90 ramp.
-        constexpr float kQuarterRampOpacity = 0.35f;
+        constexpr int kEarlyRampStart = 5;
+        // Halfway from 35 to 50 percent, at 45 degrees on a 5-85 ramp.
+        constexpr float kHalfRampOpacity = 0.425f;
 
         settings->setMarkerXRayOverheadOpacityPercent(kHalfOverheadPercent);
         checkGhostOpacity(f, true, kHalfOverheadOpacity);
@@ -1048,7 +1048,7 @@ TEST_CASE("The entrance MarkerView ramps its x-ray ghost with the camera tilt an
         CHECK(readoutSpy.count() == 2);
 
         settings->setMarkerXRayRampStartTiltDegrees(kEarlyRampStart);
-        checkGhostOpacity(f, true, kQuarterRampOpacity);
+        checkGhostOpacity(f, true, kHalfRampOpacity);
         CHECK(readoutSpy.count() == 3);
 
         settings->setMarkerXRayRampEndTiltDegrees(int(kHalfwayDownTilt));

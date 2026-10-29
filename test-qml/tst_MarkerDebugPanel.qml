@@ -62,19 +62,19 @@ MainWindowTest {
         function test_theKnobsStartAtTheirDefaults() {
             compare(rootId.renderingSettings.markerDepthTest, true)
             compare(rootId.renderingSettings.markerXRay, true)
-            compare(rootId.renderingSettings.markerXRayOpacityPercent, 30)
+            compare(rootId.renderingSettings.markerXRayOpacityPercent, 35)
             compare(rootId.renderingSettings.markerKnobsAtDefaults, true)
 
             compare(row("markerDepthTestCheckBox").checked, true)
             compare(row("markerXRayCheckBox").checked, true)
-            compare(row("markerXRayOpacitySpinBox").value, 30)
+            compare(row("markerXRayOpacitySpinBox").value, 35)
 
             compare(rootId.renderingSettings.markerXRayOverheadOpacityPercent, 100)
             compare(rootId.renderingSettings.markerXRayRampStartTiltDegrees, 60)
-            compare(rootId.renderingSettings.markerXRayRampEndTiltDegrees, 90)
+            compare(rootId.renderingSettings.markerXRayRampEndTiltDegrees, 85)
             compare(row("markerXRayOverheadOpacitySpinBox").value, 100)
             compare(row("markerXRayRampStartSpinBox").value, 60)
-            compare(row("markerXRayRampEndSpinBox").value, 90)
+            compare(row("markerXRayRampEndSpinBox").value, 85)
         }
 
         function test_theRampRowsRangeOverTheClampedLimits() {
@@ -162,7 +162,7 @@ MainWindowTest {
         function test_theReadoutShowsTheViewsLiveOpacity() {
             const readout = row("markerXRayOpacityReadout")
             panelId.markerView = bareMarkerViewId
-            tryCompare(readout, "text", "now 30%")
+            tryCompare(readout, "text", "now 35%")
 
             rootId.renderingSettings.markerXRayOpacityPercent = 55
             tryCompare(readout, "text", "now 55%")
@@ -212,16 +212,16 @@ MainWindowTest {
             tryCompare(rootId.renderingSettings, "markerKnobsAtDefaults", true)
             compare(rootId.renderingSettings.markerDepthTest, true)
             compare(rootId.renderingSettings.markerXRay, true)
-            compare(rootId.renderingSettings.markerXRayOpacityPercent, 30)
+            compare(rootId.renderingSettings.markerXRayOpacityPercent, 35)
             tryCompare(row("markerDepthTestCheckBox"), "checked", true)
             tryCompare(row("markerXRayCheckBox"), "checked", true)
-            tryCompare(row("markerXRayOpacitySpinBox"), "value", 30)
+            tryCompare(row("markerXRayOpacitySpinBox"), "value", 35)
             compare(rootId.renderingSettings.markerXRayOverheadOpacityPercent, 100)
             compare(rootId.renderingSettings.markerXRayRampStartTiltDegrees, 60)
-            compare(rootId.renderingSettings.markerXRayRampEndTiltDegrees, 90)
+            compare(rootId.renderingSettings.markerXRayRampEndTiltDegrees, 85)
             tryCompare(row("markerXRayOverheadOpacitySpinBox"), "value", 100)
             tryCompare(row("markerXRayRampStartSpinBox"), "value", 60)
-            tryCompare(row("markerXRayRampEndSpinBox"), "value", 90)
+            tryCompare(row("markerXRayRampEndSpinBox"), "value", 85)
 
             compare(rootId.renderingSettings.showRenderStatsHud, true)
             compare(rootId.renderingSettings.freezeCut, true)
