@@ -56,11 +56,12 @@ PositionItem {
             onTapped: (eventPoint) => {
                 // Route through the manager so selecting this lead deselects any
                 // other open lead; tapping the selected lead again closes it.
-                // Ignore a tap that lands on a part of the marker hidden behind
-                // geometry (the click must not pass through walls); closing is
-                // always allowed. isOccluded tests the tapped pixel itself, so it
-                // matches the silhouette the billboard is drawn with — map the tap
-                // into the markerView's (viewport) coordinate space for the ray.
+                // Selecting takes a tap only where the marker draws, so a wall
+                // the depth test hides it behind keeps the tap; closing is
+                // always allowed. isTappable tests the tapped pixel
+                // itself, so it matches the silhouette the billboard is drawn
+                // with — map the tap into the markerView's (viewport) coordinate
+                // space for the ray.
                 // A view with no manager leaves its leads unselectable.
                 if (pointId.selectionManager === null) {
                     return
@@ -69,7 +70,7 @@ PositionItem {
                     pointId.selectionManager.selectedItem = null
                 } else {
                     let tap = hitTarget.mapToItem(pointId.markerView, eventPoint.position)
-                    if (!pointId.markerView.isOccluded(pointId.position3D, tap)) {
+                    if (pointId.markerView.isTappable(pointId.position3D, tap)) {
                         pointId.selectionManager.selectedItem = pointId
                     }
                 }

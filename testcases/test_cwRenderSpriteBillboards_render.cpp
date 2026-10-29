@@ -10,7 +10,9 @@
 // above its position, and unbinding and rebinding the window drops and rebuilds
 // the layer texture. A two-slot atlas of a solid blue and a
 // solid red prototype draws each instance from its own slot, and re-skinning one
-// slot changes only the instances that name it. Needs a GPU-backed window;
+// slot changes only the instances that name it. In the marker knobs' modes, a
+// sprite behind the wall draws as a faint ghost over it with x-ray on and at
+// full strength with the depth test off. Needs a GPU-backed window;
 // skips under the offscreen QPA, which has no QRhi.
 //
 // Pixels are read back through cwScene::renderOffscreen with a fixed camera, so
@@ -114,6 +116,12 @@ constexpr int kScaledProbeOffset = 15;
 constexpr int kLitChannel = 128;
 constexpr int kDarkChannel = 64;
 constexpr int kMaxChannel = 255;
+
+// The x-ray opacity the ghost cases draw at. Blue at this opacity over the red
+// wall keeps the red lit and lifts the blue above kGhostChannelFloor while
+// staying below kLitChannel.
+constexpr int kXRayOpacityPercent = 30;
+constexpr int kGhostChannelFloor = 32;
 
 constexpr int kWaitTimeoutMs = 30000;
 constexpr int kSettleFrames = 5;
@@ -643,6 +651,51 @@ TEST_CASE("cwRenderSpriteBillboards renders one instanced, silhouette-depth spri
         REQUIRE(framesFrom(kSettleFrames));
         const QImage rebound = renderImage(ortho);
         CHECK(isBlue(rebound.pixel(topHalf(openPixel))));
+    }
+
+    SECTION("x-ray ghosts a sprite behind the wall and leaves a sprite with nothing in front solid")
+    {
+        cwSpriteBillboardHandle hidden;
+        hidden.set(layer, makeSprite(QVector3D(kWallCenter.x(), kWallCenter.y(), kWallBehindZ),
+                                     kSpriteDepthBias));
+        cwSpriteBillboardHandle open;
+        open.set(layer, makeSprite(kOpenSprite));
+
+        // Without x-ray the hidden sprite is depth-tested away, as before the knobs.
+        layer->setDepthMode(cw::billboard::markerDepthMode(true, false, kXRayOpacityPercent));
+        REQUIRE(framesFrom(kSettleFrames));
+        const QImage depthTested = renderImage(ortho);
+        REQUIRE(differingPixels(depthTested, baseline, wallPixel) == 0);
+
+        layer->setDepthMode(cw::billboard::markerDepthMode(true, true, kXRayOpacityPercent));
+        REQUIRE(framesFrom(kSettleFrames));
+        const QImage image = renderImage(ortho);
+
+        // The ghost tints the wall with the sprite's blue at the x-ray opacity,
+        // and its transparent half leaves the wall red.
+        const QRgb ghost = image.pixel(topHalf(wallPixel));
+        INFO("ghost " << qRed(ghost) << "," << qGreen(ghost) << "," << qBlue(ghost));
+        CHECK(qBlue(ghost) > kGhostChannelFloor);
+        CHECK(qBlue(ghost) < kLitChannel);
+        CHECK(qRed(ghost) > kLitChannel);
+        CHECK(isRed(image.pixel(bottomHalf(wallPixel))));
+
+        // Nothing is nearer than the open sprite, so it draws solid.
+        CHECK(isBlue(image.pixel(topHalf(openPixel))));
+        CHECK(isBackground(image.pixel(bottomHalf(openPixel))));
+    }
+
+    SECTION("the depth test off draws a sprite behind the wall at full strength")
+    {
+        layer->setDepthMode(cw::billboard::markerDepthMode(false, true, kXRayOpacityPercent));
+        cwSpriteBillboardHandle hidden;
+        hidden.set(layer, makeSprite(QVector3D(kWallCenter.x(), kWallCenter.y(), kWallBehindZ),
+                                     kSpriteDepthBias));
+        REQUIRE(framesFrom(kSettleFrames));
+        const QImage image = renderImage(ortho);
+
+        CHECK(isBlue(image.pixel(topHalf(wallPixel))));
+        CHECK(isRed(image.pixel(bottomHalf(wallPixel))));
     }
 
     const QStringList captured = RenderWarningCapture::captured();

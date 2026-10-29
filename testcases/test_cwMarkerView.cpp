@@ -3,13 +3,16 @@
 // changed) leaves one delegate per marker at the marker's position, one sprite
 // instance per marker in the view's keyed layer, and each text line in the
 // layer of its style. Also pins cwMarkerSource's own contract, and that a 4x
-// larger source costs at most about 4x in signals and layer pushes.
+// larger source costs at most about 4x in signals and layer pushes. The marker
+// knobs in cwRenderingSettings set the depth mode of every layer the view
+// draws, and leave the station labels' default text layer alone.
 //
 // The view is built in QML because its delegates come from a QML component.
 // The window is never shown and there is no QRhi: every check reads the CPU
 // side of the scene's keyed layers.
 
 //Catch includes
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 // Qt
@@ -32,11 +35,15 @@
 #include "cwMarkerSource.h"
 #include "cwMarkerView.h"
 #include "cwPositionItem.h"
+#include "cwMarkerKnobsReset.h"
+#include "cwRenderingSettings.h"
 #include "cwRenderSpriteBillboards.h"
 #include "cwRenderTextBillboards.h"
+#include "cwRhiScene.h"
 #include "cwScene.h"
 #include "cwSelectionManager.h"
 #include "cwVisibilityProxy.h"
+#include "CwRhiSceneTestAccess.h"
 #include "TestHelper.h"
 
 namespace {
@@ -620,4 +627,118 @@ TEST_CASE("A MarkerView's cost of a reset grows linearly with the markers", "[cw
     CHECK(large.keywordRowsInserted <= kGrowthFactor * small.keywordRowsInserted);
 
     CHECK(large.needsRendering <= kGrowthFactor * std::max(small.needsRendering, 1));
+}
+
+namespace {
+
+constexpr float kDefaultXRayOpacity = 0.3f;
+constexpr int kEditedXRayOpacityPercent = 55;
+constexpr float kEditedXRayOpacity = 0.55f;
+
+void checkDepthMode(const char* layerName, const cwBillboardDepthMode& mode,
+                    bool depthTest, bool xRay, float xRayOpacity)
+{
+    INFO(layerName);
+    CHECK(mode.depthTest == depthTest);
+    CHECK(mode.xRay == xRay);
+    CHECK(mode.xRayOpacity == Catch::Approx(xRayOpacity));
+}
+
+void checkMarkerLayers(MarkerFixture& f, bool depthTest, bool xRay, float xRayOpacity)
+{
+    checkDepthMode("sprites", f.sprites()->depthMode(), depthTest, xRay, xRayOpacity);
+    checkDepthMode("titles", f.titles()->depthMode(), depthTest, xRay, xRayOpacity);
+    checkDepthMode("details", f.details()->depthMode(), depthTest, xRay, xRayOpacity);
+}
+
+} // namespace
+
+TEST_CASE("A MarkerView draws its layers in the marker knobs' depth mode and station labels keep the default",
+          "[cwMarkerView]")
+{
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings != nullptr);
+    cwMarkerKnobsReset knobsReset;
+
+    MarkerFixture f;
+    f.source.resetMarkers(testMarkers(0, 2));
+    REQUIRE(f.view->count() == 2);
+    REQUIRE(f.titles() != f.details());
+
+    const auto checkStationLabelsKeepTheDefault = [&]() {
+        CHECK(f.scene.textBillboardLayer()->depthMode() == cwBillboardDepthMode());
+        CHECK(f.scene.spriteBillboardLayer()->depthMode() == cwBillboardDepthMode());
+    };
+
+    // The defaults ghost a hidden marker at 30 percent.
+    checkMarkerLayers(f, true, true, kDefaultXRayOpacity);
+    checkStationLabelsKeepTheDefault();
+
+    settings->setMarkerXRayOpacityPercent(kEditedXRayOpacityPercent);
+    checkMarkerLayers(f, true, true, kEditedXRayOpacity);
+
+    settings->setMarkerXRay(false);
+    checkMarkerLayers(f, true, false, kEditedXRayOpacity);
+
+    settings->setMarkerDepthTest(false);
+    checkMarkerLayers(f, false, false, kEditedXRayOpacity);
+    checkStationLabelsKeepTheDefault();
+
+    settings->resetMarkerKnobsToDefaults();
+    checkMarkerLayers(f, true, true, kDefaultXRayOpacity);
+}
+
+TEST_CASE("A MarkerView built after a knob change starts in the knobs' depth mode", "[cwMarkerView]")
+{
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings != nullptr);
+    cwMarkerKnobsReset knobsReset;
+    settings->setMarkerXRay(false);
+    settings->setMarkerXRayOpacityPercent(kEditedXRayOpacityPercent);
+    REQUIRE_FALSE(settings->markerXRay());
+
+    MarkerFixture f;
+    f.source.resetMarkers(testMarkers(0, 1));
+    REQUIRE(f.view->count() == 1);
+
+    checkMarkerLayers(f, true, false, kEditedXRayOpacity);
+}
+
+namespace {
+
+// Draws @a markerCount markers, drains the scene's pending work, and counts the
+// frames one marker knob change asks for.
+int framesForOneKnobChange(int markerCount)
+{
+    auto* settings = cwRenderingSettings::instance();
+    settings->resetMarkerKnobsToDefaults();
+
+    MarkerFixture f;
+    f.source.resetMarkers(testMarkers(0, markerCount));
+    INFO("markers " << markerCount);
+    CHECK(f.view->count() == markerCount);
+
+    cwRhiScene rhiScene;
+    CwRhiSceneTestAccess::synchroize(rhiScene, &f.scene);
+    QSignalSpy renderSpy(&f.scene, &cwScene::needsRendering);
+
+    settings->setMarkerXRayOpacityPercent(kEditedXRayOpacityPercent);
+    const int frames = int(renderSpy.count());
+    settings->resetMarkerKnobsToDefaults();
+    return frames;
+}
+
+} // namespace
+
+TEST_CASE("A marker knob change asks for frames independent of the marker count", "[cwMarkerView]")
+{
+    REQUIRE(cwRenderingSettings::instance() != nullptr);
+    cwMarkerKnobsReset knobsReset;
+
+    const int small = framesForOneKnobChange(kSmallMarkerCount);
+    const int large = framesForOneKnobChange(kSmallMarkerCount * kGrowthFactor);
+
+    INFO("needsRendering small " << small << " large " << large);
+    CHECK(small >= 1);
+    CHECK(large <= kGrowthFactor * std::max(small, 1));
 }

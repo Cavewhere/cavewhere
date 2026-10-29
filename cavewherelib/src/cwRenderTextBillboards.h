@@ -27,6 +27,7 @@
 
 //Our includes
 #include "cwRenderObject.h"
+#include "cwBillboardDepthMode.h"
 #include "cwBillboardId.h"
 #include "CaveWhereLibExport.h"
 
@@ -96,6 +97,12 @@ public:
     void setStyle(const Style& style);
     Style style() const;
 
+    // How the layer meets the scene's depth. The default is one depth-tested
+    // pass, which station labels keep; a marker view sets the marker knobs'
+    // mode. A change asks for a frame.
+    void setDepthMode(const cwBillboardDepthMode& depthMode);
+    cwBillboardDepthMode depthMode() const;
+
     // Stable-id API, mirroring cwRenderBillboards. updateBillboard is a no-op when
     // nothing changed, so callers may re-push an unchanged billboard each frame.
     cwBillboardId addBillboard(const TextBillboard& billboard);
@@ -134,6 +141,7 @@ private:
 
     QPointer<QQuickWindow> m_window;
     Style m_style;
+    cwBillboardDepthMode m_depthMode;
     uint32_t m_nextId = 1;
     std::unordered_map<cwBillboardId, Entry> m_billboards;
     QHash<QString, std::shared_ptr<CachedLayout>> m_layouts;

@@ -36,6 +36,7 @@ MainWindowTest {
         }
 
         function cleanup() {
+            RootData.settings.renderingSettings.resetMarkerKnobsToDefaults()
             RootData.pageSelectionModel.currentPageAddress = "View"
             RootData.newProject();
         }
@@ -915,11 +916,12 @@ MainWindowTest {
                     "a marker draws the open slot");
         }
 
-        // 4a: a click on a lead hidden behind cave geometry must be ignored (the
-        // click must not pass through walls). cwMarkerView::isOccluded gates the
-        // tap; here we drive it directly. A visible lead (the one the other tests
-        // click through) is not occluded; a point far down the same eye->lead ray,
-        // well behind the surface the lead rests on, is.
+        // 4a: cwMarkerView::isOccluded is the geometry fact the tap gate
+        // consults while the depth test is on and x-ray is off (the click must
+        // not pass through walls then); here we drive it directly. A visible lead
+        // (the one the other tests click through) is not occluded; a point far
+        // down the same eye->lead ray, well behind the surface the lead rests on,
+        // is.
         function test_occludedLeadIsNotClickable() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
@@ -950,6 +952,44 @@ MainWindowTest {
             let forward = Qt.vector3d(-vm.m31, -vm.m32, -vm.m33).normalized();
             let deepPoint = leadPos.plus(forward.times(1000));
             verify(leadView.isOccluded(deepPoint, tap), "a point behind cave geometry must be occluded");
+        }
+
+        // 4a': the marker knobs decide whether that hidden point takes the tap.
+        // The default x-ray draws it as a ghost and the depth test off draws it
+        // over everything, so it is tappable; only the depth test on with x-ray
+        // off hides it and keeps the tap out. LeadPoint gates its tap with
+        // isTappable.
+        function test_occludedLeadIsTappableWhileItDraws() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
+                return leadPoint !== null;
+            });
+
+            const settings = RootData.settings.renderingSettings
+            settings.resetMarkerKnobsToDefaults()
+            compare(settings.markerDepthTest, true)
+            compare(settings.markerXRay, true)
+
+            let leadView = leadPoint.markerView;
+            let tap = leadPoint.mapToItem(leadView, 0, 0);
+            let vm = leadView.camera.viewMatrix;
+            let forward = Qt.vector3d(-vm.m31, -vm.m32, -vm.m33).normalized();
+            let deepPoint = leadPoint.position3D.plus(forward.times(1000));
+            verify(leadView.isOccluded(deepPoint, tap), "a point behind cave geometry must be occluded");
+
+            verify(leadView.isTappable(leadPoint.position3D, tap), "a visible lead takes the tap");
+            verify(leadView.isTappable(deepPoint, tap), "an x-ray ghost takes the tap");
+
+            settings.markerXRay = false
+            verify(!leadView.isTappable(deepPoint, tap), "a lead the depth test hides keeps the tap out");
+            verify(leadView.isTappable(leadPoint.position3D, tap), "a visible lead still takes the tap");
+
+            settings.markerDepthTest = false
+            verify(leadView.isTappable(deepPoint, tap), "with the depth test off every lead takes the tap");
         }
 
         // 4b: open the layers tab, set the first filter row to the Type key, and

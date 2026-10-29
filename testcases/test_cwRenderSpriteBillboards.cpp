@@ -654,3 +654,56 @@ TEST_CASE("cwRenderSpriteBillboards: an anchor change asks for a frame and an un
     layer->setAnchor(bottomCenter);
     CHECK(frameSpy.count() == 0);
 }
+
+TEST_CASE("cwRenderSpriteBillboards: the depth mode defaults to one depth-tested pass and round-trips",
+          "[cwRenderSpriteBillboards]")
+{
+    constexpr float kXRayOpacity = 0.3f;
+    constexpr float kFullOpacity = 1.0f;
+    const cwBillboardDepthMode xRay{true, true, kXRayOpacity};
+    const cwBillboardDepthMode overEverything{false, false, kFullOpacity};
+
+    cwRenderSpriteBillboards layer;
+    CHECK(layer.depthMode() == cwBillboardDepthMode());
+    CHECK(layer.depthMode().depthTest);
+    CHECK_FALSE(layer.depthMode().xRay);
+
+    layer.setDepthMode(xRay);
+    CHECK(layer.depthMode() == xRay);
+
+    layer.setDepthMode(overEverything);
+    CHECK(layer.depthMode() == overEverything);
+
+    layer.setDepthMode(cwBillboardDepthMode());
+    CHECK(layer.depthMode() == cwBillboardDepthMode());
+}
+
+TEST_CASE("cwRenderSpriteBillboards: a depth mode change asks for a frame and an unchanged one does not",
+          "[cwRenderSpriteBillboards]")
+{
+    constexpr float kXRayOpacity = 0.3f;
+    constexpr float kFainterXRayOpacity = 0.1f;
+    const cwBillboardDepthMode xRay{true, true, kXRayOpacity};
+    const cwBillboardDepthMode fainterXRay{true, true, kFainterXRayOpacity};
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+    auto* layer = new cwRenderSpriteBillboards(&scene);
+    layer->setScene(&scene);
+
+    // Drain the pending Add so each change below queues its own Update (and a frame).
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    QSignalSpy frameSpy(&scene, &cwScene::needsRendering);
+
+    layer->setDepthMode(xRay);
+    CHECK(frameSpy.count() > 0);
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    frameSpy.clear();
+    layer->setDepthMode(xRay);
+    CHECK(frameSpy.count() == 0);
+
+    // An opacity change alone is a change too.
+    layer->setDepthMode(fainterXRay);
+    CHECK(frameSpy.count() > 0);
+}

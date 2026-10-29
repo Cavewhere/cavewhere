@@ -119,6 +119,16 @@ private:
     cwBillboardSightLine m_sightLine;
 };
 
+// True when @a tapViewportPosition (a Qt-viewport pixel, top-left origin) lies
+// in the quad of @a spriteSize logical pixels that @a anchor places at
+// @a worldPosition's projection. True without a camera or with an empty
+// @a spriteSize, which have no quad to test.
+CAVEWHERE_LIB_EXPORT bool spriteContains(const cwCamera* camera,
+                                         const QVector3D& worldPosition,
+                                         const QPointF& tapViewportPosition,
+                                         const QSizeF& spriteSize,
+                                         const QPointF& anchor);
+
 // True when no drawn pixel of the camera-facing sprite at @a worldPosition lies
 // under @a tapViewportPosition (a Qt-viewport pixel, top-left origin): the tap
 // falls outside the sprite's quad of @a spriteSize logical pixels placed by

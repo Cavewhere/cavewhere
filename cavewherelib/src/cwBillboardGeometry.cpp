@@ -159,6 +159,21 @@ QMatrix4x4 FrameCamera::modelMatrix(const QVector3D& worldPosition,
                             m_logicalViewport, m_sightLine, pixelOffset);
 }
 
+bool spriteContains(const cwCamera* camera,
+                    const QVector3D& worldPosition,
+                    const QPointF& tapViewportPosition,
+                    const QSizeF& spriteSize,
+                    const QPointF& anchor)
+{
+    if(camera == nullptr || spriteSize.isEmpty()) {
+        return true;
+    }
+    const QPointF anchorOffset(anchor.x() * spriteSize.width(),
+                               anchor.y() * spriteSize.height());
+    const QRectF quad(camera->project(worldPosition) - anchorOffset, spriteSize);
+    return quad.contains(tapViewportPosition);
+}
+
 bool isOccluded(const cwGeometryItersecter* intersecter,
                 const cwCamera* camera,
                 const QVector3D& worldPosition,
@@ -171,13 +186,8 @@ bool isOccluded(const cwGeometryItersecter* intersecter,
         return false;
     }
 
-    if(!spriteSize.isEmpty()) {
-        const QPointF anchorOffset(anchor.x() * spriteSize.width(),
-                                   anchor.y() * spriteSize.height());
-        const QRectF quad(camera->project(worldPosition) - anchorOffset, spriteSize);
-        if(!quad.contains(tapViewportPosition)) {
-            return true;
-        }
+    if(!spriteContains(camera, worldPosition, tapViewportPosition, spriteSize, anchor)) {
+        return true;
     }
 
     const QRay3D ray = camera->rayFromQtViewport(tapViewportPosition);

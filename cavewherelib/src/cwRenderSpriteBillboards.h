@@ -49,6 +49,7 @@
 //Our includes
 #include "cwRenderObject.h"
 #include "cwBillboardId.h"
+#include "cwBillboardDepthMode.h"
 #include "cwBillboardGeometry.h"
 #include "CaveWhereLibExport.h"
 
@@ -128,6 +129,11 @@ public:
     void setAnchor(const QPointF& anchor);
     QPointF anchor() const;
 
+    // How the layer meets the scene's depth. The default is one depth-tested
+    // pass; a marker view sets the marker knobs' mode. A change asks for a frame.
+    void setDepthMode(const cwBillboardDepthMode& depthMode);
+    cwBillboardDepthMode depthMode() const;
+
     // Stable-id API, mirroring cwRenderBillboards. updateBillboard is a no-op when
     // nothing changed, so callers may re-push an unchanged billboard each frame.
     cwBillboardId addBillboard(const SpriteBillboard& billboard);
@@ -167,6 +173,7 @@ private:
     mutable bool m_warnedMissingSlot = false;
     cwBillboardSizeMode m_sizeMode = cwBillboardSizeMode::ScreenConstant;
     QPointF m_anchor = kDefaultAnchor;
+    cwBillboardDepthMode m_depthMode;
     // Ordered so the instance order is stable across frames.
     std::map<cwBillboardId, SpriteBillboard> m_billboards;
     uint32_t m_nextId = 1;

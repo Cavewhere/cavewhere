@@ -439,8 +439,16 @@ Item {
         anchors.margins: Theme.pageMargin
         z: rootId.zOverlay
 
+        // The two panels share a spot, so opening one closes the other.
         sourceComponent: RenderStatsHud {
-            onDebugPanelRequested: pointCloudDebugPanelId.open()
+            onDebugPanelRequested: {
+                markerDebugPanelId.close()
+                pointCloudDebugPanelId.open()
+            }
+            onMarkerPanelRequested: {
+                pointCloudDebugPanelId.close()
+                markerDebugPanelId.open()
+            }
         }
     }
 
@@ -451,6 +459,13 @@ Item {
         x: rootId.width - width - Theme.pageMargin
         y: renderStatsHudLoaderId.y + renderStatsHudLoaderId.height + Theme.linkBarButtonSpacing
         lazLayersSceneNode: RootData.regionSceneManager.lazLayersSceneNode
+    }
+
+    MarkerDebugPanel {
+        id: markerDebugPanelId
+        parent: rootId
+        x: rootId.width - width - Theme.pageMargin
+        y: renderStatsHudLoaderId.y + renderStatsHudLoaderId.height + Theme.linkBarButtonSpacing
     }
 
     // The tools are armed from the main sidebar's tool rail (see MainSideBar),

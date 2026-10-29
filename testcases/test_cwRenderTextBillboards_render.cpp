@@ -1,6 +1,8 @@
 // Real-QRhi smoke test for the station label text layer under the threaded
 // render loop: three labels draw, a label behind an opaque wall is depth-tested
 // away, and unbinding and rebinding the window drops and rebuilds the text nodes.
+// In the marker knobs' modes, the hidden label draws with the depth test off and
+// draws fainter as an x-ray ghost.
 // Needs a GPU-backed window; skips under the offscreen QPA, which has no QRhi.
 //
 // Pixels are read back through cwScene::renderOffscreen with a fixed camera, so
@@ -67,6 +69,9 @@ constexpr int kWallTextureSize = 4;
 // visible label, inside the wall for the hidden one.
 constexpr int kProbeHalfWidth = 26;
 constexpr int kProbeHalfHeight = 10;
+
+// The x-ray opacity the ghost case draws at.
+constexpr int kXRayOpacityPercent = 30;
 
 constexpr int kWaitTimeoutMs = 30000;
 constexpr int kSettleFrames = 5;
@@ -332,6 +337,31 @@ TEST_CASE("cwRenderTextBillboards renders labels depth-tested against the scene"
         const QImage rebound = renderImage();
         CHECK(differingPixels(rebound, baseline, toPixel(kLeftLabel)) > 0);
         CHECK(differingPixels(rebound, baseline, toPixel(kHiddenLabel)) == 0);
+    }
+
+    SECTION("the depth test off draws the label behind the wall")
+    {
+        layer->setDepthMode(cw::billboard::markerDepthMode(false, true, kXRayOpacityPercent));
+        REQUIRE(framesFrom(kSettleFrames));
+        const QImage image = renderImage();
+        CHECK(differingPixels(image, baseline, toPixel(kHiddenLabel)) > 0);
+        CHECK(differingPixels(image, baseline, toPixel(kLeftLabel)) > 0);
+    }
+
+    SECTION("x-ray draws the label behind the wall as a ghost, fainter than over everything")
+    {
+        layer->setDepthMode(cw::billboard::markerDepthMode(false, true, kXRayOpacityPercent));
+        REQUIRE(framesFrom(kSettleFrames));
+        const QImage overEverything = renderImage();
+
+        layer->setDepthMode(cw::billboard::markerDepthMode(true, true, kXRayOpacityPercent));
+        REQUIRE(framesFrom(kSettleFrames));
+        const QImage ghosted = renderImage();
+
+        CHECK(differingPixels(ghosted, baseline, toPixel(kHiddenLabel)) > 0);
+        CHECK(differingPixels(ghosted, overEverything, toPixel(kHiddenLabel)) > 0);
+        // The visible labels still draw.
+        CHECK(differingPixels(ghosted, baseline, toPixel(kLeftLabel)) > 0);
     }
 
     const QStringList captured = RenderWarningCapture::captured();

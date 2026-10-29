@@ -89,7 +89,20 @@ public:
         const bool styleChanged = style != m_style;
         m_style = style;
 
+        const cwBillboardDepthMode depthMode = renderObject->depthMode();
+        if (depthMode.depthTest != m_depthMode.depthTest) {
+            // The renderer's depth use is fixed when it is created.
+            m_renderer.reset();
+        }
+        m_depthMode = depthMode;
+
         ensureRoot();
+        if (m_depthMode.drawsHiddenPass()) {
+            ensureGhostRoot();
+            m_ghostOpacity->setOpacity(m_depthMode.xRayOpacity);
+        } else {
+            teardownGhost();
+        }
 
         // Move survivors into a fresh map; labels whose id is gone are deleted with
         // the old one, which also unlinks their nodes from the subtrees.
@@ -101,7 +114,12 @@ public:
             if (existing != m_labels.end()) {
                 LabelNodes& nodes = labels.emplace(slot.id, std::move(existing->second)).first->second;
                 m_labels.erase(existing);
-                if (styleChanged || nodes.layout != slot.layout) {
+                const bool ghostAdded = m_ghostRoot && nodes.ghostOutline == nullptr;
+                if (ghostAdded) {
+                    createGhostNodes(nodes);
+                    treeChanged = true;
+                }
+                if (styleChanged || ghostAdded || nodes.layout != slot.layout) {
                     setGlyphs(nodes, slot.layout);
                 }
             } else {
@@ -172,10 +190,14 @@ public:
                 slot.depthBias, slot.pixelOffset);
             it->second.outline->setMatrix(model);
             it->second.fill->setMatrix(model);
+            if (it->second.ghostOutline != nullptr) {
+                it->second.ghostOutline->setMatrix(model);
+                it->second.ghostFill->setMatrix(model);
+            }
         }
 
         if (!m_renderer) {
-            m_renderer = std::make_unique<cwItem2DRenderer>(m_window);
+            m_renderer = std::make_unique<cwItem2DRenderer>(m_window, m_depthMode.depthTest);
         }
 
         // The model lives on each node, so the renderer's projection is VP alone;
@@ -189,7 +211,21 @@ public:
         frame.devicePixelRatio = devicePixelRatio;
         frame.rootNodeHandle = reinterpret_cast<quintptr>(m_root.get());
 
-        // Uploads happen here, before cwRhiScene opens the pass.
+        // Uploads happen here, before cwRhiScene opens the pass. QSG has no
+        // depth-Greater hook, so the ghost draws over everything, before the
+        // visible labels, which then cover it wherever they draw.
+        cwItem2DRenderer* ghostRenderer = nullptr;
+        if (m_ghostRoot) {
+            if (!m_ghostRenderer) {
+                m_ghostRenderer = std::make_unique<cwItem2DRenderer>(m_window, false);
+            }
+            cwItem2DRenderer::Frame ghostFrame = frame;
+            ghostFrame.rootNodeHandle = reinterpret_cast<quintptr>(m_ghostRoot.get());
+            if (m_ghostRenderer->prepare(ghostFrame)) {
+                ghostRenderer = m_ghostRenderer.get();
+            }
+        }
+
         if (!m_renderer->prepare(frame)) {
             return false;
         }
@@ -201,6 +237,14 @@ public:
         state.pipeline = nullptr;
         state.sortKey = makeSortKey(context.objectOrder, nullptr);
         auto& batch = acquirePipelineBatch(batches, state);
+
+        // Custom drawables run in the order they were appended.
+        if (ghostRenderer != nullptr) {
+            Drawable ghost;
+            ghost.type = Drawable::Type::Custom;
+            ghost.customDraw = [ghostRenderer](const RenderData&) { ghostRenderer->render(); };
+            batch.drawables.append(ghost);
+        }
 
         cwItem2DRenderer* renderer2d = m_renderer.get();
         Drawable drawable;
@@ -229,12 +273,16 @@ private:
     struct LabelNodes {
         QSGTextNode* outline = nullptr;   // owned by m_outlines
         QSGTextNode* fill = nullptr;      // owned by m_fills
+        QSGTextNode* ghostOutline = nullptr;   // owned by m_ghostOutlines while x-ray draws
+        QSGTextNode* ghostFill = nullptr;      // owned by m_ghostFills while x-ray draws
         std::shared_ptr<const QTextLayout> layout;
 
         LabelNodes() = default;
         LabelNodes(LabelNodes&& other) noexcept
             : outline(std::exchange(other.outline, nullptr)),
               fill(std::exchange(other.fill, nullptr)),
+              ghostOutline(std::exchange(other.ghostOutline, nullptr)),
+              ghostFill(std::exchange(other.ghostFill, nullptr)),
               layout(std::move(other.layout))
         {
         }
@@ -247,6 +295,15 @@ private:
             // Deleting a parented node unlinks it from its parent.
             delete outline;
             delete fill;
+            deleteGhost();
+        }
+
+        void deleteGhost()
+        {
+            delete ghostOutline;
+            delete ghostFill;
+            ghostOutline = nullptr;
+            ghostFill = nullptr;
         }
     };
 
@@ -289,17 +346,61 @@ private:
         m_root->appendChildNode(m_fills);
     }
 
+    // The x-ray ghost: a copy of the outline and fill subtrees under one opacity
+    // node, drawn by its own renderer. It exists only while x-ray draws.
+    void ensureGhostRoot()
+    {
+        if (m_ghostRoot) {
+            return;
+        }
+        m_ghostRoot = std::make_unique<QSGRootNode>();
+        m_ghostOpacity = new QSGOpacityNode();
+        m_ghostOutlines = new QSGNode();
+        m_ghostFills = new QSGNode();
+        m_ghostRoot->appendChildNode(m_ghostOpacity);
+        m_ghostOpacity->appendChildNode(m_ghostOutlines);
+        m_ghostOpacity->appendChildNode(m_ghostFills);
+    }
+
+    void teardownGhost()
+    {
+        if (!m_ghostRoot) {
+            return;
+        }
+        // The renderer first: it holds the root node.
+        m_ghostRenderer.reset();
+        for (auto& entry : m_labels) {
+            entry.second.deleteGhost();
+        }
+        m_ghostRoot.reset();
+        m_ghostOpacity = nullptr;
+        m_ghostOutlines = nullptr;
+        m_ghostFills = nullptr;
+    }
+
+    QSGTextNode* createTextNode(QSGTextNode::TextStyle textStyle, QSGNode* parent)
+    {
+        QSGTextNode* node = m_window->createTextNode();
+        node->setRenderType(QSGTextNode::QtRendering);
+        node->setTextStyle(textStyle);
+        parent->appendChildNode(node);
+        return node;
+    }
+
+    void createGhostNodes(LabelNodes& nodes)
+    {
+        nodes.ghostOutline = createTextNode(QSGTextNode::Outline, m_ghostOutlines);
+        nodes.ghostFill = createTextNode(QSGTextNode::Normal, m_ghostFills);
+    }
+
     LabelNodes createNodes()
     {
         LabelNodes nodes;
-        nodes.outline = m_window->createTextNode();
-        nodes.fill = m_window->createTextNode();
-        nodes.outline->setRenderType(QSGTextNode::QtRendering);
-        nodes.fill->setRenderType(QSGTextNode::QtRendering);
-        nodes.outline->setTextStyle(QSGTextNode::Outline);
-        nodes.fill->setTextStyle(QSGTextNode::Normal);
-        m_outlines->appendChildNode(nodes.outline);
-        m_fills->appendChildNode(nodes.fill);
+        nodes.outline = createTextNode(QSGTextNode::Outline, m_outlines);
+        nodes.fill = createTextNode(QSGTextNode::Normal, m_fills);
+        if (m_ghostRoot) {
+            createGhostNodes(nodes);
+        }
         return nodes;
     }
 
@@ -310,18 +411,24 @@ private:
         QColor outlineFill = m_style.color;
         outlineFill.setAlpha(0);
 
-        nodes.outline->clear();
-        nodes.fill->clear();
-        nodes.outline->setColor(outlineFill);
-        nodes.outline->setStyleColor(m_style.outlineColor);
-        nodes.fill->setColor(m_style.color);
         nodes.layout = layout;
-        if (layout) {
-            // addTextLayout copies the glyph runs and keeps no pointer; it reads the
-            // layout's caches, which is why it only runs inside synchronize.
-            auto* mutableLayout = const_cast<QTextLayout*>(layout.get());
-            nodes.outline->addTextLayout(QPointF(0.0, 0.0), mutableLayout);
-            nodes.fill->addTextLayout(QPointF(0.0, 0.0), mutableLayout);
+        // addTextLayout copies the glyph runs and keeps no pointer; it reads the
+        // layout's caches, which is why it only runs inside synchronize.
+        auto* mutableLayout = const_cast<QTextLayout*>(layout.get());
+        const auto fillPair = [&](QSGTextNode* outline, QSGTextNode* fill) {
+            outline->clear();
+            fill->clear();
+            outline->setColor(outlineFill);
+            outline->setStyleColor(m_style.outlineColor);
+            fill->setColor(m_style.color);
+            if (mutableLayout != nullptr) {
+                outline->addTextLayout(QPointF(0.0, 0.0), mutableLayout);
+                fill->addTextLayout(QPointF(0.0, 0.0), mutableLayout);
+            }
+        };
+        fillPair(nodes.outline, nodes.fill);
+        if (nodes.ghostOutline != nullptr) {
+            fillPair(nodes.ghostOutline, nodes.ghostFill);
         }
     }
 
@@ -346,6 +453,10 @@ private:
         // Unlinks without deleting: the nodes stay owned through m_labels.
         m_outlines->removeAllChildNodes();
         m_fills->removeAllChildNodes();
+        if (m_ghostRoot) {
+            m_ghostOutlines->removeAllChildNodes();
+            m_ghostFills->removeAllChildNodes();
+        }
         m_childOrder.clear();
         m_childOrder.reserve(m_slots.size());
         for (const cwRenderTextBillboards::RenderSlot& slot : std::as_const(m_slots)) {
@@ -355,12 +466,17 @@ private:
             }
             m_outlines->appendChildNode(it->second.outline);
             m_fills->appendChildNode(it->second.fill);
+            if (it->second.ghostOutline != nullptr) {
+                m_ghostOutlines->appendChildNode(it->second.ghostOutline);
+                m_ghostFills->appendChildNode(it->second.ghostFill);
+            }
             m_childOrder.append(slot.id);
         }
     }
 
     void teardownNodes()
     {
+        teardownGhost();
         // The renderer first: it holds the root node.
         m_renderer.reset();
         m_labels.clear();
@@ -370,6 +486,7 @@ private:
         m_fills = nullptr;
         m_slots.clear();
         m_style = cwRenderTextBillboards::Style();
+        m_depthMode = cwBillboardDepthMode();
     }
 
     QPointer<QQuickWindow> m_window;
@@ -383,6 +500,13 @@ private:
     QSGNode* m_fills = nullptr;      // owned by m_root
     std::unordered_map<cwBillboardId, LabelNodes> m_labels;
     QVector<cwBillboardId> m_childOrder;
+
+    cwBillboardDepthMode m_depthMode;
+    std::unique_ptr<cwItem2DRenderer> m_ghostRenderer;
+    std::unique_ptr<QSGRootNode> m_ghostRoot;
+    QSGOpacityNode* m_ghostOpacity = nullptr;   // owned by m_ghostRoot
+    QSGNode* m_ghostOutlines = nullptr;         // owned by m_ghostOpacity
+    QSGNode* m_ghostFills = nullptr;            // owned by m_ghostOpacity
 };
 
 } // namespace
@@ -427,6 +551,20 @@ void cwRenderTextBillboards::setStyle(const Style& style)
 cwRenderTextBillboards::Style cwRenderTextBillboards::style() const
 {
     return m_style;
+}
+
+void cwRenderTextBillboards::setDepthMode(const cwBillboardDepthMode& depthMode)
+{
+    if (m_depthMode == depthMode) {
+        return;
+    }
+    m_depthMode = depthMode;
+    update();
+}
+
+cwBillboardDepthMode cwRenderTextBillboards::depthMode() const
+{
+    return m_depthMode;
 }
 
 std::shared_ptr<cwRenderTextBillboards::CachedLayout> cwRenderTextBillboards::acquireLayout(const QString& text)

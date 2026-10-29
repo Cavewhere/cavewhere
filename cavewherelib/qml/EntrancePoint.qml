@@ -45,10 +45,10 @@ PositionItem {
         QQ.TapHandler {
             gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
             onTapped: (eventPoint) => {
-                // Tapping the selected pin closes its popup. Otherwise a tap on
-                // a pin pixel that cave geometry hides is ignored, so a click
-                // can't reach through a wall. A view with no manager leaves
-                // its pins unselectable.
+                // Tapping the selected pin closes its popup. Otherwise a tap
+                // selects the pin only where it draws (isTappable), so a wall the
+                // depth test hides it behind keeps the tap. A view with no
+                // manager leaves its pins unselectable.
                 if (pointId.selectionManager === null) {
                     return
                 }
@@ -56,7 +56,7 @@ PositionItem {
                     pointId.selectionManager.selectedItem = null
                 } else {
                     let tap = hitTarget.mapToItem(pointId.markerView, eventPoint.position)
-                    if (!pointId.markerView.isOccluded(pointId.position3D, tap)) {
+                    if (pointId.markerView.isTappable(pointId.position3D, tap)) {
                         pointId.selectionManager.selectedItem = pointId
                     }
                 }

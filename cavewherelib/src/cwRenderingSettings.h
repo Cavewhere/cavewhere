@@ -7,6 +7,7 @@
 #include <QList>
 
 //Our includes
+#include "cwBillboardDepthMode.h"
 #include "cwGlobals.h"
 #include "cwPointCloudShading.h"
 #include "cwRenderBudgets.h"
@@ -35,6 +36,10 @@ class QQuickRhiItem;
 // The section 8 debug knobs travel the same two ways: minLevel with the
 // budgets, debugView and showNodeBoxes with the shading.
 // Every default is the renderer's own rule.
+//
+// The marker knobs (markerDepthTest, markerXRay, markerXRayOpacityPercent) set
+// how lead and entrance markers meet the scene's depth: every cwMarkerView
+// reads markerDepthMode() and pushes it to its layers.
 class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
 {
     Q_OBJECT
@@ -66,6 +71,10 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(bool showNodeBoxes READ showNodeBoxes WRITE setShowNodeBoxes NOTIFY showNodeBoxesChanged)
     Q_PROPERTY(int revealFrames READ revealFrames WRITE setRevealFrames NOTIFY revealFramesChanged)
     Q_PROPERTY(int revealMode READ revealMode WRITE setRevealMode NOTIFY revealModeChanged)
+    Q_PROPERTY(bool markerDepthTest READ markerDepthTest WRITE setMarkerDepthTest NOTIFY markerDepthTestChanged)
+    Q_PROPERTY(bool markerXRay READ markerXRay WRITE setMarkerXRay NOTIFY markerXRayChanged)
+    Q_PROPERTY(int markerXRayOpacityPercent READ markerXRayOpacityPercent WRITE setMarkerXRayOpacityPercent NOTIFY markerXRayOpacityPercentChanged)
+    Q_PROPERTY(bool markerKnobsAtDefaults READ markerKnobsAtDefaults NOTIFY markerKnobsAtDefaultsChanged)
     Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
 
     // The shared budget limits, exposed so the settings UI spin boxes range over
@@ -95,8 +104,12 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(double maximumPointSizePx READ maximumPointSizePx CONSTANT)
     Q_PROPERTY(int minimumRevealFrames READ minimumRevealFrames CONSTANT)
     Q_PROPERTY(int maximumRevealFrames READ maximumRevealFrames CONSTANT)
+    Q_PROPERTY(int minimumMarkerXRayOpacityPercent READ minimumMarkerXRayOpacityPercent CONSTANT)
+    Q_PROPERTY(int maximumMarkerXRayOpacityPercent READ maximumMarkerXRayOpacityPercent CONSTANT)
 
 public:
+    explicit cwRenderingSettings(QObject* parent = nullptr);
+
     int sampleCount() const { return m_sampleCount; }
     void setSampleCount(int samples);
 
@@ -183,6 +196,27 @@ public:
     int revealMode() const { return int(m_shading.revealMode); }
     void setRevealMode(int mode);
 
+    //! Off draws every marker over everything, with no x-ray pass
+    bool markerDepthTest() const { return m_markerDepthTest; }
+    void setMarkerDepthTest(bool depthTest);
+
+    //! Draws the part of a marker hidden behind geometry as a ghost, while the
+    //! depth test is on
+    bool markerXRay() const { return m_markerXRay; }
+    void setMarkerXRay(bool xRay);
+
+    //! The ghost's opacity in percent
+    int markerXRayOpacityPercent() const { return m_markerXRayOpacityPercent; }
+    void setMarkerXRayOpacityPercent(int percent);
+
+    //! The three marker knobs as the depth mode every marker layer draws with
+    cwBillboardDepthMode markerDepthMode() const;
+
+    bool markerKnobsAtDefaults() const;
+
+    //! The marker knobs alone, which is what the marker debug panel resets
+    Q_INVOKABLE void resetMarkerKnobsToDefaults();
+
     //! The budget knobs in bytes, the form the render thread consumes
     cwRenderBudgets budgets() const;
 
@@ -214,6 +248,8 @@ public:
     static double maximumPointSizePx() { return cw::pointcloud::kMaxPointSizePx; }
     static int minimumRevealFrames() { return cw::pointcloud::kMinRevealFrames; }
     static int maximumRevealFrames() { return cw::pointcloud::kMaxRevealFrames; }
+    static int minimumMarkerXRayOpacityPercent() { return cw::billboard::kMinXRayOpacityPercent; }
+    static int maximumMarkerXRayOpacityPercent() { return cw::billboard::kMaxXRayOpacityPercent; }
 
     bool isAtDefaults() const;
     Q_INVOKABLE void resetToDefaults();
@@ -252,6 +288,13 @@ signals:
     void showNodeBoxesChanged();
     void revealFramesChanged();
     void revealModeChanged();
+    void markerDepthTestChanged();
+    void markerXRayChanged();
+    void markerXRayOpacityPercentChanged();
+    void markerKnobsAtDefaultsChanged();
+
+    //! Any one of the markerDepthMode() knobs moved
+    void markerDepthModeChanged();
 
     //! Any one of the budgets() knobs moved
     void budgetsChanged();
@@ -262,11 +305,12 @@ signals:
     void isAtDefaultsChanged();
 
 private:
-    explicit cwRenderingSettings(QObject* parent = nullptr);
-
     // Snap an arbitrary request down to the nearest supported MSAA level (never
     // below the smallest supported count, which is always 1).
     int clampToSupported(int samples) const;
+
+    // The aggregate signals every marker knob setter emits after its own.
+    void emitMarkerKnobChanged();
 
     static cwRenderingSettings* Settings;
 
@@ -288,6 +332,11 @@ private:
     double m_governorSlew = cw::budgets::kDefaultGovernorSlew;
     bool m_evictionHold = cw::budgets::kDefaultEvictionHold;
     cwPointCloudShading m_shading;
+
+    // Overwritten from QSettings in the constructor.
+    bool m_markerDepthTest = cw::billboard::kDefaultMarkerDepthTest;
+    bool m_markerXRay = cw::billboard::kDefaultMarkerXRay;
+    int m_markerXRayOpacityPercent = cw::billboard::kDefaultXRayOpacityPercent;
 
     // Safe baseline until the QRhi backend reports the real set (see cwRhiScene).
     // Always kept sorted ascending and containing 1.

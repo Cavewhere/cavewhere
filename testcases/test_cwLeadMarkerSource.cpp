@@ -8,6 +8,10 @@
 // window, QRhi, or QML engine: the BVH is CPU-side and the billboard plane is
 // solved analytically.
 //
+// The isTappable cases pin the marker knobs on top of that gate: a hidden lead
+// that draws as an x-ray ghost, or over everything with the depth test off,
+// takes the tap; only the depth test on with x-ray off keeps it out.
+//
 // The sprite-slot cases at the end build a lead MarkerView in QML over a
 // one-lead region, because LeadPoint markers come from QML. They read each
 // lead's instance back through the scene's sprite layer, still without a QRhi.
@@ -53,6 +57,8 @@
 #include "TestGeometryBuilders.h"
 #include "cwLeadMarkerSource.h"
 #include "cwMarkerView.h"
+#include "cwMarkerKnobsReset.h"
+#include "cwRenderingSettings.h"
 #include "cwScene.h"
 #include "cwSelectionManager.h"
 
@@ -220,6 +226,66 @@ TEST_CASE("A lead MarkerView does not occlude a lead in an empty scene",
     const QPointF tap = f.camera.project(leadPosition);
 
     CHECK_FALSE(f.leadView.isOccluded(leadPosition, tap));
+}
+
+TEST_CASE("A lead behind a cloud point is tappable while it draws as a ghost or over everything",
+          "[cwLeadMarkerSource][occlusion]")
+{
+    // The marker knobs decide whether a hidden lead draws: x-ray on draws it as
+    // a ghost and the depth test off draws it over everything, and a lead that
+    // draws takes the tap. Only the depth test on with x-ray off hides it, and
+    // only then does occlusion keep the tap out.
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings != nullptr);
+    cwMarkerKnobsReset knobsReset;
+    Fixture f;
+
+    const QVector3D leadPosition(0.0f, 0.0f, kLeadZ);
+    const QPointF tap = f.camera.project(leadPosition);
+    const QRay3D ray = f.camera.rayFromQtViewport(tap);
+    requireLookingStraightDownNegativeZ(ray);
+    addCloudPoint(f.scene, rayPointAtZ(ray, kCloudZ));
+    REQUIRE(f.leadView.isOccluded(leadPosition, tap));
+
+    // The defaults: depth test and x-ray on.
+    CHECK(f.leadView.isTappable(leadPosition, tap));
+
+    settings->setMarkerXRay(false);
+    CHECK_FALSE(f.leadView.isTappable(leadPosition, tap));
+
+    settings->setMarkerDepthTest(false);
+    CHECK(f.leadView.isTappable(leadPosition, tap));
+
+    // With the depth test off, x-ray changes nothing.
+    settings->setMarkerXRay(true);
+    CHECK(f.leadView.isTappable(leadPosition, tap));
+
+    // isOccluded stays the geometry fact, whatever the knobs.
+    CHECK(f.leadView.isOccluded(leadPosition, tap));
+}
+
+TEST_CASE("A lead in an empty scene is tappable whatever the marker knobs",
+          "[cwLeadMarkerSource][occlusion]")
+{
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings != nullptr);
+    cwMarkerKnobsReset knobsReset;
+    Fixture f;
+
+    const QVector3D leadPosition(0.0f, 0.0f, kLeadZ);
+    const QPointF tap = f.camera.project(leadPosition);
+    REQUIRE_FALSE(f.leadView.isOccluded(leadPosition, tap));
+
+    for (const bool depthTest : {true, false}) {
+        for (const bool xRay : {true, false}) {
+            INFO("depth test " << depthTest << " x-ray " << xRay);
+            settings->setMarkerDepthTest(depthTest);
+            settings->setMarkerXRay(xRay);
+            REQUIRE(settings->markerDepthTest() == depthTest);
+            REQUIRE(settings->markerXRay() == xRay);
+            CHECK(f.leadView.isTappable(leadPosition, tap));
+        }
+    }
 }
 
 namespace {

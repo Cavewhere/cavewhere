@@ -179,5 +179,45 @@ QQ.Item {
             tryCompare(rootId.renderingSettings, "showRenderStatsHud", true)
             tryCompare(hudMenuItemId, "checked", true)
         }
+
+        // The marker knobs button sits beside the point cloud knobs button and
+        // asks for its own panel.
+        function test_markerKnobsButtonAsksForTheMarkerPanel() {
+            rootId.renderingSettings.showRenderStatsHud = true
+            tryCompare(hudId, "visible", true)
+
+            const markerButton = findChild(hudId, "renderStatsHudMarkerPanelButton")
+            verify(markerButton !== null, "renderStatsHudMarkerPanelButton not found")
+            const pointCloudButton = findChild(hudId, "renderStatsHudDebugPanelButton")
+            verify(pointCloudButton !== null, "renderStatsHudDebugPanelButton not found")
+            tryCompare(markerButton, "visible", RootData.desktopBuild)
+            compare(markerButton.text, qsTr("Marker knobs…"))
+
+            const markerSpy = markerPanelSpyId
+            const pointCloudSpy = pointCloudPanelSpyId
+            verify(markerSpy.valid, "the HUD should declare markerPanelRequested")
+            markerSpy.clear()
+            pointCloudSpy.clear()
+
+            mouseClick(markerButton)
+            compare(markerSpy.count, 1)
+            compare(pointCloudSpy.count, 0)
+
+            mouseClick(pointCloudButton)
+            compare(markerSpy.count, 1)
+            compare(pointCloudSpy.count, 1)
+        }
+    }
+
+    SignalSpy {
+        id: markerPanelSpyId
+        target: hudId
+        signalName: "markerPanelRequested"
+    }
+
+    SignalSpy {
+        id: pointCloudPanelSpyId
+        target: hudId
+        signalName: "debugPanelRequested"
     }
 }

@@ -37,6 +37,7 @@ layout(std140, binding = 1) uniform SpriteBlock {
     float sizeMode;      // kSizeModeWorldSized or screen constant
     float slotCount;     // cells in the atlas row
     vec2 anchor;         // content point on iWorldPosition, normalized, y-down
+    float opacityScale;  // the depth pass's opacity: the x-ray opacity for the hidden pass
 };
 
 const float kSizeModeWorldSized = 0.0;
@@ -59,7 +60,7 @@ void main(void)
     vec2 corner = vec2(float(gl_VertexIndex & 1), float(gl_VertexIndex >> 1));
     vec2 offsetPx = (corner - anchor) * spriteSizePx;
     vUv = vec2((float(iSpriteIndex) + corner.x) / slotCount, corner.y);
-    vOpacity = iOpacity;
+    vOpacity = iOpacity * opacityScale;
 
     vec4 viewPos = viewMatrix * vec4(iWorldPosition, 1.0);
     bool orthographic = projectionMatrix[2][3] >= kPerspectiveDepthDivide;

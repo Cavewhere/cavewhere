@@ -22,6 +22,7 @@ size_t qHash(const cwRhiPipelineKey& key, size_t seed) noexcept
     seed = qHash(key.blendMode, seed);
     seed = qHash(key.depthTest, seed);
     seed = qHash(key.depthWrite, seed);
+    seed = qHash(key.depthOp, seed);
     seed = qHash(key.globalBinding, seed);
     seed = qHash(key.perDrawBinding, seed);
     seed = qHash(key.textureBinding, seed);

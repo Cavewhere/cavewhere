@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwRenderSpriteBillboards.h"
+#include "cwBillboardDepthPass.h"
 #include "cwProfileLog.h"
 #include "cwQuickItemLayerTexture.h"
 #include "cwQuickItemSubscene.h"
@@ -24,6 +25,8 @@
 #include <rhi/qrhi.h>
 
 //Std includes
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <utility>
@@ -68,7 +71,11 @@ struct SpriteBlock {
     float sizeMode;
     float slotCount;
     float anchor[2];
+    float opacityScale;
 };
+
+// The most passes a depth mode draws: the x-ray hidden pass and the visible pass.
+constexpr int kMaxDepthPasses = 2;
 
 float sizeModeSelector(cwBillboardSizeMode sizeMode)
 {
@@ -107,7 +114,9 @@ public:
     {
         teardownWindowResources();
         delete m_instanceBuffer;
-        delete m_spriteBlockBuffer;
+        for (PassResources& pass : m_passes) {
+            delete pass.spriteBlockBuffer;
+        }
         // m_pipelines releases its held pipeline references on destruction.
     }
 
@@ -122,9 +131,13 @@ public:
         m_instanceBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
         m_instanceBuffer->create();
 
+        // One SpriteBlock per depth pass, each with its pass's opacity.
         const auto spriteBlockSize = rhi->ubufAligned(sizeof(SpriteBlock));
-        m_spriteBlockBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, spriteBlockSize);
-        m_spriteBlockBuffer->create();
+        for (PassResources& pass : m_passes) {
+            pass.spriteBlockBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer,
+                                                    spriteBlockSize);
+            pass.spriteBlockBuffer->create();
+        }
 
         // One binding stepping per instance, laid out as Instance.
         QRhiVertexInputLayout inputLayout;
@@ -166,6 +179,14 @@ public:
             m_spriteSize = spriteSize;
             m_sizeMode = sizeMode;
             m_anchor = anchor;
+            m_spriteBlockDirty = true;
+        }
+
+        const QVector<cw::billboard::DepthPass> depthPasses =
+            cw::billboard::depthPasses(renderObject->depthMode());
+        if (depthPasses != m_depthPasses) {
+            Q_ASSERT(depthPasses.size() <= kMaxDepthPasses);
+            m_depthPasses = depthPasses;
             m_spriteBlockDirty = true;
         }
 
@@ -217,7 +238,7 @@ public:
             m_instancesDirty = false;
         }
 
-        if (m_spriteBlockDirty && m_spriteBlockBuffer) {
+        if (m_spriteBlockDirty && m_resourcesInitialized) {
             SpriteBlock block;
             block.spriteSizePx[0] = float(m_spriteSize.width());
             block.spriteSizePx[1] = float(m_spriteSize.height());
@@ -225,7 +246,11 @@ public:
             block.slotCount = float(m_atlasSlotCount);
             block.anchor[0] = float(m_anchor.x());
             block.anchor[1] = float(m_anchor.y());
-            batch->updateDynamicBuffer(m_spriteBlockBuffer, 0, sizeof(SpriteBlock), &block);
+            for (int i = 0; i < m_depthPasses.size(); ++i) {
+                block.opacityScale = m_depthPasses.at(i).opacity;
+                batch->updateDynamicBuffer(m_passes.at(size_t(i)).spriteBlockBuffer, 0,
+                                           sizeof(SpriteBlock), &block);
+            }
             m_spriteBlockDirty = false;
         }
     }
@@ -250,28 +275,38 @@ public:
 
         copySlotsIntoAtlas(context.resourceUpdateBatch);
 
-        if (!ensurePipeline(renderData, m_atlas)) {
+        // The hidden (x-ray) pass draws first; the ordered sort key keeps the
+        // passes in that order whatever their pipelines' addresses.
+        bool drew = false;
+        for (int i = 0; i < m_depthPasses.size(); ++i) {
+            PassResources& pass = m_passes.at(size_t(i));
+            if (!ensurePipeline(renderData, m_depthPasses.at(i), pass, m_atlas)) {
+                continue;
+            }
+
+            auto* pipeline = m_pipelineRecord ? m_pipelineRecord->pipeline : nullptr;
+            if (!pipeline || !m_instanceBuffer || !pass.srb) {
+                continue;
+            }
+
+            PipelineState state;
+            state.pipeline = pipeline;
+            state.sortKey = makeOrderedSortKey(context.objectOrder, quint32(i));
+
+            auto& batch = acquirePipelineBatch(batches, state);
+            Drawable drawable;
+            drawable.type = Drawable::Type::NonIndexed;
+            drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_instanceBuffer, 0));
+            drawable.vertexCount = kVerticesPerQuad;
+            drawable.instanceCount = static_cast<quint32>(m_instances.size());
+            drawable.bindings = pass.srb;
+            drawable.globalCameraBinding = kGlobalCameraBinding;
+            batch.drawables.append(drawable);
+            drew = true;
+        }
+        if (!drew) {
             return false;
         }
-
-        auto* pipeline = m_pipelineRecord ? m_pipelineRecord->pipeline : nullptr;
-        if (!pipeline || !m_instanceBuffer || !m_spriteBlockBuffer || !m_srb) {
-            return false;
-        }
-
-        PipelineState state;
-        state.pipeline = pipeline;
-        state.sortKey = makeSortKey(context.objectOrder, pipeline);
-
-        auto& batch = acquirePipelineBatch(batches, state);
-        Drawable drawable;
-        drawable.type = Drawable::Type::NonIndexed;
-        drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_instanceBuffer, 0));
-        drawable.vertexCount = kVerticesPerQuad;
-        drawable.instanceCount = static_cast<quint32>(m_instances.size());
-        drawable.bindings = m_srb;
-        drawable.globalCameraBinding = kGlobalCameraBinding;
-        batch.drawables.append(drawable);
 
         if (profile) {
             cw::profile::write(lcProfileRender(),
@@ -283,6 +318,14 @@ public:
     }
 
 private:
+    // One depth pass's SpriteBlock (it carries the pass's opacity) and the SRB
+    // that binds it.
+    struct PassResources {
+        QRhiBuffer* spriteBlockBuffer = nullptr;      // SpriteBlock at kSpriteBlockBinding
+        QRhiShaderResourceBindings* srb = nullptr;
+        QRhiTexture* boundTexture = nullptr;          // the atlas srb samples
+    };
+
     void bindWindow(QQuickWindow* window)
     {
         teardownWindowResources();
@@ -317,12 +360,14 @@ private:
         m_pendingSlotCount = 0;
     }
 
-    // The SRB samples the atlas, so it goes with it.
+    // The SRBs sample the atlas, so they go with it.
     void destroyAtlasTexture()
     {
-        delete m_srb;
-        m_srb = nullptr;
-        m_boundTexture = nullptr;
+        for (PassResources& pass : m_passes) {
+            delete pass.srb;
+            pass.srb = nullptr;
+            pass.boundTexture = nullptr;
+        }
         delete m_atlas;
         m_atlas = nullptr;
         m_atlasCellSize = QSize();
@@ -389,7 +434,10 @@ private:
         }
     }
 
-    bool ensurePipeline(const RenderData& data, QRhiTexture* texture)
+    // Sets m_pipelineRecord to @a depthPass's pipeline, created on its first use
+    // and cached per key after that, and ensures @a pass's SRB.
+    bool ensurePipeline(const RenderData& data, const cw::billboard::DepthPass& depthPass,
+                        PassResources& pass, QRhiTexture* texture)
     {
         if (!m_resourcesInitialized || !data.renderer) {
             return false;
@@ -402,7 +450,7 @@ private:
         }
 
         const quint32 globalStride = data.renderer->globalUniformBufferStride();
-        const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
+        const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount, depthPass);
 
         auto createFn = [this, key, globalStride](QRhi* localRhi) -> cwRhiPipelineRecord* {
             if (!localRhi) {
@@ -419,10 +467,12 @@ private:
                 { QRhiShaderStage::Fragment, fs }
             });
 
-            // Depth writes on: the fragment shader discards transparent pixels, so
-            // the depth left behind follows the marker's silhouette.
-            record->pipeline->setDepthTest(true);
-            record->pipeline->setDepthWrite(true);
+            // Depth writes on in the visible pass: the fragment shader discards
+            // transparent pixels, so the depth left behind follows the marker's
+            // silhouette.
+            record->pipeline->setDepthTest(key.depthTest != 0);
+            record->pipeline->setDepthWrite(key.depthWrite != 0);
+            record->pipeline->setDepthOp(static_cast<QRhiGraphicsPipeline::CompareOp>(key.depthOp));
             record->pipeline->setSampleCount(key.sampleCount);
             record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
             record->pipeline->setVertexInputLayout(m_inputLayout);
@@ -462,25 +512,26 @@ private:
             return false;
         }
 
-        return ensureShaderResources(rhi, data.renderer, texture);
+        return ensureShaderResources(rhi, data.renderer, pass, texture);
     }
 
     // The SRB is rebuilt when the atlas is recreated or the pipeline layout
     // changed; a slot replacing its layer texture only needs a fresh copy.
-    bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer, QRhiTexture* texture)
+    bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer, PassResources& pass,
+                               QRhiTexture* texture)
     {
-        if (!rhi || !renderer || !texture) {
+        if (!rhi || !renderer || !texture || !pass.spriteBlockBuffer) {
             return false;
         }
 
-        if (m_srb) {
+        if (pass.srb) {
             const bool layoutCompatible = m_pipelineRecord && m_pipelineRecord->layout
-                                          && m_pipelineRecord->layout->isLayoutCompatible(m_srb);
-            if (layoutCompatible && m_boundTexture == texture) {
+                                          && m_pipelineRecord->layout->isLayoutCompatible(pass.srb);
+            if (layoutCompatible && pass.boundTexture == texture) {
                 return true;
             }
-            delete m_srb;
-            m_srb = nullptr;
+            delete pass.srb;
+            pass.srb = nullptr;
         }
 
         if (!m_sampler) {
@@ -489,26 +540,27 @@ private:
             m_sampler->create();
         }
 
-        m_srb = rhi->newShaderResourceBindings();
-        m_srb->setBindings({
+        pass.srb = rhi->newShaderResourceBindings();
+        pass.srb->setBindings({
             QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
                 kGlobalCameraBinding, QRhiShaderResourceBinding::VertexStage,
                 renderer->globalUniformBuffer(), renderer->globalUniformBufferStride()),
             QRhiShaderResourceBinding::uniformBuffer(
-                kSpriteBlockBinding, QRhiShaderResourceBinding::VertexStage, m_spriteBlockBuffer),
+                kSpriteBlockBinding, QRhiShaderResourceBinding::VertexStage, pass.spriteBlockBuffer),
             QRhiShaderResourceBinding::sampledTexture(
                 kSpriteTextureBinding, QRhiShaderResourceBinding::FragmentStage, texture, m_sampler)
         });
-        m_srb->create();
-        m_boundTexture = texture;
+        pass.srb->create();
+        pass.boundTexture = texture;
 
         if (m_pipelineRecord && m_pipelineRecord->layout) {
-            Q_ASSERT(m_pipelineRecord->layout->isLayoutCompatible(m_srb));
+            Q_ASSERT(m_pipelineRecord->layout->isLayoutCompatible(pass.srb));
         }
         return true;
     }
 
-    cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor, int sampleCount) const
+    cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor, int sampleCount,
+                                      const cw::billboard::DepthPass& depthPass) const
     {
         cwRhiPipelineKey key;
         key.renderPass = renderPassDescriptor;
@@ -518,8 +570,9 @@ private:
         key.cullMode = static_cast<quint8>(cwRenderMaterialState::CullMode::None);
         key.frontFace = static_cast<quint8>(cwRenderMaterialState::FrontFace::CCW);
         key.blendMode = static_cast<quint8>(cwRenderMaterialState::BlendMode::PremultipliedAlpha);
-        key.depthTest = 1;
-        key.depthWrite = 1;
+        key.depthTest = depthPass.depthTest ? 1 : 0;
+        key.depthWrite = depthPass.depthWrite ? 1 : 0;
+        key.depthOp = static_cast<quint8>(depthPass.depthOp);
         key.globalBinding = kGlobalCameraBinding;
         key.perDrawBinding = kSpriteBlockBinding;
         key.textureBinding = kSpriteTextureBinding;
@@ -557,14 +610,13 @@ private:
     QPointF m_anchor = cwRenderSpriteBillboards::kDefaultAnchor;
     bool m_instancesDirty = false;
     bool m_spriteBlockDirty = true;
+    QVector<cw::billboard::DepthPass> m_depthPasses = cw::billboard::depthPasses(cwBillboardDepthMode());
 
     bool m_resourcesInitialized = false;
     QRhiVertexInputLayout m_inputLayout;
     QRhiBuffer* m_instanceBuffer = nullptr;      // binding 0, one Instance per billboard
-    QRhiBuffer* m_spriteBlockBuffer = nullptr;   // SpriteBlock at kSpriteBlockBinding
     QRhiSampler* m_sampler = nullptr;
-    QRhiShaderResourceBindings* m_srb = nullptr;
-    QRhiTexture* m_boundTexture = nullptr;       // the atlas m_srb samples
+    std::array<PassResources, kMaxDepthPasses> m_passes; // index-aligned with m_depthPasses
 };
 
 } // namespace
@@ -656,6 +708,20 @@ void cwRenderSpriteBillboards::setAnchor(const QPointF& anchor)
 QPointF cwRenderSpriteBillboards::anchor() const
 {
     return m_anchor;
+}
+
+void cwRenderSpriteBillboards::setDepthMode(const cwBillboardDepthMode& depthMode)
+{
+    if (m_depthMode == depthMode) {
+        return;
+    }
+    m_depthMode = depthMode;
+    update();
+}
+
+cwBillboardDepthMode cwRenderSpriteBillboards::depthMode() const
+{
+    return m_depthMode;
 }
 
 QList<QQuickItem*> cwRenderSpriteBillboards::sprites() const

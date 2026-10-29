@@ -21,6 +21,7 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwBillboardDepthMode.h"
 #include "cwBillboardOverlayItem.h"
 #include "cwKeywordItemModel.h"
 #include "cwMarkerSource.h"
@@ -100,6 +101,13 @@ public:
     Q_INVOKABLE bool isOccluded(const QVector3D& worldPosition,
                                 const QPointF& tapViewportPosition) const;
 
+    //! True when a tap at @a tapViewportPosition selects the marker at
+    //! @a worldPosition: the tap lands on the sprite, and the marker draws
+    //! there. A marker hidden behind geometry draws while x-ray is on or the
+    //! depth test is off, and only the depth test on with x-ray off hides it.
+    Q_INVOKABLE bool isTappable(const QVector3D& worldPosition,
+                                const QPointF& tapViewportPosition) const;
+
     //! Called by a group's cwMarkerVisibility when keyword filters change. Shows
     //! or hides every marker of @a group, and clears the selection when it hides
     //! the selected marker.
@@ -160,6 +168,9 @@ private:
     cwKeywordItemRegistry<QString> m_keywordRegistry;
     std::vector<TextCandidate> m_textCandidates; //!< reused by each declutter pass
 
+    //! How this view's layers meet the scene's depth: the marker knobs.
+    cwBillboardDepthMode m_depthMode;
+
     void removeAllEntries();
     void insertEntries(int first, int last);
     void removeEntries(int first, int last);
@@ -191,6 +202,7 @@ private:
     void projectItem(const Entry& entry, const QMatrix4x4& matrix);
     void projectItems();
     void prepareLayers();
+    void pushDepthMode();
     bool isEntryVisible(const Entry& entry) const;
     void updateSprite(Entry& entry, bool visible);
     void updateText(Entry& entry);
@@ -211,6 +223,8 @@ private slots:
     void sourceMarkersRemoved(int first, int last);
     void sourceMarkersChanged(int first, int last);
     void restyle();
+    // The marker knobs in cwRenderingSettings moved.
+    void applyDepthMode();
     // The sending marker item's visibility, opacity or sprite slot changed.
     void markerItemChanged();
 };

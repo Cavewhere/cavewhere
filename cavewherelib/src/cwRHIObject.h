@@ -220,6 +220,13 @@ public:
         return orderPart | pipelinePart;
     }
 
+    // For an object that draws several batches in a fixed order: @a drawOrder
+    // replaces the pipeline bits, so the batches draw in drawOrder.
+    static quint64 makeOrderedSortKey(quint32 objectOrder, quint32 drawOrder)
+    {
+        return (quint64(objectOrder) << 32) | drawOrder;
+    }
+
     virtual void initialize(const ResourceUpdateData& data) = 0;
     virtual void synchronize(const SynchronizeData& data) = 0;
     virtual void updateResources(const ResourceUpdateData& data) = 0;

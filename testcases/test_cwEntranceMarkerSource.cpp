@@ -6,7 +6,10 @@
 // style), and carries one keyword item that can hide it. A fix on a station
 // the solve did not flag draws nothing. In the scene's declutter pass
 // ([cwLabelDeclutter]) its pins and text blocks claim screen space before the
-// station labels of a participating Label3dView.
+// station labels of a participating Label3dView, as long as the entrance draws:
+// one the depth test hides behind a wall, with x-ray off, claims nothing. A tap
+// on a pin behind a wall selects it while the pin draws as a ghost or over
+// everything.
 //
 // The view is built in QML because its EntrancePoint tap targets come from QML.
 // The window is never shown and there is no QRhi: every check reads the CPU side
@@ -55,6 +58,8 @@
 #include "cwMarkerSource.h"
 #include "cwMarkerTextStyle.h"
 #include "cwMarkerView.h"
+#include "cwMarkerKnobsReset.h"
+#include "cwRenderingSettings.h"
 #include "cwRenderSpriteBillboards.h"
 #include "cwRenderTextBillboards.h"
 #include "cwScene.h"
@@ -858,8 +863,10 @@ constexpr float kWallHalfExtent = 30.0f;
 const QVector3D kWallCenterOffset(5.0f, 3.0f, 0.0f);
 
 // A camera-facing wall kWallInFront nearer the eye (the default camera looks
-// down -Z) than the solved station, centered near @a tap's ray.
-void addWallInFront(EntranceFixture& f, const QPointF& tap)
+// down -Z) than the solved station, centered near @a tap's ray. @a f is any
+// fixture with a camera and a scene.
+template <typename Fixture>
+void addWallInFront(Fixture& f, const QPointF& tap)
 {
     const QRay3D ray = f.camera.rayFromQtViewport(tap);
     const QVector3D center = ray.point(ray.origin().z() - kSolvedPosition.z()) + kWallCenterOffset
@@ -894,6 +901,38 @@ TEST_CASE("The entrance MarkerView reports a pin behind a wall as occluded", "[c
 
     addWallInFront(f, tap);
     CHECK(f.view->isOccluded(kSolvedPosition, tap));
+}
+
+TEST_CASE("The entrance MarkerView takes a tap on a pin behind a wall while the pin draws",
+          "[cwEntranceMarkerSource]")
+{
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings != nullptr);
+    cwMarkerKnobsReset knobsReset;
+
+    EntranceFixture f;
+    f.addEntranceCave();
+    REQUIRE(f.waitForOneEntrance());
+
+    const QPointF station = f.camera.project(kSolvedPosition);
+    const QPointF onPin = station + kOnPinBody;
+    const QPointF offPin = station + kBelowTip;
+    addWallInFront(f, onPin);
+    REQUIRE(f.view->isOccluded(kSolvedPosition, onPin));
+
+    // The defaults draw the hidden pin as an x-ray ghost, which takes the tap.
+    CHECK(f.view->isTappable(kSolvedPosition, onPin));
+    CHECK_FALSE(f.view->isTappable(kSolvedPosition, offPin));
+
+    // The depth test on with x-ray off hides the pin, and the wall keeps the tap.
+    settings->setMarkerXRay(false);
+    CHECK_FALSE(f.view->isTappable(kSolvedPosition, onPin));
+    CHECK_FALSE(f.view->isTappable(kSolvedPosition, offPin));
+
+    // The depth test off draws the pin over the wall; a tap off the pin still misses.
+    settings->setMarkerDepthTest(false);
+    CHECK(f.view->isTappable(kSolvedPosition, onPin));
+    CHECK_FALSE(f.view->isTappable(kSolvedPosition, offPin));
 }
 
 TEST_CASE("The entrance MarkerView selects an entrance's point by its source row", "[cwEntranceMarkerSource]")
@@ -1372,6 +1411,50 @@ TEST_CASE("Two entrances whose text overlaps keep both pins and one text block",
                                                                                      : kSolvedPosition;
     const QPointF tap = f.camera.project(hiddenPosition) + kOnPinBody;
     CHECK_FALSE(f.view->isOccluded(hiddenPosition, tap));
+}
+
+TEST_CASE("An entrance behind a wall claims its pin and text space only while it draws",
+          "[cwLabelDeclutter]")
+{
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings != nullptr);
+    cwMarkerKnobsReset knobsReset;
+
+    DeclutterFixture f;
+    const QVector3D farPosition = f.worldAtPixelOffset(kSolvedPosition, QPointF(0.0, kFarPixels));
+    DeclutterFixture::addLabels(f.labelView, {cwLabel3dItem(kLabelOnPin, kSolvedPosition),
+                                              cwLabel3dItem(kLabelFar, farPosition)});
+    REQUIRE(waitUntil([&] { return f.isStationLabelDrawn(kLabelOnPin) && f.isStationLabelDrawn(kLabelFar); }));
+
+    addWallInFront(f, f.camera.project(kSolvedPosition) + kOnPinBody);
+    f.addEntranceCaveAt(kCaveName, kSolvedPosition);
+    REQUIRE(waitUntil([&] { return f.pinCount() == 1; }));
+    REQUIRE(f.labelTextRect(kSolvedPosition, kLabelOnPin).intersects(f.pinRect(kSolvedPosition)));
+
+    // The defaults draw the hidden entrance as an x-ray ghost: it keeps its
+    // text and its pin pushes the station label out.
+    INFO("station labels: " << joined(f.drawnStationLabels()) << " names: " << joined(f.drawnNames()));
+    CHECK(waitUntil([&] { return !f.isStationLabelDrawn(kLabelOnPin)
+                                 && f.drawnNames() == QStringList{kCaveName}; }));
+
+    // The depth test on with x-ray off hides the entrance, so it claims nothing:
+    // its text goes, and the station label over its pin comes back.
+    settings->setMarkerXRay(false);
+    CHECK(waitUntil([&] { return f.isStationLabelDrawn(kLabelOnPin) && f.drawnNames().isEmpty(); }));
+    CHECK(f.drawnStats().isEmpty());
+    CHECK(f.pinCount() == 1);
+    CHECK(f.isStationLabelDrawn(kLabelFar));
+
+    // A camera change runs the pass again with the same outcome.
+    f.pan();
+    CHECK(f.isStationLabelDrawn(kLabelOnPin));
+    CHECK(f.drawnNames().isEmpty());
+
+    // The depth test off draws the entrance over the wall, so it claims again.
+    settings->setMarkerDepthTest(false);
+    CHECK(waitUntil([&] { return !f.isStationLabelDrawn(kLabelOnPin)
+                                 && f.drawnNames() == QStringList{kCaveName}; }));
+    CHECK(joined(f.drawnStats()) == joined({kCaveStats}));
 }
 
 TEST_CASE("The declutter outcome is the same whichever overlay repositions first", "[cwLabelDeclutter]")

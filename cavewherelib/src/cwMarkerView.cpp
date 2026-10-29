@@ -17,6 +17,7 @@
 #include "cwPositionItem.h"
 #include "cwRenderSpriteBillboards.h"
 #include "cwRenderTextBillboards.h"
+#include "cwRenderingSettings.h"
 #include "cwScene.h"
 
 //Qt includes
@@ -51,8 +52,14 @@ bool pushStyle(cwRenderTextBillboards* layer, const cwMarkerTextStyle* textStyle
 }
 
 cwMarkerView::cwMarkerView(QQuickItem* parent) :
-    cwBillboardOverlayItem(parent)
+    cwBillboardOverlayItem(parent),
+    m_depthMode(cw::billboard::defaultMarkerDepthMode())
 {
+    if(cwRenderingSettings* settings = cwRenderingSettings::instance()) {
+        m_depthMode = settings->markerDepthMode();
+        connect(settings, &cwRenderingSettings::markerDepthModeChanged,
+                this, &cwMarkerView::applyDepthMode);
+    }
 }
 
 cwMarkerView::~cwMarkerView()
@@ -269,6 +276,47 @@ bool cwMarkerView::isOccluded(const QVector3D& worldPosition,
                                      spriteSize(), spriteAnchor(), depthBias());
 }
 
+bool cwMarkerView::isTappable(const QVector3D& worldPosition,
+                              const QPointF& tapViewportPosition) const
+{
+    return cw::billboard::spriteContains(camera(), worldPosition, tapViewportPosition,
+                                         spriteSize(), spriteAnchor())
+           && !(m_depthMode.hidesOccluded() && isOccluded(worldPosition, tapViewportPosition));
+}
+
+void cwMarkerView::applyDepthMode()
+{
+    const cwBillboardDepthMode depthMode = cwRenderingSettings::instance()->markerDepthMode();
+    if(m_depthMode == depthMode) {
+        return;
+    }
+    const bool hidesOccludedChanged = m_depthMode.hidesOccluded() != depthMode.hidesOccluded();
+    m_depthMode = depthMode;
+
+    if(!isComponentComplete()) {
+        return;
+    }
+    pushDepthMode();
+    if(hidesOccludedChanged) {
+        // Whether an occluded marker claims declutter space follows the mode.
+        refreshDeclutter();
+    }
+}
+
+void cwMarkerView::pushDepthMode()
+{
+    if(cwRenderSpriteBillboards* sprites = ensureRenderSpriteBillboards()) {
+        sprites->setDepthMode(m_depthMode);
+    }
+    for(const cwMarkerTextStyle* textStyle : std::as_const(m_textStyles)) {
+        if(textStyle != nullptr) {
+            if(cwRenderTextBillboards* layer = textLayer(textStyle)) {
+                layer->setDepthMode(m_depthMode);
+            }
+        }
+    }
+}
+
 void cwMarkerView::setGroupKeywordVisible(const QString& group, bool visible)
 {
     const auto it = m_groups.find(group);
@@ -312,11 +360,12 @@ void cwMarkerView::repositionBillboards()
 }
 
 /**
- * Every visible sprite claims its rect unconditionally, so sprites never hide.
- * Then each visible text block claims the union of its lines: blocks that drew
- * after the last pass first, the rest after, each group ordered by declutter
- * priority, viewport depth, y, x and marker id. A block that collides hides
- * all its lines and leaves its sprite drawn.
+ * Every drawn sprite claims its rect, so sprites never hide; a sprite the depth
+ * test hides behind geometry (x-ray off) draws nothing and claims nothing. Then
+ * each visible text block claims the union of its lines: blocks that drew after
+ * the last pass first, the rest after, each group ordered by declutter priority,
+ * viewport depth, y, x and marker id. A block that collides hides all its lines
+ * and leaves its sprite drawn.
  */
 void cwMarkerView::claimDeclutterSpace(cwCollisionRectGrid& grid)
 {
@@ -330,6 +379,8 @@ void cwMarkerView::claimDeclutterSpace(cwCollisionRectGrid& grid)
     const QSizeF size = spriteSize();
     const QPointF anchor = spriteAnchor();
     const QPointF anchorOffset(size.width() * anchor.x(), size.height() * anchor.y());
+    const QPointF tipToCenter = QPointF(size.width() * kHalf, size.height() * kHalf) - anchorOffset;
+    const bool hidesOccluded = m_depthMode.hidesOccluded();
 
     m_textCandidates.clear();
     for(const auto& entryPtr : m_entries) {
@@ -344,6 +395,11 @@ void cwMarkerView::claimDeclutterSpace(cwCollisionRectGrid& grid)
         }
 
         const QPointF tip(qtViewportPosition.x(), qtViewportPosition.y());
+        if(hidesOccluded && isOccluded(entry.marker.position, tip + tipToCenter)) {
+            // The depth test hides it: its sprite draws and the GPU discards it.
+            releaseText(entry);
+            continue;
+        }
         grid.insertRect(QRectF(tip - anchorOffset, size).toAlignedRect());
 
         const bool shown = std::any_of(entry.lines.cbegin(), entry.lines.cend(),
@@ -926,6 +982,7 @@ void cwMarkerView::prepareLayers()
         }
     }
     applyStyles();
+    pushDepthMode();
 }
 
 bool cwMarkerView::isEntryVisible(const Entry& entry) const

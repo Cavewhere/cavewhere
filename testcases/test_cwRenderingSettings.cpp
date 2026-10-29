@@ -1026,3 +1026,224 @@ TEST_CASE("cwRenderingSettings announces every budget knob through budgetsChange
 
     settings->resetToDefaults();
 }
+
+TEST_CASE("cwRenderingSettings marker knobs default to a depth-tested x-ray at 30 percent",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    constexpr int kDefaultOpacityPercent = 30;
+    constexpr int kMinimumOpacityPercent = 5;
+    constexpr int kMaximumOpacityPercent = 100;
+    constexpr float kDefaultOpacity = 0.3f;
+
+    CHECK(settings->markerDepthTest());
+    CHECK(settings->markerXRay());
+    CHECK(settings->markerXRayOpacityPercent() == kDefaultOpacityPercent);
+    CHECK(cwRenderingSettings::minimumMarkerXRayOpacityPercent() == kMinimumOpacityPercent);
+    CHECK(cwRenderingSettings::maximumMarkerXRayOpacityPercent() == kMaximumOpacityPercent);
+    CHECK(settings->markerKnobsAtDefaults());
+    CHECK(settings->isAtDefaults());
+
+    const cwBillboardDepthMode mode = settings->markerDepthMode();
+    CHECK(mode.depthTest);
+    CHECK(mode.xRay);
+    CHECK(mode.xRayOpacity == Catch::Approx(kDefaultOpacity));
+}
+
+TEST_CASE("cwRenderingSettings marker knobs persist, fire once, and flip the defaults",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    constexpr int kEditedOpacityPercent = 55;
+
+    // One knob each: how to move it off its default, what QSettings and a new
+    // instance hold afterward, and the notify signal that has to fire once.
+    struct Knob {
+        const char* name;
+        std::function<void()> change;
+        QString key;
+        QVariant persisted;
+        std::function<QVariant(const cwRenderingSettings&)> read;
+        void (cwRenderingSettings::*notify)();
+    };
+
+    const QVector<Knob> knobs = {
+        {"markerDepthTest", [&] { settings->setMarkerDepthTest(false); },
+         QStringLiteral("rendering/marker/depthTest"), false,
+         [](const cwRenderingSettings& s) { return QVariant(s.markerDepthTest()); },
+         &cwRenderingSettings::markerDepthTestChanged},
+        {"markerXRay", [&] { settings->setMarkerXRay(false); },
+         QStringLiteral("rendering/marker/xRay"), false,
+         [](const cwRenderingSettings& s) { return QVariant(s.markerXRay()); },
+         &cwRenderingSettings::markerXRayChanged},
+        {"markerXRayOpacityPercent", [&] { settings->setMarkerXRayOpacityPercent(kEditedOpacityPercent); },
+         QStringLiteral("rendering/marker/xRayOpacityPercent"), kEditedOpacityPercent,
+         [](const cwRenderingSettings& s) { return QVariant(s.markerXRayOpacityPercent()); },
+         &cwRenderingSettings::markerXRayOpacityPercentChanged},
+    };
+
+    for (const Knob& knob : knobs) {
+        DYNAMIC_SECTION("moving " << knob.name << " persists it, fires once, and leaves the defaults") {
+            QSignalSpy notifySpy(settings, knob.notify);
+            QSignalSpy modeSpy(settings, &cwRenderingSettings::markerDepthModeChanged);
+            QSignalSpy markerDefaultsSpy(settings, &cwRenderingSettings::markerKnobsAtDefaultsChanged);
+            QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+            QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+            QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+
+            knob.change();
+
+            CHECK(notifySpy.count() == 1);
+            CHECK(modeSpy.count() == 1);
+            CHECK(markerDefaultsSpy.count() == 1);
+            CHECK(defaultsSpy.count() == 1);
+            CHECK(budgetsSpy.count() == 0);
+            CHECK(shadingSpy.count() == 0);
+            CHECK(knob.read(*settings) == knob.persisted);
+            CHECK_FALSE(settings->markerKnobsAtDefaults());
+            CHECK_FALSE(settings->isAtDefaults());
+
+            QSettings diskSettings;
+            CHECK(diskSettings.value(knob.key) == knob.persisted);
+
+            // A new instance reads the knob back from QSettings.
+            const cwRenderingSettings reloaded;
+            CHECK(knob.read(reloaded) == knob.persisted);
+
+            //Setting the same value again is a no-op
+            knob.change();
+            CHECK(notifySpy.count() == 1);
+            CHECK(modeSpy.count() == 1);
+
+            settings->resetMarkerKnobsToDefaults();
+            CHECK(notifySpy.count() == 2);
+            CHECK(modeSpy.count() == 2);
+            CHECK(settings->markerKnobsAtDefaults());
+            CHECK(settings->isAtDefaults());
+        }
+    }
+
+    settings->resetToDefaults();
+}
+
+TEST_CASE("cwRenderingSettings clamps the marker x-ray opacity to 5-100 percent",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetMarkerKnobsToDefaults();
+
+    const QString key = QStringLiteral("rendering/marker/xRayOpacityPercent");
+    constexpr int kBelowRange = 0;
+    constexpr int kAboveRange = 1000;
+    constexpr int kMinimumOpacityPercent = 5;
+    constexpr int kMaximumOpacityPercent = 100;
+
+    SECTION("the setter clamps to the exposed limits and stores the clamped value") {
+        settings->setMarkerXRayOpacityPercent(kBelowRange);
+        CHECK(settings->markerXRayOpacityPercent() == kMinimumOpacityPercent);
+        CHECK(settings->markerXRayOpacityPercent() == cwRenderingSettings::minimumMarkerXRayOpacityPercent());
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == kMinimumOpacityPercent);
+
+        settings->setMarkerXRayOpacityPercent(kAboveRange);
+        CHECK(settings->markerXRayOpacityPercent() == kMaximumOpacityPercent);
+        CHECK(settings->markerXRayOpacityPercent() == cwRenderingSettings::maximumMarkerXRayOpacityPercent());
+        CHECK(diskSettings.value(key).toInt() == kMaximumOpacityPercent);
+    }
+
+    SECTION("a new instance clamps an out-of-range stored value") {
+        QSettings diskSettings;
+        diskSettings.setValue(key, kAboveRange);
+        const cwRenderingSettings above;
+        CHECK(above.markerXRayOpacityPercent() == kMaximumOpacityPercent);
+
+        diskSettings.setValue(key, kBelowRange);
+        const cwRenderingSettings below;
+        CHECK(below.markerXRayOpacityPercent() == kMinimumOpacityPercent);
+
+        diskSettings.remove(key);
+    }
+
+    settings->resetMarkerKnobsToDefaults();
+}
+
+TEST_CASE("cwRenderingSettings resets the marker knobs with every knob but not with the point cloud knobs",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    constexpr int kEditedOpacityPercent = 55;
+    constexpr int kDefaultOpacityPercent = 30;
+    constexpr float kEditedOpacity = 0.55f;
+
+    SECTION("markerDepthMode carries the three knobs, the opacity as a factor") {
+        QSignalSpy modeSpy(settings, &cwRenderingSettings::markerDepthModeChanged);
+        settings->setMarkerXRayOpacityPercent(kEditedOpacityPercent);
+        CHECK(modeSpy.count() == 1);
+        cwBillboardDepthMode mode = settings->markerDepthMode();
+        CHECK(mode.depthTest);
+        CHECK(mode.xRay);
+        CHECK(mode.xRayOpacity == Catch::Approx(kEditedOpacity));
+
+        settings->setMarkerXRay(false);
+        mode = settings->markerDepthMode();
+        CHECK(mode.depthTest);
+        CHECK_FALSE(mode.xRay);
+
+        settings->setMarkerDepthTest(false);
+        mode = settings->markerDepthMode();
+        CHECK_FALSE(mode.depthTest);
+        CHECK(modeSpy.count() == 3);
+    }
+
+    SECTION("resetting the point cloud knobs leaves the marker knobs alone") {
+        settings->setMarkerXRayOpacityPercent(kEditedOpacityPercent);
+        settings->setMarkerXRay(false);
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->markerXRayOpacityPercent() == kEditedOpacityPercent);
+        CHECK_FALSE(settings->markerXRay());
+        CHECK_FALSE(settings->markerKnobsAtDefaults());
+    }
+
+    SECTION("resetMarkerKnobsToDefaults leaves MSAA, the HUD and the point cloud knobs alone") {
+        settings->setShowRenderStatsHud(true);
+        settings->setFreezeCut(true);
+        settings->setMarkerDepthTest(false);
+
+        settings->resetMarkerKnobsToDefaults();
+        CHECK(settings->markerDepthTest());
+        CHECK(settings->markerKnobsAtDefaults());
+        CHECK(settings->showRenderStatsHud());
+        CHECK(settings->freezeCut());
+    }
+
+    SECTION("resetToDefaults restores the marker knobs") {
+        settings->setMarkerDepthTest(false);
+        settings->setMarkerXRay(false);
+        settings->setMarkerXRayOpacityPercent(kEditedOpacityPercent);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        settings->resetToDefaults();
+        CHECK(settings->markerDepthTest());
+        CHECK(settings->markerXRay());
+        CHECK(settings->markerXRayOpacityPercent() == kDefaultOpacityPercent);
+        CHECK(settings->markerKnobsAtDefaults());
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}

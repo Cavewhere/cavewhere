@@ -20,6 +20,7 @@ struct cwRhiPipelineKey {
     quint8 blendMode = 0;
     quint8 depthTest = 0;
     quint8 depthWrite = 0;
+    quint8 depthOp = static_cast<quint8>(QRhiGraphicsPipeline::Less);
     quint8 globalBinding = 0;
     quint8 perDrawBinding = 0;
     quint8 textureBinding = 0;

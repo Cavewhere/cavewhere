@@ -39,7 +39,9 @@ public:
         quintptr rootNodeHandle = 0;
     };
 
-    explicit cwItem2DRenderer(QQuickWindow* window);
+    // @a depthTested draws against the open pass's depth buffer, as Item2D does;
+    // false draws over everything already in the pass.
+    explicit cwItem2DRenderer(QQuickWindow* window, bool depthTested = true);
     ~cwItem2DRenderer();
 
     cwItem2DRenderer(const cwItem2DRenderer&) = delete;

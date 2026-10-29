@@ -19,12 +19,14 @@ struct cwItem2DRenderer::Impl
 
     QPointer<QQuickWindow> window;
     QSGRenderer* renderer = nullptr;
+    bool depthTested = true;
 };
 
-cwItem2DRenderer::cwItem2DRenderer(QQuickWindow* window)
+cwItem2DRenderer::cwItem2DRenderer(QQuickWindow* window, bool depthTested)
     : d(std::make_unique<Impl>())
 {
     d->window = window;
+    d->depthTested = depthTested;
 }
 
 cwItem2DRenderer::~cwItem2DRenderer() = default;
@@ -43,7 +45,9 @@ bool cwItem2DRenderer::prepare(const Frame& frame)
     auto* rootNode = reinterpret_cast<QSGRootNode*>(frame.rootNodeHandle);
 
     if (!d->renderer) {
-        d->renderer = windowPrivate->context->createRenderer(QSGRendererInterface::RenderMode3D);
+        d->renderer = windowPrivate->context->createRenderer(
+            d->depthTested ? QSGRendererInterface::RenderMode3D
+                           : QSGRendererInterface::RenderMode2DNoDepthBuffer);
         if (!d->renderer) {
             return false;
         }

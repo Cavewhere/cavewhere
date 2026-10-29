@@ -35,6 +35,9 @@ QString debugViewKey() { return QStringLiteral("rendering/pointCloud/debugView")
 QString showNodeBoxesKey() { return QStringLiteral("rendering/pointCloud/showNodeBoxes"); }
 QString revealFramesKey() { return QStringLiteral("rendering/pointCloud/revealFrames"); }
 QString revealModeKey() { return QStringLiteral("rendering/pointCloud/revealMode"); }
+QString markerDepthTestKey() { return QStringLiteral("rendering/marker/depthTest"); }
+QString markerXRayKey() { return QStringLiteral("rendering/marker/xRay"); }
+QString markerXRayOpacityPercentKey() { return QStringLiteral("rendering/marker/xRayOpacityPercent"); }
 
 // 4x MSAA is the historical default and a good quality/cost balance. Snapped to
 // the device's supported set if 4 happens to be unavailable.
@@ -107,6 +110,11 @@ Mode clampMode(int mode, int modeCount)
 int clampRevealFrames(int frames)
 {
     return std::clamp(frames, cw::pointcloud::kMinRevealFrames, cw::pointcloud::kMaxRevealFrames);
+}
+
+int clampXRayOpacityPercent(int percent)
+{
+    return std::clamp(percent, cw::billboard::kMinXRayOpacityPercent, cw::billboard::kMaxXRayOpacityPercent);
 }
 
 float clampPointSizePx(double pixels)
@@ -198,6 +206,11 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
     m_shading.revealMode = clampMode<cw::pointcloud::RevealMode>(
                 settings.value(revealModeKey(), int(defaultShading.revealMode)).toInt(),
                 cw::pointcloud::kRevealModeCount);
+
+    m_markerDepthTest = settings.value(markerDepthTestKey(), cw::billboard::kDefaultMarkerDepthTest).toBool();
+    m_markerXRay = settings.value(markerXRayKey(), cw::billboard::kDefaultMarkerXRay).toBool();
+    m_markerXRayOpacityPercent = clampXRayOpacityPercent(
+                settings.value(markerXRayOpacityPercentKey(), cw::billboard::kDefaultXRayOpacityPercent).toInt());
 }
 
 int cwRenderingSettings::clampToSupported(int samples) const
@@ -218,6 +231,7 @@ void cwRenderingSettings::resetToDefaults()
     setSampleCount(kDefaultSampleCount);
     setShowRenderStatsHud(kDefaultShowRenderStatsHud);
     resetPointCloudKnobsToDefaults();
+    resetMarkerKnobsToDefaults();
 }
 
 void cwRenderingSettings::resetPointCloudKnobsToDefaults()
@@ -261,7 +275,59 @@ bool cwRenderingSettings::isAtDefaults() const
             && m_inflationGovernor == cw::budgets::kDefaultInflationGovernor
             && qFuzzyCompare(m_governorSlew, cw::budgets::kDefaultGovernorSlew)
             && m_evictionHold == cw::budgets::kDefaultEvictionHold
-            && m_shading == cwPointCloudShading();
+            && m_shading == cwPointCloudShading()
+            && markerKnobsAtDefaults();
+}
+
+void cwRenderingSettings::setMarkerDepthTest(bool depthTest)
+{
+    if (setPersisted(m_markerDepthTest, depthTest, markerDepthTestKey())) {
+        emit markerDepthTestChanged();
+        emitMarkerKnobChanged();
+    }
+}
+
+void cwRenderingSettings::setMarkerXRay(bool xRay)
+{
+    if (setPersisted(m_markerXRay, xRay, markerXRayKey())) {
+        emit markerXRayChanged();
+        emitMarkerKnobChanged();
+    }
+}
+
+void cwRenderingSettings::setMarkerXRayOpacityPercent(int percent)
+{
+    if (setPersisted(m_markerXRayOpacityPercent, clampXRayOpacityPercent(percent),
+                     markerXRayOpacityPercentKey())) {
+        emit markerXRayOpacityPercentChanged();
+        emitMarkerKnobChanged();
+    }
+}
+
+void cwRenderingSettings::emitMarkerKnobChanged()
+{
+    emit markerDepthModeChanged();
+    emit markerKnobsAtDefaultsChanged();
+    emit isAtDefaultsChanged();
+}
+
+cwBillboardDepthMode cwRenderingSettings::markerDepthMode() const
+{
+    return cw::billboard::markerDepthMode(m_markerDepthTest, m_markerXRay, m_markerXRayOpacityPercent);
+}
+
+bool cwRenderingSettings::markerKnobsAtDefaults() const
+{
+    return m_markerDepthTest == cw::billboard::kDefaultMarkerDepthTest
+            && m_markerXRay == cw::billboard::kDefaultMarkerXRay
+            && m_markerXRayOpacityPercent == cw::billboard::kDefaultXRayOpacityPercent;
+}
+
+void cwRenderingSettings::resetMarkerKnobsToDefaults()
+{
+    setMarkerDepthTest(cw::billboard::kDefaultMarkerDepthTest);
+    setMarkerXRay(cw::billboard::kDefaultMarkerXRay);
+    setMarkerXRayOpacityPercent(cw::billboard::kDefaultXRayOpacityPercent);
 }
 
 int cwRenderingSettings::maximumLevel()
