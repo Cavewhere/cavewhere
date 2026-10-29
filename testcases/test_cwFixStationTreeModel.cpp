@@ -26,6 +26,7 @@
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
+#include "TestHelper.h"
 
 // Async
 #include <asyncfuture.h>
@@ -33,6 +34,7 @@
 // Qt
 #include <QAbstractItemModel>
 #include <QPointer>
+#include <QSet>
 #include <QSignalSpy>
 #include <QSortFilterProxyModel>
 #include <QStringList>
@@ -1959,7 +1961,7 @@ TEST_CASE("A fix renamed onto or off an entrance station announces its entrance 
     CHECK_FALSE(fixture.isEntrance(kRenamedRow));
 }
 
-TEST_CASE("Only a node's own fix rows read the entrance flag; attached rows read false",
+TEST_CASE("A node's own fix rows read its entrance list; attached rows read false with no solve",
           "[FixStationTreeModel][FixStationTreeFilterModel]")
 {
     DelegateKindFixture fixture;
@@ -2002,4 +2004,83 @@ TEST_CASE("Only a node's own fix rows read the entrance flag; attached rows read
     {
         checkRows(fixture.proxy);
     }
+}
+
+namespace {
+
+const QString kSolvedEntranceFixture = QStringLiteral("survex_entrance.svx");
+constexpr int kSolvedEntranceFixCount = 2;
+const QString kSolvedFixedEntrance = QStringLiteral("doghill.d1");
+const QString kSolvedFixedPlain = QStringLiteral("doghill.d4");
+
+//! The fix row on \a station anywhere below \a parent, depth-first.
+QModelIndex fixRowAnywhere(const QAbstractItemModel& model, const QString& station,
+                           const QModelIndex& parent = QModelIndex())
+{
+    const int stationRole = roleId(model, QByteArrayLiteral("stationName"));
+    for (int row = 0; row < model.rowCount(parent); ++row) {
+        const QModelIndex child = model.index(row, 0, parent);
+        if (rowKind(child) == cwFixStationTreeModel::FixRow
+            && child.data(stationRole).toString() == station) {
+            return child;
+        }
+        const QModelIndex found = fixRowAnywhere(model, station, child);
+        if (found.isValid()) {
+            return found;
+        }
+    }
+    return QModelIndex();
+}
+
+} // namespace
+
+TEST_CASE("An attached fix row reads the solved entrance flag",
+          "[FixStationTreeModel][SolvedEntrances]")
+{
+    // survex_entrance.svx fixes d1 and d4 and marks d1 an entrance.
+    auto fixture = makeProject(QStringLiteral("fix-tree-solved-entrance"));
+    cwCave* root = attachAndWaitForFixes(fixture.get(), kSolvedEntranceFixture,
+                                         kSolvedEntranceFixCount);
+    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+
+    cwFixStationTreeModel model;
+    model.setRootNode(root);
+
+    const auto isEntrance = [&model](const QString& station) {
+        return fixRowAnywhere(model, station).data(cwFixStationTreeModel::IsEntranceRole).toBool();
+    };
+    REQUIRE(fixRowAnywhere(model, kSolvedFixedEntrance).isValid());
+    REQUIRE(fixRowAnywhere(model, kSolvedFixedPlain).isValid());
+    CHECK_FALSE(isEntrance(kSolvedFixedEntrance));
+
+    QSignalSpy managerSpy(&model, &cwFixStationTreeModel::linePlotManagerChanged);
+    QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+    model.setLinePlotManager(linePlot);
+    CHECK(model.linePlotManager() == linePlot);
+    CHECK(managerSpy.count() == 1);
+
+    CHECK(waitUntil([&]() { return isEntrance(kSolvedFixedEntrance); }));
+    CHECK_FALSE(isEntrance(kSolvedFixedPlain));
+
+    // One ranged announcement per holder of attached rows, never one per row.
+    QSet<QModelIndex> announcedHolders;
+    int entranceAnnouncements = 0;
+    bool spansBothAttachedRows = false;
+    for (const QList<QVariant>& emission : std::as_const(dataChangedSpy)) {
+        const QList<int> roles = emission.at(2).value<QList<int>>();
+        if (!roles.contains(cwFixStationTreeModel::IsEntranceRole)) {
+            continue;
+        }
+        ++entranceAnnouncements;
+        const QModelIndex topLeft = emission.at(0).toModelIndex();
+        const QModelIndex bottomRight = emission.at(1).toModelIndex();
+        announcedHolders.insert(topLeft.parent());
+        spansBothAttachedRows = spansBothAttachedRows || bottomRight.row() > topLeft.row();
+    }
+    CHECK(entranceAnnouncements >= 1);
+    // d1 and d4 share one holder, so its announcement covers both rows.
+    CHECK(spansBothAttachedRows);
+    CHECK(entranceAnnouncements == announcedHolders.size());
 }

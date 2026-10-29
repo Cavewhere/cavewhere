@@ -1,0 +1,6 @@
+#units d=meters a=degrees v=degrees decl=0
+;W1 holds the #FIX; W3 carries the ENTRANCE flag and no fix.
+#FIX W1 0 0 0
+W1	W2	10	0	0
+W2	W3	10	90	0
+#FLAG W3 /ENTRANCE

@@ -191,6 +191,7 @@ struct cwLinePlotTask::LinePlotWorker {
         indexStations();
         const cwStationPositionLookup stationPositions = regionStationPositions(parsed.lookup);
         updateStationPositions(stationPositions, result);
+        result.SolvedEntrances = solvedEntrancesByNode(parsed, stationPositions);
         const QHash<QUuid, cwSplayTipsByStation> nodeSplayTips =
             splitSplayTipsByNode(parsed.splayTips);
         updateSplayTipsForNodes(nodeSplayTips, result);
@@ -256,6 +257,9 @@ private:
     // both sides, which is what lets the decode below recover a node's id from
     // a name cavern echoed back.
     cwScopeLabels ScopeLabels;
+    // The region-qualified canonical keys of the stations the driver fixed at
+    // the origin: cavern flags them fixed, but the data fixes none of them.
+    QSet<QString> FallbackStationKeys;
 
     void initializeScopeLabels()
     {
@@ -301,7 +305,7 @@ private:
         QSet<QUuid> originFixedOwners;
         const Monad::ResultBase r =
             cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions,
-                                                 &originFixedOwners);
+                                                 &originFixedOwners, &FallbackStationKeys);
         if (r.hasError()) {
             cwLinePlotTask::SolveError error;
             error.step = cwLinePlotTask::SolveError::Step::Export;
@@ -685,6 +689,34 @@ private:
         }
 
         return lookup;
+    }
+
+    // The stations cavern flagged as entrances, grouped by owning node and
+    // named node-locally, as the node's fix and entrance lists name them.
+    QHash<QUuid, QList<cwSolvedEntrance>> solvedEntrancesByNode(
+        const cwSurvex3DFileReader::NetworkAndLookup& parsed,
+        const cwStationPositionLookup& stationPositions) const
+    {
+        const QSet<QString> fixedKeys(parsed.fixedStations.cbegin(), parsed.fixedStations.cend());
+        QHash<QUuid, QList<cwSolvedEntrance>> entrances;
+        for (const QString& name : parsed.entranceStations) {
+            const cwSurveyNode* owner = owningNode(name);
+            if (owner == nullptr || !stationPositions.hasPosition(name)) {
+                continue;
+            }
+            const QString tail = name.sliced(ScopeLabels.prefix(owner->id()).size());
+            if (tail.trimmed().isEmpty()) {
+                continue;
+            }
+            const QString key = cwStation::canonicalKey(name);
+            cwSolvedEntrance entrance;
+            entrance.stationName = tail;
+            entrance.qualifiedName = name;
+            entrance.position = stationPositions.position(name);
+            entrance.fixed = fixedKeys.contains(key) && !FallbackStationKeys.contains(key);
+            entrances[owner->id()].append(entrance);
+        }
+        return entrances;
     }
 
     // The owning-node split for the splay tips.

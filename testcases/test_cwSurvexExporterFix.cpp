@@ -19,9 +19,11 @@
 #include "cwSurvexExporterUtils.h"
 #include "cwCavingRegionData.h"
 #include "cwCoordinateTransform.h"
+#include "cwEntrance.h"
 #include "cwFixStation.h"
 #include "cwStation.h"
 #include "cwShot.h"
+#include "LoadProjectHelper.h"
 
 namespace {
 
@@ -73,17 +75,21 @@ cwFixStation makeFix(const QString& name, const QString& cs, double e, double n,
     return f;
 }
 
-//! The region exported the way the export menu does it, read back as text.
-//! Concurrent test processes each need their own output file.
+cwEntrance makeEntrance(const QString& stationName)
+{
+    cwEntrance entrance;
+    entrance.setStationName(stationName);
+    return entrance;
+}
+
+//! The region exported with \a options, read back as text. Concurrent test
+//! processes each need their own output file.
 QString writeRegionToString(const cwCavingRegionData& region,
-                            cwSurvexExporterRegion::OutputCSPolicy policy =
-                                cwSurvexExporterRegion::OutputCSPolicy::Shareable)
+                            const cwSurvexExporterRegion::Options& options)
 {
     const QString path = QDir::temp().filePath(
         QStringLiteral("cwSurvexExporterFix-%1.svx").arg(QCoreApplication::applicationPid()));
 
-    cwSurvexExporterRegion::Options options;
-    options.outputCSPolicy = policy;
     const auto result = cwSurvexExporterRegion::exportRegion(region, path, options);
     INFO(result.errorMessage().toStdString());
     REQUIRE_FALSE(result.hasError());
@@ -94,6 +100,16 @@ QString writeRegionToString(const cwCavingRegionData& region,
     file.close();
     QFile::remove(path);
     return text;
+}
+
+//! The region exported the way the export menu does it, read back as text.
+QString writeRegionToString(const cwCavingRegionData& region,
+                            cwSurvexExporterRegion::OutputCSPolicy policy =
+                                cwSurvexExporterRegion::OutputCSPolicy::Shareable)
+{
+    cwSurvexExporterRegion::Options options;
+    options.outputCSPolicy = policy;
+    return writeRegionToString(region, options);
 }
 
 } // namespace
@@ -393,4 +409,89 @@ TEST_CASE("Line-plot export with no frame writes no *cs for a fix that has one",
     CHECK_FALSE(output.contains(QStringLiteral("*cs")));
     CHECK_FALSE(output.contains(QStringLiteral("*declination auto")));
     CHECK(output.contains(QStringLiteral("*fix a1 0 0 0")));
+}
+
+TEST_CASE("Survex export writes *entrance for a native entrance after the node's fixes",
+          "[cwSurvexExporterFix][SurvexEntrance]") {
+    cwCavingRegionData region;
+    cwCaveData cave = makeCave(QStringLiteral("Marked"),
+                               {QStringLiteral("a1"), QStringLiteral("a2"), QStringLiteral("a3")});
+    cave.fixStations.append(makeFix("a1", QStringLiteral("EPSG:32616"),
+                                    500000.0, 4000000.0, 100.0));
+    cave.entrances.append(makeEntrance(QStringLiteral("a2")));
+    region.caves.append(cave);
+
+    const QString output = writeRegionToString(region);
+    INFO(output.toStdString());
+
+    const int fixIdx = output.indexOf(QStringLiteral("*fix a1"));
+    REQUIRE(fixIdx >= 0);
+    const int entranceIdx = output.indexOf(QStringLiteral("*entrance a2\n"));
+    REQUIRE(entranceIdx > fixIdx);
+    const int endIdx = output.indexOf(QStringLiteral("*end "), entranceIdx);
+    CHECK(endIdx > entranceIdx);
+    CHECK(output.count(QStringLiteral("*entrance")) == 1);
+}
+
+TEST_CASE("Survex export skips an entrance on a station in no shot",
+          "[cwSurvexExporterFix][SurvexEntrance]") {
+    // Cavern warns about an *entrance on a station no leg uses, so the
+    // driver writes only the entrances the data places.
+    cwCavingRegionData region;
+    cwCaveData cave = makeCave(QStringLiteral("Haunt"),
+                               {QStringLiteral("a1"), QStringLiteral("a2")});
+    cave.entrances.append(makeEntrance(QStringLiteral("ghost")));
+    cave.entrances.append(makeEntrance(QStringLiteral("a2")));
+    region.caves.append(cave);
+
+    const QString output = writeRegionToString(region);
+    INFO(output.toStdString());
+    CHECK_FALSE(output.contains(QStringLiteral("ghost")));
+    CHECK(output.contains(QStringLiteral("*entrance a2\n")));
+}
+
+TEST_CASE("Survex export writes one *entrance for two entrances that differ only in case",
+          "[cwSurvexExporterFix][SurvexEntrance]") {
+    cwCavingRegionData region;
+    cwCaveData cave = makeCave(QStringLiteral("Twice"),
+                               {QStringLiteral("a1"), QStringLiteral("a2")});
+    cave.entrances.append(makeEntrance(QStringLiteral("a2")));
+    cave.entrances.append(makeEntrance(QStringLiteral("A2")));
+    region.caves.append(cave);
+
+    const QString output = writeRegionToString(region);
+    INFO(output.toStdString());
+    CHECK(output.count(QStringLiteral("*entrance a2\n"), Qt::CaseInsensitive) == 1);
+}
+
+TEST_CASE("Survex export writes an attached cave's entrance before the file's *include",
+          "[cwSurvexExporterFix][SurvexEntrance]") {
+    // The node's own fixes and entrances name the file's stations in the
+    // node's block, ahead of the *include that reads them.
+    const QString fixtureDir = testcasesDatasetSourcePath(QStringLiteral("external-centerlines"));
+    cwCaveData cave;
+    cave.id = QUuid::createUuid();
+    cave.name = QStringLiteral("Attached");
+    cave.externalCenterline = cwExternalCenterline(QStringLiteral("survex_entrance.svx"));
+    cave.externalStations = {QStringLiteral("doghill.d1"), QStringLiteral("doghill.d2"),
+                             QStringLiteral("doghill.d3"), QStringLiteral("doghill.d4")};
+    cave.entrances.append(makeEntrance(QStringLiteral("doghill.d2")));
+    cave.entrances.append(makeEntrance(QStringLiteral("doghill.ghost")));
+
+    cwCavingRegionData region;
+    region.caves.append(cave);
+
+    cwSurvexExporterRegion::Options options;
+    options.caveAttachmentDirs.insert(cave.id, fixtureDir);
+    options.externalFixedStations.insert(cave.id, {QStringLiteral("doghill.d1"),
+                                                   QStringLiteral("doghill.d4")});
+
+    const QString output = writeRegionToString(region, options);
+    INFO(output.toStdString());
+    const int entranceIdx = output.indexOf(QStringLiteral("*entrance doghill.d2\n"));
+    REQUIRE(entranceIdx >= 0);
+    const int includeIdx = output.indexOf(QStringLiteral("*include"));
+    REQUIRE(includeIdx >= 0);
+    CHECK(entranceIdx < includeIdx);
+    CHECK_FALSE(output.contains(QStringLiteral("ghost")));
 }

@@ -9,6 +9,7 @@
 #include "cwSurvexExporterCaveTask.h"
 #include "cwCompassMakFile.h"
 #include "cwCompassMakTranslator.h"
+#include "cwEntrance.h"
 #include "cwExternalCenterlineScanner.h"
 #include "cwFixStationDiagnostics.h"
 #include "cwLocalProjection.h"
@@ -512,6 +513,22 @@ private:
             inFileScope.setStationName(name.mid(makOwner->scope.size()));
             fixes.makFixes[makOwner->ownerId].append(inFileScope);
         }
+
+        QSet<QString> entranceKeys;
+        for (const cwEntrance& entrance : node.entrances) {
+            const QString name = entrance.stationName().trimmed();
+            const QString key = cwStation::canonicalKey(name);
+            if (!stationNamesLower.contains(key) || entranceKeys.contains(key)) {
+                continue;
+            }
+            entranceKeys.insert(key);
+            const auto makOwner = makStationOwners.constFind(key);
+            if (makOwner == makStationOwners.constEnd()) {
+                fixes.entrances.append(name);
+            } else {
+                fixes.makEntrances[makOwner->ownerId].append(name.mid(makOwner->scope.size()));
+            }
+        }
         return fixes;
     }
 
@@ -554,6 +571,7 @@ private:
             }
             anchoredGroups.insert(group);
             m_plan.m_fallbackStations.insert(fallback.blockId, fallback.station);
+            m_plan.m_fallbackStationKeys.insert(fallback.key);
             if (fallback.attachedFile) {
                 m_plan.m_originFixedOwners.insert(fallback.blockId);
             }
@@ -704,7 +722,8 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
                                   ExportOptions.caveAttachmentDirs,
                                   node.externalCenterline.entryFile(),
                                   node.name, globalCS, scopeAtInclude,
-                                  written.makFixes.value(node.id))) {
+                                  written.makFixes.value(node.id),
+                                  written.makEntrances.value(node.id))) {
             return false;
         }
 
@@ -813,7 +832,8 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
                                       ExportOptions.tripAttachmentDirs,
                                       tripData.externalCenterline.entryFile(),
                                       tripData.name, globalCS, includeScope,
-                                      written.makFixes.value(tripData.id))) {
+                                      written.makFixes.value(tripData.id),
+                                      written.makEntrances.value(tripData.id))) {
                 return false;
             }
             stream << "*end " << tripLabel << Qt::endl << Qt::endl;
@@ -946,6 +966,7 @@ cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData
     Errors.append(fixes.errors);
     cwSurvexExporterUtils::writeFixStations(stream, fixes.direct, plan.fallbackStation(node.id),
                                             globalCS, scope);
+    cwSurvexExporterUtils::writeEntrances(stream, fixes.entrances);
     return fixes;
 }
 
@@ -1051,7 +1072,8 @@ bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,
                                                     const QString& ownerLabel,
                                                     const QString& globalCS,
                                                     cwSurvexExporterUtils::CsScope& scope,
-                                                    const QList<cwFixStation>& makFixes)
+                                                    const QList<cwFixStation>& makFixes,
+                                                    const QStringList& makEntrances)
 {
     const auto it = attachmentDirs.constFind(ownerId);
     if (it == attachmentDirs.constEnd()) {
@@ -1080,7 +1102,8 @@ bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,
 
     if (cwCompassMakFile::isMakFile(absolutePath)) {
         const auto translated =
-            cwCompassMakTranslator::translate({absolutePath, globalCS, makFixes}, scope);
+            cwCompassMakTranslator::translate({absolutePath, globalCS, makFixes, makEntrances},
+                                              scope);
         if (translated.has_value()) {
             stream << *translated;
             return true;
@@ -1088,6 +1111,7 @@ bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,
         // A .mak the translation cannot spell is read by cavern itself, which
         // places its fixes at their raw numbers.
         cwSurvexExporterUtils::writeFixStations(stream, makFixes, QString(), globalCS, scope);
+        cwSurvexExporterUtils::writeEntrances(stream, makEntrances);
     }
 
     stream << "*include \"" << absolutePath << "\"" << Qt::endl;

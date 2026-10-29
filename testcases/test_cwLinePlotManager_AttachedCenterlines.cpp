@@ -76,23 +76,6 @@ cwTrip* addTripWithShot(cwCave* cave, const QString& name)
     return trip;
 }
 
-// A node attached to an external file: the file supplies the node's whole
-// body, read through its one *include.
-cwCave* addCaveAttachedTo(cwCavingRegion& region,
-                          const QString& name,
-                          const QString& fixture,
-                          const QTemporaryDir& tempRoot,
-                          QHash<QUuid, QString>& caveDirs)
-{
-    cwCave* cave = addEmptyCave(region, name);
-    cave->setExternalCenterline(cwExternalCenterline(fixture));
-
-    const QString attachDir = tempSubdir(tempRoot, name);
-    seedAttachment(attachDir, fixturePath(fixture));
-    caveDirs.insert(cave->id(), attachDir);
-    return cave;
-}
-
 } // namespace
 
 TEST_CASE("Native region has zero attached rows and a native driver source",

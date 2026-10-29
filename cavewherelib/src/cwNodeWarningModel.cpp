@@ -43,6 +43,7 @@ constexpr std::array kRollUpKindOrder = {
     static_cast<int>(cwErrorTypeId::FixStationOutlier),
     static_cast<int>(cwErrorTypeId::FixStationDomain),
     static_cast<int>(cwErrorTypeId::FixStationReference),
+    static_cast<int>(cwErrorTypeId::EntranceUnplaced),
     kOtherWarningKind
 };
 
@@ -142,6 +143,10 @@ QString rollUpMessage(int kind, int nodeCount)
         return countedPhrase(nodeCount,
                              QStringLiteral("has a fix on a station the survey lacks."),
                              QStringLiteral("have fixes on stations the survey lacks."));
+    case static_cast<int>(cwErrorTypeId::EntranceUnplaced):
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has an entrance on a station the survey lacks."),
+                             QStringLiteral("have entrances on stations the survey lacks."));
     default:
         return countedPhrase(nodeCount,
                              QStringLiteral("has other warnings."),

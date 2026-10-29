@@ -48,6 +48,10 @@ public:
         //! format's own fix). The origin cavern invents for a survey with no
         //! fix is excluded.
         QStringList fixedStations;
+        //! Names of the stations cavern flags as entrances (Survex *entrance,
+        //! a Walls ENTRANCE flag, a Compass .mak fixed point), spelled as
+        //! cavern spells them with the separator normalized to '.'.
+        QStringList entranceStations;
 
         // The img_ERROR_INFO closure error of every leg that sits in a loop,
         // keyed by legKey() of its two full station names. Legs outside any

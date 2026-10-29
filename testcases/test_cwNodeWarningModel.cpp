@@ -455,3 +455,22 @@ TEST_CASE("A descendant's file read with warnings rolls up under its own kind",
     CHECK(targetAt(topModel, 0) == Target::NodePage);
     CHECK(nodeAt(topModel, 0) == nested.deep);
 }
+
+TEST_CASE("A descendant's entrance on an unplaced station rolls up under its own kind",
+          "[cwNodeWarningModel]")
+{
+    NestedRegion nested;
+    nested.deep->errorModel()->errors()->setTypedWarning(
+        cwErrorTypeId::EntranceUnplaced,
+        QStringLiteral("Entrance \"ghost\" is on a station the survey lacks."));
+
+    cwNodeWarningModel topModel;
+    topModel.setNode(nested.top);
+    CHECK(waitUntil([&topModel]() { return topModel.count() == 1; }));
+    REQUIRE(topModel.count() == 1);
+    INFO("message: " << messageAt(topModel, 0).toStdString());
+    CHECK(messageAt(topModel, 0)
+          == QStringLiteral("1 node below has an entrance on a station the survey lacks."));
+    CHECK(targetAt(topModel, 0) == Target::NodePage);
+    CHECK(nodeAt(topModel, 0) == nested.deep);
+}

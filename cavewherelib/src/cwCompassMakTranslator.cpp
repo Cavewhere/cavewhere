@@ -75,6 +75,8 @@ struct Block {
     QString path;
     //! The node's fixes on this block's stations, renamed to the station alone.
     QList<cwFixStation> nodeFixes;
+    //! The node's entrances on this block's stations, renamed the same way.
+    QStringList nodeEntrances;
 };
 
 void writeFix(QTextStream& stream, const QString& station, double easting, double northing,
@@ -162,27 +164,48 @@ std::optional<QString> translate(const Input& input, const cwSurvexExporterUtils
         }
 
         readSurveys.append(survey);
-        blocks.append({&reference, survey, path, {}});
+        blocks.append({&reference, survey, path, {}, {}});
     }
 
-    // The node's fixes go into the block whose survey they name.
+    // The node's fixes and entrances go into the block whose survey they name,
+    // spelled as the file spells the station.
+    const auto blockNaming = [&blocks](const QString& name) {
+        return std::find_if(blocks.begin(), blocks.end(), [&name](const Block& block) {
+            return name.startsWith(block.survey + QLatin1Char('.'), Qt::CaseInsensitive);
+        });
+    };
+    const auto spellingIn = [&surveyStations](const Block& block, const QString& name) {
+        return stationSpelling(surveyStations.value(block.survey),
+                               name.mid(block.survey.size() + 1));
+    };
     QList<cwFixStation> unplacedNodeFixes;
     for (const cwFixStation& fix : input.nodeFixes) {
         const QString name = fix.stationName().trimmed();
-        const auto block = std::find_if(blocks.begin(), blocks.end(), [&name](const Block& block) {
-            return name.startsWith(block.survey + QLatin1Char('.'), Qt::CaseInsensitive);
-        });
+        const auto block = blockNaming(name);
         if (block == blocks.end()) {
             unplacedNodeFixes.append(fix);
             continue;
         }
         cwFixStation renamed = fix;
-        renamed.setStationName(stationSpelling(surveyStations.value(block->survey),
-                                               name.mid(block->survey.size() + 1)));
+        renamed.setStationName(spellingIn(*block, name));
         if (!collectNameCharacters(renamed.stationName(), extraNameCharacters)) {
             return std::nullopt;
         }
         block->nodeFixes.append(renamed);
+    }
+    QStringList unplacedNodeEntrances;
+    for (const QString& entrance : input.nodeEntrances) {
+        const QString name = entrance.trimmed();
+        const auto block = blockNaming(name);
+        if (block == blocks.end()) {
+            unplacedNodeEntrances.append(name);
+            continue;
+        }
+        const QString renamed = spellingIn(*block, name);
+        if (!collectNameCharacters(renamed, extraNameCharacters)) {
+            return std::nullopt;
+        }
+        block->nodeEntrances.append(renamed);
     }
 
     const bool georeferenced = !input.outputCS.isEmpty();
@@ -199,6 +222,7 @@ std::optional<QString> translate(const Input& input, const cwSurvexExporterUtils
     for (const cwFixStation& fix : std::as_const(unplacedNodeFixes)) {
         writeNodeFix(stream, fix, wrapperScope);
     }
+    cwSurvexExporterUtils::writeEntrances(stream, unplacedNodeEntrances);
 
     for (const Block& block : std::as_const(blocks)) {
         const cwCompassMakFile::DatReference& reference = *block.reference;
@@ -235,6 +259,7 @@ std::optional<QString> translate(const Input& input, const cwSurvexExporterUtils
         for (const cwFixStation& fix : block.nodeFixes) {
             writeNodeFix(stream, fix, blockScope);
         }
+        cwSurvexExporterUtils::writeEntrances(stream, block.nodeEntrances);
 
         stream << "*end " << block.survey << Qt::endl;
     }

@@ -3141,13 +3141,14 @@ MainWindowTest {
             return count
         }
 
-        // An attached file's fix row shows its Entrance box read-only and
-        // unchecked until the solve reports entrances; the node's own row
-        // beside it keeps a working box.
+        // An attached file's fix row shows its Entrance box read-only, checked
+        // where the solve flags the station an entrance; the node's own row
+        // beside it keeps a working box. survex_entrance.svx fixes d1 and d4
+        // and marks d1 an entrance.
         function test_anAttachedFixRowsEntranceBoxIsReadOnly() {
             const cave = makeSavedCaveAttach("fix-station-attached-entrance",
-                                             "external-centerlines/survex_blocks.svx")
-            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
+                                             "external-centerlines/survex_entrance.svx")
+            tryVerify(() => subtreeAttachedFixCount(cave) === 2, 20000, "the scan lists the file's fixes")
             const model = cave.fixStations
             model.addFixStation()
             model.setData(model.index(0), "doghill.d2", FixStationModel.StationNameRole)
@@ -3158,13 +3159,17 @@ MainWindowTest {
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
             const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
-            tryCompare(tableView, "count", 2)
+            tryCompare(tableView, "count", 3)
             compare(waitForChild("stationCell.1").text, "doghill.d1")
+            compare(waitForChild("stationCell.2").text, "doghill.d4")
 
             const attachedBox = waitForChild("entranceCheckBox.1")
+            const plainBox = waitForChild("entranceCheckBox.2")
             const ownBox = waitForChild("entranceCheckBox.0")
             verify(!attachedBox.enabled, "the attached row's Entrance box is read-only")
-            verify(!attachedBox.checked, "and unchecked until the solve reports entrances")
+            verify(!plainBox.enabled)
+            tryVerify(() => attachedBox.checked, 20000, "the solve flags d1 an entrance")
+            verify(!plainBox.checked, "a fixed station the file marks no entrance reads unchecked")
             verify(ownBox.enabled, "the node's own row's box is enabled")
             verify(!ownBox.checked, "a name set through the model marks no entrance")
 
@@ -3175,7 +3180,7 @@ MainWindowTest {
                       "the own row's click marks its station")
             compare(cave.entrances.count, 1, "the attached row's click marks nothing")
             verify(!cave.entrances.isEntrance("doghill.d1"))
-            verify(!attachedBox.checked, "the attached box stays unchecked")
+            verify(attachedBox.checked, "the attached box stays checked")
         }
 
         // The attached file's own *fix is a row of the page after the node's

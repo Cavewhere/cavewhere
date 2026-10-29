@@ -6,6 +6,7 @@
 #include "cwSurvex3DFileReader.h"
 #include "cwCavernRunner.h"
 #include "cwCavernNaming.h"
+#include "cwStation.h"
 #include "LoadProjectHelper.h"
 
 //Qt includes
@@ -1067,4 +1068,29 @@ TEST_CASE("cwSurvex3DFileReader names each leg end under its own survey with a n
     CHECK(neighborsOf(parsed.network, "site.alpha.a2") == "site.alpha.a1");
     CHECK(neighborsOf(parsed.network, "site.beta.b1") == "site.beta.b2");
     CHECK(neighborsOf(parsed.network, "site.beta.b2") == "site.beta.b1");
+}
+
+TEST_CASE("cwSurvex3DFileReader collects the stations cavern flags as entrances",
+          "[cwSurvex3DFileReader]") {
+    const QString survexDataFile = testcasesDatasetSourcePath(
+        QStringLiteral("test_cwSurvex3DFileReader/entrance.svx"));
+    REQUIRE(QFile::exists(survexDataFile));
+
+    QTemporaryDir workDir;
+    REQUIRE(workDir.isValid());
+    const QString output3dPath = workDir.filePath(QStringLiteral("entrance.3d"));
+
+    auto cavernResult = cwCavernRunner::run(survexDataFile, output3dPath);
+    REQUIRE_FALSE(cavernResult.hasError());
+    CHECK(cavernResult.value().warningCount == 0);
+    REQUIRE(QFileInfo(cavernResult.value().output3dPath).exists());
+
+    cwSurvex3DFileReader reader;
+    const auto parsed = reader.readNetworkAndLookup(cavernResult.value().output3dPath);
+
+    QStringList entrances = parsed.entranceStations;
+    entrances.sort();
+    INFO("entrances: " << entrances.join(QStringLiteral(", ")).toStdString());
+    CHECK(entrances == QStringList({QStringLiteral("cave.a1"), QStringLiteral("cave.a3")}));
+    CHECK(parsed.fixedStations == QStringList({cwStation::canonicalKey(QStringLiteral("cave.a1"))}));
 }

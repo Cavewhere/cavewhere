@@ -362,6 +362,13 @@ void writeFixStations(QTextStream& stream,
     }
 }
 
+void writeEntrances(QTextStream& stream, const QStringList& stations)
+{
+    for (const QString& station : stations) {
+        stream << "*entrance " << station << Qt::endl;
+    }
+}
+
 bool isLrudOnlyShot(const cwShot& shot)
 {
     const cwDistanceReading distance = shot.distance();

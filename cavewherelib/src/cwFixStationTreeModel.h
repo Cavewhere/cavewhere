@@ -11,6 +11,7 @@
 //Our includes
 #include "cwGlobals.h"
 #include "cwSurveyNode.h"
+class cwLinePlotManager;
 class cwTrip;
 
 //Qt includes
@@ -40,8 +41,11 @@ class CAVEWHERE_LIB_EXPORT cwFixStationTreeModel : public QAbstractItemModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(FixStationTreeModel)
+    Q_MOC_INCLUDE("cwLinePlotManager.h")
 
     Q_PROPERTY(cwSurveyNode* rootNode READ rootNode WRITE setRootNode NOTIFY rootNodeChanged)
+    //! The solve whose entrance flags the attached fix rows read.
+    Q_PROPERTY(cwLinePlotManager* linePlotManager READ linePlotManager WRITE setLinePlotManager NOTIFY linePlotManagerChanged)
     Q_PROPERTY(int fixRowCount READ fixRowCount NOTIFY fixRowCountChanged)
 
 public:
@@ -111,9 +115,10 @@ public:
         //! owning node; false on a trip row.
         CanHoldFixesRole,
         //! On one of a node's own fix rows, whether the node's entrances()
-        //! list the row's station. False on attached fix rows (a node's
-        //! read-only rows and trip rows) until the solve reports entrances,
-        //! and on node and trip rows.
+        //! list the row's station. On an attached fix row (a node's
+        //! read-only rows and trip rows), whether linePlotManager's last
+        //! solve flagged the station an entrance; false with no manager.
+        //! False on node and trip rows.
         IsEntranceRole
     };
     Q_ENUM(Roles)
@@ -122,6 +127,9 @@ public:
 
     cwSurveyNode* rootNode() const { return m_rootNode; }
     void setRootNode(cwSurveyNode* rootNode);
+
+    cwLinePlotManager* linePlotManager() const;
+    void setLinePlotManager(cwLinePlotManager* linePlotManager);
 
     //! The number of fix rows in the whole tree.
     int fixRowCount() const;
@@ -157,10 +165,12 @@ public:
 
 signals:
     void rootNodeChanged();
+    void linePlotManagerChanged();
     void fixRowCountChanged();
 
 private:
     QPointer<cwSurveyNode> m_rootNode;
+    QPointer<cwLinePlotManager> m_linePlotManager;
 
     //! The nodes and trips this model holds connections to.
     QSet<cwSurveyNode*> m_connected;
@@ -195,6 +205,14 @@ private:
     QHash<const cwSurveyNode*, QList<cwTrip*>> m_bareFixOwnerTrips;
 
     bool isLeaving(const QObject* holder, int row) const;
+
+    //! Announces IsEntranceRole on every holder's attached fix rows, one range
+    //! per holder.
+    void emitAttachedEntranceRowsChanged();
+
+    //! True when the last solve flagged \a station, named as \a holder's
+    //! attached fixes name it, an entrance.
+    bool isSolvedEntrance(const cwSurveyNode* holder, const QString& station) const;
 
     //! Announces \a roles on \a holder's fix rows \a first through \a last.
     void emitFixRowChanged(const QObject* holder, int first, int last,

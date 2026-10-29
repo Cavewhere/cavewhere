@@ -32,6 +32,7 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwSurveyNetworkSource.h"
+#include "cwEntranceModel.h"
 #include "cwEquateModel.h"
 #include "cwFixStationModel.h"
 #include "cwKeywordItem.h"
@@ -243,6 +244,10 @@ void cwLinePlotManager::connectFixStations(cwSurveyNode* node) {
     connect(model, &cwFixStationModel::rowsInserted, this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
     connect(model, &cwFixStationModel::rowsRemoved,  this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
     connect(model, &cwFixStationModel::modelReset,   this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
+    // The driver writes *entrance for the node's entrances; a label edit
+    // changes nothing cavern reads.
+    connect(node->entrances(), &cwEntranceModel::entranceStationsChanged,
+            this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
 }
 
 void cwLinePlotManager::connectEquates(cwEquateModel* equates) {
@@ -431,6 +436,24 @@ void cwLinePlotManager::removeTripKeywordItems(cwTrip* trip)
     // accumulates a duplicate connection on every cycle. (Lambda connections
     // can't use Qt::UniqueConnection, so disconnect explicitly.)
     disconnect(trip, &QObject::destroyed, this, nullptr);
+}
+
+QList<cwSolvedEntrance> cwLinePlotManager::solvedEntrances(const QUuid& nodeId) const
+{
+    return m_solvedEntrances.value(nodeId);
+}
+
+bool cwLinePlotManager::isSolvedEntrance(const QUuid& nodeId, const QString& stationName) const
+{
+    const auto entrances = m_solvedEntrances.constFind(nodeId);
+    if (entrances == m_solvedEntrances.constEnd()) {
+        return false;
+    }
+    const QString name = stationName.trimmed();
+    return std::any_of(entrances->cbegin(), entrances->cend(),
+                       [&name](const cwSolvedEntrance& entrance) {
+                           return entrance.stationName.compare(name, Qt::CaseInsensitive) == 0;
+                       });
 }
 
 /**
@@ -798,7 +821,52 @@ void cwLinePlotManager::publishResults(const cwLinePlotTask::LinePlotResultData&
     if (results.OriginFixedOwners.has_value()) {
         publishUnfixedFileWarnings(*results.OriginFixedOwners);
     }
+    if (results.SolvedEntrances.has_value()) {
+        publishSolvedEntrances(*results.SolvedEntrances, !results.DriverSource.isEmpty());
+    }
     publishUnconnectedStationWarnings();
+}
+
+void cwLinePlotManager::publishSolvedEntrances(const QHash<QUuid, QList<cwSolvedEntrance>>& entrances,
+                                               bool solved)
+{
+    if (m_solvedEntrances != entrances) {
+        m_solvedEntrances = entrances;
+        emit solvedEntrancesChanged();
+    }
+
+    if (Region == nullptr) {
+        return;
+    }
+
+    for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
+        if (node->errorModel() == nullptr) {
+            continue;
+        }
+        QStringList unplaced;
+        if (solved) {
+            QSet<QString> solvedKeys;
+            for (const cwSolvedEntrance& solvedEntrance : m_solvedEntrances.value(node->id())) {
+                solvedKeys.insert(solvedEntrance.stationName.toCaseFolded());
+            }
+            for (const cwEntrance& entrance : node->entrances()->entrances()) {
+                const QString station = entrance.stationName().trimmed();
+                // A fix on the same station already warns through
+                // FixStationReference.
+                if (!solvedKeys.contains(station.toCaseFolded()) && !node->fixStations()->isFixed(station)) {
+                    unplaced.append(QStringLiteral("\"%1\"").arg(station));
+                }
+            }
+        }
+        QString message;
+        if (unplaced.size() == 1) {
+            message = QStringLiteral("Entrance %1 is on a station the survey lacks.").arg(unplaced.first());
+        } else if (unplaced.size() > 1) {
+            message = QStringLiteral("Entrances %1 are on stations the survey lacks.")
+                          .arg(unplaced.join(QStringLiteral(", ")));
+        }
+        node->errorModel()->errors()->setTypedWarning(cwErrorTypeId::EntranceUnplaced, message);
+    }
 }
 
 /**

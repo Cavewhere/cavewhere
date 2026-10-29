@@ -163,6 +163,9 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
             if (pimg->flags & img_SFLAG_FIXED) {
                 out.fixedStations.append(cwStation::canonicalKey(name));
             }
+            if (pimg->flags & img_SFLAG_ENTRANCE) {
+                out.entranceStations.append(name);
+            }
 
             // Equated or coincident stations share a coordinate; pass 2 picks
             // among them by the leg's survey.

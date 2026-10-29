@@ -1258,6 +1258,7 @@ StandardPage {
     FixStationTreeModel {
         id: treeModelId
         rootNode: fixStationPage.cave
+        linePlotManager: RootData.linePlotManager
     }
 
     FixStationTreeFilterModel {

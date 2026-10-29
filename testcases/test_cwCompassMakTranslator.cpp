@@ -14,6 +14,7 @@
 #include "cwCavingRegion.h"
 #include "cwCompassMakFile.h"
 #include "cwCompassMakTranslator.h"
+#include "cwEntranceModel.h"
 #include "cwExternalCenterline.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
@@ -243,6 +244,33 @@ TEST_CASE("The driver writes a node fix on a .mak station inside the station's b
     CHECK(errors.contains(QStringLiteral(
         "compass_zone_no_datum.mak already fixes compass_zone_no_datum.a1; remove that fix from "
         "the file or fix another station")));
+}
+
+TEST_CASE("The driver writes a node entrance on a .mak station inside the station's block",
+          "[cwSurvexExporter][Compass][SurvexEntrance]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addAttachedCave(region, QStringLiteral("Zone"), kZoneNoDatumMak);
+    cave->setExternalStations({QStringLiteral("compass_zone_no_datum.A1"),
+                               QStringLiteral("compass_zone_no_datum.A2"),
+                               QStringLiteral("compass_zone_no_datum.A3")});
+    // Typed in another case than the file's: the block keeps Compass's case,
+    // so the entrance takes the file's spelling to reach its station.
+    cave->entrances()->addEntrance(QStringLiteral("compass_zone_no_datum.a2"));
+
+    cwSurvexExporterRegion::Options options;
+    options.caveAttachmentDirs.insert(cave->id(), fixtureDir());
+    options.externalFixedStations.insert(cave->id(), {QStringLiteral("compass_zone_no_datum.A1")});
+
+    const QString driver = driverFor(region, options, kUtm13N);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK_FALSE(driver.contains(QStringLiteral("*entrance compass_zone_no_datum.")));
+    checkInOrder(driver, {QStringLiteral("*begin compass_zone_no_datum\n"),
+                          QStringLiteral("*include "),
+                          QStringLiteral("*entrance A2\n"),
+                          QStringLiteral("*end compass_zone_no_datum\n")});
+    CHECK(driver.count(QStringLiteral("*entrance A2\n")) == 1);
 }
 
 TEST_CASE("The driver translates a trip-attached .mak inside the trip's block",

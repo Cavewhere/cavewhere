@@ -19,7 +19,8 @@ Monad::ResultBase
 cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
                                      const QString& outputPath,
                                      const Options& options,
-                                     QSet<QUuid>* originFixedOwners)
+                                     QSet<QUuid>* originFixedOwners,
+                                     QSet<QString>* fallbackStationKeys)
 {
     if (region.caves.isEmpty()) {
         return Monad::ResultBase(QStringLiteral("No caves to do loop closure"),
@@ -99,6 +100,9 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
 
     if (originFixedOwners != nullptr) {
         *originFixedOwners = plan.originFixedOwners();
+    }
+    if (fallbackStationKeys != nullptr) {
+        *fallbackStationKeys = plan.fallbackStationKeys();
     }
     return Monad::ResultBase();
 }

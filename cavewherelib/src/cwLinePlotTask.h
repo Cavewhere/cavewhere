@@ -18,6 +18,7 @@ class cwCavingRegion;
 #include "cwGeoPoint.h"
 #include "cwLinePlotGeometry.h"
 #include "cwExternalCenterlineScanner.h"
+#include "cwSolvedEntrance.h"
 class cwScrap;
 class cwTrip;
 class cwSurveyNode;
@@ -281,6 +282,10 @@ public:
         //! writing the driver, which leaves the last answer standing.
         std::optional<QSet<QUuid>> OriginFixedOwners;
 
+        //! The stations the solve flagged as entrances, keyed by owning node
+        //! id; std::nullopt leaves the last answer standing.
+        std::optional<QHash<QUuid, QList<cwSolvedEntrance>>> SolvedEntrances;
+
         //! A result asserting "there is nothing, and I looked" — what the
         //! manager publishes to wipe state on setRegion, and what a region with
         //! nothing solvable in it produces. Distinct from a default-constructed
@@ -383,6 +388,7 @@ inline cwLinePlotTask::LinePlotResultData cwLinePlotTask::LinePlotResultData::cl
     LinePlotResultData result;
     result.ExternalScopesChecked = true;
     result.OriginFixedOwners = QSet<QUuid>();
+    result.SolvedEntrances = QHash<QUuid, QList<cwSolvedEntrance>>();
     return result;
 }
 

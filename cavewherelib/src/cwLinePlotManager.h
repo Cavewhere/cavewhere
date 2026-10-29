@@ -136,6 +136,16 @@ public:
     //! trip resolved against the live region. Always non-null.
     cwFloatingSurveyModel* floatingSurveyModel() const { return m_floatingSurveyModel; }
 
+    //! Every station the most recent solve flagged as an entrance (native
+    //! *entrance, Survex, Walls and Compass), keyed by the id of the node that
+    //! owns it. Empty until the first solve completes.
+    QHash<QUuid, QList<cwSolvedEntrance>> solvedEntrances() const { return m_solvedEntrances; }
+    //! The solved entrances \a nodeId owns.
+    QList<cwSolvedEntrance> solvedEntrances(const QUuid& nodeId) const;
+    //! True when the node \a nodeId owns a solved entrance on \a stationName,
+    //! matched case-insensitively.
+    bool isSolvedEntrance(const QUuid& nodeId, const QString& stationName) const;
+
     void waitToFinish();
 
 signals:
@@ -146,6 +156,7 @@ signals:
     void updateStateChanged();
     void cavernOutputChanged();
     void floatingSurveysChanged();
+    void solvedEntrancesChanged();
 
 public slots:
     //Marks the line plot dirty without running anything. Public so a "Solve"
@@ -176,6 +187,9 @@ private:
     // the floating surveys' external half so a run that stops before the
     // post-solve pass leaves it standing.
     QList<cwLinePlotTask::LinePlotResultData::HangingStations> m_hangingStations;
+
+    // The last solve's entrances, kept like the hanging stations.
+    QHash<QUuid, QList<cwSolvedEntrance>> m_solvedEntrances;
 
     std::optional<cwLinePlotTask::SolveError> m_lastSolveError;
     QString m_lastCavernLog;
@@ -335,6 +349,12 @@ private:
     //! each result that wrote a driver; a run that stopped before writing one
     //! leaves the last warning standing, and a cleared result clears it.
     void publishUnfixedFileWarnings(const QSet<QUuid>& originFixedOwners);
+    //! Installs a result's solved entrances, and writes one EntranceUnplaced
+    //! warning on each node naming its entrances the solve did not flag,
+    //! leaving out a station the node also fixes. \a solved is false for a
+    //! cleared result, which clears every such warning.
+    void publishSolvedEntrances(const QHash<QUuid, QList<cwSolvedEntrance>>& entrances,
+                                bool solved);
     void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys,
                                 bool externalScopesChecked);
 

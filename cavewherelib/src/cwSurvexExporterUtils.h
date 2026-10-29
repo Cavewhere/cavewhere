@@ -344,6 +344,9 @@ void writeFixStations(QTextStream& stream,
                       const QString& globalCS,
                       CsScope& scope);
 
+//! Writes `*entrance <station>` for each of \a stations, in order.
+void writeEntrances(QTextStream& stream, const QStringList& stations);
+
 //! True when a shot only carries passage dimensions: a valid zero-length
 //! distance with no compass or clino (front or back). Compass records LRUD on
 //! dead-end stations this way, e.g. "ALT13LRUD ALT13 0 - - - -". Survex rejects

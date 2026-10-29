@@ -1,0 +1,10 @@
+; Two entrances, one fixed (a1) and one not (a3), and a station that is
+; neither (a2), for the reader's entrance flag.
+*begin cave
+*fix a1 0 0 0
+*entrance a1
+*entrance a3
+*data normal from to tape compass clino
+a1 a2 10.0 0 0
+a2 a3 10.0 90 0
+*end cave

@@ -146,6 +146,14 @@ public:
             QHash<QUuid, QList<cwFixStation>> makFixes;
             //! Why each dropped fix was dropped.
             QStringList errors;
+            //! The node's entrances on stations its block knows, trimmed and
+            //! once per station, that the block writes itself: every one
+            //! except those in makEntrances. An entrance on a station the
+            //! block does not know is left out, since cavern warns about it.
+            QStringList entrances;
+            //! The entrances on an attached Compass .mak's stations, keyed and
+            //! named as makFixes are.
+            QHash<QUuid, QStringList> makEntrances;
         };
 
         //! The validated fixes of the emitting node \a nodeId; empty for any
@@ -161,12 +169,17 @@ public:
         //! *include the driver fixes at the origin.
         const QSet<QUuid>& originFixedOwners() const { return m_originFixedOwners; }
 
+        //! The region-qualified canonical key of every station the driver
+        //! fixes at the origin.
+        const QSet<QString>& fallbackStationKeys() const { return m_fallbackStationKeys; }
+
     private:
         class Builder;
 
         QHash<QUuid, NodeFixes> m_fixes;
         QHash<QUuid, QString> m_fallbackStations;
         QSet<QUuid> m_originFixedOwners;
+        QSet<QString> m_fallbackStationKeys;
     };
 
     //! The single-cave export: \a cave and its subtree, standing alone, labeled
@@ -264,8 +277,9 @@ private:
     //! refuses the file's bare fixes when nothing is chosen for them.
     bool scopeReachesInheritingInclude(const cwCaveData& node, const DriverTree& tree) const;
 
-    //! Writes \a node's validated fixes from \a plan, and its fallback when
-    //! the plan gives it one, appending the validation errors to Errors.
+    //! Writes \a node's validated fixes from \a plan, its fallback when the
+    //! plan gives it one, then its entrances, appending the validation errors
+    //! to Errors.
     const AnchorPlan::NodeFixes& writeFixStations(QTextStream& stream, const cwCaveData& node,
                                                   const AnchorPlan& plan,
                                                   const QString& globalCS,
@@ -290,9 +304,10 @@ private:
     // Emits *include "<abs>" for the cave/trip's externalCenterline by
     // joining the owner's attachment dir with the project-relative
     // entry file. A Compass .mak is written as its Survex translation
-    // (cwCompassMakTranslator) instead, carrying \a makFixes, so its fixes
-    // read through their datum and zone. Returns false (and appends an
-    // error) when the owner's attachment dir is missing from ExportOptions
+    // (cwCompassMakTranslator) instead, carrying \a makFixes and
+    // \a makEntrances, so its fixes read through their datum and zone.
+    // Returns false (and appends an error) when the owner's attachment dir
+    // is missing from ExportOptions
     // — that state means reconcile has not run yet, so writing a stale
     // *include would surface as a cavern parse failure rather than a clear
     // message.
@@ -303,7 +318,8 @@ private:
                               const QString& ownerLabel,
                               const QString& globalCS,
                               cwSurvexExporterUtils::CsScope& scope,
-                              const QList<cwFixStation>& makFixes);
+                              const QList<cwFixStation>& makFixes,
+                              const QStringList& makEntrances);
 };
 
 #endif // CWSURVEXEXPORTERCAVETASK_H

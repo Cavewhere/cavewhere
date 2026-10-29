@@ -1,0 +1,13 @@
+; One cave block with a fixed entrance (d1), an unfixed entrance (d3), a
+; fixed station that is no entrance (d4) and a plain station (d2), for the
+; solved-entrance tests. d4's fix sits where its leg puts it.
+*begin doghill
+*fix d1 0 0 0
+*fix d4 0 10 -5
+*entrance d1
+*entrance d3
+*data normal from to tape compass clino
+d1 d2 10.0 0 0
+d2 d3 10.0 90 0
+d2 d4 5.0 0 -90
+*end doghill

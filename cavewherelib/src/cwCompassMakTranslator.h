@@ -54,6 +54,9 @@ struct Input {
     //! The node's own fixes on the file's stations, named as the file's
     //! stations are ("<survey>.<station>"), already validated.
     QList<cwFixStation> nodeFixes;
+    //! The node's own entrances on the file's stations, named as nodeFixes
+    //! are, already validated.
+    QStringList nodeEntrances;
 };
 
 /**

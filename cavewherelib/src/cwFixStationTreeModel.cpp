@@ -10,6 +10,7 @@
 #include "cwAttachedFixModel.h"
 #include "cwEntranceModel.h"
 #include "cwExternalCenterline.h"
+#include "cwLinePlotManager.h"
 #include "cwSurveyTreeModel.h"
 #include "cwTrip.h"
 
@@ -107,6 +108,51 @@ void cwFixStationTreeModel::setRootNode(cwSurveyNode* rootNode)
     emit fixRowCountChanged();
 }
 
+cwLinePlotManager* cwFixStationTreeModel::linePlotManager() const
+{
+    return m_linePlotManager;
+}
+
+void cwFixStationTreeModel::setLinePlotManager(cwLinePlotManager* linePlotManager)
+{
+    if (m_linePlotManager == linePlotManager) {
+        return;
+    }
+    if (m_linePlotManager != nullptr) {
+        disconnect(m_linePlotManager, &cwLinePlotManager::solvedEntrancesChanged,
+                   this, &cwFixStationTreeModel::emitAttachedEntranceRowsChanged);
+    }
+    m_linePlotManager = linePlotManager;
+    if (m_linePlotManager != nullptr) {
+        connect(m_linePlotManager, &cwLinePlotManager::solvedEntrancesChanged,
+                this, &cwFixStationTreeModel::emitAttachedEntranceRowsChanged);
+    }
+    emit linePlotManagerChanged();
+    emitAttachedEntranceRowsChanged();
+}
+
+void cwFixStationTreeModel::emitAttachedEntranceRowsChanged()
+{
+    for (const cwSurveyNode* node : std::as_const(m_connected)) {
+        emitFixRowChanged(node, node->fixStations()->count(), node->fixStationCount() - 1,
+                          {IsEntranceRole});
+    }
+    for (const cwTrip* trip : std::as_const(m_connectedTrips)) {
+        emitFixRowChanged(trip, 0, m_tripFixRows.value(trip) - 1, {IsEntranceRole});
+    }
+}
+
+bool cwFixStationTreeModel::isSolvedEntrance(const cwSurveyNode* holder, const QString& station) const
+{
+    if (m_linePlotManager.isNull() || holder == nullptr) {
+        return false;
+    }
+    // The solve groups an attached file's stations under the node whose
+    // *include reads them: the source root of a sourced node.
+    const cwSurveyNode* owner = holder->isSourced() ? holder->sourceRoot() : holder;
+    return owner != nullptr && m_linePlotManager->isSolvedEntrance(owner->id(), station);
+}
+
 int cwFixStationTreeModel::fixRowCount() const
 {
     rebuildFixRows();
@@ -193,12 +239,19 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
             return QVariant::fromValue(const_cast<cwTrip*>(trip));
         case CanHoldFixesRole:
             return owner != nullptr && owner->canHoldFixes();
-        case IsEntranceRole:
-            if (trip != nullptr || index.row() >= owner->fixStations()->count()) {
-                return false;
+        case IsEntranceRole: {
+            if (trip != nullptr) {
+                return isSolvedEntrance(owner, trip->attachedFixes()->attachedFixes()
+                                                   .at(index.row()).station);
+            }
+            const int ownCount = owner->fixStations()->count();
+            if (index.row() >= ownCount) {
+                return isSolvedEntrance(owner, owner->attachedFixes()->attachedFixes()
+                                                   .at(index.row() - ownCount).station);
             }
             return owner->entrances()->isEntrance(
                 owner->fixStations()->fixStationAt(index.row()).stationName());
+        }
         case DelegateKindRole: {
             if (trip != nullptr) {
                 return ReadOnlyFix;
