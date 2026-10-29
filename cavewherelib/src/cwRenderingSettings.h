@@ -38,8 +38,8 @@ class QQuickRhiItem;
 // Every default is the renderer's own rule.
 //
 // The marker knobs (markerDepthTest, markerXRay, markerXRayOpacityPercent) set
-// how lead and entrance markers meet the scene's depth: every cwMarkerView
-// reads markerDepthMode() and pushes it to its layers.
+// how entrance markers meet the scene's depth: every cwMarkerView that follows
+// the marker knobs reads markerDepthMode() and pushes it to its layers.
 class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
 {
     Q_OBJECT

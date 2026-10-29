@@ -53,10 +53,9 @@ bool pushStyle(cwRenderTextBillboards* layer, const cwMarkerTextStyle* textStyle
 
 cwMarkerView::cwMarkerView(QQuickItem* parent) :
     cwBillboardOverlayItem(parent),
-    m_depthMode(cw::billboard::defaultMarkerDepthMode())
+    m_depthMode(knobDepthMode())
 {
     if(cwRenderingSettings* settings = cwRenderingSettings::instance()) {
-        m_depthMode = settings->markerDepthMode();
         connect(settings, &cwRenderingSettings::markerDepthModeChanged,
                 this, &cwMarkerView::applyDepthMode);
     }
@@ -256,6 +255,21 @@ int cwMarkerView::count() const
     return int(m_entries.size());
 }
 
+bool cwMarkerView::followsMarkerKnobs() const
+{
+    return m_followsMarkerKnobs;
+}
+
+void cwMarkerView::setFollowsMarkerKnobs(bool followsMarkerKnobs)
+{
+    if(m_followsMarkerKnobs == followsMarkerKnobs) {
+        return;
+    }
+    m_followsMarkerKnobs = followsMarkerKnobs;
+    emit followsMarkerKnobsChanged();
+    applyDepthMode();
+}
+
 void cwMarkerView::select(int row)
 {
     if(row < 0 || row >= count() || m_selectionManager.isNull()) {
@@ -284,9 +298,19 @@ bool cwMarkerView::isTappable(const QVector3D& worldPosition,
            && !(m_depthMode.hidesOccluded() && isOccluded(worldPosition, tapViewportPosition));
 }
 
+cwBillboardDepthMode cwMarkerView::knobDepthMode() const
+{
+    if(m_followsMarkerKnobs) {
+        const cwRenderingSettings* settings = cwRenderingSettings::instance();
+        return settings ? settings->markerDepthMode() : cw::billboard::defaultMarkerDepthMode();
+    } else {
+        return cwBillboardDepthMode();
+    }
+}
+
 void cwMarkerView::applyDepthMode()
 {
-    const cwBillboardDepthMode depthMode = cwRenderingSettings::instance()->markerDepthMode();
+    const cwBillboardDepthMode depthMode = knobDepthMode();
     if(m_depthMode == depthMode) {
         return;
     }

@@ -13,9 +13,10 @@
 
 // How a billboard layer meets the scene's depth buffer. The default, depth test
 // on and no x-ray, is the single depth-tested pass station labels draw with.
-// Marker layers take theirs from the marker knobs in cwRenderingSettings: with
-// x-ray on, the part of a marker hidden behind geometry draws as a ghost at
-// xRayOpacity, and with the depth test off every marker draws over everything.
+// Marker layers that follow the marker knobs in cwRenderingSettings take theirs
+// from them: with x-ray on, the part of a marker hidden behind geometry draws as
+// a ghost at xRayOpacity, and with the depth test off every marker draws over
+// everything.
 struct cwBillboardDepthMode {
     bool depthTest = true;
     bool xRay = false;

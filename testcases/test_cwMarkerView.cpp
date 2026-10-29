@@ -706,6 +706,97 @@ TEST_CASE("A MarkerView built after a knob change starts in the knobs' depth mod
 
 namespace {
 
+void checkStationLabelMode(MarkerFixture& f)
+{
+    const cwBillboardDepthMode stationLabelMode;
+    checkMarkerLayers(f, stationLabelMode.depthTest, stationLabelMode.xRay,
+                      stationLabelMode.xRayOpacity);
+}
+
+} // namespace
+
+TEST_CASE("A MarkerView that does not follow the marker knobs keeps the station-label depth mode",
+          "[cwMarkerView]")
+{
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings != nullptr);
+    cwMarkerKnobsReset knobsReset;
+
+    MarkerFixture f;
+    f.view->setFollowsMarkerKnobs(false);
+    f.source.resetMarkers(testMarkers(0, 2));
+    REQUIRE(f.view->count() == 2);
+    REQUIRE(f.titles() != f.details());
+
+    SECTION("at the knobs' defaults, x-ray on")
+    {
+        checkStationLabelMode(f);
+    }
+
+    SECTION("with the x-ray opacity edited")
+    {
+        settings->setMarkerXRayOpacityPercent(kEditedXRayOpacityPercent);
+        checkStationLabelMode(f);
+    }
+
+    SECTION("with x-ray off")
+    {
+        settings->setMarkerXRay(false);
+        checkStationLabelMode(f);
+    }
+
+    SECTION("with the depth test off")
+    {
+        settings->setMarkerXRay(false);
+        settings->setMarkerDepthTest(false);
+        checkStationLabelMode(f);
+    }
+
+    SECTION("with the depth test off and x-ray on")
+    {
+        settings->setMarkerDepthTest(false);
+        settings->setMarkerXRay(true);
+        checkStationLabelMode(f);
+    }
+}
+
+TEST_CASE("A MarkerView switches between the knobs' and the station-label depth mode as followsMarkerKnobs changes",
+          "[cwMarkerView]")
+{
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings != nullptr);
+    cwMarkerKnobsReset knobsReset;
+    settings->setMarkerDepthTest(false);
+
+    MarkerFixture f;
+    f.source.resetMarkers(testMarkers(0, 2));
+    REQUIRE(f.view->count() == 2);
+    REQUIRE(f.view->followsMarkerKnobs());
+    REQUIRE(f.sprites()->depthMode() == settings->markerDepthMode());
+    REQUIRE(settings->markerDepthMode() != cwBillboardDepthMode());
+
+    QSignalSpy followsSpy(f.view, &cwMarkerView::followsMarkerKnobsChanged);
+
+    f.view->setFollowsMarkerKnobs(false);
+    CHECK(followsSpy.count() == 1);
+    CHECK_FALSE(f.view->followsMarkerKnobs());
+    checkStationLabelMode(f);
+
+    f.view->setFollowsMarkerKnobs(false);
+    CHECK(followsSpy.count() == 1);
+
+    f.view->setFollowsMarkerKnobs(true);
+    CHECK(followsSpy.count() == 2);
+    const cwBillboardDepthMode knobMode = settings->markerDepthMode();
+    checkMarkerLayers(f, knobMode.depthTest, knobMode.xRay, knobMode.xRayOpacity);
+
+    f.view->setFollowsMarkerKnobs(false);
+    CHECK(followsSpy.count() == 3);
+    checkStationLabelMode(f);
+}
+
+namespace {
+
 // Draws @a markerCount markers, drains the scene's pending work, and counts the
 // frames one marker knob change asks for.
 int framesForOneKnobChange(int markerCount)

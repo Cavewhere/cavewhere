@@ -10,9 +10,10 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// The marker knobs: depth test, x-ray and x-ray opacity for lead and entrance
-// markers, opened from the render stats HUD beside the point cloud knobs. Each
-// row writes RenderingSettings, and every marker view redraws at once.
+// The marker knobs: depth test, x-ray and x-ray opacity for entrance markers,
+// opened from the render stats HUD beside the point cloud knobs. Each row writes
+// RenderingSettings, and the entrance markers redraw at once. Leads always draw
+// depth tested with no x-ray.
 QC.Popup {
     id: panelId
     objectName: "markerDebugPanel"
@@ -39,7 +40,7 @@ QC.Popup {
         // X-ray draws only while the depth test is on.
         PointCloudDebugPanel.KnobCheckBox {
             objectName: "markerXRayCheckBox"
-            text: qsTr("X-ray hidden markers")
+            text: qsTr("X-ray hidden entrances")
             enabled: panelId.renderingSettings.markerDepthTest
             knobValue: panelId.renderingSettings.markerXRay
             onToggled: panelId.renderingSettings.markerXRay = checked

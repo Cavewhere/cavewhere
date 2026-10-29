@@ -63,6 +63,7 @@ class CAVEWHERE_LIB_EXPORT cwMarkerView : public cwBillboardOverlayItem
     Q_PROPERTY(QQmlListProperty<cwMarkerTextStyle> textStyles READ textStyles NOTIFY textStylesChanged)
     Q_PROPERTY(qreal textGap READ textGap WRITE setTextGap NOTIFY textGapChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(bool followsMarkerKnobs READ followsMarkerKnobs WRITE setFollowsMarkerKnobs NOTIFY followsMarkerKnobsChanged)
 
 public:
     explicit cwMarkerView(QQuickItem* parent = nullptr);
@@ -90,6 +91,12 @@ public:
 
     //! The number of markers drawn, hidden ones included.
     int count() const;
+
+    //! True (the default) draws this view's layers in the marker knobs' depth
+    //! mode; false draws them in the station-label mode, depth test on and no
+    //! x-ray, whatever the knobs say.
+    bool followsMarkerKnobs() const;
+    void setFollowsMarkerKnobs(bool followsMarkerKnobs);
 
     //! Selects the delegate of the source's marker @a row, opening its popup.
     //! Does nothing for a row out of range or without a selection manager.
@@ -121,6 +128,7 @@ signals:
     void textStylesChanged();
     void textGapChanged();
     void countChanged();
+    void followsMarkerKnobsChanged();
 
 protected:
     void componentComplete() override;
@@ -159,6 +167,7 @@ private:
     QPointer<cwSelectionManager> m_selectionManager;
     QList<cwMarkerTextStyle*> m_textStyles;
     qreal m_textGap = 0.0;
+    bool m_followsMarkerKnobs = true;
 
     // Row-aligned with the source. Entries are heap-held so groups and the
     // marker lookup keep stable pointers while rows shift.
@@ -168,7 +177,7 @@ private:
     cwKeywordItemRegistry<QString> m_keywordRegistry;
     std::vector<TextCandidate> m_textCandidates; //!< reused by each declutter pass
 
-    //! How this view's layers meet the scene's depth: the marker knobs.
+    //! How this view's layers meet the scene's depth: knobDepthMode().
     cwBillboardDepthMode m_depthMode;
 
     void removeAllEntries();
@@ -203,6 +212,7 @@ private:
     void projectItems();
     void prepareLayers();
     void pushDepthMode();
+    cwBillboardDepthMode knobDepthMode() const;
     bool isEntryVisible(const Entry& entry) const;
     void updateSprite(Entry& entry, bool visible);
     void updateText(Entry& entry);
@@ -223,7 +233,7 @@ private slots:
     void sourceMarkersRemoved(int first, int last);
     void sourceMarkersChanged(int first, int last);
     void restyle();
-    // The marker knobs in cwRenderingSettings moved.
+    // The marker knobs in cwRenderingSettings or followsMarkerKnobs moved.
     void applyDepthMode();
     // The sending marker item's visibility, opacity or sprite slot changed.
     void markerItemChanged();

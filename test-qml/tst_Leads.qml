@@ -655,7 +655,7 @@ MainWindowTest {
             let {leadPoint} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
 
             // Second tap on the now-selected lead must toggle it closed. This is the
-            // behaviour under test, so it stays a single tap (no retry).
+            // behavior under test, so it stays a single tap (no retry).
             mouseClick(leadPoint)
             tryVerify(() => !leadPoint.selected, leadsTestCase.leadSelectTimeout,
                       "tapping the selected lead again should close it")
@@ -795,6 +795,16 @@ MainWindowTest {
             verify(renderer.leadView.selectionManager !== null, "the lead view should have a selection manager")
             verify(renderer.leadView.selectionManager === renderer.entranceView.selectionManager,
                    "the lead and entrance views should share one selection manager")
+        }
+
+        // Leads draw only where they are visible: the lead view keeps the
+        // station-label depth mode, and only the entrance view follows the
+        // marker knobs.
+        function test_leadViewIgnoresTheMarkerKnobs() {
+            const renderer = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer")
+            verify(renderer !== null, "found the renderer")
+            compare(renderer.leadView.followsMarkerKnobs, false, "the lead view should ignore the marker knobs")
+            compare(renderer.entranceView.followsMarkerKnobs, true, "the entrance view should follow the marker knobs")
         }
 
         // Tapping a lead pin while an entrance popup is open closes the entrance
@@ -939,7 +949,7 @@ MainWindowTest {
             let leadPos = leadPoint.position3D;
 
             // isOccluded now tests the tapped viewport pixel. The lead item is
-            // positioned with its origin at the projected marker centre, so map
+            // positioned with its origin at the projected marker center, so map
             // that into the leadView (viewport) space for the tap point.
             let tap = leadPoint.mapToItem(leadView, 0, 0);
             verify(!leadView.isOccluded(leadPos, tap), "a visible lead must not be occluded");
@@ -954,12 +964,10 @@ MainWindowTest {
             verify(leadView.isOccluded(deepPoint, tap), "a point behind cave geometry must be occluded");
         }
 
-        // 4a': the marker knobs decide whether that hidden point takes the tap.
-        // The default x-ray draws it as a ghost and the depth test off draws it
-        // over everything, so it is tappable; only the depth test on with x-ray
-        // off hides it and keeps the tap out. LeadPoint gates its tap with
-        // isTappable.
-        function test_occludedLeadIsTappableWhileItDraws() {
+        // 4a': the marker knobs are for entrances. A lead always draws depth
+        // tested with no x-ray, so a point hidden behind the wall keeps the tap
+        // out whatever the knobs say. LeadPoint gates its tap with isTappable.
+        function test_occludedLeadIsUntappableWhateverTheKnobs() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
@@ -970,9 +978,6 @@ MainWindowTest {
             });
 
             const settings = RootData.settings.renderingSettings
-            settings.resetMarkerKnobsToDefaults()
-            compare(settings.markerDepthTest, true)
-            compare(settings.markerXRay, true)
 
             let leadView = leadPoint.markerView;
             let tap = leadPoint.mapToItem(leadView, 0, 0);
@@ -981,15 +986,15 @@ MainWindowTest {
             let deepPoint = leadPoint.position3D.plus(forward.times(1000));
             verify(leadView.isOccluded(deepPoint, tap), "a point behind cave geometry must be occluded");
 
-            verify(leadView.isTappable(leadPoint.position3D, tap), "a visible lead takes the tap");
-            verify(leadView.isTappable(deepPoint, tap), "an x-ray ghost takes the tap");
-
-            settings.markerXRay = false
-            verify(!leadView.isTappable(deepPoint, tap), "a lead the depth test hides keeps the tap out");
-            verify(leadView.isTappable(leadPoint.position3D, tap), "a visible lead still takes the tap");
-
-            settings.markerDepthTest = false
-            verify(leadView.isTappable(deepPoint, tap), "with the depth test off every lead takes the tap");
+            for (const depthTest of [true, false]) {
+                for (const xRay of [true, false]) {
+                    settings.markerDepthTest = depthTest
+                    settings.markerXRay = xRay
+                    const knobs = " (depth test " + depthTest + ", x-ray " + xRay + ")"
+                    verify(leadView.isTappable(leadPoint.position3D, tap), "a visible lead takes the tap" + knobs);
+                    verify(!leadView.isTappable(deepPoint, tap), "a hidden lead keeps the tap out" + knobs);
+                }
+            }
         }
 
         // 4b: open the layers tab, set the first filter row to the Type key, and
