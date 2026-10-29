@@ -52,7 +52,7 @@ georeference it. The page starts empty:
 > No fix stations yet. Click **Add Fix** to anchor a station to absolute
 > coordinates.
 
-Each row **Add Fix** creates carries 5 fields:
+Each row **Add Fix** creates carries 6 fields:
 
 - **Station**: the real survey station you are fixing, `a1` in the shot shown
   below. It has to match a station in the cave, or the fix has nothing to
@@ -65,6 +65,9 @@ Each row **Add Fix** creates carries 5 fields:
 - **Easting**, **Northing**, **Elevation**: the coordinates, in meters. Under a
   Lat/Lon input CS these 3 hold longitude, latitude, and elevation instead.
   CaveWhere treats every elevation as a height above sea level.
+- **Entrance**: a checkbox. Tick it to mark the station an entrance, untick it
+  to drop the mark and keep the fix. A row from an attached file shows it
+  unchecked and grayed out for now.
 
 ![The Fix Stations page with one row: station a1, Input CS set to UTM, easting 350000, northing 4300000, elevation 1200.](../images/georef-fix-station.png)
 *One fixed station anchors the cave. The **Input CS** picker sits on the row, so
@@ -195,7 +198,8 @@ length and depth in the project's units. Lengths under 1 km (or 1 mi) show
 whole meters (or feet). Every marker draws the same cave pin.
 
 **Mark Station as Fixed** also marks the station an entrance, and **Remove
-Fix** takes the entrance away with the fix. Renaming a fix on the **Fix
+Fix** takes the entrance away with the fix. The **Entrance** checkbox on the
+**Fix Stations** page marks or unmarks one on its own. Renaming a fix on the **Fix
 Stations** page carries its entrance to the new station.
 
 The caret on a station cell in the survey table also offers **Mark Station as

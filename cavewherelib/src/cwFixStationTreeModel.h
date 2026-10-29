@@ -109,7 +109,12 @@ public:
         //! True when the user may add a fix to the row's node
         //! (cwSurveyNode::canHoldFixes): a node row's own node, a fix row's
         //! owning node; false on a trip row.
-        CanHoldFixesRole
+        CanHoldFixesRole,
+        //! On one of a node's own fix rows, whether the node's entrances()
+        //! list the row's station. False on attached fix rows (a node's
+        //! read-only rows and trip rows) until the solve reports entrances,
+        //! and on node and trip rows.
+        IsEntranceRole
     };
     Q_ENUM(Roles)
 

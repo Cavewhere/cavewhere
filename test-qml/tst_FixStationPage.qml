@@ -203,7 +203,8 @@ MainWindowTest {
         }
 
         readonly property string coordinateTitle: "Coordinate (East, North / Lat, Long)"
-        readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]
+        readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth",
+                                                         "coordinateColumnWidth", "entranceColumnWidth"]
         readonly property int columnDrag: 80
         readonly property int columnWidthTolerance: 2
         readonly property int largerFontStep: 4
@@ -1924,10 +1925,121 @@ MainWindowTest {
             tryCompare(cave.entrances, "count", 0)
         }
 
+        //! Row \a rowIndex's Entrance checkbox in the narrow layout, once the
+        //! row has taken its narrow delegate.
+        function narrowEntranceBox(rowIndex) {
+            const page = RootData.pageView.currentPageItem
+            let box = null
+            tryVerify(() => {
+                const narrowRow = findChild(page, "narrowFixRow." + rowIndex)
+                box = narrowRow === null ? null : findChild(narrowRow, "entranceCheckBox." + rowIndex)
+                return box !== null
+            }, 5000, "narrow row " + rowIndex + " should carry an Entrance checkbox")
+            return box
+        }
+
+        // The Entrance column checks the rows whose station the node marks as
+        // an entrance, and follows the node's entrance list as it changes.
+        function test_theEntranceColumnShowsWhichStationsAreEntrances() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            compare(cave.addFixedEntrance("A1"), 0)
+            compare(cave.fixStations.addFixStation("A2"), 1)
+            verify(!cave.entrances.isEntrance("A2"), "a fix added through the model marks nothing")
+
+            verify(rootId.headerCell("Entrance") !== null, "the page has an Entrance header")
+            const marked = findRowChild("entranceCheckBox", 0)
+            const plain = findRowChild("entranceCheckBox", 1)
+            compare(marked.checked, true, "A1 is an entrance")
+            compare(plain.checked, false, "A2 is no entrance")
+            verify(marked.enabled, "a node's own row can change its entrance")
+            verify(plain.enabled, "a node's own row can change its entrance")
+
+            cave.entrances.addEntrance("A2")
+            tryCompare(plain, "checked", true, 5000, "marking A2 elsewhere checks its box")
+            cave.entrances.removeEntrance("A1")
+            tryCompare(marked, "checked", false, 5000, "unmarking A1 elsewhere clears its box")
+            compare(cave.fixStations.count, 2, "the fixes stay")
+
+            rootId.width = Theme.breakpointPanelCollapse - 100
+            tryVerify(() => page.isNarrow, 5000, "the page should be in its narrow layout")
+            compare(narrowEntranceBox(0).checked, false, "the narrow A1 row reads no entrance")
+            compare(narrowEntranceBox(1).checked, true, "the narrow A2 row reads an entrance")
+            cave.entrances.addEntrance("A1")
+            tryCompare(narrowEntranceBox(0), "checked", true, 5000,
+                       "the narrow row follows the entrance list too")
+
+            rootId.width = defaultWindowWidth
+            tryVerify(() => !page.isNarrow, 5000, "and the layout goes back")
+        }
+
+        // Clicking the Entrance box adds or removes the station's entrance
+        // and keeps the fix: it is the entrance list alone that changes.
+        function test_clickingTheEntranceBoxTogglesTheEntranceAndKeepsTheFix() {
+            const cave = gotoFixStations()
+            compare(cave.addFixedEntrance("A1"), 0)
+            const box = findRowChild("entranceCheckBox", 0)
+            tryCompare(box, "checked", true, 5000, "A1 starts as an entrance")
+            waitForRendering(rootId)
+
+            mouseClick(box)
+            tryVerify(() => !cave.entrances.isEntrance("A1"), 5000, "unchecking removes A1's entrance")
+            compare(cave.entrances.count, 0)
+            compare(cave.fixStations.count, 1, "the fix stays")
+            compare(cave.fixStations.data(cave.fixStations.index(0), FixStationModel.StationNameRole), "A1",
+                    "with its station")
+            tryCompare(box, "checked", false, 5000, "the box clears")
+
+            mouseClick(box)
+            tryVerify(() => cave.entrances.isEntrance("A1"), 5000, "checking marks A1 again")
+            compare(cave.entrances.count, 1)
+            compare(cave.fixStations.count, 1, "the fix is still the one fix")
+            tryCompare(box, "checked", true, 5000, "the box checks")
+        }
+
+        // A blank Add Fix row names no station, so its Entrance box waits for
+        // a name.
+        function test_aBlankRowsEntranceBoxWaitsForAStationName() {
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+            const box = findRowChild("entranceCheckBox", 0)
+            verify(!box.enabled, "a blank row's Entrance box is disabled")
+
+            cave.fixStations.setData(cave.fixStations.index(0), "A3", FixStationModel.StationNameRole)
+            tryVerify(() => box.enabled, 5000, "naming the row enables its Entrance box")
+            compare(box.checked, false, "a name set through the model marks no entrance")
+        }
+
+        // The Entrance column resizes and stores its width like every other
+        // column.
+        function test_theEntranceColumnResizesAndPersists() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            cave.fixStations.addFixStation("A1")
+            findRowChild("entranceCheckBox", 0)
+            waitForRendering(page)
+
+            const header = rootId.headerCell("Entrance")
+            verify(header !== null, "the page has an Entrance header")
+            verify(header.width > Theme.tableColumnMinimumWidth,
+                   "the Entrance column starts wider than the minimum")
+            // A drag well past the drag threshold, inside the room the page
+            // has, so neither the threshold nor the page edge clamps it.
+            verify(page.width - page.wideMinimumWidth > columnDrag, "the page has room to widen the column")
+            const startWidth = header.width
+            dragColumnEdge("Entrance", columnDrag)
+            tryVerify(() => Math.abs(header.width - (startWidth + columnDrag)) <= columnWidthTolerance, 5000,
+                      "the Entrance header widens by the drag, got " + header.width)
+            compare(Number(fixColumnSettingsId.value("entranceColumnWidth", 0)), header.width,
+                    "the dragged width is stored under the page's settings")
+        }
+
         //! The page swaps layouts on whether the wide table fits, so the two
         //! sides of that answer are checked a couple of pixels apart. The wide
-        //! side also proves the point of the whole exercise: the pick button,
-        //! the rightmost thing a row draws, is still on screen.
+        //! side also proves the point of the whole exercise: the Entrance box,
+        //! the rightmost thing a row draws, and the pick button are still on
+        //! screen.
         function test_theLayoutFollowsWhetherTheWideTableFits() {
             const cave = gotoFixStations()
             const page = RootData.pageView.currentPageItem
@@ -1955,6 +2067,16 @@ MainWindowTest {
             const rightEdge = pickButton.mapToItem(page, pickButton.width, 0).x
             verify(rightEdge <= page.width,
                    "the pick button's right edge (" + rightEdge
+                   + ") should sit inside the page (" + page.width + ")")
+
+            let entranceBox = null
+            tryVerify(() => {
+                entranceBox = findChild(page, "entranceCheckBox.0")
+                return entranceBox !== null && entranceBox.visible
+            }, 5000, "the wide row's Entrance box should be on screen")
+            const entranceRightEdge = entranceBox.mapToItem(page, entranceBox.width, 0).x
+            verify(entranceRightEdge <= page.width,
+                   "the Entrance box's right edge (" + entranceRightEdge
                    + ") should sit inside the page (" + page.width + ")")
         }
 
@@ -3017,6 +3139,43 @@ MainWindowTest {
                 count += subtreeAttachedFixCount(node.childNode(i))
             }
             return count
+        }
+
+        // An attached file's fix row shows its Entrance box read-only and
+        // unchecked until the solve reports entrances; the node's own row
+        // beside it keeps a working box.
+        function test_anAttachedFixRowsEntranceBoxIsReadOnly() {
+            const cave = makeSavedCaveAttach("fix-station-attached-entrance",
+                                             "external-centerlines/survex_blocks.svx")
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
+            const model = cave.fixStations
+            model.addFixStation()
+            model.setData(model.index(0), "doghill.d2", FixStationModel.StationNameRole)
+
+            RootData.pageSelectionModel.currentPageAddress =
+                "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "should land on fixStationPage")
+            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
+            tryCompare(tableView, "count", 2)
+            compare(waitForChild("stationCell.1").text, "doghill.d1")
+
+            const attachedBox = waitForChild("entranceCheckBox.1")
+            const ownBox = waitForChild("entranceCheckBox.0")
+            verify(!attachedBox.enabled, "the attached row's Entrance box is read-only")
+            verify(!attachedBox.checked, "and unchecked until the solve reports entrances")
+            verify(ownBox.enabled, "the node's own row's box is enabled")
+            verify(!ownBox.checked, "a name set through the model marks no entrance")
+
+            waitForRendering(rootId)
+            mouseClick(attachedBox)
+            mouseClick(ownBox)
+            tryVerify(() => cave.entrances.isEntrance("doghill.d2"), 5000,
+                      "the own row's click marks its station")
+            compare(cave.entrances.count, 1, "the attached row's click marks nothing")
+            verify(!cave.entrances.isEntrance("doghill.d1"))
+            verify(!attachedBox.checked, "the attached box stays unchecked")
         }
 
         // The attached file's own *fix is a row of the page after the node's

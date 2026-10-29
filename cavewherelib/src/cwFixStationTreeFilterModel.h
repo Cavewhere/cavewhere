@@ -19,9 +19,11 @@
 /**
  * The Fix Stations page's sort and filter over cwFixStationTreeModel.
  *
- * The sort role picks the column: StationNameRole, InputCSRole, or EastingRole
- * for the coordinate. Sorting orders the fix rows under each node and keeps
- * the node rows after them in their own order, in both directions.
+ * The sort role picks the column: StationNameRole, InputCSRole, EastingRole
+ * for the coordinate, or cwFixStationTreeModel::IsEntranceRole, which puts
+ * the entrances last when ascending. Sorting orders the fix rows under each
+ * node and keeps the node rows after them in their own order, in both
+ * directions.
  *
  * The filter keeps the fixes whose station name holds filterText, ignoring
  * case, and the node rows above them. The top row, the page's own node,

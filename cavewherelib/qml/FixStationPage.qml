@@ -49,12 +49,14 @@ StandardPage {
                                                      + Theme.tableColumnMinimumWidth
 
     // The QSettings keys of the dragged column widths, in column order.
-    readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]
+    readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth",
+                                                     "coordinateColumnWidth", "entranceColumnWidth"]
 
     // Whether any column holds a dragged width rather than its default.
     readonly property bool hasCustomColumnWidths: columnWidthsId.stationColumnWidth > 0
                                                   || columnWidthsId.inputCSColumnWidth > 0
                                                   || columnWidthsId.coordinateColumnWidth > 0
+                                                  || columnWidthsId.entranceColumnWidth > 0
 
     // Under any output system, a local grid's included, a file whose fix names
     // no system is placed at the project origin, so only then does a bare
@@ -186,6 +188,21 @@ StandardPage {
         const node = fixStationPage.nodeOfFixRow(fixRow)
         if (node !== null) {
             node.removeFixAndEntranceAt(fixStationPage.rowInNode(fixRow))
+        }
+    }
+
+    // Marks or unmarks page row \a fixRow's station as an entrance through the
+    // node's entrance list alone, so the fix stays either way.
+    function setEntrance(fixRow: int, isEntrance: bool): void {
+        const node = fixStationPage.nodeOfFixRow(fixRow)
+        if (node === null) {
+            return
+        }
+        const name = treeModelId.data(treeModelId.indexOfFixRow(fixRow), FixStationModel.StationNameRole)
+        if (isEntrance) {
+            node.entrances.addEntrance(name)
+        } else {
+            node.entrances.removeEntrance(name)
         }
     }
 
@@ -478,7 +495,7 @@ StandardPage {
     //! stays above the column's minimum, and grows only as far as the table
     //! still fits the page, so the page keeps the wide layout through a drag.
     function resizeColumn(column: int, requestedWidth: int): void {
-        const columns = [stationColumn, csColumn, coordinateColumn]
+        const columns = [stationColumn, csColumn, coordinateColumn, entranceColumn]
         const keys = fixStationPage.columnWidthKeys
         const minimum = column === 0 ? fixStationPage.stationColumnMinimumWidth
                                      : Theme.tableColumnMinimumWidth
@@ -934,6 +951,44 @@ StandardPage {
         clip: true
     }
 
+    // A fix row's Entrance box. Commits only on a user's toggle, never on a
+    // rebind.
+    component EntranceCheckBox : QC.CheckBox {
+        id: entranceCheckBox
+        property int rowIndex
+        property bool isEntrance
+
+        checked: entranceCheckBox.isEntrance
+
+        onToggled: {
+            fixStationPage.setEntrance(entranceCheckBox.rowIndex, entranceCheckBox.checked)
+            // A click sets checked itself; follow the row again.
+            entranceCheckBox.checked = Qt.binding(() => entranceCheckBox.isEntrance)
+        }
+    }
+
+    // The wide layout's Entrance column: one box, clipped to the column. The
+    // box follows the cell's enabled.
+    component EntranceColumnCell : QQ.Item {
+        id: entranceColumnCell
+        property string boxObjectName
+        property int rowIndex
+        property bool isEntrance
+
+        implicitWidth: entranceColumn.columnWidth
+        implicitHeight: entranceColumnBox.implicitHeight
+        clip: true
+
+        EntranceCheckBox {
+            id: entranceColumnBox
+            objectName: entranceColumnCell.boxObjectName
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            rowIndex: entranceColumnCell.rowIndex
+            isEntrance: entranceColumnCell.isEntrance
+        }
+    }
+
     // What every fix row's delegate shares: the row's fix, the selection
     // background, and closing an editor open in the row as the view pools it.
     // An editable row and a read-only one each have a delegate of their own,
@@ -954,6 +1009,7 @@ StandardPage {
         required property string stationError
         required property SurveyNode node
         required property bool canHoldFixes
+        required property bool isEntrance
 
         //! The fix-row menu's item that adds a fix beside this one.
         readonly property string addFixText: qsTr("Add fix station to %1").arg(
@@ -1248,6 +1304,7 @@ StandardPage {
         property int stationColumnWidth: 0
         property int inputCSColumnWidth: 0
         property int coordinateColumnWidth: 0
+        property int entranceColumnWidth: 0
     }
 
     TableStaticColumnModel {
@@ -1287,6 +1344,14 @@ StandardPage {
                 // Long", "Northing / Lat") were the only place that was said.
                 text: "Coordinate (East, North / Lat, Long)"
                 sortRole: FixStationModel.EastingRole
+            },
+            TableStaticColumn {
+                id: entranceColumn
+                columnWidth: columnWidthsId.entranceColumnWidth > 0
+                             ? columnWidthsId.entranceColumnWidth
+                             : Theme.fixEntranceColumnWidth
+                text: "Entrance"
+                sortRole: FixStationTreeModel.IsEntranceRole
             }
         ]
     }
@@ -1896,6 +1961,14 @@ StandardPage {
                     }
                 }
 
+                // A blank row's box waits for a name; naming the row here marks it an entrance.
+                EntranceColumnCell {
+                    boxObjectName: "entranceCheckBox." + wideEditableId.fixRow
+                    rowIndex: wideEditableId.fixRow
+                    isEntrance: wideEditableId.isEntrance
+                    enabled: wideEditableId.stationName.trim() !== ""
+                }
+
                 InlineWarning {
                     objectName: "stationWarning." + wideEditableId.fixRow
                     Layout.leftMargin: Theme.tightSpacing
@@ -2002,6 +2075,14 @@ StandardPage {
                     editValue: wideReadOnlyId.coordinateText
                     rowIndex: wideReadOnlyId.fixRow
                     axisOrder: CoordinateText.axisOrderFor(wideReadOnlyId.inputCS)
+                }
+
+                // Only the file marks an attached station an entrance.
+                EntranceColumnCell {
+                    boxObjectName: "entranceCheckBox." + wideReadOnlyId.fixRow
+                    rowIndex: wideReadOnlyId.fixRow
+                    isEntrance: wideReadOnlyId.isEntrance
+                    enabled: false
                 }
 
                 QQ.Loader {
@@ -2126,6 +2207,16 @@ StandardPage {
 
                     onClicked: fixStationPage.pickFromView(narrowEditableId.fixRow)
                 }
+
+                QC.Label { text: "·"; color: Theme.textSubtle }
+
+                EntranceCheckBox {
+                    objectName: "entranceCheckBox." + narrowEditableId.fixRow
+                    text: qsTr("Entrance")
+                    rowIndex: narrowEditableId.fixRow
+                    isEntrance: narrowEditableId.isEntrance
+                    enabled: narrowEditableId.stationName.trim() !== ""
+                }
             }
         }
     }
@@ -2201,6 +2292,16 @@ StandardPage {
                     coordinate: true
                     readOnly: true
                     axisOrder: CoordinateText.axisOrderFor(narrowReadOnlyId.inputCS)
+                }
+
+                QC.Label { text: "·"; color: Theme.textSubtle }
+
+                EntranceCheckBox {
+                    objectName: "entranceCheckBox." + narrowReadOnlyId.fixRow
+                    text: qsTr("Entrance")
+                    rowIndex: narrowReadOnlyId.fixRow
+                    isEntrance: narrowReadOnlyId.isEntrance
+                    enabled: false
                 }
 
                 QQ.Loader {

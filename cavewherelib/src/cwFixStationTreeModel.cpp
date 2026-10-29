@@ -8,6 +8,7 @@
 //Our includes
 #include "cwFixStationTreeModel.h"
 #include "cwAttachedFixModel.h"
+#include "cwEntranceModel.h"
 #include "cwExternalCenterline.h"
 #include "cwSurveyTreeModel.h"
 #include "cwTrip.h"
@@ -192,6 +193,12 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
             return QVariant::fromValue(const_cast<cwTrip*>(trip));
         case CanHoldFixesRole:
             return owner != nullptr && owner->canHoldFixes();
+        case IsEntranceRole:
+            if (trip != nullptr || index.row() >= owner->fixStations()->count()) {
+                return false;
+            }
+            return owner->entrances()->isEntrance(
+                owner->fixStations()->fixStationAt(index.row()).stationName());
         case DelegateKindRole: {
             if (trip != nullptr) {
                 return ReadOnlyFix;
@@ -235,6 +242,7 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
         case TripObjectRole:
             return QVariant::fromValue(const_cast<cwTrip*>(trip));
         case CanHoldFixesRole:
+        case IsEntranceRole:
             return false;
         case OwnFixCountRole:
         case SubtreeFixCountRole:
@@ -293,6 +301,8 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
         return QVariant::fromValue(static_cast<cwTrip*>(nullptr));
     case CanHoldFixesRole:
         return node->canHoldFixes();
+    case IsEntranceRole:
+        return false;
     case OwnFixCountRole:
         return node->fixStationCount();
     case SubtreeFixCountRole:
@@ -397,7 +407,8 @@ QHash<int, QByteArray> cwFixStationTreeModel::roleNames() const
         {TripObjectRole,                    "trip"},
         {BareFixOwnerTripsRole,             "bareFixOwnerTrips"},
         {DelegateKindRole,                  "delegateKind"},
-        {CanHoldFixesRole,                  "canHoldFixes"}
+        {CanHoldFixesRole,                  "canHoldFixes"},
+        {IsEntranceRole,                    "isEntrance"}
     });
     return names;
 }
@@ -562,8 +573,15 @@ void cwFixStationTreeModel::connectNode(cwSurveyNode* node)
     connect(table, &QAbstractItemModel::dataChanged, this,
             [this, node](const QModelIndex& topLeft, const QModelIndex& bottomRight,
                          const QList<int>& roles) {
-        emit dataChanged(fixIndex(node, topLeft.row()), fixIndex(node, bottomRight.row()), roles);
+        QList<int> forwarded = roles;
+        if (roles.contains(cwFixStationModel::StationNameRole)) {
+            forwarded.append(IsEntranceRole);
+        }
+        emit dataChanged(fixIndex(node, topLeft.row()), fixIndex(node, bottomRight.row()), forwarded);
         emitCountsChanged(node);
+    });
+    connect(node->entrances(), &cwEntranceModel::entranceStationsChanged, this, [this, node]() {
+        emitFixRowChanged(node, 0, fixRowsOf(node) - 1, {IsEntranceRole});
     });
 
     connect(node, &cwSurveyNode::beginInsertNodes, this, [this, node](int begin, int end) {
@@ -834,6 +852,7 @@ void cwFixStationTreeModel::disconnectNode(cwSurveyNode* node)
 {
     disconnect(node, nullptr, this, nullptr);
     disconnect(node->fixStationTable(), nullptr, this, nullptr);
+    disconnect(node->entrances(), nullptr, this, nullptr);
     for (cwTrip* trip : node->trips()) {
         disconnectTrip(trip);
     }

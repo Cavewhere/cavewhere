@@ -12,6 +12,7 @@
 #include "cwAttachedFixModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwEntranceModel.h"
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineManager.h"
 #include "cwFixStationModel.h"
@@ -1803,4 +1804,202 @@ TEST_CASE("A trip row holds no fixes of its own, and Add on it targets its node"
     REQUIRE(pageRow >= 0);
     CHECK(model.indexOfFixRow(pageRow).data(cwFixStationTreeModel::NodeObjectRole)
               .value<cwSurveyNode*>() == root);
+}
+
+namespace {
+
+const QByteArray kIsEntranceRoleName = QByteArrayLiteral("isEntrance");
+const QString kEntranceFixName = QStringLiteral("a%1");
+// Matched the way cwFixStationModel matches names: trimmed and
+// case-insensitive, so it marks fix "a2".
+const QString kMarkedEntrance = QStringLiteral("A2");
+const QString kMarkedFix = QStringLiteral("a2");
+const QString kRenameTarget = QStringLiteral("b9");
+const QString kEntranceLabel = QStringLiteral("North sink");
+constexpr int kEntranceFixCount = 4;
+constexpr int kEntranceGrowthFactor = 4;
+constexpr int kRenamedRow = 2;
+
+//! A standalone node, outside any project, holding \a fixCount fixes of its
+//! own named a1, a2, …, and no entrances.
+struct EntranceFixture
+{
+    cwCave node;
+    cwFixStationTreeModel model;
+
+    explicit EntranceFixture(int fixCount)
+    {
+        for (int i = 0; i < fixCount; ++i) {
+            node.fixStations()->addFixStation(kEntranceFixName.arg(i + 1));
+        }
+        model.setRootNode(&node);
+    }
+
+    QModelIndex rootRow() const { return model.index(0, 0); }
+    QModelIndex fixRowAt(int row) const { return model.index(row, 0, rootRow()); }
+    bool isEntrance(int row) const
+    {
+        return fixRowAt(row).data(cwFixStationTreeModel::IsEntranceRole).toBool();
+    }
+};
+
+//! The dataChanged emissions \a spy caught that announce \a role, by name or
+//! as "every role".
+QList<QList<QVariant>> emissionsAnnouncing(const QSignalSpy& spy, int role)
+{
+    QList<QList<QVariant>> found;
+    for (const QList<QVariant>& emission : spy) {
+        const QList<int> roles = emission.at(2).value<QList<int>>();
+        if (roles.isEmpty() || roles.contains(role)) {
+            found.append(emission);
+        }
+    }
+    return found;
+}
+
+//! The IsEntranceRole emissions one entrance added to a node holding
+//! \a fixCount fixes gives, after checking that each spans every own row.
+int entranceEmissionsForOneChange(int fixCount)
+{
+    EntranceFixture fixture(fixCount);
+    QSignalSpy spy(&fixture.model, &QAbstractItemModel::dataChanged);
+    fixture.node.entrances()->addEntrance(kMarkedEntrance);
+    const QList<QList<QVariant>> emissions =
+        emissionsAnnouncing(spy, cwFixStationTreeModel::IsEntranceRole);
+    for (const QList<QVariant>& emission : emissions) {
+        CHECK(emission.at(0).toModelIndex() == fixture.fixRowAt(0));
+        CHECK(emission.at(1).toModelIndex() == fixture.fixRowAt(fixCount - 1));
+    }
+    return static_cast<int>(emissions.size());
+}
+
+} // namespace
+
+TEST_CASE("A fix row reads whether its node marks the station an entrance",
+          "[FixStationTreeModel]")
+{
+    EntranceFixture fixture(kEntranceFixCount);
+    CHECK(roleId(fixture.model, kIsEntranceRoleName) == cwFixStationTreeModel::IsEntranceRole);
+    for (int row = 0; row < kEntranceFixCount; ++row) {
+        CHECK_FALSE(fixture.isEntrance(row));
+    }
+
+    QSignalSpy spy(&fixture.model, &QAbstractItemModel::dataChanged);
+    fixture.node.entrances()->addEntrance(kMarkedEntrance);
+
+    INFO("dataChanged emissions: " << spy.count());
+    REQUIRE(spy.count() == 1);
+    const QList<int> roles = spy.at(0).at(2).value<QList<int>>();
+    CHECK(roles.contains(cwFixStationTreeModel::IsEntranceRole));
+    CHECK(spy.at(0).at(0).toModelIndex() == fixture.fixRowAt(0));
+    CHECK(spy.at(0).at(1).toModelIndex() == fixture.fixRowAt(kEntranceFixCount - 1));
+
+    const QModelIndex marked = fixRow(fixture.model, fixture.rootRow(), kMarkedFix);
+    REQUIRE(marked.isValid());
+    CHECK(marked.data(cwFixStationTreeModel::IsEntranceRole).toBool());
+    for (int row = 0; row < kEntranceFixCount; ++row) {
+        if (fixture.fixRowAt(row) != marked) {
+            CHECK_FALSE(fixture.isEntrance(row));
+        }
+    }
+
+    SECTION("a label edit leaves the entrance flag unannounced")
+    {
+        spy.clear();
+        cwEntranceModel* entrances = fixture.node.entrances();
+        const int entranceRow = entrances->indexOf(kMarkedEntrance);
+        REQUIRE(entranceRow >= 0);
+        REQUIRE(entrances->setData(entrances->index(entranceRow), kEntranceLabel,
+                                   cwEntranceModel::LabelRole));
+        CHECK(emissionsAnnouncing(spy, cwFixStationTreeModel::IsEntranceRole).isEmpty());
+        CHECK(marked.data(cwFixStationTreeModel::IsEntranceRole).toBool());
+    }
+
+    SECTION("removing the entrance announces it once more and clears the flag")
+    {
+        spy.clear();
+        fixture.node.entrances()->removeEntrance(kMarkedEntrance);
+        CHECK(emissionsAnnouncing(spy, cwFixStationTreeModel::IsEntranceRole).size() == 1);
+        CHECK_FALSE(marked.data(cwFixStationTreeModel::IsEntranceRole).toBool());
+        CHECK(fixture.node.fixStations()->count() == kEntranceFixCount);
+    }
+}
+
+TEST_CASE("An entrance change announces a node's fix rows in one emission at any size",
+          "[FixStationTreeModel]")
+{
+    const int small = entranceEmissionsForOneChange(kEntranceFixCount);
+    const int large = entranceEmissionsForOneChange(kEntranceFixCount * kEntranceGrowthFactor);
+    CHECK(small == 1);
+    CHECK(large == 1);
+    CHECK(large <= small * kEntranceGrowthFactor);
+}
+
+TEST_CASE("A fix renamed onto or off an entrance station announces its entrance flag",
+          "[FixStationTreeModel]")
+{
+    EntranceFixture fixture(kEntranceFixCount);
+    fixture.node.entrances()->addEntrance(kRenameTarget);
+    cwFixStationModel* fixes = fixture.node.fixStations();
+    const QString originalName = fixes->fixStationAt(kRenamedRow).stationName();
+    CHECK_FALSE(fixture.isEntrance(kRenamedRow));
+
+    QSignalSpy spy(&fixture.model, &QAbstractItemModel::dataChanged);
+    REQUIRE(fixes->setData(fixes->index(kRenamedRow), kRenameTarget,
+                           cwFixStationModel::StationNameRole));
+    CHECK(roleAnnouncements(spy, fixture.fixRowAt(kRenamedRow),
+                            cwFixStationTreeModel::IsEntranceRole) >= 1);
+    CHECK(fixture.isEntrance(kRenamedRow));
+
+    spy.clear();
+    REQUIRE(fixes->setData(fixes->index(kRenamedRow), originalName,
+                           cwFixStationModel::StationNameRole));
+    CHECK(roleAnnouncements(spy, fixture.fixRowAt(kRenamedRow),
+                            cwFixStationTreeModel::IsEntranceRole) >= 1);
+    CHECK_FALSE(fixture.isEntrance(kRenamedRow));
+}
+
+TEST_CASE("Only a node's own fix rows read the entrance flag; attached rows read false",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    DelegateKindFixture fixture;
+    cwEntranceModel* entrances = fixture.node.entrances();
+    for (const QString& station : {kOwnFirst, kAttachedSecond, kTripHeldFix}) {
+        entrances->addEntrance(station);
+    }
+
+    const auto isEntrance = [](const QModelIndex& index) {
+        return index.data(cwFixStationTreeModel::IsEntranceRole).toBool();
+    };
+    const auto checkRows = [&](const QAbstractItemModel& model) {
+        CHECK(roleId(model, kIsEntranceRoleName) == cwFixStationTreeModel::IsEntranceRole);
+        const QModelIndex root = model.index(0, 0);
+        const QModelIndex trip = tripRow(model, kKindTripName);
+        REQUIRE(trip.isValid());
+        const QModelIndex ownMarked = fixRow(model, root, kOwnFirst);
+        const QModelIndex ownPlain = fixRow(model, root, kOwnThird);
+        const QModelIndex attachedMarked = fixRow(model, root, kAttachedSecond);
+        const QModelIndex tripMarked = fixRow(model, trip, kTripHeldFix);
+        REQUIRE(ownMarked.isValid());
+        REQUIRE(ownPlain.isValid());
+        REQUIRE(attachedMarked.isValid());
+        REQUIRE(tripMarked.isValid());
+
+        CHECK(isEntrance(ownMarked));
+        CHECK_FALSE(isEntrance(ownPlain));
+        CHECK_FALSE(isEntrance(attachedMarked));
+        CHECK_FALSE(isEntrance(tripMarked));
+        CHECK_FALSE(isEntrance(root));
+        CHECK_FALSE(isEntrance(trip));
+    };
+
+    SECTION("through the tree model")
+    {
+        checkRows(fixture.model);
+    }
+
+    SECTION("through the filter proxy")
+    {
+        checkRows(fixture.proxy);
+    }
 }

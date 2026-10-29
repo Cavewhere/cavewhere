@@ -300,6 +300,8 @@ QtObject {
     readonly property int fixInputCSColumnWidth: Math.round(400 * fontScale)
     //Fits a UTM triple with its elevation unit, e.g. "610016.792, 5615117.075, 2545.34m".
     readonly property int fixCoordinateColumnWidth: Math.round(300 * fontScale)
+    //Fits the "Entrance" header with its sort indicator.
+    readonly property int fixEntranceColumnWidth: Math.round(100 * fontScale)
 
     // Kind glyphs: a Cave, a Folder where caves go, a Section (a Folder
     // inside a cave), and a Trip. KindIcon picks one from where the node sits.
