@@ -11,6 +11,7 @@
 #include <QHash>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QPointer>
 
 #include <algorithm>
 
@@ -715,6 +716,9 @@ TEST_CASE("A LiDAR note deleted mid-run never reaches the render items", "[cwNot
     // The pointer outlives the row: removeNote() defers the delete, and the
     // manager only ever uses it as a hash key.
     cwNoteLiDAR* removedNote = notes.at(1);
+    // Per-note delivery can hand the note to the renderer before the removal
+    // lands, so whatever it holds by then has to leave with it.
+    const QVector<uint32_t> idsAtRemoval = manager->renderItemIds(removedNote);
     lidarModel->removeNote(1);
 
     root->linePlotManager()->waitToFinish();
@@ -727,6 +731,12 @@ TEST_CASE("A LiDAR note deleted mid-run never reaches the render items", "[cwNot
     // The removal cleared the note's render ids; a delivery after it would put
     // them back — and leave items in the scene for a note that no longer exists.
     CHECK(manager->renderItemIds(removedNote).isEmpty());
+
+    auto* renderItems = root->regionSceneManager()->items();
+    REQUIRE(renderItems != nullptr);
+    for (uint32_t id : idsAtRemoval) {
+        CHECK_FALSE(renderItems->hasItem(id));
+    }
 
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 }
@@ -1104,6 +1114,8 @@ namespace {
 
         cwRootData* rootData() const { return m_rootData.get(); }
         cwCave* cave() const { return m_cave; }
+        cwTrip* trip() const { return m_cave->trip(0); }
+        cwRenderTexturedItems* renderItems() const { return m_rootData->regionSceneManager()->items(); }
         cwNoteLiDAR* note() const { return m_notes.first(); }
         const QList<cwNoteLiDAR*>& notes() const { return m_notes; }
         cwNoteLiDARManager* manager() const { return m_rootData->noteLiDARManager(); }
@@ -1339,5 +1351,96 @@ TEST_CASE("A restart cancels the superseded LiDAR run", "[cwNoteLiDARManager]")
     }
     for (cwNoteLiDAR* note : project.notes()) {
         CHECK_FALSE(manager->renderItemIds(note).isEmpty());
+    }
+}
+
+namespace {
+    const QVector3D kStation6PositionOnNote(0.19147f, -0.720703f, -2.15723f);
+
+    //Stations every note of the project, runs it to completion, and returns
+    //the render ids each note put in the 3D view.
+    QHash<cwNoteLiDAR*, QVector<uint32_t>> renderIdsAfterSettling(const LiDARProject& project)
+    {
+        for (cwNoteLiDAR* note : project.notes()) {
+            cwNoteLiDARStation station;
+            station.setName(QStringLiteral("6"));
+            station.setPositionOnNote(kStation6PositionOnNote);
+            note->addStation(station);
+        }
+
+        REQUIRE(project.pumpUntilSettled());
+
+        auto* renderItems = project.renderItems();
+        REQUIRE(renderItems != nullptr);
+
+        QHash<cwNoteLiDAR*, QVector<uint32_t>> idsByNote;
+        for (cwNoteLiDAR* note : project.notes()) {
+            const QVector<uint32_t> ids = project.manager()->renderItemIds(note);
+            REQUIRE_FALSE(ids.isEmpty());
+            for (uint32_t id : ids) {
+                REQUIRE(renderItems->hasItem(id));
+            }
+            idsByNote.insert(note, ids);
+        }
+        return idsByNote;
+    }
+}
+
+TEST_CASE("Deleting a LiDAR note takes its meshes out of the 3D view",
+          "[cwNoteLiDARManager][Issue749]")
+{
+    constexpr int kTwoNotes = 2;
+    LiDARProject project(kTwoNotes);
+    const auto idsByNote = renderIdsAfterSettling(project);
+
+    cwNoteLiDAR* removedNote = project.notes().at(1);
+    cwNoteLiDAR* keptNote = project.notes().at(0);
+    project.trip()->notesLiDAR()->removeNote(1);
+    REQUIRE(project.pumpUntilSettled());
+
+    auto* renderItems = project.renderItems();
+    for (uint32_t id : idsByNote.value(removedNote)) {
+        CHECK_FALSE(renderItems->hasItem(id));
+    }
+    for (uint32_t id : idsByNote.value(keptNote)) {
+        CHECK(renderItems->hasItem(id));
+    }
+}
+
+TEST_CASE("Removing a trip takes its LiDAR meshes out of the 3D view",
+          "[cwNoteLiDARManager][Issue749]")
+{
+    LiDARProject project;
+    const auto idsByNote = renderIdsAfterSettling(project);
+
+    project.cave()->removeTrip(0);
+    REQUIRE(project.pumpUntilSettled());
+
+    auto* renderItems = project.renderItems();
+    for (uint32_t id : idsByNote.value(project.note())) {
+        CHECK_FALSE(renderItems->hasItem(id));
+    }
+}
+
+TEST_CASE("A new project takes the previous project's LiDAR meshes out of the 3D view",
+          "[cwNoteLiDARManager][Issue749]")
+{
+    LiDARProject project;
+    const QVector<uint32_t> ids = renderIdsAfterSettling(project).value(project.note());
+
+    QPointer<cwNoteLiDAR> note(project.note());
+    project.rootData()->project()->newProject();
+
+    //newProject() hands the old caves to deleteLater(); the note is gone once
+    //those are delivered.
+    REQUIRE(waitUntil([&] {
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        return note.isNull();
+    }));
+    REQUIRE(project.pumpUntilSettled());
+
+    auto* renderItems = project.renderItems();
+    for (uint32_t id : ids) {
+        CHECK_FALSE(renderItems->hasItem(id));
     }
 }
