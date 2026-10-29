@@ -111,6 +111,11 @@ QQ.Item {
         cave: clipArea.currentTrip !== null ? clipArea.currentTrip.parentCave : null
     }
 
+    EntrancePopup {
+        id: entrancePopupId
+        cave: clipArea.currentTrip !== null ? clipArea.currentTrip.parentCave : null
+    }
+
     // The editor isn't modal, so left open it would float over the cells the user
     // moved on to. Its own fields don't touch the focused cell, so this only fires
     // when the user really has left the station behind.
@@ -118,9 +123,11 @@ QQ.Item {
         target: editorModel
         function onFocusedRowChanged() {
             fixStationPopupId.close()
+            entrancePopupId.close()
         }
         function onFocusedRoleChanged() {
             fixStationPopupId.close()
+            entrancePopupId.close()
         }
     }
 
@@ -480,6 +487,7 @@ QQ.Item {
                 model: editorModel
                 removePreview: removePreviewId
                 fixStationPopup: fixStationPopupId
+                entrancePopup: entrancePopupId
                 splayRemoveChallenge: removeSplaysChallengeId
                 stationValidator: stationValidatorId
                 distanceValidator: distanceValidatorId

@@ -15,8 +15,8 @@ DataBox {
     // property var window: QQ.Window.window
 
     // The page-level inline fix editor this cell's caret opens, and the one
-    // handle the cell has on the cave's fixes. Null leaves the caret off, so a
-    // host that offers no way to edit a fix simply doesn't offer the actions.
+    // handle the cell has on the cave's fixes. Null leaves the fix actions off,
+    // so a host without a fix editor offers only the remaining actions.
     property FixStationPopup fixStationPopup: null
 
     // Whether one of the cave's fixes anchors this station. Read from the survey
@@ -24,6 +24,14 @@ DataBox {
     // DrySurveyComponent. Independent of the caret above: a badge is worth
     // showing even where fixing isn't offered.
     property bool stationIsFixed: false
+
+    // The page-level inline entrance editor this cell's caret opens. Null
+    // leaves the entrance actions off.
+    property EntrancePopup entrancePopup: null
+
+    // Whether the trip's cave marks this station an entrance, read from the
+    // survey model's StationEntranceRole.
+    property bool stationIsEntrance: false
 
     readonly property string stationNameValue: stationBox.dataValue.reading.value
 
@@ -46,9 +54,15 @@ DataBox {
     readonly property int splayMoveOutlineInset: 1
 
     // A blank name has nothing to anchor — that's the trailing virtual station
-    // row, which shouldn't offer to fix itself.
-    readonly property bool canFix: stationBox.fixStationPopup !== null
-                                   && stationBox.stationNameValue.trim() !== ""
+    // row, which offers neither action.
+    readonly property bool hasStationName: stationBox.stationNameValue.trim() !== ""
+
+    readonly property bool canFix: stationBox.fixStationPopup !== null && stationBox.hasStationName
+
+    readonly property bool canEditEntrance: stationBox.entrancePopup !== null && stationBox.hasStationName
+
+    // Matches DataBoxCaret's corner margin, one corner over.
+    readonly property int entranceBadgeMargin: 3
 
     acceptsSplayMove: true
 
@@ -162,10 +176,26 @@ DataBox {
         text: "Fixed"
     }
 
+    // Every cell carries one, almost all hidden, so a hidden badge loads no
+    // image and builds no effect layer.
+    Icon {
+        objectName: "entranceStationBadge"
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.margins: stationBox.entranceBadgeMargin
+        width: Theme.stationBadgeIconSize
+        height: Theme.stationBadgeIconSize
+        sourceSize: Qt.size(Theme.stationBadgeIconSize, Theme.stationBadgeIconSize)
+        visible: stationBox.stationIsEntrance
+        source: visible ? Theme.kindIconCave : ""
+        colorizeEnabled: visible
+        colorizationColor: Theme.textSubtle
+    }
+
     // The same caret the exclude-distance menu uses one column over, so the two
     // cell-level actions share an affordance rather than resembling one.
     DataBoxCaret {
-        active: stationBox.focus && stationBox.canFix
+        active: stationBox.focus && (stationBox.canFix || stationBox.canEditEntrance)
         buttonObjectName: "fixStationMenuButton"
 
         menu: QC.Menu {
@@ -178,14 +208,33 @@ DataBox {
                 text: stationBox.stationIsFixed
                       ? qsTr("Edit Fixed Coordinates...")
                       : qsTr("Mark Station as Fixed")
+                enabled: stationBox.canFix
                 onTriggered: stationBox.fixStationPopup.openFor(stationBox.stationNameValue, stationBox)
             }
 
             QC.MenuItem {
                 objectName: "removeStationFixMenuItem"
                 text: qsTr("Remove Fix")
-                enabled: stationBox.stationIsFixed
+                enabled: stationBox.canFix && stationBox.stationIsFixed
                 onTriggered: stationBox.fixStationPopup.removeFixFor(stationBox.stationNameValue)
+            }
+
+            QC.MenuSeparator {}
+
+            QC.MenuItem {
+                objectName: "markStationEntranceMenuItem"
+                text: stationBox.stationIsEntrance
+                      ? qsTr("Edit Entrance...")
+                      : qsTr("Mark Station as Entrance")
+                enabled: stationBox.canEditEntrance
+                onTriggered: stationBox.entrancePopup.openFor(stationBox.stationNameValue, stationBox)
+            }
+
+            QC.MenuItem {
+                objectName: "removeStationEntranceMenuItem"
+                text: qsTr("Remove Entrance")
+                enabled: stationBox.canEditEntrance && stationBox.stationIsEntrance
+                onTriggered: stationBox.entrancePopup.removeEntranceFor(stationBox.stationNameValue)
             }
         }
     }

@@ -209,6 +209,9 @@ QtObject {
     readonly property int iconSizeButton: 16
     readonly property int iconSizeSmall: 24
     readonly property int iconSizeMedium: 32
+    // The entrance glyph in a survey-table station cell's top-left corner:
+    // small enough to clear the centered station name.
+    readonly property int stationBadgeIconSize: 12
 
     // Coordinate-system picker: keep the UTM zone spinbox and N/S combo
     // compact so mode + zone + hemisphere fit one row without overflowing the
@@ -226,6 +229,8 @@ QtObject {
     // "610016.792, 5615117.075, 2545.34m". Also caps the error line below it, so
     // a long message wraps inside the popup instead of widening it.
     readonly property int fixPopupCoordinateWidth: 260
+    // The label field in the inline entrance editor.
+    readonly property int entrancePopupLabelWidth: 200
 
     // Touch target sizing — scale up hit points on mobile builds
     readonly property real pointSizeFactor: RootData.mobileBuild ? 2.0 : 1.0

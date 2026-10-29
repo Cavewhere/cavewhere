@@ -198,6 +198,13 @@ whole meters (or feet). Every marker draws the same cave pin.
 Fix** takes the entrance away with the fix. Renaming a fix on the **Fix
 Stations** page carries its entrance to the new station.
 
+The caret on a station cell in the survey table also offers **Mark Station as
+Entrance** and **Remove Entrance**. Marking opens a small editor with one
+**Label** field; once the station is an entrance, the same item reads **Edit
+Entrance...** and reopens it. A fixed entrance's pin shows the label in place
+of the cave's name. A small cave icon in the cell's top-left corner shows
+which stations are entrances.
+
 Click a pin to see the cave icon, its name, the cave's length and depth, and a
 link that opens the cave's page. Click empty space to close it.
 

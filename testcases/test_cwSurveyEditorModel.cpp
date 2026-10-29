@@ -10,6 +10,7 @@
 #include "cwSurveyEditorBoxData.h"
 #include "cwErrorListModel.h"
 #include "cwFixStationModel.h"
+#include "cwEntranceModel.h"
 #include "cwProject.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -1019,6 +1020,215 @@ TEST_CASE("cwSurveyEditorModel reports which stations the cave's fixes anchor",
     }
 }
 
+TEST_CASE("cwSurveyEditorModel reports which stations the cave marks as entrances",
+          "[cwSurveyEditorModel][Entrance]")
+{
+    cwCave cave;
+    cave.addTrip();
+    auto trip = cave.trip(0);
+    REQUIRE(trip != nullptr);
+
+    trip->addNewChunk();
+    auto chunk = trip->chunk(0);
+    REQUIRE(chunk != nullptr);
+
+    cwSurveyEditorModel model;
+    model.setTrip(trip);
+    model.setFocusedChunk(chunk);
+
+    auto stationRow = [&model, chunk](int indexInChunk) {
+        const int row = model.toModelRow(model.rowIndex(chunk, indexInChunk, cwSurveyEditorRowIndex::StationRow));
+        REQUIRE(row >= 0);
+        return model.index(row, 0);
+    };
+
+    auto isEntrance = [](const QModelIndex& index) {
+        return index.data(cwSurveyEditorModel::StationEntranceRole).toBool();
+    };
+
+    auto isFixed = [](const QModelIndex& index) {
+        return index.data(cwSurveyEditorModel::StationFixedRole).toBool();
+    };
+
+    REQUIRE(model.setDataAt(model.cellIndex(stationRow(0).row(), cwSurveyEditorCellIndex::StationNameCell), "A1"));
+    REQUIRE(model.setDataAt(model.cellIndex(stationRow(1).row(), cwSurveyEditorCellIndex::StationNameCell), "A2"));
+
+    auto entrances = cave.entrances();
+    REQUIRE(entrances != nullptr);
+
+    CHECK(model.roleNames().value(cwSurveyEditorModel::StationEntranceRole) == QByteArray("stationEntrance"));
+
+    SECTION("an entrance marks its station in one ranged dataChanged") {
+        CHECK_FALSE(isEntrance(stationRow(0)));
+        CHECK_FALSE(isEntrance(stationRow(1)));
+
+        cwSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        entrances->addEntrance("A1");
+
+        CHECK(isEntrance(stationRow(0)));
+        CHECK_FALSE(isEntrance(stationRow(1)));
+
+        //One emission over every row, never one per row
+        REQUIRE(dataChangedSpy.count() == 1);
+        CHECK(dataChangedSpy.at(0).at(2).value<QList<int>>()
+              == QList<int>({cwSurveyEditorModel::StationEntranceRole}));
+        CHECK(dataChangedSpy.at(0).at(0).toModelIndex().row() == 0);
+        CHECK(dataChangedSpy.at(0).at(1).toModelIndex().row() == model.rowCount() - 1);
+    }
+
+    SECTION("matching is case-insensitive") {
+        entrances->addEntrance("a1");
+        CHECK(isEntrance(stationRow(0)));
+    }
+
+    SECTION("a label edit leaves the rows alone") {
+        entrances->addEntrance("A1");
+        REQUIRE(isEntrance(stationRow(0)));
+
+        cwSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        REQUIRE(entrances->setData(entrances->index(0), QStringLiteral("Main Entrance"),
+                                   cwEntranceModel::LabelRole));
+
+        CHECK(dataChangedSpy.count() == 0);
+        CHECK(isEntrance(stationRow(0)));
+    }
+
+    SECTION("removing the entrance clears its station") {
+        entrances->addEntrance("A1");
+        REQUIRE(isEntrance(stationRow(0)));
+
+        entrances->removeEntrance("A1");
+        CHECK_FALSE(isEntrance(stationRow(0)));
+    }
+
+    SECTION("renaming the station moves the badge with it") {
+        entrances->addEntrance("A1");
+        REQUIRE(isEntrance(stationRow(0)));
+
+        cwSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        const int renamedRow = stationRow(0).row();
+        REQUIRE(model.setDataAt(model.cellIndex(renamedRow, cwSurveyEditorCellIndex::StationNameCell), "B1"));
+        CHECK_FALSE(isEntrance(stationRow(0)));
+
+        CHECK(dataChangedCovers(dataChangedSpy, renamedRow, cwSurveyEditorModel::StationEntranceRole));
+    }
+
+    SECTION("renaming a station onto an existing entrance turns the badge on") {
+        entrances->addEntrance("B1");
+        REQUIRE_FALSE(isEntrance(stationRow(0)));
+
+        cwSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        const int renamedRow = stationRow(0).row();
+        REQUIRE(model.setDataAt(model.cellIndex(renamedRow, cwSurveyEditorCellIndex::StationNameCell), "B1"));
+
+        CHECK(isEntrance(stationRow(0)));
+        CHECK(dataChangedCovers(dataChangedSpy, renamedRow, cwSurveyEditorModel::StationEntranceRole));
+    }
+
+    SECTION("naming the trailing virtual row onto an entrance turns its badge on") {
+        entrances->addEntrance("A3");
+
+        const int virtualRow = model.toModelRow(model.rowIndex(chunk,
+                                                               chunk->stationCount(),
+                                                               cwSurveyEditorRowIndex::StationRow));
+        REQUIRE(virtualRow >= 0);
+        REQUIRE_FALSE(isEntrance(model.index(virtualRow, 0)));
+
+        cwSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+
+        REQUIRE(model.setDataAt(model.cellIndex(virtualRow, cwSurveyEditorCellIndex::StationNameCell), "A3"));
+
+        CHECK(isEntrance(model.index(virtualRow, 0)));
+        CHECK(dataChangedCovers(dataChangedSpy, virtualRow, cwSurveyEditorModel::StationEntranceRole));
+    }
+
+    SECTION("the trailing virtual station row is never an entrance") {
+        entrances->addEntrance("A1");
+        REQUIRE(isEntrance(stationRow(0)));
+
+        const int virtualRow = model.toModelRow(model.rowIndex(chunk,
+                                                               chunk->stationCount(),
+                                                               cwSurveyEditorRowIndex::StationRow));
+        REQUIRE(virtualRow >= 0);
+        CHECK_FALSE(isEntrance(model.index(virtualRow, 0)));
+    }
+
+    SECTION("a trip with no cave has no entrances to read") {
+        entrances->addEntrance("A1");
+        REQUIRE(isEntrance(stationRow(0)));
+
+        cwTrip orphan;
+        orphan.addNewChunk();
+        orphan.chunk(0)->setData(cwSurveyChunk::StationNameRole, 0, QStringLiteral("A1"));
+
+        model.setTrip(&orphan);
+
+        const int row = model.toModelRow(model.rowIndex(orphan.chunk(0), 0,
+                                                        cwSurveyEditorRowIndex::StationRow));
+        REQUIRE(row >= 0);
+        CHECK_FALSE(isEntrance(model.index(row, 0)));
+
+        model.setTrip(nullptr);
+    }
+
+    SECTION("moving the trip to another cave reads that cave's entrances") {
+        entrances->addEntrance("A1");
+        REQUIRE(isEntrance(stationRow(0)));
+
+        cwCave otherCave;
+        otherCave.entrances()->addEntrance("A2");
+        otherCave.addTrip(trip);
+
+        CHECK_FALSE(isEntrance(stationRow(0)));
+        CHECK(isEntrance(stationRow(1)));
+    }
+
+    SECTION("switching to a trip in another cave reads that cave's entrances") {
+        entrances->addEntrance("A1");
+        REQUIRE(isEntrance(stationRow(0)));
+
+        cwCave otherCave;
+        otherCave.addTrip();
+        auto otherTrip = otherCave.trip(0);
+        REQUIRE(otherTrip != nullptr);
+        otherTrip->addNewChunk();
+        auto otherChunk = otherTrip->chunk(0);
+
+        model.setTrip(otherTrip);
+        model.setFocusedChunk(otherChunk);
+
+        auto otherStationRow = [&model, otherChunk](int indexInChunk) {
+            const int row = model.toModelRow(model.rowIndex(otherChunk, indexInChunk,
+                                                            cwSurveyEditorRowIndex::StationRow));
+            REQUIRE(row >= 0);
+            return model.index(row, 0);
+        };
+
+        REQUIRE(model.setDataAt(model.cellIndex(otherStationRow(0).row(),
+                                                cwSurveyEditorCellIndex::StationNameCell), "A1"));
+
+        //Same station name, different cave: the first cave's entrance must not follow
+        CHECK_FALSE(isEntrance(otherStationRow(0)));
+
+        otherCave.entrances()->addEntrance("A1");
+        CHECK(isEntrance(otherStationRow(0)));
+    }
+
+    SECTION("the fix verbs move the fixed and entrance answers together") {
+        cave.addFixedEntrance("A1");
+        CHECK(isFixed(stationRow(0)));
+        CHECK(isEntrance(stationRow(0)));
+
+        cave.removeFixAndEntrance("A1");
+        CHECK_FALSE(isFixed(stationRow(0)));
+        CHECK_FALSE(isEntrance(stationRow(0)));
+    }
+}
+
 TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurveyEditorModel]") {
     cwTrip trip;
     cwSurveyEditorModel model;
@@ -1207,15 +1417,17 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
         CHECK(dataChangedSpy.first().at(0).toModelIndex() == index);
         // qDebug() << "dataChange1:" << dataChangedSpy.last().at(1).toModelIndex() << index;
         CHECK(dataChangedSpy.first().at(1).toModelIndex() == index);
-        //Renaming a station also moves whether the cave's fixes anchor it, so
-        //that edit carries StationFixedRole alongside the role that changed.
-        //Checked as a set: Qt's roles argument carries no ordering promise, and
-        //every consumer reads it with contains().
+        //Renaming a station also moves whether the cave's fixes anchor it and
+        //whether the cave marks it an entrance, so that edit carries
+        //StationFixedRole and StationEntranceRole alongside the role that
+        //changed. Checked as a set: Qt's roles argument carries no ordering
+        //promise, and every consumer reads it with contains().
         const bool renamesStation = (role == cwSurveyEditorModel::StationNameRole);
         const auto actualRoles = dataChangedSpy.first().at(2).value<QList<int>>();
-        CHECK(actualRoles.size() == (renamesStation ? 2 : 1));
+        CHECK(actualRoles.size() == (renamesStation ? 3 : 1));
         CHECK(actualRoles.contains(role));
         CHECK(actualRoles.contains(cwSurveyEditorModel::StationFixedRole) == renamesStation);
+        CHECK(actualRoles.contains(cwSurveyEditorModel::StationEntranceRole) == renamesStation);
 
         spyChecker.clearSpyCounts();
     };

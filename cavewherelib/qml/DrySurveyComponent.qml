@@ -28,6 +28,7 @@ Item {
     required property QC.ButtonGroup errorButtonGroup
     required property var removePreview
     required property FixStationPopup fixStationPopup
+    required property EntrancePopup entrancePopup
     required property SplayRemoveAskBox splayRemoveChallenge
     required property int rowType
     required property cwSurveyEditorRowIndex rowIndex
@@ -43,6 +44,7 @@ Item {
     required property cwSurveyEditorBoxData stationUp;
     required property cwSurveyEditorBoxData stationDown;
     required property bool stationFixed;
+    required property bool stationEntrance;
     required property cwSurveyEditorBoxData shotDistance;
     required property bool shotDistanceIncluded;
     required property cwSurveyEditorBoxData shotCompass;
@@ -123,6 +125,8 @@ Item {
                 dataValidator: stationValidator
                 fixStationPopup: itemId.fixStationPopup
                 stationIsFixed: itemId.stationFixed
+                entrancePopup: itemId.entrancePopup
+                stationIsEntrance: itemId.stationEntrance
                 rowIndex: itemId.rowIndex
             }
 

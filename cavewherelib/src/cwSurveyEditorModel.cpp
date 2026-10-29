@@ -3,6 +3,7 @@
 #include "cwTrip.h"
 #include "cwCave.h"
 #include "cwFixStationModel.h"
+#include "cwEntranceModel.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyEditorBoxData.h"
@@ -234,6 +235,46 @@ void cwSurveyEditorModel::invalidateStationFixed()
     }
 }
 
+/**
+ * Points StationEntranceRole at the entrances of whichever cave the current
+ * trip belongs to, the same way syncFixStationSignals() follows its fixes.
+ */
+void cwSurveyEditorModel::syncEntranceSignals()
+{
+    auto cave = m_trip ? m_trip->parentCave() : nullptr;
+    auto entrances = cave ? cave->entrances() : nullptr;
+
+    if(m_entrances == entrances) {
+        return;
+    }
+
+    if(m_entrances) {
+        disconnect(m_entrances, &cwEntranceModel::entranceStationsChanged,
+                   this, &cwSurveyEditorModel::invalidateStationEntrance);
+    }
+
+    m_entrances = entrances;
+
+    if(m_entrances) {
+        connect(m_entrances, &cwEntranceModel::entranceStationsChanged,
+                this, &cwSurveyEditorModel::invalidateStationEntrance);
+    }
+
+    invalidateStationEntrance();
+}
+
+/**
+ * An entrance was added, removed or renamed. Like invalidateStationFixed(),
+ * one ranged emission covers every row.
+ */
+void cwSurveyEditorModel::invalidateStationEntrance()
+{
+    const int rows = rowCount();
+    if(rows > 0) {
+        emit dataChanged(index(0), index(rows - 1), {StationEntranceRole});
+    }
+}
+
 void cwSurveyEditorModel::setTrip(cwTrip* trip) {
     if(m_trip != trip) {
         //A move armed in the trip the table is leaving has nowhere to land
@@ -346,6 +387,8 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
 
             connect(m_trip, &cwTrip::parentCaveChanged, this,
                     &cwSurveyEditorModel::syncFixStationSignals);
+            connect(m_trip, &cwTrip::parentCaveChanged, this,
+                    &cwSurveyEditorModel::syncEntranceSignals);
 
             connect(m_trip->calibrations(), &cwTripCalibration::splaysChanged, this,
                     &cwSurveyEditorModel::collapseHiddenSplays);
@@ -360,6 +403,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
         endResetModel();
         syncFocusedCellSignals();
         syncFixStationSignals();
+        syncEntranceSignals();
 
         emit tripChanged();
     }
@@ -490,7 +534,8 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         if(stationIndex == chunk->stationCount()) {
             switch(role) {
             case StationFixedRole:
-                //The trailing virtual row has no name, so nothing can anchor it
+            case StationEntranceRole:
+                //The trailing virtual row has no name, so nothing can anchor or mark it
                 return false;
             case StationSplaysExpandedRole:
                 return false;
@@ -514,6 +559,9 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         case StationFixedRole:
             return m_fixStations != nullptr
                     && m_fixStations->isFixed(chunk->station(stationIndex).name());
+        case StationEntranceRole:
+            return m_entrances != nullptr
+                    && m_entrances->isEntrance(chunk->station(stationIndex).name());
         case StationSplayCountRole:
             return chunk->stationSplayCount(stationIndex);
         case StationSplaysExpandedRole:
@@ -1411,6 +1459,7 @@ QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
     roles.insert(StationUpRole, "stationUp");
     roles.insert(StationDownRole, "stationDown");
     roles.insert(StationFixedRole, "stationFixed");
+    roles.insert(StationEntranceRole, "stationEntrance");
     roles.insert(ShotDistanceRole, "shotDistance");
     roles.insert(ShotDistanceIncludedRole, "shotDistanceIncluded");
     roles.insert(ShotCompassRole, "shotCompass");
@@ -2966,13 +3015,13 @@ cwSurveyEditorModel::Role cwSurveyEditorModel::toModelRole(cwSurveyChunk::DataRo
 
 /**
  * The model roles a chunk-level change to \a chunkRole invalidates. Renaming a
- * station also moves it into or out of the cave's fixes, which no chunk role
- * reports — the fixes aren't the chunk's data.
+ * station also moves it into or out of the cave's fixes and entrances, which
+ * no chunk role reports — they aren't the chunk's data.
  */
 QList<int> cwSurveyEditorModel::changedRolesFor(cwSurveyChunk::DataRole chunkRole) const
 {
     if(chunkRole == cwSurveyChunk::StationNameRole) {
-        return {StationNameRole, StationFixedRole};
+        return {StationNameRole, StationFixedRole, StationEntranceRole};
     }
     return {toModelRole(chunkRole)};
 }

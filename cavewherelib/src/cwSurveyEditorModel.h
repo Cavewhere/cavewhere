@@ -17,6 +17,7 @@
 #include <QQmlEngine>
 
 class cwFixStationModel;
+class cwEntranceModel;
 
 /**
  * @brief The cwSurveyEditorModel class
@@ -76,6 +77,10 @@ public:
         //Read-only and derived: the fixes live in cwFixStationModel, not in the
         //chunk, so this role is the survey table's only view of them.
         StationFixedRole,
+
+        //True when the trip's cave marks this station an entrance. Read-only and
+        //derived from the cave's cwEntranceModel, like StationFixedRole.
+        StationEntranceRole,
 
         //Shot Data Roles
         ShotDistanceRole,
@@ -215,6 +220,7 @@ private:
 
     QPointer<cwTrip> m_trip; //!<
     QPointer<cwFixStationModel> m_fixStations; //!< The trip's cave's fixes, for StationFixedRole
+    QPointer<cwEntranceModel> m_entrances; //!< The trip's cave's entrances, for StationEntranceRole
     QPointer<cwSurveyChunk> m_focusedChunk;
     QPointer<cwSurveyChunk> m_virtualRowsVisibleChunk;
     QPersistentModelIndex m_focusedRowIndex;
@@ -282,6 +288,8 @@ private:
     void disconnectChunkSignals(cwSurveyChunk* chunk);
     void syncFixStationSignals();
     void invalidateStationFixed();
+    void syncEntranceSignals();
+    void invalidateStationEntrance();
     void syncFocusedCellSignals();
     static bool isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex);
     static int lastStationAfterTrim(cwSurveyChunk* chunk);
