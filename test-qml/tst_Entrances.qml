@@ -4,9 +4,9 @@ import cavewherelib
 import cw.TestLib
 import QmlTestRecorder
 
-// Entrance markers in the 3D view: every placed, solved fix gets an
-// EntrancePoint from the renderer's entrance MarkerView, and its Type keyword hides it.
-// There is no global toggle; keywords are the only switch.
+// Entrance markers in the 3D view: every entrance the solve flags, fixed or
+// not, gets an EntrancePoint from the renderer's entrance MarkerView, and its
+// Type keyword hides it. There is no global toggle; keywords are the only switch.
 MainWindowTest {
     id: rootId
 
@@ -45,8 +45,8 @@ MainWindowTest {
                         mainWindow, "rootId->viewPage->SplitView->renderer->entranceView")
         }
 
-        // One cave with one shot from A1 to A2 and a fix on A1 in Kentucky.
-        function addCaveWithEntrance(name) {
+        // One cave with one shot from A1 to A2.
+        function addSurveyedCave(name) {
             RootData.region.addCave()
             const cave = RootData.region.cave(RootData.region.rowCount() - 1)
             cave.name = name
@@ -59,22 +59,27 @@ MainWindowTest {
             chunk.setData(SurveyChunk.ShotDistanceRole, 0, "10")
             chunk.setData(SurveyChunk.ShotCompassRole, 0, "0")
             chunk.setData(SurveyChunk.ShotClinoRole, 0, "-5")
+            return cave
+        }
 
-            const fixes = cave.fixStations
-            const row = fixes.addFixStation("A1")
+        // One surveyed cave whose A1 is a fixed entrance in Kentucky, marked the
+        // way the user's "Mark Station as Fixed" marks it.
+        function addCaveWithEntrance(name) {
+            const cave = addSurveyedCave(name)
+            const row = cave.addFixedEntrance("A1")
             compare(row, 0)
+            verify(cave.entrances.isEntrance("A1"), "fixing A1 through the verb should mark it an entrance")
+            const fixes = cave.fixStations
             fixes.setData(fixes.index(row), "EPSG:4326", FixStationModel.InputCSRole)
             compare(fixes.setCoordinateText(row, "37.0, -84.0, 300m", Units.Metric), "")
             return cave
         }
 
-        // Adds one solved cave with a fix on A1 and waits for its visible
-        // EntrancePoint. Returns {cave, point}.
-        function addSolvedEntrance(name) {
+        // Waits for @a cave's solve and its visible EntrancePoint on A1.
+        // Returns {cave, point}.
+        function waitForEntrancePoint(cave) {
             const view = entranceView()
             verify(view !== null, "the renderer should host an entrance MarkerView")
-
-            const cave = addCaveWithEntrance(name)
             tryVerify(() => cave.length.value > 0, entrancesTestCase.solveTimeout,
                       "the solve should give the cave a length")
 
@@ -82,8 +87,29 @@ MainWindowTest {
             tryVerify(() => {
                 point = findChild(view, "entrancePoint_A1")
                 return point !== null && point.visible
-            }, entrancesTestCase.solveTimeout, "the solved fix should get a visible entrance point")
+            }, entrancesTestCase.solveTimeout, "the solved entrance should get a visible entrance point")
             return {cave: cave, point: point}
+        }
+
+        // Adds one solved cave with a fixed entrance on A1 and waits for its
+        // visible EntrancePoint. Returns {cave, point}.
+        function addSolvedEntrance(name) {
+            return waitForEntrancePoint(addCaveWithEntrance(name))
+        }
+
+        // The popup row @a objectName, which must exist and show.
+        function shownRow(quoteBox, objectName) {
+            const row = findChild(quoteBox, objectName)
+            verify(row !== null, objectName + " should be in the popup")
+            verify(row.visible, objectName + " should show")
+            return row
+        }
+
+        // True when the popup's row @a objectName exists and is hidden.
+        function rowHidden(quoteBox, objectName) {
+            const row = findChild(quoteBox, objectName)
+            verify(row !== null, objectName + " should be in the popup")
+            return !row.visible
         }
 
         // The marker has to be on screen for a click to reach it.
@@ -239,8 +265,9 @@ MainWindowTest {
                       "the entrance should return when the Entrance Type is re-enabled")
         }
 
-        // Tapping the pin opens a popup naming the entrance and the cave's length
-        // and depth, with no Kind row.
+        // Tapping the pin opens a popup with the cave's name, the station, a
+        // Fixed line for a fixed entrance, and the cave's length and depth, with
+        // no label row for an unlabeled entrance and no Kind row.
         function test_tapEntranceShowsPopup() {
             const {point} = addSolvedEntrance("Gypsum Hollow")
 
@@ -249,7 +276,12 @@ MainWindowTest {
             verify(entranceView().selectionManager.selectedItem === point,
                    "the tapped entrance should be the view's selection")
 
-            tryCompare(findChild(quoteBox, "entranceName"), "text", "Gypsum Hollow")
+            tryCompare(shownRow(quoteBox, "entranceCaveName"), "text", "Gypsum Hollow")
+            verify(rowHidden(quoteBox, "entranceLabel"), "an unlabeled entrance shows no label row")
+            verify(String(shownRow(quoteBox, "entranceStation").text).indexOf("A1") >= 0,
+                   "the popup should name the station")
+            verify(String(shownRow(quoteBox, "entranceFixed").text).indexOf("Fixed") >= 0,
+                   "a fixed entrance's popup should say Fixed")
             compare(findChild(quoteBox, "entranceKind"), null, "the popup has no Kind row")
 
             for (const statName of ["entranceLength", "entranceDepth"]) {
@@ -261,27 +293,53 @@ MainWindowTest {
             }
         }
 
-        // A labeled entrance's popup leads with its label, from the cave's
-        // entrance entry, and still shows the cave's length and depth.
+        // A labeled entrance's popup shows the cave's name and the label, from
+        // the cave's entrance entry, and still shows the cave's length and depth.
         function test_labeledEntrancePopupShowsTheLabel() {
             const {cave, point} = addSolvedEntrance("Gypsum Hollow")
             const entrances = cave.entrances
-            const row = entrances.addEntrance("A1")
+            const row = entrances.indexOf("A1")
             verify(row >= 0, "A1 should be marked an entrance")
             verify(entrances.setData(entrances.index(row), "North Sink", EntranceModel.LabelRole))
             tryCompare(point, "displayName", "North Sink", 5000,
                        "the point should follow the entrance's label")
+            compare(point.label, "North Sink")
+            compare(point.caveName, "Gypsum Hollow")
 
             const quoteBox = openEntrancePopup(point)
-            tryCompare(findChild(quoteBox, "entranceName"), "text", "North Sink")
+            tryCompare(shownRow(quoteBox, "entranceCaveName"), "text", "Gypsum Hollow")
+            tryCompare(shownRow(quoteBox, "entranceLabel"), "text", "North Sink")
             for (const statName of ["entranceLength", "entranceDepth"]) {
                 const stat = findChild(quoteBox, statName)
                 verify(stat !== null && stat.visible, statName + " should show for a labeled entrance")
             }
         }
 
+        // An entrance with no fix gets a point at its solved position, and its
+        // popup names the cave and the station with no Fixed line.
+        function test_unfixedEntranceGetsAPoint() {
+            const cave = addSurveyedCave("Gypsum Hollow")
+            verify(cave.entrances.addEntrance("A1") >= 0, "A1 should be marked an entrance")
+            compare(cave.fixStations.rowCount(), 0, "the entrance should carry no fix")
+
+            const {point} = waitForEntrancePoint(cave)
+            verify(!point.fixed, "an unfixed entrance's point should read unfixed")
+            compare(point.caveName, "Gypsum Hollow")
+            compare(entranceView().count, 1)
+
+            const quoteBox = openEntrancePopup(point)
+            tryCompare(shownRow(quoteBox, "entranceCaveName"), "text", "Gypsum Hollow")
+            verify(String(shownRow(quoteBox, "entranceStation").text).indexOf("A1") >= 0,
+                   "the popup should name the station")
+            verify(rowHidden(quoteBox, "entranceFixed"), "an unfixed entrance's popup has no Fixed line")
+            for (const statName of ["entranceLength", "entranceDepth"]) {
+                const stat = shownRow(quoteBox, statName)
+                verify(parseFloat(findChild(stat, "value").text) > 0, statName + " should show the cave's value")
+            }
+        }
+
         // The renderer's entrances run on the shared MarkerView, fed by the
-        // region's fixes, in their own "entrances" layers.
+        // region's solved entrances, in their own "entrances" layers.
         function test_entranceViewIsAMarkerView() {
             const view = entranceView()
             verify(view instanceof MarkerView, "the entrance view should be a MarkerView")

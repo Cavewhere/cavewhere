@@ -18,22 +18,23 @@
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwCavingRegion.h"
-#include "cwFixStation.h"
 #include "cwMarkerSource.h"
 class cwSurveyNode;
 
 /**
- * @brief The entrance markers: one marker per placed fix whose station the
- * solve placed below the fix's node. Every such fix counts as an entrance.
+ * @brief The entrance markers: one marker per entrance the last solve flagged
+ * (cwCavingRegion::solvedEntrances()), fixed or not, at its solved position.
  *
  * A marker's text is its display name in the "name" style and the
- * cwEntranceLabel length and depth line under it in the "stats" style. The
- * display name is the label of the node's entrance entry for the station when
- * it has one, else the name of the nearest enclosing Cave node, else the fix's
- * own node's name. Its keyword item extends the node's keywords with
- * Type = "Entrance" and Name = the display name. Model, solve, name, kind, size
- * and unit changes coalesce into one queued rebuild that emits at most one
- * signal of each kind.
+ * cwEntranceLabel length and depth line of its cave under it in the "stats"
+ * style. Its cave is the nearest node of kind Cave at or above the node that
+ * owns the station, else that node. The display name is the label of the
+ * owning node's entrance entry for the station when it has one, else the
+ * cave's name; an attached entrance has no entry, so it shows the cave's name.
+ * Its keyword item extends the owning node's keywords with Type = "Entrance"
+ * and Name = the display name. Solve, entrance list, name, kind, size and unit
+ * changes coalesce into one queued rebuild that emits at most one signal of
+ * each kind.
  */
 class CAVEWHERE_LIB_EXPORT cwEntranceMarkerSource : public cwMarkerSource
 {
@@ -48,8 +49,9 @@ public:
     cwCavingRegion* region() const;
     void setRegion(cwCavingRegion* region);
 
-    //! The row of @a node's fix @a fixId, or -1 when that fix of that node has no marker.
-    Q_INVOKABLE int row(cwSurveyNode* node, const QUuid& fixId) const;
+    //! The row of @a node's entrance on @a stationName, matched as station
+    //! names match (trimmed, case-insensitive), or -1 when it has no marker.
+    Q_INVOKABLE int row(cwSurveyNode* node, const QString& stationName) const;
 
     QPointF spriteAnchor() const override;
     float depthBias() const override;
@@ -58,13 +60,16 @@ signals:
     void regionChanged();
 
 private:
-    // What one rebuild pass wants drawn for a fix.
+    // What one rebuild pass wants drawn for a solved entrance.
     struct Entrance {
-        QUuid fixId;
+        QUuid id;
         cwSurveyNode* node = nullptr;
+        cwSurveyNode* caveNode = nullptr;
         QString stationName;
         QVector3D position;
-        QString displayName;
+        bool fixed = false;
+        QString caveName;
+        QString label;
         QString statsText;
 
         bool operator==(const Entrance&) const = default;

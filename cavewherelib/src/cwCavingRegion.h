@@ -34,6 +34,7 @@ class cwProject;
 #include "cwGeoReference.h"
 #include "cwLocalProjectionManager.h"
 #include "cwLazLayerModel.h"
+#include "cwSolvedEntrance.h"
 #include "cwSurveyNode.h"
 #include "cwUndoer.h"
 #include "cwGlobals.h"
@@ -244,7 +245,13 @@ public:
     cwSurveyNetwork network() const { return m_network; }
     void setNetwork(const cwSurveyNetwork& network);
 
-    //! Empties stationPositions() and network(). A region with nothing to
+    //! The stations the last solve flagged as entrances, grouped by the id of
+    //! the node that owns each station. Written by cwLinePlotManager after
+    //! each solve.
+    QHash<QUuid, QList<cwSolvedEntrance>> solvedEntrances() const { return m_solvedEntrances; }
+    void setSolvedEntrances(const QHash<QUuid, QList<cwSolvedEntrance>>& entrances);
+
+    //! Empties stationPositions(), network() and solvedEntrances(). A region with nothing to
     //! solve publishes no solve, so a load or a new project clears the last
     //! project's solve here.
     void clearSolve();
@@ -332,6 +339,9 @@ signals:
     //! cwSurveyNode::scopedNetworkChanged.
     void networkChanged();
 
+    //! solvedEntrances() changed.
+    void solvedEntrancesChanged();
+
     //! memberPositions() and memberNetwork() changed while the solve stayed
     //! put. Relayed down the tree as both cwSurveyNode::scopedPositionsChanged
     //! and cwSurveyNode::scopedNetworkChanged, since a derived node's scoped
@@ -371,6 +381,7 @@ private:
 
     cwStationPositionLookup m_stationPositions;
     cwSurveyNetwork m_network;
+    QHash<QUuid, QList<cwSolvedEntrance>> m_solvedEntrances;
     bool m_stationPositionsStale = false;
     // Keyed by prefix and kept until the next publish, so a prefix left behind
     // by a rename or move lingers until the re-solve lands.

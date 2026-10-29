@@ -182,6 +182,11 @@ cwLinePlotManager::~cwLinePlotManager() {
   \brief Sets the region that this manager will listen to
   */
 void cwLinePlotManager::setRegion(cwCavingRegion* region) {
+    const QHash<QUuid, QList<cwSolvedEntrance>> oldEntrances = solvedEntrances();
+    if (Region != nullptr) {
+        disconnect(Region, &cwCavingRegion::solvedEntrancesChanged,
+                   this, &cwLinePlotManager::solvedEntrancesChanged);
+    }
     Region = region;
     m_pendingLabels.clear();
     m_pendingLiveLabels.clear();
@@ -197,6 +202,15 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     // resolve against the incoming one and publish a run's worth of rows that
     // describe neither.
     m_floatingSurveyModel->setRegion(region);
+
+    // Connected after the clear above, so the swap announces at most once.
+    if (Region != nullptr) {
+        connect(Region, &cwCavingRegion::solvedEntrancesChanged,
+                this, &cwLinePlotManager::solvedEntrancesChanged);
+    }
+    if (solvedEntrances() != oldEntrances) {
+        emit solvedEntrancesChanged();
+    }
 
     if(Region == nullptr) {
         SurveySignaler->setRegion(nullptr);
@@ -438,19 +452,21 @@ void cwLinePlotManager::removeTripKeywordItems(cwTrip* trip)
     disconnect(trip, &QObject::destroyed, this, nullptr);
 }
 
+QHash<QUuid, QList<cwSolvedEntrance>> cwLinePlotManager::solvedEntrances() const
+{
+    return Region != nullptr ? Region->solvedEntrances() : QHash<QUuid, QList<cwSolvedEntrance>>();
+}
+
 QList<cwSolvedEntrance> cwLinePlotManager::solvedEntrances(const QUuid& nodeId) const
 {
-    return m_solvedEntrances.value(nodeId);
+    return solvedEntrances().value(nodeId);
 }
 
 bool cwLinePlotManager::isSolvedEntrance(const QUuid& nodeId, const QString& stationName) const
 {
-    const auto entrances = m_solvedEntrances.constFind(nodeId);
-    if (entrances == m_solvedEntrances.constEnd()) {
-        return false;
-    }
+    const QList<cwSolvedEntrance> entrances = solvedEntrances(nodeId);
     const QString name = stationName.trimmed();
-    return std::any_of(entrances->cbegin(), entrances->cend(),
+    return std::any_of(entrances.cbegin(), entrances.cend(),
                        [&name](const cwSolvedEntrance& entrance) {
                            return entrance.stationName.compare(name, Qt::CaseInsensitive) == 0;
                        });
@@ -830,14 +846,10 @@ void cwLinePlotManager::publishResults(const cwLinePlotTask::LinePlotResultData&
 void cwLinePlotManager::publishSolvedEntrances(const QHash<QUuid, QList<cwSolvedEntrance>>& entrances,
                                                bool solved)
 {
-    if (m_solvedEntrances != entrances) {
-        m_solvedEntrances = entrances;
-        emit solvedEntrancesChanged();
-    }
-
     if (Region == nullptr) {
         return;
     }
+    Region->setSolvedEntrances(entrances);
 
     for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
         if (node->errorModel() == nullptr) {
@@ -846,7 +858,7 @@ void cwLinePlotManager::publishSolvedEntrances(const QHash<QUuid, QList<cwSolved
         QStringList unplaced;
         if (solved) {
             QSet<QString> solvedKeys;
-            for (const cwSolvedEntrance& solvedEntrance : m_solvedEntrances.value(node->id())) {
+            for (const cwSolvedEntrance& solvedEntrance : entrances.value(node->id())) {
                 solvedKeys.insert(solvedEntrance.stationName.toCaseFolded());
             }
             for (const cwEntrance& entrance : node->entrances()->entrances()) {

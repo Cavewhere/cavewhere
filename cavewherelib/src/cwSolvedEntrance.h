@@ -18,7 +18,8 @@
  * Compass .mak fixed point. Grouped by the node that owns the station.
  */
 struct cwSolvedEntrance {
-    //! The station as the owning node's fix and entrance lists name it.
+    //! The station's name below the owning node, as cavern reports it: lower
+    //! case for a native station, so match it case-insensitively.
     QString stationName;
     //! The full cavern name, '.'-separated.
     QString qualifiedName;

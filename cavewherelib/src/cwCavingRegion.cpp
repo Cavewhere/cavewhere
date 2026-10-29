@@ -623,6 +623,16 @@ void cwCavingRegion::clearSolve()
 {
     setStationPositions(cwStationPositionLookup());
     setNetwork(cwSurveyNetwork());
+    setSolvedEntrances({});
+}
+
+void cwCavingRegion::setSolvedEntrances(const QHash<QUuid, QList<cwSolvedEntrance>>& entrances)
+{
+    if (m_solvedEntrances == entrances) {
+        return;
+    }
+    m_solvedEntrances = entrances;
+    emit solvedEntrancesChanged();
 }
 
 void cwCavingRegion::setNetwork(const cwSurveyNetwork& network)

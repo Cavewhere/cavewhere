@@ -7,16 +7,20 @@ import cavewherelib
 
 // The 2D stand-in for one entrance marker. The pin and its text draw as
 // billboards of the entrance MarkerView's keyed layers; cwMarkerView reads this
-// item's marker visibility for both and places the item at the fix's solved
-// position. Tapping the pin opens a popup with the cave icon, the entrance's
-// name, its node's stats, and a link to the node's page.
+// item's marker visibility for both and places the item at the entrance's
+// solved position. Tapping the pin opens a popup with the cave icon and name,
+// the entrance's label, its station, whether it is fixed, the cave's stats, and
+// a link to the node that owns the station.
 PositionItem {
     id: pointId
     objectName: "entrancePoint_" + stationName
 
     property SurveyNode node
+    property SurveyNode caveNode
     property string stationName
-    property string fixId
+    property string caveName
+    property string label
+    property bool fixed: false
     property bool selected: false //Set by selectionManager
     property string displayName
     required property SelectionManager selectionManager //Injected by cwMarkerView
@@ -96,11 +100,28 @@ PositionItem {
                         }
 
                         QC.Label {
-                            objectName: "entranceName"
-                            text: pointId.displayName
+                            objectName: "entranceCaveName"
+                            text: pointId.caveName
                             font.bold: true
                             font.pixelSize: Theme.fontSizeMedium
                         }
+                    }
+
+                    QC.Label {
+                        objectName: "entranceLabel"
+                        visible: pointId.label !== ""
+                        text: pointId.label
+                    }
+
+                    QC.Label {
+                        objectName: "entranceStation"
+                        text: "Station: " + pointId.stationName
+                    }
+
+                    QC.Label {
+                        objectName: "entranceFixed"
+                        visible: pointId.fixed
+                        text: "Fixed"
                     }
 
                     QQ.Rectangle {
@@ -112,13 +133,13 @@ PositionItem {
                     SelectableCaveStat {
                         objectName: "entranceLength"
                         label: "Length:"
-                        unitValue: pointId.node ? pointId.node.length : null
+                        unitValue: pointId.caveNode ? pointId.caveNode.length : null
                     }
 
                     SelectableCaveStat {
                         objectName: "entranceDepth"
                         label: "Depth:"
-                        unitValue: pointId.node ? pointId.node.depth : null
+                        unitValue: pointId.caveNode ? pointId.caveNode.depth : null
                         depth: true
                     }
 

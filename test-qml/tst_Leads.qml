@@ -725,8 +725,8 @@ MainWindowTest {
             const stationName = cave.trip(0).chunk(0).data(SurveyChunk.StationNameRole, 0)
             verify(stationName !== "", "the first chunk should name its first station")
             const fixes = cave.fixStations
-            const row = fixes.addFixStation(stationName)
-            verify(row >= 0, "the fix should be added")
+            const row = cave.addFixedEntrance(stationName)
+            verify(row >= 0, "the fixed entrance should be added")
             fixes.setData(fixes.index(row), "EPSG:4326", FixStationModel.InputCSRole)
             compare(fixes.setCoordinateText(row, "37.0, -84.0, 300m", Units.Metric), "")
 
@@ -734,7 +734,7 @@ MainWindowTest {
             tryVerify(() => {
                 entrancePoint = findChild(renderer.entranceView, "entrancePoint_" + stationName)
                 return entrancePoint !== null && entrancePoint.visible
-            }, 20000, "the solved fix should get a visible entrance point")
+            }, 20000, "the solved entrance should get a visible entrance point")
 
             let leadPoint = null
             tryVerify(() => {

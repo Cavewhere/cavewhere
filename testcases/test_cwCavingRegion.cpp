@@ -12,11 +12,13 @@
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "cwSignalSpy.h"
+#include "cwSolvedEntrance.h"
 #include "TestHelper.h"
 
 //Qt includes
 #include <QAbstractItemModel>
 #include <QCoreApplication>
+#include <QSignalSpy>
 #include <QUndoStack>
 
 
@@ -409,4 +411,34 @@ TEST_CASE("addNode names, places and undoes a node", "[cwCavingRegion]") {
     const int caveCountBefore = region.caveCount();
     CHECK(region.addNode(nullptr, static_cast<cwSurveyNode::Kind>(99)) == nullptr);
     CHECK(region.caveCount() == caveCountBefore);
+}
+
+TEST_CASE("The region stores the solved entrances and notifies once per change", "[cwCavingRegion]")
+{
+    cwCavingRegion region;
+    QSignalSpy changedSpy(&region, &cwCavingRegion::solvedEntrancesChanged);
+    REQUIRE(region.solvedEntrances().isEmpty());
+
+    cwSolvedEntrance entrance;
+    entrance.stationName = QStringLiteral("a1");
+    entrance.qualifiedName = QStringLiteral("hollow.a1");
+    entrance.position = QVector3D(1.0f, 2.0f, 3.0f);
+    entrance.fixed = true;
+    const QUuid nodeId = QUuid::createUuid();
+    const QHash<QUuid, QList<cwSolvedEntrance>> entrances{{nodeId, {entrance}}};
+
+    region.setSolvedEntrances(entrances);
+    CHECK(region.solvedEntrances() == entrances);
+    CHECK(changedSpy.count() == 1);
+
+    // A solve that flags the same entrances leaves the listeners alone.
+    region.setSolvedEntrances(entrances);
+    CHECK(changedSpy.count() == 1);
+
+    SECTION("clearSolve empties them")
+    {
+        region.clearSolve();
+        CHECK(region.solvedEntrances().isEmpty());
+        CHECK(changedSpy.count() == 2);
+    }
 }

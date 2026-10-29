@@ -20,6 +20,7 @@
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwShot.h"
+#include "cwSolvedEntrance.h"
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
 #include "cwSurveyNetwork.h"
@@ -213,6 +214,22 @@ inline void setScopedNetwork(cwSurveyNode* node, const cwSurveyNetwork& network)
         }
     }
     region->setNetwork(merged);
+}
+
+//! Stands in for a solve that flags \a entrances on stations \a node owns:
+//! replaces the node's solved entrances in the region and keeps every other
+//! node's. The node must hang in a region.
+inline void setSolvedEntrances(cwSurveyNode* node, const QList<cwSolvedEntrance>& entrances)
+{
+    cwCavingRegion* region = node->parentRegion();
+    REQUIRE(region != nullptr);
+    QHash<QUuid, QList<cwSolvedEntrance>> merged = region->solvedEntrances();
+    if (entrances.isEmpty()) {
+        merged.remove(node->id());
+    } else {
+        merged.insert(node->id(), entrances);
+    }
+    region->setSolvedEntrances(merged);
 }
 
 //! Installs a network on \a node that names \a stations, so fixes on them

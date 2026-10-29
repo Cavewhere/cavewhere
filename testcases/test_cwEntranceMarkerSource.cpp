@@ -1,15 +1,17 @@
 // Pins the entrance markers, a cwMarkerView fed by a cwEntranceMarkerSource:
-// every placed fix whose station the solve placed draws one tip-down pin in the
-// view's keyed sprite layer, its name above the pin in the keyed text layer
-// ("name" style) and a length and depth line under the name in the stats text
-// layer ("stats" style), and carries one keyword item that can hide it. In the
-// scene's declutter pass ([cwLabelDeclutter]) its pins and text blocks claim
-// screen space before the station labels of a participating Label3dView.
+// every entrance the last solve flagged, fixed or not, draws one tip-down pin
+// at its solved position in the view's keyed sprite layer, its label or its
+// cave's name above the pin in the keyed text layer ("name" style) and the
+// cave's length and depth line under the name in the stats text layer ("stats"
+// style), and carries one keyword item that can hide it. A fix on a station
+// the solve did not flag draws nothing. In the scene's declutter pass
+// ([cwLabelDeclutter]) its pins and text blocks claim screen space before the
+// station labels of a participating Label3dView.
 //
 // The view is built in QML because its EntrancePoint tap targets come from QML.
 // The window is never shown and there is no QRhi: every check reads the CPU side
-// of the scene's keyed layers. Positions come from a hand-set solve, so no
-// cavern run is involved.
+// of the scene's keyed layers. Solved entrances come from a hand-set solve,
+// except for the one case that runs cavern through cwLinePlotManager.
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -49,6 +51,7 @@
 #include "cwLabel3dView.h"
 #include "cwLabelDeclutter.h"
 #include "cwLength.h"
+#include "cwLinePlotManager.h"
 #include "cwMarkerSource.h"
 #include "cwMarkerTextStyle.h"
 #include "cwMarkerView.h"
@@ -56,6 +59,7 @@
 #include "cwRenderTextBillboards.h"
 #include "cwScene.h"
 #include "cwSelectionManager.h"
+#include "cwSolvedEntrance.h"
 #include "cwStationPositionLookup.h"
 #include "cwVisibilityProxy.h"
 #include "SurveyTreeTestHelper.h"
@@ -161,6 +165,17 @@ cwMarkerTextStyle* textStyle(cwMarkerView* view, int index)
     return qobject_cast<cwMarkerTextStyle*>(styles.at(index));
 }
 
+// What a solve reports for an entrance on @a stationName at @a position.
+cwSolvedEntrance solvedEntrance(const QString& stationName, const QVector3D& position, bool fixed)
+{
+    cwSolvedEntrance entrance;
+    entrance.stationName = stationName;
+    entrance.qualifiedName = stationName.toLower();
+    entrance.position = position;
+    entrance.fixed = fixed;
+    return entrance;
+}
+
 cwFixStation placedFix(const QString& stationName)
 {
     cwFixStation fix;
@@ -249,14 +264,27 @@ struct EntranceFixture
         return cave;
     }
 
-    // One cave holding one placed fix on kStation, solved at kSolvedPosition.
+    // One cave holding one placed fix on kStation that the solve placed at
+    // kSolvedPosition and flagged as a fixed entrance.
     cwCave* addEntranceCave(const QString& name = kCaveName)
     {
         cwCave* cave = addCave(name);
         cave->fixStations()->appendFixStation(placedFix(kStation));
         solve(cave, {{kStation, kSolvedPosition}});
+        SurveyTreeTestHelper::setSolvedEntrances(cave, {solvedEntrance(kStation, kSolvedPosition, true)});
         REQUIRE(cave->fixStations()->fixStations().at(0).hasPlacedCoordinate());
         REQUIRE(cave->scopedPositions().position(kStation) == kSolvedPosition);
+        return cave;
+    }
+
+    // One cave with no fix whose solve flagged kStation an unfixed entrance at
+    // @a position, the way a native entrance on an unfixed survey solves.
+    cwCave* addUnfixedEntranceCave(const QString& name = kCaveName,
+                                   const QVector3D& position = kSolvedPosition)
+    {
+        cwCave* cave = addCave(name);
+        SurveyTreeTestHelper::setSolvedEntrances(cave, {solvedEntrance(kStation, position, false)});
+        REQUIRE(cave->fixStations()->rowCount() == 0);
         return cave;
     }
 
@@ -403,7 +431,8 @@ TEST_CASE("The entrance MarkerView names an entrance by its entrance label, else
     CHECK(changedSpy.count() == 2);
 }
 
-TEST_CASE("The entrance MarkerView names a fix on a section by its cave", "[cwEntranceMarkerSource]")
+TEST_CASE("The entrance MarkerView names an entrance on a section by its cave, with the cave's numbers",
+          "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addCave(kCaveName);
@@ -412,10 +441,16 @@ TEST_CASE("The entrance MarkerView names a fix on a section by its cave", "[cwEn
                                                     sectionName);
     section->fixStations()->appendFixStation(placedFix(kStation));
     f.solve(section, {{kStation, kSolvedPosition}});
+    SurveyTreeTestHelper::setSolvedEntrances(section, {solvedEntrance(kStation, kSolvedPosition, true)});
     REQUIRE(section->scopedPositions().position(kStation) == kSolvedPosition);
+    // The section's own numbers differ from the cave's, so a stats line drawn
+    // from the section fails the check below.
+    REQUIRE(section->length()->value() != kCaveLengthMeters);
 
     REQUIRE(f.waitForOneEntrance());
     CHECK(joined(f.drawnTexts()) == joined({kCaveName}));
+    // Line 2 is the cave-wide length and depth.
+    CHECK(joined(f.drawnStatsTexts()) == joined({kCaveStats}));
 
     REQUIRE(f.keywords.rowCount() == 1);
     CHECK(keywordPairs(f.keywords.item(0)).contains(QStringLiteral("Type=Entrance")));
@@ -436,29 +471,22 @@ TEST_CASE("The entrance MarkerView redraws the stats line when the cave's length
     CHECK(changedSpy.count() == 1);
 }
 
-TEST_CASE("The entrance MarkerView draws nothing for a fix the solve missed or that has no coordinate",
+TEST_CASE("The entrance MarkerView draws nothing for a fixed station the solve did not flag as an entrance",
           "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
-    cwCave* cave = f.addCave(kCaveName);
+    cwCave* cave = f.addEntranceCave();
 
-    const QString unsolved = QStringLiteral("B1");
-    const QString empty = QStringLiteral("C1");
-    const QVector3D emptyPosition(-40.0f, 2.0f, 0.0f);
+    // B1 is fixed, placed and solved, and no entrance.
+    const QString fixedOnly = QStringLiteral("B1");
+    const QVector3D fixedOnlyPosition(-40.0f, 2.0f, 0.0f);
+    cave->fixStations()->appendFixStation(placedFix(fixedOnly));
+    f.solve(cave, {{kStation, kSolvedPosition}, {fixedOnly, fixedOnlyPosition}});
+    REQUIRE(cave->fixStations()->fixStations().at(1).hasPlacedCoordinate());
+    REQUIRE(cave->scopedPositions().position(fixedOnly) == fixedOnlyPosition);
 
-    cwFixStation emptyFix;
-    emptyFix.setStationName(empty);
-    REQUIRE(emptyFix.state() == cwFixStation::Empty);
-
-    cave->fixStations()->appendFixStation(placedFix(kStation));
-    cave->fixStations()->appendFixStation(placedFix(unsolved));
-    cave->fixStations()->appendFixStation(emptyFix);
-    f.solve(cave, {{kStation, kSolvedPosition}, {empty, emptyPosition}});
-    REQUIRE(cave->scopedPositions().hasPosition(empty));
-    REQUIRE_FALSE(cave->scopedPositions().hasPosition(unsolved));
-
-    // The placed, solved fix is the positive control: the pass ran and drew it.
-    REQUIRE(f.waitForOneEntrance());
+    // The solved entrance on A1 is the positive control: the pass ran and drew it.
+    REQUIRE(waitUntil([&] { return f.point() != nullptr; }));
     REQUIRE(waitForQueuedEvents());
 
     const auto instances = f.pins()->buildInstances();
@@ -469,10 +497,120 @@ TEST_CASE("The entrance MarkerView draws nothing for a fix the solve missed or t
     CHECK(f.pins()->billboardCount() == 1);
     CHECK(f.view->count() == 1);
     CHECK(f.keywords.rowCount() == 1);
-
-    CHECK(f.point() != nullptr);
     CHECK(f.point(QStringLiteral("entrancePoint_B1")) == nullptr);
-    CHECK(f.point(QStringLiteral("entrancePoint_C1")) == nullptr);
+}
+
+TEST_CASE("The entrance MarkerView draws an unfixed entrance at its solved position", "[cwEntranceMarkerSource]")
+{
+    EntranceFixture f;
+    f.addUnfixedEntranceCave();
+
+    REQUIRE(f.waitForOneEntrance());
+    const auto instances = f.pins()->buildInstances();
+    CHECK(instances.at(0).worldPosition == kSolvedPosition);
+    CHECK(joined(f.drawnTexts()) == joined({kCaveName}));
+    CHECK(joined(f.drawnStatsTexts()) == joined({kCaveStats}));
+    CHECK(f.keywords.rowCount() == 1);
+
+    QQuickItem* point = f.point();
+    REQUIRE(point != nullptr);
+    CHECK(point->property("position3D").value<QVector3D>() == kSolvedPosition);
+    CHECK_FALSE(point->property("fixed").toBool());
+}
+
+TEST_CASE("The entrance MarkerView spells a native entrance as its entrance entry does", "[cwEntranceMarkerSource]")
+{
+    // Cavern reports native stations in lower case.
+    EntranceFixture f;
+    cwCave* cave = f.addCave(kCaveName);
+    REQUIRE(cave->entrances()->addEntrance(kStation) >= 0);
+    SurveyTreeTestHelper::setSolvedEntrances(cave, {solvedEntrance(kStation.toLower(), kSolvedPosition, false)});
+
+    REQUIRE(f.waitForOneEntrance());
+    QQuickItem* point = f.point();
+    REQUIRE(point != nullptr);
+    CHECK(point->property("stationName").toString() == kStation);
+    CHECK(f.source->row(cave, kStation) == 0);
+}
+
+TEST_CASE("The entrance MarkerView names a labeled entrance by its label and an unlabeled one by its cave",
+          "[cwEntranceMarkerSource]")
+{
+    EntranceFixture f;
+    const QString label = QStringLiteral("North Shaft");
+    const QVector3D otherPosition(-60.0f, 9.0f, 1.0f);
+
+    cwCave* labeledCave = f.addUnfixedEntranceCave(kCaveName, kSolvedPosition);
+    cwEntranceModel* entrances = labeledCave->entrances();
+    const int entranceRow = entrances->addEntrance(kStation);
+    REQUIRE(entranceRow >= 0);
+    REQUIRE(entrances->setData(entrances->index(entranceRow), label, cwEntranceModel::LabelRole));
+
+    const QString unlabeledCaveName = QStringLiteral("Calcite Hollow");
+    cwCave* unlabeledCave = f.addUnfixedEntranceCave(unlabeledCaveName, otherPosition);
+    REQUIRE(unlabeledCave->entrances()->addEntrance(kStation) >= 0);
+
+    REQUIRE(waitUntil([&] { return f.pins()->buildInstances().size() == 2; }));
+    QStringList names = f.drawnTexts();
+    names.sort();
+    CHECK(joined(names) == joined({unlabeledCaveName, label}));
+    // A label replaces the cave's name on line 1 only; both stats lines stay.
+    CHECK(f.drawnStatsTexts().size() == 2);
+}
+
+TEST_CASE("The entrance MarkerView names an attached entrance by its cave", "[cwEntranceMarkerSource]")
+{
+    // An attached file's entrance has no survey-editor row, so its owning node
+    // (the source root under the cave) holds no entrance entry and no fix.
+    EntranceFixture f;
+    cwCave* cave = f.addCave(kCaveName);
+    cwCave* sourceRoot = SurveyTreeTestHelper::addNode(&f.region, cave, cwSurveyNode::Kind::Folder,
+                                                       QStringLiteral("doghill.svx"));
+    const QString attachedStation = QStringLiteral("doghill.d3");
+    SurveyTreeTestHelper::setSolvedEntrances(sourceRoot,
+                                             {solvedEntrance(attachedStation, kSolvedPosition, false)});
+    REQUIRE(sourceRoot->entrances()->rowCount() == 0);
+    REQUIRE(sourceRoot->fixStations()->rowCount() == 0);
+
+    REQUIRE(f.waitForOneEntrance());
+    CHECK(joined(f.drawnTexts()) == joined({kCaveName}));
+    CHECK(joined(f.drawnStatsTexts()) == joined({kCaveStats}));
+
+    QQuickItem* point = f.point(QStringLiteral("entrancePoint_") + attachedStation);
+    REQUIRE(point != nullptr);
+    CHECK(point->property("caveName").toString() == kCaveName);
+    CHECK(point->property("label").toString().isEmpty());
+    CHECK(point->property("node").value<cwSurveyNode*>() == sourceRoot);
+    CHECK(point->property("caveNode").value<cwSurveyNode*>() == cave);
+}
+
+TEST_CASE("The entrance MarkerView renames an entrance's line 1 from its label without a re-solve",
+          "[cwEntranceMarkerSource]")
+{
+    EntranceFixture f;
+    cwCave* cave = f.addUnfixedEntranceCave();
+    cwEntranceModel* entrances = cave->entrances();
+    const int entranceRow = entrances->addEntrance(kStation);
+    REQUIRE(entranceRow >= 0);
+    REQUIRE(f.waitForOneEntrance());
+    REQUIRE(joined(f.drawnTexts()) == joined({kCaveName}));
+
+    QSignalSpy solvedSpy(&f.region, &cwCavingRegion::solvedEntrancesChanged);
+    QSignalSpy changedSpy(f.source, &cwMarkerSource::markersChanged);
+    QSignalSpy insertedSpy(f.source, &cwMarkerSource::markersInserted);
+    QSignalSpy removedSpy(f.source, &cwMarkerSource::markersRemoved);
+
+    const QString label = QStringLiteral("Sinkhole Entrance");
+    REQUIRE(entrances->setData(entrances->index(entranceRow), label, cwEntranceModel::LabelRole));
+    REQUIRE(waitUntil([&] { return f.drawnTexts() == QStringList{label}; }));
+    REQUIRE(waitForQueuedEvents());
+
+    CHECK(changedSpy.count() == 1);
+    CHECK(insertedSpy.count() == 0);
+    CHECK(removedSpy.count() == 0);
+    CHECK(solvedSpy.count() == 0);
+    CHECK(f.point()->property("label").toString() == label);
+    CHECK(f.point()->property("displayName").toString() == label);
 }
 
 TEST_CASE("The entrance pin carries the cave glyph and the per-kind pins are gone", "[cwEntranceMarkerSource]")
@@ -506,7 +644,8 @@ TEST_CASE("The entrance pin carries the cave glyph and the per-kind pins are gon
     }
 }
 
-TEST_CASE("The entrance MarkerView drops the pin, text and keyword item of a removed fix", "[cwEntranceMarkerSource]")
+TEST_CASE("The entrance MarkerView drops the pin, text and keyword item of an entrance the next solve drops",
+          "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -514,8 +653,10 @@ TEST_CASE("The entrance MarkerView drops the pin, text and keyword item of a rem
     REQUIRE(f.keywords.rowCount() == 1);
     CHECK(f.statsTexts()->billboardCount() == 1);
 
+    // The fix stays placed and solved; only the solve's entrance flag goes.
     QSignalSpy removedSpy(f.source, &cwMarkerSource::markersRemoved);
-    cave->fixStations()->removeAt(0);
+    SurveyTreeTestHelper::setSolvedEntrances(cave, {});
+    REQUIRE(cave->fixStations()->fixStations().at(0).hasPlacedCoordinate());
 
     REQUIRE(waitUntil([&] {
         return f.pins()->billboardCount() == 0
@@ -755,7 +896,7 @@ TEST_CASE("The entrance MarkerView reports a pin behind a wall as occluded", "[c
     CHECK(f.view->isOccluded(kSolvedPosition, tap));
 }
 
-TEST_CASE("The entrance MarkerView selects a fix's point by its source row", "[cwEntranceMarkerSource]")
+TEST_CASE("The entrance MarkerView selects an entrance's point by its source row", "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -763,16 +904,18 @@ TEST_CASE("The entrance MarkerView selects a fix's point by its source row", "[c
     REQUIRE(f.waitForOneEntrance());
     QQuickItem* point = f.point();
     REQUIRE(point != nullptr);
-    const QUuid fixId = cave->fixStations()->fixStations().at(0).id();
 
-    const int row = f.source->row(cave, fixId);
+    const int row = f.source->row(cave, kStation);
     REQUIRE(row == 0);
     f.view->select(row);
     CHECK(f.view->selectionManager()->selectedItem() == point);
     CHECK(point->property("selected").toBool());
 
-    // The fix belongs to its own node only.
-    CHECK(f.source->row(otherCave, fixId) == -1);
+    // Station names match as the entrance list matches them.
+    CHECK(f.source->row(cave, kStation.toLower()) == 0);
+    // The entrance belongs to its own node only.
+    CHECK(f.source->row(otherCave, kStation) == -1);
+    CHECK(f.source->row(cave, QStringLiteral("B1")) == -1);
 }
 
 TEST_CASE("The entrance MarkerView takes a settable selection manager and hands it to its points",
@@ -802,9 +945,7 @@ TEST_CASE("The entrance MarkerView selects nothing without a selection manager",
     REQUIRE(f.waitForOneEntrance());
     QQuickItem* point = f.point();
     REQUIRE(point != nullptr);
-    const QUuid fixId = cave->fixStations()->fixStations().at(0).id();
-
-    const int row = f.source->row(cave, fixId);
+    const int row = f.source->row(cave, kStation);
     REQUIRE(row == 0);
     f.view->setSelectionManager(nullptr);
     CHECK(f.view->selectionManager() == nullptr);
@@ -821,9 +962,7 @@ TEST_CASE("The entrance MarkerView clears its selected point from a manager it r
     REQUIRE(f.waitForOneEntrance());
     QQuickItem* point = f.point();
     REQUIRE(point != nullptr);
-    const QUuid fixId = cave->fixStations()->fixStations().at(0).id();
-
-    const int row = f.source->row(cave, fixId);
+    const int row = f.source->row(cave, kStation);
     REQUIRE(row == 0);
     f.view->select(row);
     CHECK(f.selection.selectedItem() == point);
@@ -834,7 +973,8 @@ TEST_CASE("The entrance MarkerView clears its selected point from a manager it r
     CHECK(otherSelection.selectedItem() == nullptr);
 }
 
-TEST_CASE("The entrance MarkerView hands each point its display name and no kind", "[cwEntranceMarkerSource]")
+TEST_CASE("The entrance MarkerView hands each point its cave, label, station and fixed flag and no kind",
+          "[cwEntranceMarkerSource]")
 {
     EntranceFixture f;
     cwCave* cave = f.addEntranceCave();
@@ -843,6 +983,12 @@ TEST_CASE("The entrance MarkerView hands each point its display name and no kind
     REQUIRE(point != nullptr);
 
     CHECK(point->property("displayName").toString() == kCaveName);
+    CHECK(point->property("caveName").toString() == kCaveName);
+    CHECK(point->property("label").toString().isEmpty());
+    CHECK(point->property("stationName").toString() == kStation);
+    CHECK(point->property("fixed").toBool());
+    CHECK(point->property("node").value<cwSurveyNode*>() == cave);
+    CHECK(point->property("caveNode").value<cwSurveyNode*>() == cave);
     // Kind is gone from the point and its popup.
     CHECK_FALSE(point->property("kind").isValid());
     CHECK_FALSE(point->property("kindName").isValid());
@@ -854,6 +1000,45 @@ TEST_CASE("The entrance MarkerView hands each point its display name and no kind
     REQUIRE(entrances->setData(entrances->index(entranceRow), label, cwEntranceModel::LabelRole));
 
     CHECK(waitUntil([&] { return point->property("displayName").toString() == label; }));
+    CHECK(point->property("label").toString() == label);
+    CHECK(point->property("caveName").toString() == kCaveName);
+}
+
+TEST_CASE("The entrance MarkerView draws a native unfixed entrance the solve flags",
+          "[cwEntranceMarkerSource]")
+{
+    // A native survey with no fix: cavern solves it from the origin the driver
+    // invents and flags the marked entrance a3, which the solve reports unfixed.
+    // A cavern run on a loaded machine can take a while.
+    constexpr int kSolveWaitMs = 20000;
+    const QString entranceStation = QStringLiteral("a3");
+
+    EntranceFixture f;
+    cwCave* cave = f.addCave(kCaveName);
+    cwTrip* trip = SurveyTreeTestHelper::addTrip(cave, QStringLiteral("Chain"), QStringLiteral("a"));
+    SurveyTreeTestHelper::addShot(trip, QStringLiteral("a2"), entranceStation);
+    REQUIRE(cave->entrances()->addEntrance(entranceStation) >= 0);
+    REQUIRE(cave->fixStations()->rowCount() == 0);
+
+    cwLinePlotManager manager;
+    manager.setRegion(&f.region);
+    manager.waitToFinish();
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE(manager.isSolvedEntrance(cave->id(), entranceStation));
+
+    QQuickItem* point = nullptr;
+    REQUIRE(waitUntil([&] {
+        point = f.point(QStringLiteral("entrancePoint_") + entranceStation);
+        return point != nullptr;
+    }, kSolveWaitMs));
+    CHECK_FALSE(point->property("fixed").toBool());
+    CHECK(point->property("caveName").toString() == kCaveName);
+    REQUIRE(cave->scopedPositions().hasPosition(entranceStation));
+    CHECK(point->property("position3D").value<QVector3D>()
+          == cave->scopedPositions().position(entranceStation));
+    CHECK(f.view->count() == 1);
 }
 
 namespace {
@@ -1000,6 +1185,7 @@ struct DeclutterFixture
         cwStationPositionLookup lookup;
         lookup.setPosition(kStation, position);
         SurveyTreeTestHelper::setScopedPositions(cave, lookup);
+        SurveyTreeTestHelper::setSolvedEntrances(cave, {solvedEntrance(kStation, position, true)});
         REQUIRE(cave->scopedPositions().position(kStation) == position);
         return cave;
     }

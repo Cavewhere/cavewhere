@@ -311,3 +311,51 @@ TEST_CASE("An entrance on a station the survey does not place warns on its node"
     CHECK(waitUntil([cave]() { return !unplacedEntranceWarning(cave).has_value(); },
                     kSolveWaitMs));
 }
+
+TEST_CASE("A solve publishes its entrances on the region", "[LinePlotManager][SolvedEntrances]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Native"));
+    addNativeChain(cave, {QStringLiteral("a1"), QStringLiteral("a2"), QStringLiteral("a3")});
+    cave->entrances()->addEntrance(QStringLiteral("a3"));
+
+    QSignalSpy regionSpy(&region, &cwCavingRegion::solvedEntrancesChanged);
+    cwLinePlotManager manager;
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE(manager.isSolvedEntrance(cave->id(), QStringLiteral("a3")));
+
+    const QList<cwSolvedEntrance> entrances = region.solvedEntrances().value(cave->id());
+    INFO("region's solved entrances: " << stationNames(entrances).join(QStringLiteral(", ")).toStdString());
+    REQUIRE(entrances.size() == 1);
+    CHECK(entrances == manager.solvedEntrances(cave->id()));
+    CHECK(region.solvedEntrances() == manager.solvedEntrances());
+    CHECK(regionSpy.count() >= 1);
+}
+
+TEST_CASE("The line plot manager reads the solved entrances from its region",
+          "[LinePlotManager][SolvedEntrances]")
+{
+    // A region with nothing to solve keeps whatever a writer sets on it, so the
+    // manager's answers and its notification come from the region alone.
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    REQUIRE(manager.solvedEntrances().isEmpty());
+
+    cwSolvedEntrance entrance;
+    entrance.stationName = QStringLiteral("b2");
+    entrance.qualifiedName = QStringLiteral("hollow.b2");
+    entrance.fixed = false;
+    const QUuid nodeId = QUuid::createUuid();
+
+    QSignalSpy managerSpy(&manager, &cwLinePlotManager::solvedEntrancesChanged);
+    region.setSolvedEntrances({{nodeId, {entrance}}});
+
+    CHECK(managerSpy.count() == 1);
+    CHECK(manager.solvedEntrances(nodeId) == QList<cwSolvedEntrance>{entrance});
+    CHECK(manager.isSolvedEntrance(nodeId, QStringLiteral("B2")));
+}

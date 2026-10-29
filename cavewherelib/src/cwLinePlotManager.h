@@ -138,8 +138,8 @@ public:
 
     //! Every station the most recent solve flagged as an entrance (native
     //! *entrance, Survex, Walls and Compass), keyed by the id of the node that
-    //! owns it. Empty until the first solve completes.
-    QHash<QUuid, QList<cwSolvedEntrance>> solvedEntrances() const { return m_solvedEntrances; }
+    //! owns it. Read from the region, which the solve writes; empty without one.
+    QHash<QUuid, QList<cwSolvedEntrance>> solvedEntrances() const;
     //! The solved entrances \a nodeId owns.
     QList<cwSolvedEntrance> solvedEntrances(const QUuid& nodeId) const;
     //! True when the node \a nodeId owns a solved entrance on \a stationName,
@@ -187,9 +187,6 @@ private:
     // the floating surveys' external half so a run that stops before the
     // post-solve pass leaves it standing.
     QList<cwLinePlotTask::LinePlotResultData::HangingStations> m_hangingStations;
-
-    // The last solve's entrances, kept like the hanging stations.
-    QHash<QUuid, QList<cwSolvedEntrance>> m_solvedEntrances;
 
     std::optional<cwLinePlotTask::SolveError> m_lastSolveError;
     QString m_lastCavernLog;
