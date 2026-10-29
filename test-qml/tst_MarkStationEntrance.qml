@@ -114,6 +114,52 @@ MainWindowTest {
             tryCompare(popup, "opened", false)
         }
 
+        function labelAt(entrances, row) {
+            return entrances.data(entrances.index(row), EntranceModel.LabelRole)
+        }
+
+        // Marks A1 an entrance through the caret, labeled `label` first when it
+        // is set, and returns the open popup's label field.
+        function openEntranceEditor(context, label) {
+            const entrances = context.cave.entrances
+            if (label !== "") {
+                entrances.addEntrance("A1")
+                entrances.setData(entrances.index(0), label, EntranceModel.LabelRole)
+            }
+
+            const menu = openStationMenu(focusedStationBox(context, 0))
+            menu.markEntrance.triggered()
+
+            const popup = entrancePopup()
+            tryCompare(popup, "opened", true)
+            compare(popup.stationName, "A1")
+
+            const field = findChild(popup, "entrancePopupLabel")
+            verify(field !== null, "popup should offer the label field")
+            return field
+        }
+
+        // Replaces the field's text the way a user does: select all, then type.
+        function retype(field, text) {
+            field.forceActiveFocus()
+            tryCompare(field, "activeFocus", true)
+            field.selectAll()
+            if (text === "") {
+                keyClick(Qt.Key_Delete)
+            } else {
+                typeText(text)
+            }
+            compare(field.text, text)
+        }
+
+        function pressDone() {
+            const popup = entrancePopup()
+            const done = findChild(popup, "entrancePopupDone")
+            verify(done !== null, "popup should offer a way to close")
+            done.clicked()
+            tryCompare(popup, "opened", false)
+        }
+
         function test_markStationEntranceShowsBadge() {
             const context = gotoSurveyTable()
             const entrances = context.cave.entrances
@@ -157,27 +203,14 @@ MainWindowTest {
             const context = gotoSurveyTable()
             const entrances = context.cave.entrances
 
-            const menu = openStationMenu(focusedStationBox(context, 0))
-            menu.markEntrance.triggered()
+            const field = openEntranceEditor(context, "")
+            compare(field.text, "EntranceCave")
 
-            const popup = entrancePopup()
-            tryCompare(popup, "opened", true)
-
-            const field = findChild(popup, "entrancePopupLabel")
-            verify(field !== null, "popup should offer the label field")
-            compare(field.text, "")
-
-            field.forceActiveFocus()
-            tryCompare(field, "activeFocus", true)
-            typeText("Main Entrance")
-
-            const done = findChild(popup, "entrancePopupDone")
-            verify(done !== null, "popup should offer a way to close")
-            done.clicked()
-            tryCompare(popup, "opened", false)
+            retype(field, "Main Entrance")
+            pressDone()
 
             compare(entrances.count, 1)
-            tryVerify(() => entrances.data(entrances.index(0), EntranceModel.LabelRole) === "Main Entrance",
+            tryVerify(() => labelAt(entrances, 0) === "Main Entrance",
                       5000, "the typed label should land in the entrance model")
             compare(entrances.data(entrances.index(0), EntranceModel.StationNameRole), "A1")
         }
@@ -204,7 +237,75 @@ MainWindowTest {
             compare(entrances.count, 1, "editing an entrance adds no row")
 
             closePopup(popup)
-            compare(entrances.data(entrances.index(0), EntranceModel.LabelRole), "Upper Entrance")
+            compare(labelAt(entrances, 0), "Upper Entrance")
+        }
+
+        function test_unlabeledEntranceOpensWithCaveName() {
+            const context = gotoSurveyTable()
+            const entrances = context.cave.entrances
+
+            const field = openEntranceEditor(context, "")
+            compare(field.text, "EntranceCave",
+                    "an unlabeled entrance shows the cave name its marker uses")
+
+            pressDone()
+            compare(entrances.count, 1)
+            compare(labelAt(entrances, 0), "",
+                    "closing on the cave name keeps the label empty, so it follows the cave")
+        }
+
+        function test_clearedFieldPreviewsCaveName() {
+            const context = gotoSurveyTable()
+
+            const field = openEntranceEditor(context, "Upper Entrance")
+            compare(field.text, "Upper Entrance")
+            compare(field.placeholderText, "EntranceCave",
+                    "a cleared field previews the cave name the marker falls back to")
+
+            closePopup(entrancePopup())
+        }
+
+        function test_caveNameInOtherCapitalizationStoresEmpty() {
+            const context = gotoSurveyTable()
+            const entrances = context.cave.entrances
+
+            const field = openEntranceEditor(context, "Upper Entrance")
+            retype(field, " entrancecave ")
+            pressDone()
+
+            compare(entrances.count, 1)
+            compare(labelAt(entrances, 0), "",
+                    "the cave name in any capitalization stores no custom label")
+        }
+
+        function test_clearingStoresEmpty() {
+            const context = gotoSurveyTable()
+            const entrances = context.cave.entrances
+
+            const cleared = openEntranceEditor(context, "Upper Entrance")
+            retype(cleared, "")
+            pressDone()
+            compare(labelAt(entrances, 0), "", "a cleared field stores no custom label")
+
+            entrances.setData(entrances.index(0), "Upper Entrance", EntranceModel.LabelRole)
+            const blank = openEntranceEditor(context, "")
+            compare(blank.text, "Upper Entrance")
+            retype(blank, "   ")
+            pressDone()
+            compare(labelAt(entrances, 0), "", "a field of only spaces stores no custom label")
+        }
+
+        function test_otherTextStoresTrimmedLabel() {
+            const context = gotoSurveyTable()
+            const entrances = context.cave.entrances
+
+            const field = openEntranceEditor(context, "")
+            retype(field, "  Main Entrance  ")
+            pressDone()
+
+            compare(entrances.count, 1)
+            compare(labelAt(entrances, 0), "Main Entrance",
+                    "text other than the cave name is stored trimmed as the label")
         }
 
         function test_removeEntranceHidesBadge() {

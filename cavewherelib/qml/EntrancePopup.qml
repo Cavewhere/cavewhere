@@ -31,6 +31,10 @@ QC.Popup {
     property string stationName: ""
     property int row: -1
 
+    // The name the entrance marker falls back to when the label is empty, as
+    // it read when openFor() ran.
+    property string caveName: ""
+
     focus: true
     padding: Theme.statsPadding
     closePolicy: QC.Popup.CloseOnEscape
@@ -49,8 +53,10 @@ QC.Popup {
             return
         }
 
-        labelFieldId.text = popupId.entrances.data(popupId.entrances.index(popupId.row),
-                                                   EntranceModel.LabelRole)
+        popupId.caveName = popupId.currentCaveName()
+        const label = popupId.entrances.data(popupId.entrances.index(popupId.row),
+                                             EntranceModel.LabelRole)
+        labelFieldId.text = popupId.shownLabel(label)
         popupId.moveTo(anchorItem)
         popupId.open()
     }
@@ -68,6 +74,26 @@ QC.Popup {
         popupId.entrances.removeEntrance(name)
     }
 
+    // What the marker shows for a stored label: the label, else the cave name.
+    function shownLabel(label: string): string {
+        return label !== "" ? label : popupId.caveName
+    }
+
+    function currentCaveName(): string {
+        return popupId.cave !== null ? popupId.cave.caveNode().name : ""
+    }
+
+    // The cave name in any capitalization stores an empty label, so the marker
+    // follows a cave rename. The name shown at open counts too, in case the
+    // cave was renamed while this was up.
+    function storedLabel(text: string): string {
+        const trimmed = text.trim()
+        const lowered = trimmed.toLowerCase()
+        const matchesCaveName = lowered === popupId.caveName.trim().toLowerCase()
+                              || lowered === popupId.currentCaveName().trim().toLowerCase()
+        return trimmed === "" || matchesCaveName ? "" : trimmed
+    }
+
     // The row is looked up again by name, since an entrance removed elsewhere
     // while this was open shifts the rows below it.
     function commitLabel(text: string): void {
@@ -81,9 +107,10 @@ QC.Popup {
             return
         }
 
+        const label = popupId.storedLabel(text)
         const modelIndex = model.index(popupId.row)
-        if (model.data(modelIndex, EntranceModel.LabelRole) !== text) {
-            model.setData(modelIndex, text, EntranceModel.LabelRole)
+        if (model.data(modelIndex, EntranceModel.LabelRole) !== label) {
+            model.setData(modelIndex, label, EntranceModel.LabelRole)
         }
     }
 
@@ -128,9 +155,12 @@ QC.Popup {
             id: labelFieldId
             objectName: "entrancePopupLabel"
             Layout.preferredWidth: Theme.entrancePopupLabelWidth
-            placeholderText: qsTr("Cave name")
+            placeholderText: popupId.caveName
 
-            onEditingFinished: popupId.commitLabel(labelFieldId.text)
+            onEditingFinished: {
+                popupId.commitLabel(labelFieldId.text)
+                labelFieldId.text = popupId.shownLabel(popupId.storedLabel(labelFieldId.text))
+            }
         }
 
         QC.Button {

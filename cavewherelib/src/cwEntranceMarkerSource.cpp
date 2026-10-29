@@ -39,17 +39,6 @@ double toMeters(const cwLength* length)
                             cwUnits::Meters);
 }
 
-// The nearest Cave at or above @a node, else @a node when no Cave encloses it.
-cwSurveyNode* caveNodeOf(cwSurveyNode* node)
-{
-    for(cwSurveyNode* n = node; n != nullptr && !n->isRoot(); n = n->parentNode()) {
-        if(n->kind() == cwSurveyNodeKind::Kind::Cave) {
-            return n;
-        }
-    }
-    return node;
-}
-
 // One marker per station of one node, stable across solves and label edits.
 QUuid entranceId(const cwSurveyNode* node, const QString& stationName)
 {
@@ -244,7 +233,7 @@ QList<cwEntranceMarkerSource::Entrance> cwEntranceMarkerSource::desiredEntrances
             const cwEntrance entry = entranceModel->entranceAt(entryRow);
 
             cwSurveyNode* deepestNode = nodesById.value(solvedEntrance.deepestNodeId, node);
-            cwSurveyNode* caveNode = deepestNode == node ? caveNodeOf(node) : deepestNode;
+            cwSurveyNode* caveNode = deepestNode == node ? node->caveNode() : deepestNode;
 
             Entrance entrance;
             entrance.id = entranceId(node, solvedEntrance.stationName);

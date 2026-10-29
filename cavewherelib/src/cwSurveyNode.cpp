@@ -1618,6 +1618,16 @@ QHash<QString, QString> cwSurveyNode::fileFixedStations() const
     return stations;
 }
 
+cwSurveyNode* cwSurveyNode::caveNode()
+{
+    for(cwSurveyNode* node = this; node != nullptr && !node->isRoot(); node = node->parentNode()) {
+        if(node->kind() == Kind::Cave) {
+            return node;
+        }
+    }
+    return this;
+}
+
 int cwSurveyNode::addFixedEntrance(const QString& stationName)
 {
     const int existingRow = m_fixStations->indexOf(stationName);

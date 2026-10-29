@@ -1239,3 +1239,39 @@ TEST_CASE("cwSurveyNode isSelfOrDescendantOf follows the listed parent chain", "
         CHECK(c->isSelfOrDescendantOf(&a));
     }
 }
+
+TEST_CASE("caveNode is the nearest Cave at or above a node", "[SurveyNode][cwEntranceModel]")
+{
+    cwCavingRegion region;
+    using SurveyTreeTestHelper::addNode;
+    cwCave* cave = addNode(&region, nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Upper Cave"));
+    cwCave* section = addNode(&region, cave, cwSurveyNode::Kind::Folder, QStringLiteral("Section"));
+    cwCave* deeper = addNode(&region, section, cwSurveyNode::Kind::Folder, QStringLiteral("Deeper"));
+    cwCave* loose = addNode(&region, nullptr, cwSurveyNode::Kind::Folder, QStringLiteral("Loose"));
+
+    SECTION("a Cave is its own cave node") {
+        CHECK(cave->caveNode() == cave);
+    }
+
+    SECTION("a Folder under a Cave names that Cave, at any depth") {
+        CHECK(section->caveNode() == cave);
+        CHECK(deeper->caveNode() == cave);
+    }
+
+    SECTION("a Folder with no Cave above names itself") {
+        CHECK(loose->caveNode() == loose);
+    }
+
+    SECTION("the root names itself") {
+        CHECK(region.rootNode()->caveNode() == region.rootNode());
+    }
+
+    SECTION("an ancestor's kind change moves the answer") {
+        section->setKind(cwSurveyNode::Kind::Cave);
+        CHECK(deeper->caveNode() == section);
+
+        section->setKind(cwSurveyNode::Kind::Folder);
+        cave->setKind(cwSurveyNode::Kind::Folder);
+        CHECK(deeper->caveNode() == deeper);
+    }
+}

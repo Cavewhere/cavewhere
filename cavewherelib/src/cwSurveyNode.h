@@ -245,6 +245,11 @@ public:
     //! no entrance.
     cwEntranceModel* entrances() const { return m_entrances; }
 
+    //! The nearest node of kind Cave at or above this one, stopping below the
+    //! root; this node when no Cave encloses it. A native entrance's marker is
+    //! named after it when the entrance has no label.
+    Q_INVOKABLE cwSurveyNode* caveNode();
+
     //! The user's "Mark Station as Fixed". Returns the fix row, as
     //! cwFixStationModel::addFixStation(name) does. When this creates the fix it
     //! also marks the station an entrance, unless it already is one. A station
