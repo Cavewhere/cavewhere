@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QString>
+#include <QUuid>
 #include <QVector3D>
 
 /**
@@ -27,6 +28,10 @@ struct cwSolvedEntrance {
     //! True when the data fixes the station; the origin the driver invents for
     //! an unfixed survey reads false.
     bool fixed = false;
+    //! The deepest node holding the station: the Compass .dat or Survex block
+    //! node below the owning node that cavern scopes an attached station
+    //! under, else the owning node itself.
+    QUuid deepestNodeId;
 
     bool operator==(const cwSolvedEntrance& other) const = default;
 };

@@ -26,6 +26,7 @@
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
+#include "cwUpdateCoordinator.h"
 
 // Test helpers
 #include "ExternalCenterlineTestHelpers.h"
@@ -53,6 +54,7 @@ constexpr int kSolveWaitMs = 20000;
 const QString kSurvexEntranceFixture = QStringLiteral("survex_entrance.svx");
 const QString kWallsEntranceFixture = QStringLiteral("walls_entrance.srv");
 const QString kCompassProjectFixture = QStringLiteral("compass_project/PROJECT.MAK");
+const QString kSurvexNestedEntranceFixture = QStringLiteral("survex_nested_entrance.svx");
 
 //! A native trip on \a cave surveying \a stations in one chunk, 10 m apart.
 cwTrip* addNativeChain(cwCave* cave, const QStringList& stations)
@@ -145,6 +147,9 @@ TEST_CASE("An attached Survex file's *entrance stations are solved entrances of 
         entranceNamed(entrances, QStringLiteral("doghill.d1"));
     REQUIRE(fixedEntrance.has_value());
     CHECK(fixedEntrance->fixed);
+    // The file opens one block, doghill, which holds shots and nests none, so
+    // it is a trip and the cave is the deepest node holding d1.
+    CHECK(fixedEntrance->deepestNodeId == cave->id());
     CHECK(fixedEntrance->qualifiedName.endsWith(QStringLiteral("doghill.d1"), Qt::CaseInsensitive));
     checkAt(*fixedEntrance, cave->scopedPositions(), QStringLiteral("doghill.d1"));
 
@@ -152,6 +157,7 @@ TEST_CASE("An attached Survex file's *entrance stations are solved entrances of 
         entranceNamed(entrances, QStringLiteral("doghill.d3"));
     REQUIRE(unfixedEntrance.has_value());
     CHECK_FALSE(unfixedEntrance->fixed);
+    CHECK(unfixedEntrance->deepestNodeId == cave->id());
     checkAt(*unfixedEntrance, cave->scopedPositions(), QStringLiteral("doghill.d3"));
 
     // A fixed station is no entrance unless the data marks it one.
@@ -189,6 +195,7 @@ TEST_CASE("An attached Walls file's ENTRANCE flag is a solved entrance of its no
     REQUIRE(entrances.size() == 1);
     CHECK(entrances.first().stationName.compare(QStringLiteral("W3"), Qt::CaseInsensitive) == 0);
     CHECK_FALSE(entrances.first().fixed);
+    CHECK(entrances.first().deepestNodeId == cave->id());
     checkAt(entrances.first(), cave->scopedPositions(), entrances.first().stationName);
 }
 
@@ -221,6 +228,86 @@ TEST_CASE("An attached Compass .mak's fixed points are solved entrances of its s
     }
 }
 
+TEST_CASE("An attached Compass .mak names each .dat's node as the deepest node of its entrance",
+          "[LinePlotManager][SolvedEntrances]")
+{
+    auto project = makeSavedProject(QStringLiteral("compass-deepest-entrances"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        project.get(), project->project->cavingRegion()->rootNode(),
+        fixturePath(kCompassProjectFixture));
+    drainPipelines(project.get());
+
+    cwLinePlotManager* manager = project->rootData->linePlotManager();
+    INFO("driver:\n" << manager->driverSource().toStdString());
+    INFO("cavern log:\n" << manager->cavernLog().toStdString());
+    REQUIRE_FALSE(manager->hasSolveError());
+
+    cwSurveyNode* alpha = childNodeNamed(root, QStringLiteral("Alpha"));
+    cwSurveyNode* charlie = childNodeNamed(root, QStringLiteral("Charlie"));
+    REQUIRE(alpha != nullptr);
+    REQUIRE(charlie != nullptr);
+
+    // Both entrances stay filed under the source root, each in its own .dat's node.
+    const QList<cwSolvedEntrance> entrances = manager->solvedEntrances(root->id());
+    INFO("solved entrances: " << stationNames(entrances).join(QStringLiteral(", ")).toStdString());
+    REQUIRE(entrances.size() == 2);
+    const std::optional<cwSolvedEntrance> alphaEntrance =
+        entranceNamed(entrances, QStringLiteral("alpha.A1"));
+    const std::optional<cwSolvedEntrance> charlieEntrance =
+        entranceNamed(entrances, QStringLiteral("charlie.C1"));
+    REQUIRE(alphaEntrance.has_value());
+    REQUIRE(charlieEntrance.has_value());
+    CHECK(alphaEntrance->deepestNodeId == alpha->id());
+    CHECK(charlieEntrance->deepestNodeId == charlie->id());
+
+    // Cavern names the station by the .dat's own label, so renaming the node
+    // and solving again keeps the entrance in it.
+    const QString renamed = QStringLiteral("Alpha Passage");
+    alpha->setName(renamed);
+    QSignalSpy solves(manager, &cwLinePlotManager::stationPositionInTripsChanged);
+    manager->markNeedsUpdate();
+    project->rootData->updateCoordinator()->updateNow();
+    REQUIRE(waitUntil([&solves]() { return solves.count() >= 1; }, kSolveWaitMs));
+    drainPipelines(project.get());
+    REQUIRE_FALSE(manager->hasSolveError());
+    REQUIRE(alpha->name() == renamed);
+
+    const std::optional<cwSolvedEntrance> renamedEntrance =
+        entranceNamed(manager->solvedEntrances(root->id()), QStringLiteral("alpha.A1"));
+    REQUIRE(renamedEntrance.has_value());
+    CHECK(renamedEntrance->deepestNodeId == alpha->id());
+}
+
+TEST_CASE("An attached Survex *entrance names the innermost block node holding it as its deepest node",
+          "[LinePlotManager][SolvedEntrances]")
+{
+    auto project = makeSavedProject(QStringLiteral("survex-deepest-entrance"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        project.get(), project->project->cavingRegion()->rootNode(),
+        fixturePath(kSurvexNestedEntranceFixture));
+    drainPipelines(project.get());
+
+    const cwLinePlotManager* manager = project->rootData->linePlotManager();
+    INFO("driver:\n" << manager->driverSource().toStdString());
+    INFO("cavern log:\n" << manager->cavernLog().toStdString());
+    REQUIRE_FALSE(manager->hasSolveError());
+
+    // outer nests inner, which nests side: outer and inner stay nodes, and
+    // side, holding shots and no block, is a trip.
+    cwSurveyNode* outer = childNodeNamed(root, QStringLiteral("outer"));
+    REQUIRE(outer != nullptr);
+    cwSurveyNode* inner = childNodeNamed(outer, QStringLiteral("inner"));
+    REQUIRE(inner != nullptr);
+
+    const QList<cwSolvedEntrance> entrances = manager->solvedEntrances(root->id());
+    INFO("solved entrances: " << stationNames(entrances).join(QStringLiteral(", ")).toStdString());
+    REQUIRE(entrances.size() == 1);
+    CHECK(entrances.first().stationName.compare(QStringLiteral("outer.inner.i2"), Qt::CaseInsensitive) == 0);
+    CHECK(entrances.first().deepestNodeId == inner->id());
+}
+
 TEST_CASE("A native entrance on an unfixed cave is a solved, unfixed entrance",
           "[LinePlotManager][SolvedEntrances]")
 {
@@ -249,6 +336,8 @@ TEST_CASE("A native entrance on an unfixed cave is a solved, unfixed entrance",
         const std::optional<cwSolvedEntrance> entrance = entranceNamed(entrances, station);
         REQUIRE(entrance.has_value());
         CHECK_FALSE(entrance->fixed);
+        // A native entrance sits in the node that owns it.
+        CHECK(entrance->deepestNodeId == cave->id());
         checkAt(*entrance, cave->scopedPositions(), station);
     }
 }

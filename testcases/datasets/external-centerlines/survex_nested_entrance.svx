@@ -1,0 +1,19 @@
+; Nested blocks for the solved-entrance tests: the entrance i2 sits in
+; inner, which nests side, so inner stays a node while side becomes a
+; trip. outer fixes o1 and reaches inner through a qualified shot.
+*begin outer
+*fix o1 0 0 0
+*data normal from to tape compass clino
+o1 o2 10.0 0 0
+o2 inner.i1 5.0 90 0
+
+*begin inner
+*entrance i2
+i1 i2 8.0 0 0
+i2 side.s1 4.0 180 0
+
+*begin side
+s1 s2 6.0 270 0
+*end side
+*end inner
+*end outer

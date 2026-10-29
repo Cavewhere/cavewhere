@@ -14,7 +14,7 @@ MainWindowTest {
         id: linkGeneratorId
     }
 
-    TestCase {
+    ExternalCenterlineTestCase {
         id: entrancesTestCase
         name: "Entrances"
         when: windowShown
@@ -379,6 +379,31 @@ MainWindowTest {
             const link = findChild(quoteBox, "entranceNodeLink")
             verify(link !== null, "the popup should have a link to the cave")
             verify(link.text.indexOf("Gypsum Hollow") >= 0, "the link should name the cave")
+
+            mouseClick(link)
+            tryCompare(RootData.pageSelectionModel, "currentPageAddress", expectedAddress, 5000)
+        }
+
+        // An attached entrance's popup names the deepest node holding its
+        // station, so the headline and the link both name ALPHA.DAT's node,
+        // and the link opens that node's page.
+        function test_attachedEntranceLinkOpensItsDeepestNode() {
+            const root = attachCompassProject("attachedEntranceLink")
+            const alpha = childNamed(root, "Alpha")
+            verify(alpha !== null, "the project should hold Alpha's node")
+            const expectedAddress = linkGeneratorId.nodeLink(alpha)
+            verify(expectedAddress !== "")
+
+            let point = null
+            tryVerify(() => {
+                point = findChild(entranceView(), "entrancePoint_alpha.A1")
+                return point !== null && point.visible
+            }, entrancesTestCase.solveTimeout, "the attached entrance should get a visible entrance point")
+
+            const quoteBox = openEntrancePopup(point)
+            tryCompare(shownRow(quoteBox, "entranceCaveName"), "text", "Alpha")
+            const link = shownRow(quoteBox, "entranceNodeLink")
+            compare(link.text, "Open Alpha", "the link should name the node the popup names")
 
             mouseClick(link)
             tryCompare(RootData.pageSelectionModel, "currentPageAddress", expectedAddress, 5000)

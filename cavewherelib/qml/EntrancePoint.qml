@@ -10,13 +10,14 @@ import cavewherelib
 // item's marker visibility for both and places the item at the entrance's
 // solved position. Tapping the pin opens a popup with the cave icon and name,
 // the entrance's label, its station, whether it is fixed, the cave's stats, and
-// a link to the node that owns the station.
+// a link to the deepest node holding the station.
 PositionItem {
     id: pointId
     objectName: "entrancePoint_" + stationName
 
     property SurveyNode node
     property SurveyNode caveNode
+    property SurveyNode deepestNode
     property string stationName
     property string caveName
     property string label
@@ -154,8 +155,8 @@ PositionItem {
 
                         LinkText {
                             objectName: "entranceNodeLink"
-                            text: "Open " + (pointId.node ? pointId.node.name : "")
-                            onClicked: RootData.pageSelectionModel.currentPageAddress = linkGenerator.nodeLink(pointId.node)
+                            text: "Open " + (pointId.deepestNode ? pointId.deepestNode.name : "")
+                            onClicked: RootData.pageSelectionModel.currentPageAddress = linkGenerator.nodeLink(pointId.deepestNode)
 
                             LinkGenerator {
                                 id: linkGenerator

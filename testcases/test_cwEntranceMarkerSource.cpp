@@ -42,6 +42,7 @@
 #include "cwCamera.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwEntranceLabel.h"
 #include "cwEntranceMarkerSource.h"
 #include "cwEntranceModel.h"
 #include "cwFixStation.h"
@@ -86,6 +87,18 @@ constexpr double kCaveDepthMeters = 85.4;
 const QString kCaveStats = QStringLiteral("\u21921.2 km  \u219385 m");
 constexpr double kLongerCaveLengthMeters = 2500.0;
 const QString kLongerCaveStats = QStringLiteral("\u21922.5 km  \u219385 m");
+
+// Two .dat nodes of an attached Compass project, each with numbers of its own
+// that differ from the cave's.
+const QString kAlphaName = QStringLiteral("Alpha");
+const QString kCharlieName = QStringLiteral("Charlie");
+const QString kAlphaStation = QStringLiteral("alpha.A1");
+const QString kCharlieStation = QStringLiteral("charlie.C1");
+constexpr double kAlphaLengthMeters = 310.0;
+constexpr double kAlphaDepthMeters = 22.0;
+constexpr double kCharlieLengthMeters = 4700.0;
+constexpr double kCharlieDepthMeters = 140.0;
+const QVector3D kCharliePosition(60.0f, 4.0f, -2.0f);
 
 // The solved position, deliberately unrelated to the fix's input coordinate, so
 // a marker drawn at the input coordinate fails the position checks.
@@ -270,6 +283,18 @@ struct EntranceFixture
         return cave;
     }
 
+    // A node of @a kind under @a parent with its own length and depth.
+    cwCave* addMeasuredNode(cwSurveyNode* parent, cwSurveyNode::Kind kind, const QString& name,
+                            double lengthMeters, double depthMeters)
+    {
+        cwCave* node = SurveyTreeTestHelper::addNode(&region, parent, kind, name);
+        node->length()->setUnit(cwUnits::Meters);
+        node->length()->setValue(lengthMeters);
+        node->depth()->setUnit(cwUnits::Meters);
+        node->depth()->setValue(depthMeters);
+        return node;
+    }
+
     // One cave holding one placed fix on kStation that the solve placed at
     // kSolvedPosition and flagged as a fixed entrance.
     cwCave* addEntranceCave(const QString& name = kCaveName)
@@ -447,7 +472,10 @@ TEST_CASE("The entrance MarkerView names an entrance on a section by its cave, w
                                                     sectionName);
     section->fixStations()->appendFixStation(placedFix(kStation));
     f.solve(section, {{kStation, kSolvedPosition}});
-    SurveyTreeTestHelper::setSolvedEntrances(section, {solvedEntrance(kStation, kSolvedPosition, true)});
+    // A native entrance's deepest node is the node that owns it.
+    cwSolvedEntrance sectionEntrance = solvedEntrance(kStation, kSolvedPosition, true);
+    sectionEntrance.deepestNodeId = section->id();
+    SurveyTreeTestHelper::setSolvedEntrances(section, {sectionEntrance});
     REQUIRE(section->scopedPositions().position(kStation) == kSolvedPosition);
     // The section's own numbers differ from the cave's, so a stats line drawn
     // from the section fails the check below.
@@ -564,17 +592,20 @@ TEST_CASE("The entrance MarkerView names a labeled entrance by its label and an 
     CHECK(f.drawnStatsTexts().size() == 2);
 }
 
-TEST_CASE("The entrance MarkerView names an attached entrance by its cave", "[cwEntranceMarkerSource]")
+TEST_CASE("The entrance MarkerView names an attached entrance its owning node holds by its cave",
+          "[cwEntranceMarkerSource]")
 {
     // An attached file's entrance has no survey-editor row, so its owning node
-    // (the source root under the cave) holds no entrance entry and no fix.
+    // (the source root under the cave) holds no entrance entry and no fix. No
+    // deeper node holds d3, as for a Walls book without #PREFIX.
     EntranceFixture f;
     cwCave* cave = f.addCave(kCaveName);
     cwCave* sourceRoot = SurveyTreeTestHelper::addNode(&f.region, cave, cwSurveyNode::Kind::Folder,
                                                        QStringLiteral("doghill.svx"));
     const QString attachedStation = QStringLiteral("doghill.d3");
-    SurveyTreeTestHelper::setSolvedEntrances(sourceRoot,
-                                             {solvedEntrance(attachedStation, kSolvedPosition, false)});
+    cwSolvedEntrance attachedEntrance = solvedEntrance(attachedStation, kSolvedPosition, false);
+    attachedEntrance.deepestNodeId = sourceRoot->id();
+    SurveyTreeTestHelper::setSolvedEntrances(sourceRoot, {attachedEntrance});
     REQUIRE(sourceRoot->entrances()->rowCount() == 0);
     REQUIRE(sourceRoot->fixStations()->rowCount() == 0);
 
@@ -588,6 +619,91 @@ TEST_CASE("The entrance MarkerView names an attached entrance by its cave", "[cw
     CHECK(point->property("label").toString().isEmpty());
     CHECK(point->property("node").value<cwSurveyNode*>() == sourceRoot);
     CHECK(point->property("caveNode").value<cwSurveyNode*>() == cave);
+}
+
+TEST_CASE("The entrance MarkerView names an attached entrance by its deepest node, with that node's numbers",
+          "[cwEntranceMarkerSource]")
+{
+    // A Compass project attached under a cave: the source root owns both
+    // entrances, and each sits in its own .dat's node.
+    EntranceFixture f;
+    cwCave* cave = f.addCave(kCaveName);
+    cwCave* sourceRoot = SurveyTreeTestHelper::addNode(&f.region, cave, cwSurveyNode::Kind::CompassProject,
+                                                       QStringLiteral("PROJECT"));
+    cwCave* alpha = f.addMeasuredNode(sourceRoot, cwSurveyNode::Kind::CompassFile, kAlphaName,
+                                      kAlphaLengthMeters, kAlphaDepthMeters);
+    cwCave* charlie = f.addMeasuredNode(sourceRoot, cwSurveyNode::Kind::CompassFile, kCharlieName,
+                                        kCharlieLengthMeters, kCharlieDepthMeters);
+
+    cwSolvedEntrance alphaEntrance = solvedEntrance(kAlphaStation, kSolvedPosition, true);
+    alphaEntrance.deepestNodeId = alpha->id();
+    cwSolvedEntrance charlieEntrance = solvedEntrance(kCharlieStation, kCharliePosition, true);
+    charlieEntrance.deepestNodeId = charlie->id();
+    SurveyTreeTestHelper::setSolvedEntrances(sourceRoot, {alphaEntrance, charlieEntrance});
+
+    const cwUnits::UnitSystem unitSystem = f.region.unitSystem();
+    const QString alphaStats = cwEntranceLabel::statsText(kAlphaLengthMeters, kAlphaDepthMeters, unitSystem);
+    const QString charlieStats = cwEntranceLabel::statsText(kCharlieLengthMeters, kCharlieDepthMeters, unitSystem);
+    REQUIRE(alphaStats != charlieStats);
+    REQUIRE(alphaStats != kCaveStats);
+
+    REQUIRE(waitUntil([&] { return f.pins()->buildInstances().size() == 2; }));
+    QStringList names = f.drawnTexts();
+    names.sort();
+    CHECK(joined(names) == joined({kAlphaName, kCharlieName}));
+    QStringList stats = f.drawnStatsTexts();
+    stats.sort();
+    QStringList expectedStats = {alphaStats, charlieStats};
+    expectedStats.sort();
+    CHECK(joined(stats) == joined(expectedStats));
+
+    // The point and its popup name the deepest node; the owning node keeps the
+    // marker's row and keywords.
+    QQuickItem* alphaPoint = f.point(QStringLiteral("entrancePoint_") + kAlphaStation);
+    REQUIRE(alphaPoint != nullptr);
+    CHECK(alphaPoint->property("displayName").toString().toStdString() == kAlphaName.toStdString());
+    CHECK(alphaPoint->property("caveName").toString().toStdString() == kAlphaName.toStdString());
+    CHECK(alphaPoint->property("node").value<cwSurveyNode*>() == sourceRoot);
+    CHECK(alphaPoint->property("caveNode").value<cwSurveyNode*>() == alpha);
+    CHECK(alphaPoint->property("deepestNode").value<cwSurveyNode*>() == alpha);
+    CHECK(f.source->row(sourceRoot, kAlphaStation) >= 0);
+
+    QQuickItem* charliePoint = f.point(QStringLiteral("entrancePoint_") + kCharlieStation);
+    REQUIRE(charliePoint != nullptr);
+    CHECK(charliePoint->property("caveName").toString().toStdString() == kCharlieName.toStdString());
+    CHECK(charliePoint->property("caveNode").value<cwSurveyNode*>() == charlie);
+    CHECK(charliePoint->property("deepestNode").value<cwSurveyNode*>() == charlie);
+}
+
+TEST_CASE("The entrance MarkerView renames an attached entrance with its deepest node without a re-solve",
+          "[cwEntranceMarkerSource]")
+{
+    EntranceFixture f;
+    cwCave* sourceRoot = SurveyTreeTestHelper::addNode(&f.region, nullptr, cwSurveyNode::Kind::CompassProject,
+                                                       QStringLiteral("PROJECT"));
+    cwCave* alpha = f.addMeasuredNode(sourceRoot, cwSurveyNode::Kind::CompassFile, kAlphaName,
+                                      kAlphaLengthMeters, kAlphaDepthMeters);
+    cwSolvedEntrance alphaEntrance = solvedEntrance(kAlphaStation, kSolvedPosition, true);
+    alphaEntrance.deepestNodeId = alpha->id();
+    SurveyTreeTestHelper::setSolvedEntrances(sourceRoot, {alphaEntrance});
+
+    REQUIRE(waitUntil([&] { return f.pins()->buildInstances().size() == 1; }));
+    CHECK(joined(f.drawnTexts()) == joined({kAlphaName}));
+
+    QSignalSpy solvedSpy(&f.region, &cwCavingRegion::solvedEntrancesChanged);
+    QSignalSpy changedSpy(f.source, &cwMarkerSource::markersChanged);
+    QSignalSpy insertedSpy(f.source, &cwMarkerSource::markersInserted);
+    QSignalSpy removedSpy(f.source, &cwMarkerSource::markersRemoved);
+
+    const QString renamed = QStringLiteral("Alpha Passage");
+    alpha->setName(renamed);
+    CHECK(waitUntil([&] { return f.drawnTexts() == QStringList{renamed}; }));
+    REQUIRE(waitForQueuedEvents());
+
+    CHECK(changedSpy.count() == 1);
+    CHECK(insertedSpy.count() == 0);
+    CHECK(removedSpy.count() == 0);
+    CHECK(solvedSpy.count() == 0);
 }
 
 TEST_CASE("The entrance MarkerView renames an entrance's line 1 from its label without a re-solve",

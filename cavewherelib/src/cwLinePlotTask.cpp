@@ -691,6 +691,56 @@ private:
         return lookup;
     }
 
+    // Each derived node of a sourced subtree, keyed by the canonical scope its
+    // stations carry: the source root's label path, then the cavernLabels down
+    // to the node. These are cavern's own names, so a display-name rename
+    // leaves them unchanged. The shallower node wins a shared scope.
+    QHash<QString, const cwSurveyNode*> derivedNodesByCavernScope() const
+    {
+        QHash<QString, const cwSurveyNode*> nodesByScope;
+        for (const cwSurveyNode* node : std::as_const(Nodes)) {
+            const QUuid rootId = ScopeLabels.sourceRoot(node->id());
+            const QString cavernPath = ScopeLabels.cavernPath(node->id());
+            if (rootId.isNull() || cavernPath.isEmpty()) {
+                continue;
+            }
+            const QString scope = cwStation::canonicalKey(ScopeLabels.prefix(rootId) + cavernPath);
+            if (!nodesByScope.contains(scope)) {
+                nodesByScope.insert(scope, node);
+            }
+        }
+        return nodesByScope;
+    }
+
+    // The deepest node inside \a owner's subtree whose cavern scope
+    // \a canonicalName starts with, else \a owner itself.
+    static const cwSurveyNode* deepestNode(const QString& canonicalName,
+                                           const cwSurveyNode* owner,
+                                           const QHash<QString, const cwSurveyNode*>& nodesByScope)
+    {
+        if (owner->externalCenterline().isEmpty() || nodesByScope.isEmpty()) {
+            return owner;
+        }
+        for (qsizetype end = canonicalName.lastIndexOf(QLatin1Char('.')); end > 0;
+             end = canonicalName.lastIndexOf(QLatin1Char('.'), end - 1)) {
+            const cwSurveyNode* candidate = nodesByScope.value(canonicalName.left(end + 1), nullptr);
+            if (candidate != nullptr && isInSubtree(candidate, owner)) {
+                return candidate;
+            }
+        }
+        return owner;
+    }
+
+    static bool isInSubtree(const cwSurveyNode* node, const cwSurveyNode* ancestor)
+    {
+        for (const cwSurveyNode* current = node; current != nullptr; current = current->parentNode()) {
+            if (current == ancestor) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // The stations cavern flagged as entrances, grouped by owning node and
     // named node-locally, as the node's fix and entrance lists name them.
     QHash<QUuid, QList<cwSolvedEntrance>> solvedEntrancesByNode(
@@ -698,6 +748,7 @@ private:
         const cwStationPositionLookup& stationPositions) const
     {
         const QSet<QString> fixedKeys(parsed.fixedStations.cbegin(), parsed.fixedStations.cend());
+        const QHash<QString, const cwSurveyNode*> derivedNodesByScope = derivedNodesByCavernScope();
         QHash<QUuid, QList<cwSolvedEntrance>> entrances;
         for (const QString& name : parsed.entranceStations) {
             const cwSurveyNode* owner = owningNode(name);
@@ -714,6 +765,7 @@ private:
             entrance.qualifiedName = name;
             entrance.position = stationPositions.position(name);
             entrance.fixed = fixedKeys.contains(key) && !FallbackStationKeys.contains(key);
+            entrance.deepestNodeId = deepestNode(key, owner, derivedNodesByScope)->id();
             entrances[owner->id()].append(entrance);
         }
         return entrances;

@@ -27,10 +27,12 @@ class cwSurveyNode;
  *
  * A marker's text is its display name in the "name" style and the
  * cwEntranceLabel length and depth line of its cave under it in the "stats"
- * style. Its cave is the nearest node of kind Cave at or above the node that
- * owns the station, else that node. The display name is the label of the
- * owning node's entrance entry for the station when it has one, else the
- * cave's name; an attached entrance has no entry, so it shows the cave's name.
+ * style. Its cave is the deepest node holding the station when that node lies
+ * below the owning node (a Compass .dat or Survex block of an attached file),
+ * else the nearest node of kind Cave at or above the owning node, else the
+ * owning node. The display name is the label of the owning node's entrance
+ * entry for the station when it has one, else the cave's name; an attached
+ * entrance has no entry, so it shows the cave's name.
  * Its keyword item extends the owning node's keywords with Type = "Entrance"
  * and Name = the display name. Solve, entrance list, name, kind, size and unit
  * changes coalesce into one queued rebuild that emits at most one signal of
@@ -65,6 +67,7 @@ private:
         QUuid id;
         cwSurveyNode* node = nullptr;
         cwSurveyNode* caveNode = nullptr;
+        cwSurveyNode* deepestNode = nullptr;
         QString stationName;
         QVector3D position;
         bool fixed = false;

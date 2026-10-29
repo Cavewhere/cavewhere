@@ -195,7 +195,9 @@ void cwEntranceMarkerSource::nodeDestroyed(QObject* node)
 
 /**
  * The entrances to draw: every node's solved entrances, named by the owning
- * node's entrance label or the cave's name, with the cave's numbers.
+ * node's entrance label or the name of the node they sit in, with that node's
+ * numbers. An entrance whose deepest node is its owning node sits in that
+ * node's cave.
  */
 QList<cwEntranceMarkerSource::Entrance> cwEntranceMarkerSource::desiredEntrances() const
 {
@@ -211,17 +213,29 @@ QList<cwEntranceMarkerSource::Entrance> cwEntranceMarkerSource::desiredEntrances
 
     const cwUnits::UnitSystem unitSystem = m_region->unitSystem();
     const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
+    QHash<QUuid, cwSurveyNode*> nodesById;
+    nodesById.reserve(nodes.size());
+    for(cwSurveyNode* node : nodes) {
+        nodesById.insert(node->id(), node);
+    }
+
+    QHash<const cwSurveyNode*, QString> statsTextByNode;
+    const auto statsTextOf = [&](cwSurveyNode* node) {
+        auto it = statsTextByNode.constFind(node);
+        if(it == statsTextByNode.constEnd()) {
+            it = statsTextByNode.insert(node, cwEntranceLabel::statsText(toMeters(node->length()),
+                                                                         toMeters(node->depth()),
+                                                                         unitSystem));
+        }
+        return it.value();
+    };
+
     for(cwSurveyNode* node : nodes) {
         const auto nodeEntrances = solved.constFind(node->id());
         if(nodeEntrances == solved.constEnd()) {
             continue;
         }
 
-        cwSurveyNode* caveNode = caveNodeOf(node);
-        const QString caveName = caveNode->name();
-        const QString statsText = cwEntranceLabel::statsText(toMeters(caveNode->length()),
-                                                             toMeters(caveNode->depth()),
-                                                             unitSystem);
         const cwEntranceModel* entranceModel = node->entrances();
         for(const cwSolvedEntrance& solvedEntrance : nodeEntrances.value()) {
             // Cavern folds native names to lower case; a native entrance keeps
@@ -229,16 +243,20 @@ QList<cwEntranceMarkerSource::Entrance> cwEntranceMarkerSource::desiredEntrances
             const int entryRow = entranceModel->indexOf(solvedEntrance.stationName);
             const cwEntrance entry = entranceModel->entranceAt(entryRow);
 
+            cwSurveyNode* deepestNode = nodesById.value(solvedEntrance.deepestNodeId, node);
+            cwSurveyNode* caveNode = deepestNode == node ? caveNodeOf(node) : deepestNode;
+
             Entrance entrance;
             entrance.id = entranceId(node, solvedEntrance.stationName);
             entrance.node = node;
             entrance.caveNode = caveNode;
+            entrance.deepestNode = deepestNode;
             entrance.stationName = entryRow >= 0 ? entry.stationName() : solvedEntrance.stationName;
             entrance.position = solvedEntrance.position;
             entrance.fixed = solvedEntrance.fixed;
-            entrance.caveName = caveName;
+            entrance.caveName = caveNode->name();
             entrance.label = entry.label();
-            entrance.statsText = statsText;
+            entrance.statsText = statsTextOf(caveNode);
             desired.append(entrance);
         }
     }
@@ -265,6 +283,7 @@ cwMarker cwEntranceMarkerSource::toMarker(const Entrance& entrance)
                        cwKeyword(cwKeywordModel::NameKey, displayName)};
     marker.delegateProperties = {{QStringLiteral("node"), QVariant::fromValue(entrance.node)},
                                  {QStringLiteral("caveNode"), QVariant::fromValue(entrance.caveNode)},
+                                 {QStringLiteral("deepestNode"), QVariant::fromValue(entrance.deepestNode)},
                                  {QStringLiteral("stationName"), entrance.stationName},
                                  {QStringLiteral("caveName"), entrance.caveName},
                                  {QStringLiteral("label"), entrance.label},
