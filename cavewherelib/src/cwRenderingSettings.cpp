@@ -38,6 +38,9 @@ QString revealModeKey() { return QStringLiteral("rendering/pointCloud/revealMode
 QString markerDepthTestKey() { return QStringLiteral("rendering/marker/depthTest"); }
 QString markerXRayKey() { return QStringLiteral("rendering/marker/xRay"); }
 QString markerXRayOpacityPercentKey() { return QStringLiteral("rendering/marker/xRayOpacityPercent"); }
+QString markerXRayOverheadOpacityPercentKey() { return QStringLiteral("rendering/marker/xRayOverheadOpacityPercent"); }
+QString markerXRayRampStartTiltDegreesKey() { return QStringLiteral("rendering/marker/xRayRampStartTiltDegrees"); }
+QString markerXRayRampEndTiltDegreesKey() { return QStringLiteral("rendering/marker/xRayRampEndTiltDegrees"); }
 
 // 4x MSAA is the historical default and a good quality/cost balance. Snapped to
 // the device's supported set if 4 happens to be unavailable.
@@ -115,6 +118,11 @@ int clampRevealFrames(int frames)
 int clampXRayOpacityPercent(int percent)
 {
     return std::clamp(percent, cw::billboard::kMinXRayOpacityPercent, cw::billboard::kMaxXRayOpacityPercent);
+}
+
+int clampXRayRampTiltDegrees(int degrees)
+{
+    return std::clamp(degrees, cw::billboard::kMinXRayRampTiltDegrees, cw::billboard::kMaxXRayRampTiltDegrees);
 }
 
 float clampPointSizePx(double pixels)
@@ -211,6 +219,15 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
     m_markerXRay = settings.value(markerXRayKey(), cw::billboard::kDefaultMarkerXRay).toBool();
     m_markerXRayOpacityPercent = clampXRayOpacityPercent(
                 settings.value(markerXRayOpacityPercentKey(), cw::billboard::kDefaultXRayOpacityPercent).toInt());
+    m_markerXRayOverheadOpacityPercent = clampXRayOpacityPercent(
+                settings.value(markerXRayOverheadOpacityPercentKey(),
+                               cw::billboard::kDefaultXRayOverheadOpacityPercent).toInt());
+    m_markerXRayRampStartTiltDegrees = clampXRayRampTiltDegrees(
+                settings.value(markerXRayRampStartTiltDegreesKey(),
+                               cw::billboard::kDefaultXRayRampStartTiltDegrees).toInt());
+    m_markerXRayRampEndTiltDegrees = clampXRayRampTiltDegrees(
+                settings.value(markerXRayRampEndTiltDegreesKey(),
+                               cw::billboard::kDefaultXRayRampEndTiltDegrees).toInt());
 }
 
 int cwRenderingSettings::clampToSupported(int samples) const
@@ -304,6 +321,33 @@ void cwRenderingSettings::setMarkerXRayOpacityPercent(int percent)
     }
 }
 
+void cwRenderingSettings::setMarkerXRayOverheadOpacityPercent(int percent)
+{
+    if (setPersisted(m_markerXRayOverheadOpacityPercent, clampXRayOpacityPercent(percent),
+                     markerXRayOverheadOpacityPercentKey())) {
+        emit markerXRayOverheadOpacityPercentChanged();
+        emitMarkerKnobChanged();
+    }
+}
+
+void cwRenderingSettings::setMarkerXRayRampStartTiltDegrees(int degrees)
+{
+    if (setPersisted(m_markerXRayRampStartTiltDegrees, clampXRayRampTiltDegrees(degrees),
+                     markerXRayRampStartTiltDegreesKey())) {
+        emit markerXRayRampStartTiltDegreesChanged();
+        emitMarkerKnobChanged();
+    }
+}
+
+void cwRenderingSettings::setMarkerXRayRampEndTiltDegrees(int degrees)
+{
+    if (setPersisted(m_markerXRayRampEndTiltDegrees, clampXRayRampTiltDegrees(degrees),
+                     markerXRayRampEndTiltDegreesKey())) {
+        emit markerXRayRampEndTiltDegreesChanged();
+        emitMarkerKnobChanged();
+    }
+}
+
 void cwRenderingSettings::emitMarkerKnobChanged()
 {
     emit markerDepthModeChanged();
@@ -320,7 +364,10 @@ bool cwRenderingSettings::markerKnobsAtDefaults() const
 {
     return m_markerDepthTest == cw::billboard::kDefaultMarkerDepthTest
             && m_markerXRay == cw::billboard::kDefaultMarkerXRay
-            && m_markerXRayOpacityPercent == cw::billboard::kDefaultXRayOpacityPercent;
+            && m_markerXRayOpacityPercent == cw::billboard::kDefaultXRayOpacityPercent
+            && m_markerXRayOverheadOpacityPercent == cw::billboard::kDefaultXRayOverheadOpacityPercent
+            && m_markerXRayRampStartTiltDegrees == cw::billboard::kDefaultXRayRampStartTiltDegrees
+            && m_markerXRayRampEndTiltDegrees == cw::billboard::kDefaultXRayRampEndTiltDegrees;
 }
 
 void cwRenderingSettings::resetMarkerKnobsToDefaults()
@@ -328,6 +375,9 @@ void cwRenderingSettings::resetMarkerKnobsToDefaults()
     setMarkerDepthTest(cw::billboard::kDefaultMarkerDepthTest);
     setMarkerXRay(cw::billboard::kDefaultMarkerXRay);
     setMarkerXRayOpacityPercent(cw::billboard::kDefaultXRayOpacityPercent);
+    setMarkerXRayOverheadOpacityPercent(cw::billboard::kDefaultXRayOverheadOpacityPercent);
+    setMarkerXRayRampStartTiltDegrees(cw::billboard::kDefaultXRayRampStartTiltDegrees);
+    setMarkerXRayRampEndTiltDegrees(cw::billboard::kDefaultXRayRampEndTiltDegrees);
 }
 
 int cwRenderingSettings::maximumLevel()

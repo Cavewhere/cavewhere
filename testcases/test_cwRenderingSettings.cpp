@@ -1063,6 +1063,9 @@ TEST_CASE("cwRenderingSettings marker knobs persist, fire once, and flip the def
     settings->resetToDefaults();
 
     constexpr int kEditedOpacityPercent = 55;
+    constexpr int kEditedOverheadOpacityPercent = 80;
+    constexpr int kEditedRampStartTilt = 30;
+    constexpr int kEditedRampEndTilt = 70;
 
     // One knob each: how to move it off its default, what QSettings and a new
     // instance hold afterward, and the notify signal that has to fire once.
@@ -1088,6 +1091,21 @@ TEST_CASE("cwRenderingSettings marker knobs persist, fire once, and flip the def
          QStringLiteral("rendering/marker/xRayOpacityPercent"), kEditedOpacityPercent,
          [](const cwRenderingSettings& s) { return QVariant(s.markerXRayOpacityPercent()); },
          &cwRenderingSettings::markerXRayOpacityPercentChanged},
+        {"markerXRayOverheadOpacityPercent",
+         [&] { settings->setMarkerXRayOverheadOpacityPercent(kEditedOverheadOpacityPercent); },
+         QStringLiteral("rendering/marker/xRayOverheadOpacityPercent"), kEditedOverheadOpacityPercent,
+         [](const cwRenderingSettings& s) { return QVariant(s.markerXRayOverheadOpacityPercent()); },
+         &cwRenderingSettings::markerXRayOverheadOpacityPercentChanged},
+        {"markerXRayRampStartTiltDegrees",
+         [&] { settings->setMarkerXRayRampStartTiltDegrees(kEditedRampStartTilt); },
+         QStringLiteral("rendering/marker/xRayRampStartTiltDegrees"), kEditedRampStartTilt,
+         [](const cwRenderingSettings& s) { return QVariant(s.markerXRayRampStartTiltDegrees()); },
+         &cwRenderingSettings::markerXRayRampStartTiltDegreesChanged},
+        {"markerXRayRampEndTiltDegrees",
+         [&] { settings->setMarkerXRayRampEndTiltDegrees(kEditedRampEndTilt); },
+         QStringLiteral("rendering/marker/xRayRampEndTiltDegrees"), kEditedRampEndTilt,
+         [](const cwRenderingSettings& s) { return QVariant(s.markerXRayRampEndTiltDegrees()); },
+         &cwRenderingSettings::markerXRayRampEndTiltDegreesChanged},
     };
 
     for (const Knob& knob : knobs) {
@@ -1177,6 +1195,106 @@ TEST_CASE("cwRenderingSettings clamps the marker x-ray opacity to 5-100 percent"
     settings->resetMarkerKnobsToDefaults();
 }
 
+TEST_CASE("cwRenderingSettings marker ramp knobs default to a 60-90 degree ramp up to full opacity",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    constexpr int kDefaultRampStartTilt = 60;
+    constexpr int kDefaultRampEndTilt = 90;
+    constexpr int kDefaultOverheadOpacityPercent = 100;
+    constexpr int kMinimumTilt = 0;
+    constexpr int kMaximumTilt = 90;
+    constexpr int kMinimumOpacityPercent = 5;
+    constexpr int kMaximumOpacityPercent = 100;
+    constexpr float kDefaultOpacity = 0.3f;
+
+    CHECK(settings->markerXRayRampStartTiltDegrees() == kDefaultRampStartTilt);
+    CHECK(settings->markerXRayRampEndTiltDegrees() == kDefaultRampEndTilt);
+    CHECK(settings->markerXRayOverheadOpacityPercent() == kDefaultOverheadOpacityPercent);
+    CHECK(cwRenderingSettings::minimumMarkerXRayRampTiltDegrees() == kMinimumTilt);
+    CHECK(cwRenderingSettings::maximumMarkerXRayRampTiltDegrees() == kMaximumTilt);
+    CHECK(cwRenderingSettings::minimumMarkerXRayOverheadOpacityPercent() == kMinimumOpacityPercent);
+    CHECK(cwRenderingSettings::maximumMarkerXRayOverheadOpacityPercent() == kMaximumOpacityPercent);
+    CHECK(settings->markerKnobsAtDefaults());
+
+    // The ramp is per view, so the settings' depth mode stays at the base opacity.
+    CHECK(settings->markerDepthMode().xRayOpacity == Catch::Approx(kDefaultOpacity));
+}
+
+TEST_CASE("cwRenderingSettings clamps the marker ramp tilts to 0-90 degrees and the overhead opacity to 5-100 percent",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetMarkerKnobsToDefaults();
+
+    constexpr int kBelowRange = -45;
+    constexpr int kAboveRange = 1000;
+    constexpr int kMinimumTilt = 0;
+    constexpr int kMaximumTilt = 90;
+    constexpr int kMinimumOpacityPercent = 5;
+    constexpr int kMaximumOpacityPercent = 100;
+
+    // One knob each: its setter, getter, key and limits.
+    struct Knob {
+        const char* name;
+        std::function<void(int)> set;
+        std::function<int(const cwRenderingSettings&)> read;
+        QString key;
+        int minimum;
+        int maximum;
+    };
+
+    const QVector<Knob> knobs = {
+        {"markerXRayRampStartTiltDegrees",
+         [&](int value) { settings->setMarkerXRayRampStartTiltDegrees(value); },
+         [](const cwRenderingSettings& s) { return s.markerXRayRampStartTiltDegrees(); },
+         QStringLiteral("rendering/marker/xRayRampStartTiltDegrees"), kMinimumTilt, kMaximumTilt},
+        {"markerXRayRampEndTiltDegrees",
+         [&](int value) { settings->setMarkerXRayRampEndTiltDegrees(value); },
+         [](const cwRenderingSettings& s) { return s.markerXRayRampEndTiltDegrees(); },
+         QStringLiteral("rendering/marker/xRayRampEndTiltDegrees"), kMinimumTilt, kMaximumTilt},
+        {"markerXRayOverheadOpacityPercent",
+         [&](int value) { settings->setMarkerXRayOverheadOpacityPercent(value); },
+         [](const cwRenderingSettings& s) { return s.markerXRayOverheadOpacityPercent(); },
+         QStringLiteral("rendering/marker/xRayOverheadOpacityPercent"),
+         kMinimumOpacityPercent, kMaximumOpacityPercent},
+    };
+
+    for (const Knob& knob : knobs) {
+        DYNAMIC_SECTION(knob.name << "'s setter clamps and stores the clamped value") {
+            QSettings diskSettings;
+            knob.set(kBelowRange);
+            CHECK(knob.read(*settings) == knob.minimum);
+            CHECK(diskSettings.value(knob.key).toInt() == knob.minimum);
+
+            knob.set(kAboveRange);
+            CHECK(knob.read(*settings) == knob.maximum);
+            CHECK(diskSettings.value(knob.key).toInt() == knob.maximum);
+        }
+
+        DYNAMIC_SECTION("a new instance clamps an out-of-range stored " << knob.name) {
+            QSettings diskSettings;
+            diskSettings.setValue(knob.key, kAboveRange);
+            const cwRenderingSettings above;
+            CHECK(knob.read(above) == knob.maximum);
+
+            diskSettings.setValue(knob.key, kBelowRange);
+            const cwRenderingSettings below;
+            CHECK(knob.read(below) == knob.minimum);
+
+            diskSettings.remove(knob.key);
+        }
+    }
+
+    settings->resetMarkerKnobsToDefaults();
+}
+
 TEST_CASE("cwRenderingSettings resets the marker knobs with every knob but not with the point cloud knobs",
           "[cwRenderingSettings]")
 {
@@ -1229,6 +1347,41 @@ TEST_CASE("cwRenderingSettings resets the marker knobs with every knob but not w
         CHECK(settings->markerKnobsAtDefaults());
         CHECK(settings->showRenderStatsHud());
         CHECK(settings->freezeCut());
+    }
+
+    SECTION("both resets restore the ramp knobs") {
+        constexpr int kEditedOverheadOpacityPercent = 80;
+        constexpr int kEditedRampStartTilt = 30;
+        constexpr int kEditedRampEndTilt = 70;
+        constexpr int kDefaultRampStartTilt = 60;
+        constexpr int kDefaultRampEndTilt = 90;
+        constexpr int kDefaultOverheadOpacityPercent = 100;
+
+        const auto moveRampKnobs = [&]() {
+            settings->setMarkerXRayOverheadOpacityPercent(kEditedOverheadOpacityPercent);
+            settings->setMarkerXRayRampStartTiltDegrees(kEditedRampStartTilt);
+            settings->setMarkerXRayRampEndTiltDegrees(kEditedRampEndTilt);
+            CHECK(settings->markerXRayOverheadOpacityPercent() == kEditedOverheadOpacityPercent);
+            CHECK(settings->markerXRayRampStartTiltDegrees() == kEditedRampStartTilt);
+            CHECK(settings->markerXRayRampEndTiltDegrees() == kEditedRampEndTilt);
+            CHECK_FALSE(settings->markerKnobsAtDefaults());
+            CHECK_FALSE(settings->isAtDefaults());
+        };
+        const auto checkRampKnobsAtDefaults = [&]() {
+            CHECK(settings->markerXRayOverheadOpacityPercent() == kDefaultOverheadOpacityPercent);
+            CHECK(settings->markerXRayRampStartTiltDegrees() == kDefaultRampStartTilt);
+            CHECK(settings->markerXRayRampEndTiltDegrees() == kDefaultRampEndTilt);
+            CHECK(settings->markerKnobsAtDefaults());
+            CHECK(settings->isAtDefaults());
+        };
+
+        moveRampKnobs();
+        settings->resetMarkerKnobsToDefaults();
+        checkRampKnobsAtDefaults();
+
+        moveRampKnobs();
+        settings->resetToDefaults();
+        checkRampKnobsAtDefaults();
     }
 
     SECTION("resetToDefaults restores the marker knobs") {

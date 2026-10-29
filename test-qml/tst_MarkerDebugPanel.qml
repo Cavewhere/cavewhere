@@ -14,6 +14,11 @@ MainWindowTest {
         parent: rootId
     }
 
+    // A view with no camera, scene or source: its ghost sits at the base knob.
+    MarkerView {
+        id: bareMarkerViewId
+    }
+
     TestCase {
         name: "MarkerDebugPanel"
         when: windowShown
@@ -22,6 +27,10 @@ MainWindowTest {
             "markerDepthTestCheckBox",
             "markerXRayCheckBox",
             "markerXRayOpacitySpinBox",
+            "markerXRayOpacityReadout",
+            "markerXRayOverheadOpacitySpinBox",
+            "markerXRayRampStartSpinBox",
+            "markerXRayRampEndSpinBox",
             "markerDebugResetButton",
             "markerDebugCloseButton"
         ]
@@ -32,8 +41,15 @@ MainWindowTest {
             tryCompare(panelId, "opened", true)
         }
 
+        readonly property list<string> rampSpinBoxNames: [
+            "markerXRayOverheadOpacitySpinBox",
+            "markerXRayRampStartSpinBox",
+            "markerXRayRampEndSpinBox"
+        ]
+
         function cleanup() {
             panelId.close()
+            panelId.markerView = null
             rootId.renderingSettings.resetToDefaults()
         }
 
@@ -52,6 +68,29 @@ MainWindowTest {
             compare(row("markerDepthTestCheckBox").checked, true)
             compare(row("markerXRayCheckBox").checked, true)
             compare(row("markerXRayOpacitySpinBox").value, 30)
+
+            compare(rootId.renderingSettings.markerXRayOverheadOpacityPercent, 100)
+            compare(rootId.renderingSettings.markerXRayRampStartTiltDegrees, 60)
+            compare(rootId.renderingSettings.markerXRayRampEndTiltDegrees, 90)
+            compare(row("markerXRayOverheadOpacitySpinBox").value, 100)
+            compare(row("markerXRayRampStartSpinBox").value, 60)
+            compare(row("markerXRayRampEndSpinBox").value, 90)
+        }
+
+        function test_theRampRowsRangeOverTheClampedLimits() {
+            const overhead = row("markerXRayOverheadOpacitySpinBox")
+            compare(overhead.from, rootId.renderingSettings.minimumMarkerXRayOverheadOpacityPercent)
+            compare(overhead.to, rootId.renderingSettings.maximumMarkerXRayOverheadOpacityPercent)
+            compare(overhead.from, 5)
+            compare(overhead.to, 100)
+
+            for (const name of ["markerXRayRampStartSpinBox", "markerXRayRampEndSpinBox"]) {
+                const tilt = row(name)
+                compare(tilt.from, rootId.renderingSettings.minimumMarkerXRayRampTiltDegrees, name)
+                compare(tilt.to, rootId.renderingSettings.maximumMarkerXRayRampTiltDegrees, name)
+                compare(tilt.from, 0, name)
+                compare(tilt.to, 90, name)
+            }
         }
 
         function test_everyKnobHasARow() {
@@ -92,20 +131,67 @@ MainWindowTest {
             compare(rootId.renderingSettings.markerKnobsAtDefaults, false)
         }
 
+        function test_theRampRowsWriteTheSettings() {
+            const overhead = row("markerXRayOverheadOpacitySpinBox")
+            overhead.value = 75
+            overhead.valueModified()
+            compare(rootId.renderingSettings.markerXRayOverheadOpacityPercent, 75)
+
+            const rampStart = row("markerXRayRampStartSpinBox")
+            rampStart.value = 40
+            rampStart.valueModified()
+            compare(rootId.renderingSettings.markerXRayRampStartTiltDegrees, 40)
+
+            const rampEnd = row("markerXRayRampEndSpinBox")
+            rampEnd.value = 80
+            rampEnd.valueModified()
+            compare(rootId.renderingSettings.markerXRayRampEndTiltDegrees, 80)
+            compare(rootId.renderingSettings.markerKnobsAtDefaults, false)
+        }
+
+        function test_theRampRowsFollowTheSettings() {
+            rootId.renderingSettings.markerXRayOverheadOpacityPercent = 65
+            rootId.renderingSettings.markerXRayRampStartTiltDegrees = 20
+            rootId.renderingSettings.markerXRayRampEndTiltDegrees = 70
+
+            tryCompare(row("markerXRayOverheadOpacitySpinBox"), "value", 65)
+            tryCompare(row("markerXRayRampStartSpinBox"), "value", 20)
+            tryCompare(row("markerXRayRampEndSpinBox"), "value", 70)
+        }
+
+        function test_theReadoutShowsTheViewsLiveOpacity() {
+            const readout = row("markerXRayOpacityReadout")
+            panelId.markerView = bareMarkerViewId
+            tryCompare(readout, "text", "now 30%")
+
+            rootId.renderingSettings.markerXRayOpacityPercent = 55
+            tryCompare(readout, "text", "now 55%")
+        }
+
         function test_theXRayRowsDisableWhileTheDepthTestIsOff() {
             const xRay = row("markerXRayCheckBox")
             const opacity = row("markerXRayOpacitySpinBox")
             compare(xRay.enabled, true)
             compare(opacity.enabled, true)
 
+            for (const name of rampSpinBoxNames) {
+                compare(row(name).enabled, true, name)
+            }
+
             rootId.renderingSettings.markerDepthTest = false
             tryCompare(xRay, "enabled", false)
             tryCompare(opacity, "enabled", false)
+            for (const name of rampSpinBoxNames) {
+                tryCompare(row(name), "enabled", false)
+            }
             compare(row("markerDepthTestCheckBox").enabled, true)
 
             rootId.renderingSettings.markerDepthTest = true
             tryCompare(xRay, "enabled", true)
             tryCompare(opacity, "enabled", true)
+            for (const name of rampSpinBoxNames) {
+                tryCompare(row(name), "enabled", true)
+            }
         }
 
         function test_resetRestoresTheMarkerKnobsAndLeavesTheHudAlone() {
@@ -114,6 +200,12 @@ MainWindowTest {
             rootId.renderingSettings.markerDepthTest = false
             rootId.renderingSettings.markerXRay = false
             rootId.renderingSettings.markerXRayOpacityPercent = 55
+            rootId.renderingSettings.markerXRayOverheadOpacityPercent = 65
+            rootId.renderingSettings.markerXRayRampStartTiltDegrees = 20
+            rootId.renderingSettings.markerXRayRampEndTiltDegrees = 70
+            compare(rootId.renderingSettings.markerXRayOverheadOpacityPercent, 65)
+            compare(rootId.renderingSettings.markerXRayRampStartTiltDegrees, 20)
+            compare(rootId.renderingSettings.markerXRayRampEndTiltDegrees, 70)
             compare(rootId.renderingSettings.markerKnobsAtDefaults, false)
 
             mouseClick(row("markerDebugResetButton"))
@@ -124,6 +216,12 @@ MainWindowTest {
             tryCompare(row("markerDepthTestCheckBox"), "checked", true)
             tryCompare(row("markerXRayCheckBox"), "checked", true)
             tryCompare(row("markerXRayOpacitySpinBox"), "value", 30)
+            compare(rootId.renderingSettings.markerXRayOverheadOpacityPercent, 100)
+            compare(rootId.renderingSettings.markerXRayRampStartTiltDegrees, 60)
+            compare(rootId.renderingSettings.markerXRayRampEndTiltDegrees, 90)
+            tryCompare(row("markerXRayOverheadOpacitySpinBox"), "value", 100)
+            tryCompare(row("markerXRayRampStartSpinBox"), "value", 60)
+            tryCompare(row("markerXRayRampEndSpinBox"), "value", 90)
 
             compare(rootId.renderingSettings.showRenderStatsHud, true)
             compare(rootId.renderingSettings.freezeCut, true)
@@ -188,6 +286,15 @@ MainWindowTest {
             mouseClick(view, view.width / 2, view.height / 2)
             compare(panel.opened, true)
             panel.close()
+        }
+
+        function test_thePanelReadsOutTheEntranceView() {
+            const view = renderer()
+            const panel = findChild(view, "markerDebugPanel")
+            const entranceView = findChild(view, "entranceView")
+            verify(panel !== null, "markerDebugPanel not found")
+            verify(entranceView !== null, "entranceView not found")
+            compare(panel.markerView, entranceView)
         }
 
         function test_openingOnePanelClosesTheOther() {

@@ -64,6 +64,7 @@ class CAVEWHERE_LIB_EXPORT cwMarkerView : public cwBillboardOverlayItem
     Q_PROPERTY(qreal textGap READ textGap WRITE setTextGap NOTIFY textGapChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool followsMarkerKnobs READ followsMarkerKnobs WRITE setFollowsMarkerKnobs NOTIFY followsMarkerKnobsChanged)
+    Q_PROPERTY(double xRayOpacityPercent READ xRayOpacityPercent NOTIFY xRayOpacityPercentChanged)
 
 public:
     explicit cwMarkerView(QQuickItem* parent = nullptr);
@@ -98,6 +99,12 @@ public:
     bool followsMarkerKnobs() const;
     void setFollowsMarkerKnobs(bool followsMarkerKnobs);
 
+    //! The opacity, in percent, this view's layers draw the x-ray ghost at
+    //! now: ramped by the camera tilt while the hidden pass draws. With the
+    //! hidden pass off it holds the base knob opacity, or 100 for a view that
+    //! ignores the marker knobs.
+    double xRayOpacityPercent() const;
+
     //! Selects the delegate of the source's marker @a row, opening its popup.
     //! Does nothing for a row out of range or without a selection manager.
     Q_INVOKABLE void select(int row);
@@ -129,6 +136,7 @@ signals:
     void textGapChanged();
     void countChanged();
     void followsMarkerKnobsChanged();
+    void xRayOpacityPercentChanged();
 
 protected:
     void componentComplete() override;

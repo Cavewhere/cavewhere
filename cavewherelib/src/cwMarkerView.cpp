@@ -31,6 +31,7 @@
 namespace {
 constexpr qreal kHalf = 0.5;
 constexpr float kFullOpacity = 1.0f;
+constexpr double kPercentScale = 100.0;
 
 // Returns true when @a layer's style changed.
 bool pushStyle(cwRenderTextBillboards* layer, const cwMarkerTextStyle* textStyle)
@@ -298,11 +299,33 @@ bool cwMarkerView::isTappable(const QVector3D& worldPosition,
            && !(m_depthMode.hidesOccluded() && isOccluded(worldPosition, tapViewportPosition));
 }
 
+double cwMarkerView::xRayOpacityPercent() const
+{
+    return double(m_depthMode.xRayOpacity) * kPercentScale;
+}
+
 cwBillboardDepthMode cwMarkerView::knobDepthMode() const
 {
     if(m_followsMarkerKnobs) {
         const cwRenderingSettings* settings = cwRenderingSettings::instance();
-        return settings ? settings->markerDepthMode() : cw::billboard::defaultMarkerDepthMode();
+        cwBillboardDepthMode mode = settings ? settings->markerDepthMode() : cw::billboard::defaultMarkerDepthMode();
+        if(mode.drawsHiddenPass() && camera() != nullptr) {
+            const double tilt = cw::billboard::cameraTiltDegrees(camera()->viewMatrix());
+            if(settings) {
+                mode.xRayOpacity = cw::billboard::rampedXRayOpacity(tilt,
+                                                                    settings->markerXRayOpacityPercent(),
+                                                                    settings->markerXRayOverheadOpacityPercent(),
+                                                                    settings->markerXRayRampStartTiltDegrees(),
+                                                                    settings->markerXRayRampEndTiltDegrees());
+            } else {
+                mode.xRayOpacity = cw::billboard::rampedXRayOpacity(tilt,
+                                                                    cw::billboard::kDefaultXRayOpacityPercent,
+                                                                    cw::billboard::kDefaultXRayOverheadOpacityPercent,
+                                                                    cw::billboard::kDefaultXRayRampStartTiltDegrees,
+                                                                    cw::billboard::kDefaultXRayRampEndTiltDegrees);
+            }
+        }
+        return mode;
     } else {
         return cwBillboardDepthMode();
     }
@@ -315,7 +338,11 @@ void cwMarkerView::applyDepthMode()
         return;
     }
     const bool hidesOccludedChanged = m_depthMode.hidesOccluded() != depthMode.hidesOccluded();
+    const bool opacityChanged = m_depthMode.xRayOpacity != depthMode.xRayOpacity;
     m_depthMode = depthMode;
+    if(opacityChanged) {
+        emit xRayOpacityPercentChanged();
+    }
 
     if(!isComponentComplete()) {
         return;
@@ -375,6 +402,8 @@ void cwMarkerView::componentComplete()
  */
 void cwMarkerView::repositionBillboards()
 {
+    // The x-ray opacity ramps with the camera's tilt.
+    applyDepthMode();
     projectItems();
     if(cwLabelDeclutter* declutter = labelDeclutter()) {
         declutter->ensurePass(camera());

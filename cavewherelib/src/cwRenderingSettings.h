@@ -39,7 +39,9 @@ class QQuickRhiItem;
 //
 // The marker knobs (markerDepthTest, markerXRay, markerXRayOpacityPercent) set
 // how entrance markers meet the scene's depth: every cwMarkerView that follows
-// the marker knobs reads markerDepthMode() and pushes it to its layers.
+// the marker knobs reads markerDepthMode() and pushes it to its layers. The ramp
+// knobs (markerXRayOverheadOpacityPercent and the two ramp tilts) set how each
+// such view ramps the x-ray opacity with its camera's tilt.
 class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
 {
     Q_OBJECT
@@ -74,6 +76,9 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(bool markerDepthTest READ markerDepthTest WRITE setMarkerDepthTest NOTIFY markerDepthTestChanged)
     Q_PROPERTY(bool markerXRay READ markerXRay WRITE setMarkerXRay NOTIFY markerXRayChanged)
     Q_PROPERTY(int markerXRayOpacityPercent READ markerXRayOpacityPercent WRITE setMarkerXRayOpacityPercent NOTIFY markerXRayOpacityPercentChanged)
+    Q_PROPERTY(int markerXRayOverheadOpacityPercent READ markerXRayOverheadOpacityPercent WRITE setMarkerXRayOverheadOpacityPercent NOTIFY markerXRayOverheadOpacityPercentChanged)
+    Q_PROPERTY(int markerXRayRampStartTiltDegrees READ markerXRayRampStartTiltDegrees WRITE setMarkerXRayRampStartTiltDegrees NOTIFY markerXRayRampStartTiltDegreesChanged)
+    Q_PROPERTY(int markerXRayRampEndTiltDegrees READ markerXRayRampEndTiltDegrees WRITE setMarkerXRayRampEndTiltDegrees NOTIFY markerXRayRampEndTiltDegreesChanged)
     Q_PROPERTY(bool markerKnobsAtDefaults READ markerKnobsAtDefaults NOTIFY markerKnobsAtDefaultsChanged)
     Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
 
@@ -106,6 +111,10 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int maximumRevealFrames READ maximumRevealFrames CONSTANT)
     Q_PROPERTY(int minimumMarkerXRayOpacityPercent READ minimumMarkerXRayOpacityPercent CONSTANT)
     Q_PROPERTY(int maximumMarkerXRayOpacityPercent READ maximumMarkerXRayOpacityPercent CONSTANT)
+    Q_PROPERTY(int minimumMarkerXRayOverheadOpacityPercent READ minimumMarkerXRayOverheadOpacityPercent CONSTANT)
+    Q_PROPERTY(int maximumMarkerXRayOverheadOpacityPercent READ maximumMarkerXRayOverheadOpacityPercent CONSTANT)
+    Q_PROPERTY(int minimumMarkerXRayRampTiltDegrees READ minimumMarkerXRayRampTiltDegrees CONSTANT)
+    Q_PROPERTY(int maximumMarkerXRayRampTiltDegrees READ maximumMarkerXRayRampTiltDegrees CONSTANT)
 
 public:
     explicit cwRenderingSettings(QObject* parent = nullptr);
@@ -209,6 +218,21 @@ public:
     int markerXRayOpacityPercent() const { return m_markerXRayOpacityPercent; }
     void setMarkerXRayOpacityPercent(int percent);
 
+    //! The ghost's opacity in percent from markerXRayRampEndTiltDegrees of
+    //! camera tilt on, looking down
+    int markerXRayOverheadOpacityPercent() const { return m_markerXRayOverheadOpacityPercent; }
+    void setMarkerXRayOverheadOpacityPercent(int percent);
+
+    //! The camera tilt below the horizon, in degrees, where the ghost's opacity
+    //! starts to ramp from markerXRayOpacityPercent toward the overhead opacity
+    int markerXRayRampStartTiltDegrees() const { return m_markerXRayRampStartTiltDegrees; }
+    void setMarkerXRayRampStartTiltDegrees(int degrees);
+
+    //! The camera tilt below the horizon, in degrees, where the ghost reaches
+    //! the overhead opacity
+    int markerXRayRampEndTiltDegrees() const { return m_markerXRayRampEndTiltDegrees; }
+    void setMarkerXRayRampEndTiltDegrees(int degrees);
+
     //! The three marker knobs as the depth mode every marker layer draws with
     cwBillboardDepthMode markerDepthMode() const;
 
@@ -250,6 +274,10 @@ public:
     static int maximumRevealFrames() { return cw::pointcloud::kMaxRevealFrames; }
     static int minimumMarkerXRayOpacityPercent() { return cw::billboard::kMinXRayOpacityPercent; }
     static int maximumMarkerXRayOpacityPercent() { return cw::billboard::kMaxXRayOpacityPercent; }
+    static int minimumMarkerXRayOverheadOpacityPercent() { return cw::billboard::kMinXRayOpacityPercent; }
+    static int maximumMarkerXRayOverheadOpacityPercent() { return cw::billboard::kMaxXRayOpacityPercent; }
+    static int minimumMarkerXRayRampTiltDegrees() { return cw::billboard::kMinXRayRampTiltDegrees; }
+    static int maximumMarkerXRayRampTiltDegrees() { return cw::billboard::kMaxXRayRampTiltDegrees; }
 
     bool isAtDefaults() const;
     Q_INVOKABLE void resetToDefaults();
@@ -291,9 +319,12 @@ signals:
     void markerDepthTestChanged();
     void markerXRayChanged();
     void markerXRayOpacityPercentChanged();
+    void markerXRayOverheadOpacityPercentChanged();
+    void markerXRayRampStartTiltDegreesChanged();
+    void markerXRayRampEndTiltDegreesChanged();
     void markerKnobsAtDefaultsChanged();
 
-    //! Any one of the markerDepthMode() knobs moved
+    //! Any one of the marker knobs moved, the ramp knobs included
     void markerDepthModeChanged();
 
     //! Any one of the budgets() knobs moved
@@ -337,6 +368,9 @@ private:
     bool m_markerDepthTest = cw::billboard::kDefaultMarkerDepthTest;
     bool m_markerXRay = cw::billboard::kDefaultMarkerXRay;
     int m_markerXRayOpacityPercent = cw::billboard::kDefaultXRayOpacityPercent;
+    int m_markerXRayOverheadOpacityPercent = cw::billboard::kDefaultXRayOverheadOpacityPercent;
+    int m_markerXRayRampStartTiltDegrees = cw::billboard::kDefaultXRayRampStartTiltDegrees;
+    int m_markerXRayRampEndTiltDegrees = cw::billboard::kDefaultXRayRampEndTiltDegrees;
 
     // Safe baseline until the QRhi backend reports the real set (see cwRhiScene).
     // Always kept sorted ascending and containing 1.

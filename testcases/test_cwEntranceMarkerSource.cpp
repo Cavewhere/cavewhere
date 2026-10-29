@@ -9,7 +9,8 @@
 // station labels of a participating Label3dView, as long as the entrance draws:
 // one the depth test hides behind a wall, with x-ray off, claims nothing. A tap
 // on a pin behind a wall selects it while the pin draws as a ghost or over
-// everything.
+// everything. The ghost's opacity ramps with the camera's tilt from the base
+// knob (level) to the overhead knob (straight down), and the view reads it out.
 //
 // The view is built in QML because its EntrancePoint tap targets come from QML.
 // The window is never shown and there is no QRhi: every check reads the CPU side
@@ -933,6 +934,151 @@ TEST_CASE("The entrance MarkerView takes a tap on a pin behind a wall while the 
     settings->setMarkerDepthTest(false);
     CHECK(f.view->isTappable(kSolvedPosition, onPin));
     CHECK_FALSE(f.view->isTappable(kSolvedPosition, offPin));
+}
+
+namespace {
+
+// The marker knobs' ghost opacities as 0-1 factors and readout percents.
+constexpr float kBaseGhostOpacity = 0.3f;
+constexpr float kOverheadGhostOpacity = 1.0f;
+constexpr float kMidRampGhostOpacity = 0.65f;
+constexpr float kGhostOpacityTolerance = 1e-4f;
+constexpr double kPercentScale = 100.0;
+
+// Camera tilts below the horizon, in degrees.
+constexpr double kStraightDownTilt = 90.0;
+constexpr double kLevelTilt = 0.0;
+constexpr double kMidRampTilt = 75.0;
+constexpr double kHalfwayDownTilt = 45.0;
+
+// A view matrix tilted @a tiltDegrees below the horizon, the turntable's pitch:
+// the identity looks straight down.
+QMatrix4x4 tiltedView(double tiltDegrees)
+{
+    QMatrix4x4 view;
+    view.rotate(float(tiltDegrees - kStraightDownTilt), 1.0f, 0.0f, 0.0f);
+    return view;
+}
+
+// @a view moved without changing its tilt: turned about the vertical and panned.
+QMatrix4x4 turnedAndPanned(const QMatrix4x4& view)
+{
+    constexpr float kAzimuthDegrees = 30.0f;
+    const QVector3D kPan(12.0f, -7.0f, -50.0f);
+    QMatrix4x4 moved = view;
+    moved.rotate(kAzimuthDegrees, 0.0f, 0.0f, 1.0f);
+    moved.translate(kPan);
+    return moved;
+}
+
+// Every entrance layer draws its ghost at @a opacity, and the view reads it out.
+void checkGhostOpacity(EntranceFixture& f, bool xRay, float opacity)
+{
+    const QList<QPair<const char*, cwBillboardDepthMode>> layers = {
+        {"pins", f.pins()->depthMode()},
+        {"names", f.texts()->depthMode()},
+        {"stats", f.statsTexts()->depthMode()},
+    };
+    for (const auto& layer : layers) {
+        INFO(layer.first);
+        CHECK(layer.second.xRay == xRay);
+        CHECK_THAT(layer.second.xRayOpacity, Catch::Matchers::WithinAbs(opacity, kGhostOpacityTolerance));
+    }
+    CHECK_THAT(f.view->xRayOpacityPercent(),
+               Catch::Matchers::WithinAbs(opacity * kPercentScale, kGhostOpacityTolerance * kPercentScale));
+}
+
+} // namespace
+
+TEST_CASE("The entrance MarkerView ramps its x-ray ghost with the camera tilt and reads the opacity out",
+          "[cwEntranceMarkerSource]")
+{
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings != nullptr);
+    cwMarkerKnobsReset knobsReset;
+
+    EntranceFixture f;
+    f.addEntranceCave();
+    REQUIRE(f.waitForOneEntrance());
+    REQUIRE(f.camera.viewMatrix() == QMatrix4x4());
+
+    // The fixture's camera looks straight down, where the ghost is at the
+    // overhead knob.
+    checkGhostOpacity(f, true, kOverheadGhostOpacity);
+    QSignalSpy readoutSpy(f.view, &cwMarkerView::xRayOpacityPercentChanged);
+
+    SECTION("orbiting from straight down to level fades the ghost to the base knob and back") {
+        f.camera.setViewMatrix(tiltedView(kLevelTilt));
+        checkGhostOpacity(f, true, kBaseGhostOpacity);
+        CHECK(readoutSpy.count() == 1);
+
+        f.camera.setViewMatrix(tiltedView(kMidRampTilt));
+        checkGhostOpacity(f, true, kMidRampGhostOpacity);
+        CHECK(readoutSpy.count() == 2);
+
+        f.camera.setViewMatrix(QMatrix4x4());
+        checkGhostOpacity(f, true, kOverheadGhostOpacity);
+        CHECK(readoutSpy.count() == 3);
+
+        // Turning and panning keep the tilt, so the opacity and the readout stay.
+        f.camera.setViewMatrix(turnedAndPanned(QMatrix4x4()));
+        checkGhostOpacity(f, true, kOverheadGhostOpacity);
+        CHECK(readoutSpy.count() == 3);
+
+        f.camera.setViewMatrix(tiltedView(kLevelTilt));
+        CHECK(readoutSpy.count() == 4);
+        f.camera.setViewMatrix(turnedAndPanned(tiltedView(kLevelTilt)));
+        checkGhostOpacity(f, true, kBaseGhostOpacity);
+        CHECK(readoutSpy.count() == 4);
+    }
+
+    SECTION("each ramp knob reaches the view at once") {
+        constexpr int kHalfOverheadPercent = 50;
+        constexpr float kHalfOverheadOpacity = 0.5f;
+        constexpr int kEarlyRampStart = 30;
+        // A quarter of the way from 30 to 50 percent, at 45 degrees on a 30-90 ramp.
+        constexpr float kQuarterRampOpacity = 0.35f;
+
+        settings->setMarkerXRayOverheadOpacityPercent(kHalfOverheadPercent);
+        checkGhostOpacity(f, true, kHalfOverheadOpacity);
+        CHECK(readoutSpy.count() == 1);
+
+        f.camera.setViewMatrix(tiltedView(kHalfwayDownTilt));
+        checkGhostOpacity(f, true, kBaseGhostOpacity);
+        CHECK(readoutSpy.count() == 2);
+
+        settings->setMarkerXRayRampStartTiltDegrees(kEarlyRampStart);
+        checkGhostOpacity(f, true, kQuarterRampOpacity);
+        CHECK(readoutSpy.count() == 3);
+
+        settings->setMarkerXRayRampEndTiltDegrees(int(kHalfwayDownTilt));
+        checkGhostOpacity(f, true, kHalfOverheadOpacity);
+        CHECK(readoutSpy.count() == 4);
+    }
+
+    SECTION("x-ray off and the depth test off skip the ramp") {
+        settings->setMarkerXRay(false);
+        checkGhostOpacity(f, false, kBaseGhostOpacity);
+        CHECK(readoutSpy.count() == 1);
+
+        f.camera.setViewMatrix(tiltedView(kMidRampTilt));
+        checkGhostOpacity(f, false, kBaseGhostOpacity);
+        CHECK(readoutSpy.count() == 1);
+
+        // Level, x-ray on lands on the same base opacity, so the readout stays.
+        f.camera.setViewMatrix(tiltedView(kLevelTilt));
+        settings->setMarkerXRay(true);
+        checkGhostOpacity(f, true, kBaseGhostOpacity);
+        CHECK(readoutSpy.count() == 1);
+
+        settings->setMarkerDepthTest(false);
+        f.camera.setViewMatrix(QMatrix4x4());
+        CHECK_FALSE(f.pins()->depthMode().depthTest);
+        CHECK_THAT(f.view->xRayOpacityPercent(),
+                   Catch::Matchers::WithinAbs(kBaseGhostOpacity * kPercentScale,
+                                              kGhostOpacityTolerance * kPercentScale));
+        CHECK(readoutSpy.count() == 1);
+    }
 }
 
 TEST_CASE("The entrance MarkerView selects an entrance's point by its source row", "[cwEntranceMarkerSource]")

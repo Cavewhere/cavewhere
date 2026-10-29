@@ -5,7 +5,8 @@
 // layer of its style. Also pins cwMarkerSource's own contract, and that a 4x
 // larger source costs at most about 4x in signals and layer pushes. The marker
 // knobs in cwRenderingSettings set the depth mode of every layer the view
-// draws, and leave the station labels' default text layer alone.
+// draws, and leave the station labels' default text layer alone. The ghost's
+// opacity ramps with the camera tilt, so the base-opacity cases look level.
 //
 // The view is built in QML because its delegates come from a QML component.
 // The window is never shown and there is no QRhi: every check reads the CPU
@@ -635,6 +636,17 @@ constexpr float kDefaultXRayOpacity = 0.3f;
 constexpr int kEditedXRayOpacityPercent = 55;
 constexpr float kEditedXRayOpacity = 0.55f;
 
+// A level camera: the turntable's pitch 0, where the x-ray ghost draws at the
+// base opacity knob. The fixture's identity camera looks straight down, where
+// it draws at the overhead knob.
+QMatrix4x4 levelViewMatrix()
+{
+    constexpr float kStraightDownToLevelDegrees = -90.0f;
+    QMatrix4x4 view;
+    view.rotate(kStraightDownToLevelDegrees, 1.0f, 0.0f, 0.0f);
+    return view;
+}
+
 void checkDepthMode(const char* layerName, const cwBillboardDepthMode& mode,
                     bool depthTest, bool xRay, float xRayOpacity)
 {
@@ -661,6 +673,8 @@ TEST_CASE("A MarkerView draws its layers in the marker knobs' depth mode and sta
     cwMarkerKnobsReset knobsReset;
 
     MarkerFixture f;
+    // Level, so the ghost draws at the base opacity knob these checks move.
+    f.camera.setViewMatrix(levelViewMatrix());
     f.source.resetMarkers(testMarkers(0, 2));
     REQUIRE(f.view->count() == 2);
     REQUIRE(f.titles() != f.details());
@@ -758,6 +772,21 @@ TEST_CASE("A MarkerView that does not follow the marker knobs keeps the station-
         settings->setMarkerXRay(true);
         checkStationLabelMode(f);
     }
+
+    SECTION("at any camera tilt, with its readout at full opacity")
+    {
+        constexpr double kFullOpacityPercent = 100.0;
+        QSignalSpy readoutSpy(f.view, &cwMarkerView::xRayOpacityPercentChanged);
+
+        f.camera.setViewMatrix(levelViewMatrix());
+        checkStationLabelMode(f);
+        CHECK(f.view->xRayOpacityPercent() == Catch::Approx(kFullOpacityPercent));
+
+        f.camera.setViewMatrix(QMatrix4x4());
+        checkStationLabelMode(f);
+        CHECK(f.view->xRayOpacityPercent() == Catch::Approx(kFullOpacityPercent));
+        CHECK(readoutSpy.count() == 0);
+    }
 }
 
 TEST_CASE("A MarkerView switches between the knobs' and the station-label depth mode as followsMarkerKnobs changes",
@@ -805,6 +834,8 @@ int framesForOneKnobChange(int markerCount)
     settings->resetMarkerKnobsToDefaults();
 
     MarkerFixture f;
+    // Level, so the base opacity knob this edits reaches the layers.
+    f.camera.setViewMatrix(levelViewMatrix());
     f.source.resetMarkers(testMarkers(0, markerCount));
     INFO("markers " << markerCount);
     CHECK(f.view->count() == markerCount);

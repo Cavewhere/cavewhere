@@ -466,6 +466,7 @@ Item {
     MarkerDebugPanel {
         id: markerDebugPanelId
         parent: rootId
+        markerView: entranceViewId
         x: rootId.width - width - Theme.pageMargin
         y: renderStatsHudLoaderId.y + renderStatsHudLoaderId.height + Theme.linkBarButtonSpacing
     }
