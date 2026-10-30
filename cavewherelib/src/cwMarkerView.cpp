@@ -256,18 +256,18 @@ int cwMarkerView::count() const
     return int(m_entries.size());
 }
 
-bool cwMarkerView::followsMarkerKnobs() const
+bool cwMarkerView::xRayEnabled() const
 {
-    return m_followsMarkerKnobs;
+    return m_xRayEnabled;
 }
 
-void cwMarkerView::setFollowsMarkerKnobs(bool followsMarkerKnobs)
+void cwMarkerView::setXRayEnabled(bool xRayEnabled)
 {
-    if(m_followsMarkerKnobs == followsMarkerKnobs) {
+    if(m_xRayEnabled == xRayEnabled) {
         return;
     }
-    m_followsMarkerKnobs = followsMarkerKnobs;
-    emit followsMarkerKnobsChanged();
+    m_xRayEnabled = xRayEnabled;
+    emit xRayEnabledChanged();
     applyDepthMode();
 }
 
@@ -306,7 +306,7 @@ double cwMarkerView::xRayOpacityPercent() const
 
 cwBillboardDepthMode cwMarkerView::knobDepthMode() const
 {
-    if(m_followsMarkerKnobs) {
+    if(m_xRayEnabled) {
         const cwRenderingSettings* settings = cwRenderingSettings::instance();
         cwBillboardDepthMode mode = settings ? settings->markerDepthMode() : cw::billboard::defaultMarkerDepthMode();
         if(mode.drawsHiddenPass() && camera() != nullptr) {

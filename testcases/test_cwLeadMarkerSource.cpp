@@ -9,7 +9,7 @@
 // solved analytically.
 //
 // The isTappable cases pin the lead view's fixed depth mode on top of that gate.
-// They set followsMarkerKnobs false, as GLTerrainRenderer does for the lead view,
+// They set xRayEnabled false, as GLTerrainRenderer does for the lead view,
 // so the view draws with the depth test on and no x-ray and a hidden lead keeps
 // the tap out whatever the knobs say.
 //
@@ -246,11 +246,12 @@ TEST_CASE("A lead behind a cloud point is untappable whatever the marker knobs",
     addCloudPoint(f.scene, rayPointAtZ(ray, kCloudZ));
     REQUIRE(f.leadView.isOccluded(leadPosition, tap));
 
-    // Following the default knobs, the hidden lead draws as a ghost and takes the tap.
-    REQUIRE(f.leadView.followsMarkerKnobs());
+    // With x-ray enabled at the default knobs, the hidden lead draws as a ghost
+    // and takes the tap.
+    REQUIRE(f.leadView.xRayEnabled());
     REQUIRE(f.leadView.isTappable(leadPosition, tap));
 
-    f.leadView.setFollowsMarkerKnobs(false);
+    f.leadView.setXRayEnabled(false);
     CHECK_FALSE(f.leadView.isTappable(leadPosition, tap));
 
     for (const bool depthTest : {true, false}) {
@@ -274,7 +275,7 @@ TEST_CASE("A lead in an empty scene is tappable whatever the marker knobs",
     REQUIRE(settings != nullptr);
     cwMarkerKnobsReset knobsReset;
     Fixture f;
-    f.leadView.setFollowsMarkerKnobs(false);
+    f.leadView.setXRayEnabled(false);
 
     const QVector3D leadPosition(0.0f, 0.0f, kLeadZ);
     const QPointF tap = f.camera.project(leadPosition);
@@ -303,9 +304,8 @@ const QString kLeadPointName = QStringLiteral("leadPoint1_0");
 
 // A lead MarkerView whose sprites list is @a spritesList, built from the
 // openSprite and completedSprite items it declares. It keeps the default layer
-// key, so leads draw in the default layers before the station labels, and
-// follows the marker knobs as @a followsMarkerKnobs says.
-QString leadViewQml(const QString& spritesList, bool followsMarkerKnobs)
+// key, so leads draw in the default layers before the station labels.
+QString leadViewQml(const QString& spritesList, bool xRayEnabled)
 {
     return QStringLiteral(
                "import QtQuick\n"
@@ -315,7 +315,7 @@ QString leadViewQml(const QString& spritesList, bool followsMarkerKnobs)
                "  MarkerView {\n"
                "    objectName: \"leadView\"\n"
                "    anchors.fill: parent\n"
-               "    followsMarkerKnobs: %7\n"
+               "    xRayEnabled: %7\n"
                "    sprites: %2\n"
                "    source: LeadMarkerSource {}\n"
                "    delegate: LeadPoint {}\n"
@@ -329,7 +329,7 @@ QString leadViewQml(const QString& spritesList, bool followsMarkerKnobs)
         .arg(kOpenSpriteSize.height())
         .arg(kCompletedSpriteSize.width())
         .arg(kCompletedSpriteSize.height())
-        .arg(followsMarkerKnobs ? QStringLiteral("true") : QStringLiteral("false"));
+        .arg(xRayEnabled ? QStringLiteral("true") : QStringLiteral("false"));
 }
 
 // One cave, trip, note and scrap holding one lead, under a region tree model,
@@ -346,7 +346,7 @@ struct SpriteFixture
     cwMarkerView* leadView = nullptr;
     cwLeadMarkerSource* source = nullptr;
 
-    explicit SpriteFixture(const QString& spritesList, bool followsMarkerKnobs = true)
+    explicit SpriteFixture(const QString& spritesList, bool xRayEnabled = true)
     {
         regionModel.setCavingRegion(&region);
         auto* cave = new cwCave();
@@ -368,7 +368,7 @@ struct SpriteFixture
         window.resize(kSpriteViewportSize, kSpriteViewportSize);
 
         QQmlComponent component(&engine);
-        component.setData(leadViewQml(spritesList, followsMarkerKnobs).toUtf8(), QUrl());
+        component.setData(leadViewQml(spritesList, xRayEnabled).toUtf8(), QUrl());
         root.reset(component.create());
         INFO(component.errorString().toStdString());
         REQUIRE(root != nullptr);
@@ -435,7 +435,7 @@ TEST_CASE("A lead MarkerView hands its sprites list to the scene's default sprit
     CHECK(instances.at(0).spriteIndex == uint32_t(cwLeadMarkerSource::CompletedSprite));
 }
 
-TEST_CASE("A lead MarkerView declared not to follow the marker knobs draws its sprites in the station-label mode",
+TEST_CASE("A lead MarkerView with x-ray disabled draws its sprites in the station-label mode",
           "[cwLeadMarkerSource][sprites]")
 {
     auto* settings = cwRenderingSettings::instance();
@@ -445,7 +445,7 @@ TEST_CASE("A lead MarkerView declared not to follow the marker knobs draws its s
     REQUIRE(settings->markerDepthMode() != cwBillboardDepthMode());
 
     SpriteFixture f(QStringLiteral("[openSprite, completedSprite]"), false);
-    REQUIRE_FALSE(f.leadView->followsMarkerKnobs());
+    REQUIRE_FALSE(f.leadView->xRayEnabled());
     REQUIRE(f.scene.spriteBillboardLayer()->buildInstances().size() == 1);
 
     const auto checkStationLabelMode = [&]() {

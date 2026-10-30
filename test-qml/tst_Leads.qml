@@ -798,13 +798,12 @@ MainWindowTest {
         }
 
         // Leads draw only where they are visible: the lead view keeps the
-        // station-label depth mode, and only the entrance view follows the
-        // marker knobs.
-        function test_leadViewIgnoresTheMarkerKnobs() {
+        // station-label depth mode, and only the entrance view has x-ray enabled.
+        function test_leadViewHasXRayDisabled() {
             const renderer = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer")
             verify(renderer !== null, "found the renderer")
-            compare(renderer.leadView.followsMarkerKnobs, false, "the lead view should ignore the marker knobs")
-            compare(renderer.entranceView.followsMarkerKnobs, true, "the entrance view should follow the marker knobs")
+            compare(renderer.leadView.xRayEnabled, false, "the lead view should have x-ray disabled")
+            compare(renderer.entranceView.xRayEnabled, true, "the entrance view should have x-ray enabled")
         }
 
         // Tapping a lead pin while an entrance popup is open closes the entrance

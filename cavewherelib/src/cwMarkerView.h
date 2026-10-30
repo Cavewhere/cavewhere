@@ -63,7 +63,7 @@ class CAVEWHERE_LIB_EXPORT cwMarkerView : public cwBillboardOverlayItem
     Q_PROPERTY(QQmlListProperty<cwMarkerTextStyle> textStyles READ textStyles NOTIFY textStylesChanged)
     Q_PROPERTY(qreal textGap READ textGap WRITE setTextGap NOTIFY textGapChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
-    Q_PROPERTY(bool followsMarkerKnobs READ followsMarkerKnobs WRITE setFollowsMarkerKnobs NOTIFY followsMarkerKnobsChanged)
+    Q_PROPERTY(bool xRayEnabled READ xRayEnabled WRITE setXRayEnabled NOTIFY xRayEnabledChanged)
     Q_PROPERTY(double xRayOpacityPercent READ xRayOpacityPercent NOTIFY xRayOpacityPercentChanged)
 
 public:
@@ -93,16 +93,17 @@ public:
     //! The number of markers drawn, hidden ones included.
     int count() const;
 
-    //! True (the default) draws this view's layers in the marker knobs' depth
-    //! mode; false draws them in the station-label mode, depth test on and no
-    //! x-ray, whatever the knobs say.
-    bool followsMarkerKnobs() const;
-    void setFollowsMarkerKnobs(bool followsMarkerKnobs);
+    //! True (the default) draws this view's markers as an x-ray ghost behind
+    //! geometry, or with no depth test, as the marker knobs in
+    //! cwRenderingSettings set. False keeps the station-label mode, depth test
+    //! on and no x-ray.
+    bool xRayEnabled() const;
+    void setXRayEnabled(bool xRayEnabled);
 
     //! The opacity, in percent, this view's layers draw the x-ray ghost at
     //! now: ramped by the camera tilt while the hidden pass draws. With the
-    //! hidden pass off it holds the base knob opacity, or 100 for a view that
-    //! ignores the marker knobs.
+    //! hidden pass off it holds the base knob opacity, or 100 while x-ray is
+    //! disabled.
     double xRayOpacityPercent() const;
 
     //! Selects the delegate of the source's marker @a row, opening its popup.
@@ -135,7 +136,7 @@ signals:
     void textStylesChanged();
     void textGapChanged();
     void countChanged();
-    void followsMarkerKnobsChanged();
+    void xRayEnabledChanged();
     void xRayOpacityPercentChanged();
 
 protected:
@@ -175,7 +176,7 @@ private:
     QPointer<cwSelectionManager> m_selectionManager;
     QList<cwMarkerTextStyle*> m_textStyles;
     qreal m_textGap = 0.0;
-    bool m_followsMarkerKnobs = true;
+    bool m_xRayEnabled = true;
 
     // Row-aligned with the source. Entries are heap-held so groups and the
     // marker lookup keep stable pointers while rows shift.
@@ -241,7 +242,7 @@ private slots:
     void sourceMarkersRemoved(int first, int last);
     void sourceMarkersChanged(int first, int last);
     void restyle();
-    // The marker knobs in cwRenderingSettings or followsMarkerKnobs moved.
+    // The marker knobs in cwRenderingSettings or xRayEnabled moved.
     void applyDepthMode();
     // The sending marker item's visibility, opacity or sprite slot changed.
     void markerItemChanged();

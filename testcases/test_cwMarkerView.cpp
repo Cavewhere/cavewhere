@@ -729,7 +729,7 @@ void checkStationLabelMode(MarkerFixture& f)
 
 } // namespace
 
-TEST_CASE("A MarkerView that does not follow the marker knobs keeps the station-label depth mode",
+TEST_CASE("A MarkerView with x-ray disabled keeps the station-label depth mode",
           "[cwMarkerView]")
 {
     auto* settings = cwRenderingSettings::instance();
@@ -737,7 +737,7 @@ TEST_CASE("A MarkerView that does not follow the marker knobs keeps the station-
     cwMarkerKnobsReset knobsReset;
 
     MarkerFixture f;
-    f.view->setFollowsMarkerKnobs(false);
+    f.view->setXRayEnabled(false);
     f.source.resetMarkers(testMarkers(0, 2));
     REQUIRE(f.view->count() == 2);
     REQUIRE(f.titles() != f.details());
@@ -789,7 +789,7 @@ TEST_CASE("A MarkerView that does not follow the marker knobs keeps the station-
     }
 }
 
-TEST_CASE("A MarkerView switches between the knobs' and the station-label depth mode as followsMarkerKnobs changes",
+TEST_CASE("A MarkerView switches between the knobs' and the station-label depth mode as xRayEnabled changes",
           "[cwMarkerView]")
 {
     auto* settings = cwRenderingSettings::instance();
@@ -800,27 +800,27 @@ TEST_CASE("A MarkerView switches between the knobs' and the station-label depth 
     MarkerFixture f;
     f.source.resetMarkers(testMarkers(0, 2));
     REQUIRE(f.view->count() == 2);
-    REQUIRE(f.view->followsMarkerKnobs());
+    REQUIRE(f.view->xRayEnabled());
     REQUIRE(f.sprites()->depthMode() == settings->markerDepthMode());
     REQUIRE(settings->markerDepthMode() != cwBillboardDepthMode());
 
-    QSignalSpy followsSpy(f.view, &cwMarkerView::followsMarkerKnobsChanged);
+    QSignalSpy xRayEnabledSpy(f.view, &cwMarkerView::xRayEnabledChanged);
 
-    f.view->setFollowsMarkerKnobs(false);
-    CHECK(followsSpy.count() == 1);
-    CHECK_FALSE(f.view->followsMarkerKnobs());
+    f.view->setXRayEnabled(false);
+    CHECK(xRayEnabledSpy.count() == 1);
+    CHECK_FALSE(f.view->xRayEnabled());
     checkStationLabelMode(f);
 
-    f.view->setFollowsMarkerKnobs(false);
-    CHECK(followsSpy.count() == 1);
+    f.view->setXRayEnabled(false);
+    CHECK(xRayEnabledSpy.count() == 1);
 
-    f.view->setFollowsMarkerKnobs(true);
-    CHECK(followsSpy.count() == 2);
+    f.view->setXRayEnabled(true);
+    CHECK(xRayEnabledSpy.count() == 2);
     const cwBillboardDepthMode knobMode = settings->markerDepthMode();
     checkMarkerLayers(f, knobMode.depthTest, knobMode.xRay, knobMode.xRayOpacity);
 
-    f.view->setFollowsMarkerKnobs(false);
-    CHECK(followsSpy.count() == 3);
+    f.view->setXRayEnabled(false);
+    CHECK(xRayEnabledSpy.count() == 3);
     checkStationLabelMode(f);
 }
 

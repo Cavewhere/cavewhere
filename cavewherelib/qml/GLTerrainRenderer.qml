@@ -276,8 +276,8 @@ Item {
         scene: rendererId.scene
         keywordItemModel: RootData.keywordItemModel
         visible: RootData.leadsVisible
-        // Leads draw only where they are visible; the marker knobs are for entrances.
-        followsMarkerKnobs: false
+        // Leads draw only where they are visible; x-ray is for entrances.
+        xRayEnabled: false
         // Leads keep the default layers, so they draw before the station labels.
         sprites: [leadSprite]
         source: LeadMarkerSource {
