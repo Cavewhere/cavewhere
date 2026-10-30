@@ -36,6 +36,7 @@
 namespace {
 
 const QString kA1 = QStringLiteral("A1");
+const QString kLowerA1 = QStringLiteral("a1");
 const QString kA10 = QStringLiteral("A10");
 const QString kB2 = QStringLiteral("B2");
 const QString kC3 = QStringLiteral("C3");
@@ -456,6 +457,24 @@ TEST_CASE("setFixStationName moves a fix's entrance with it",
         CHECK(entrances->entranceAt(0).stationName() == kA10);
         CHECK(entrances->entranceAt(0).id() == entranceId);
         CHECK(entrances->entranceAt(0).label() == kNorthShaft);
+    }
+
+    SECTION("a rename by letter case respells the entrance and keeps its id and label") {
+        REQUIRE(fixes->addFixStation(kLowerA1) == 0);
+        REQUIRE(entrances->addEntrance(kLowerA1) == 0);
+        REQUIRE(entrances->setData(entrances->index(0), kNorthShaft, cwEntranceModel::LabelRole));
+        const QUuid entranceId = entrances->entranceAt(0).id();
+        QSignalSpy entranceSpy(entrances, &QAbstractItemModel::dataChanged);
+
+        CHECK(cave.setFixStationName(0, kA1));
+
+        CHECK(joined(fixNames(fixes)) == joined({kA1}));
+        REQUIRE(entrances->count() == 1);
+        CHECK(entrances->entranceAt(0).stationName() == kA1);
+        CHECK(entrances->entranceAt(0).id() == entranceId);
+        CHECK(entrances->entranceAt(0).label() == kNorthShaft);
+        REQUIRE(entranceSpy.count() == 1);
+        CHECK(entranceSpy.first().at(2).value<QList<int>>() == QList<int>({cwEntranceModel::StationNameRole}));
     }
 
     SECTION("naming a blank row marks the new station an entrance") {

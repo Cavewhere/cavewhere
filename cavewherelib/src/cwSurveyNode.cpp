@@ -1670,16 +1670,19 @@ bool cwSurveyNode::setFixStationName(int fixRow, const QString& stationName)
         return false;
     }
 
-    if (stationName.trimmed().isEmpty() || m_entrances->isEntrance(stationName)) {
+    const QString trimmedOldName = oldName.trimmed();
+    const QString newName = stationName.trimmed();
+    const bool sameStation = cwStation::canonicalKey(trimmedOldName) == cwStation::canonicalKey(newName);
+    if (newName.isEmpty() || (!sameStation && m_entrances->isEntrance(newName))) {
         return true;
     }
 
-    if (oldName.trimmed().isEmpty()) {
-        m_entrances->addEntrance(stationName);
+    if (trimmedOldName.isEmpty()) {
+        m_entrances->addEntrance(newName);
     } else {
         const int entranceRow = m_entrances->indexOf(oldName);
         if (entranceRow >= 0) {
-            m_entrances->setData(m_entrances->index(entranceRow), stationName.trimmed(),
+            m_entrances->setData(m_entrances->index(entranceRow), newName,
                                  cwEntranceModel::StationNameRole);
         }
     }

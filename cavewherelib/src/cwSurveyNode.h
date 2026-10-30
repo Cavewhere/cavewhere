@@ -269,7 +269,9 @@ public:
     //! cwFixStationModel::setData so its dataChanged roles stay the same. Naming
     //! a blank row marks the new station an entrance unless it is one. Renaming
     //! an entrance station onto a station that is no entrance moves the
-    //! entrance entry, keeping its id and label. Returns whether the fix changed.
+    //! entrance entry, keeping its id and label; a rename that changes only
+    //! letter case respells the station's entrance entry the same way. Returns
+    //! whether the fix changed.
     Q_INVOKABLE bool setFixStationName(int fixRow, const QString& stationName);
 
     /// The fix stations plus their read-only, computed warnings (coordinate
