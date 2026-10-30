@@ -614,6 +614,12 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
         return AsyncFuture::completed(
             ReportResult(QStringLiteral("attach: trip is not part of a cave yet")));
     }
+    if (!trip->takesSurveyFile()) {
+        return AsyncFuture::completed(ReportResult(QStringLiteral(
+            "attach: this trip is inside a source root, which reads its survey data from the "
+            "source's own file. Add the file there, or attach it to a trip outside the source "
+            "root and tie it in with an equate.")));
+    }
 
     return attachOwner(OwnerTarget::forTrip(trip), nullptr, sourceFile, saveLoad,
                        externalSourceSettings, std::move(cancelFlag));

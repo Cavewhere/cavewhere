@@ -172,6 +172,22 @@ TEST_CASE("cwFixStationModel looks a fix up by station name",
     }
 }
 
+TEST_CASE("cwFixStationModel looks a fix up by the exact name before ignoring case",
+          "[FixStation][cwFixStationModel][CasePairs]") {
+    // P2 and p2 can be two stations of an attached file, each with its own fix.
+    cwFixStationModel model;
+    cwFixStation lower;
+    lower.setStationName(QStringLiteral("p2"));
+    cwFixStation upper;
+    upper.setStationName(QStringLiteral("P2"));
+    model.setFixStations({lower, upper});
+
+    CHECK(model.indexOf(QStringLiteral("p2")) == 0);
+    CHECK(model.indexOf(QStringLiteral("P2")) == 1);
+    CHECK(model.indexOf(QStringLiteral(" P2 ")) == 1);
+    CHECK(model.isFixed(QStringLiteral("P2")));
+}
+
 TEST_CASE("cwFixStationModel addFixStation(name) won't double-anchor a station",
           "[FixStation][cwFixStationModel]") {
     cwFixStationModel model;

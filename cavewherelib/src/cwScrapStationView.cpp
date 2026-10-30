@@ -27,6 +27,10 @@
 #include <QPen>
 #include <QSGTransformNode>
 #include <QSGFlatColorMaterial>
+#include <QSet>
+
+//Std includes
+#include <utility>
 
 cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     cwScrapPointView(parent),
@@ -213,19 +217,28 @@ void cwScrapStationView::updateShotLines() {
         //Go through all the neighboring stations and add the position to the
         //line. Iterate raw names, not cwStation: external tails carry dots that
         //cwStation's validator would blank (native names are unaffected).
-        foreach(const QString& neighborName, neighboringStations) {
+        const bool isRunningProfile = scrap()->type() == cwScrap::RunningProfile;
+        const QSet<QString> noteStationKeys = [&]() {
+            QSet<QString> keys;
+            if(isRunningProfile) {
+                const QList<cwNoteStation> scrapStations = scrap()->stations();
+                keys.reserve(scrapStations.size());
+                for(const cwNoteStation& currentNoteStation : scrapStations) {
+                    const QString key = stationPositionLookup.key(currentNoteStation.name());
+                    if(!key.isEmpty()) {
+                        keys.insert(key);
+                    }
+                }
+            }
+            return keys;
+        }();
+
+        for(const QString& neighborName : std::as_const(neighboringStations)) {
 
             QVector3D currentPos = stationPositionLookup.position(neighborName);
 
-            if(scrap()->type() == cwScrap::RunningProfile) {
-                bool foundStation = false;
-                foreach(cwNoteStation currentNoteStation, scrap()->stations()) {
-                    if(cwStation::canonicalKey(currentNoteStation.name()) == cwStation::canonicalKey(neighborName)) {
-                        foundStation = true;
-                    }
-                }
-
-                if(foundStation) { continue; }
+            if(isRunningProfile) {
+                if(noteStationKeys.contains(neighborName)) { continue; }
 
                 //Caluclate the running profile rotation based on the stations
                 QMatrix4x4 toProfileRotation = cwRunningProfileScrapViewMatrix::Data(selectedStationPos, currentPos).matrix();

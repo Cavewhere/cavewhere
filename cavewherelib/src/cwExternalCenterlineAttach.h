@@ -96,6 +96,10 @@ using RootCreated = std::function<void(cwSurveyNode* root)>;
  * returned future directly, the flag never settles the future early,
  * so a manager observing it keeps its busy token until the outcome
  * is actually decided.
+ *
+ * A trip inside a source root (cwTrip::takesSurveyFile() is false) is
+ * refused with a reason before anything is touched: the solve reads
+ * that subtree through the root's own file only.
  */
 CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> attach(
     cwTrip* trip,

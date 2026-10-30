@@ -7,6 +7,7 @@
 
 // Catch
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 // Our
 #include "cwCavernRunner.h"
@@ -19,6 +20,7 @@
 
 // Qt
 #include <QDir>
+#include <QHash>
 #include <QFile>
 #include <QFileInfo>
 #include <QStringList>
@@ -28,6 +30,7 @@
 // Std
 #include <atomic>
 #include <optional>
+#include <string>
 #include <thread>
 
 namespace {
@@ -76,13 +79,131 @@ TEST_CASE("Harvest names a Compass survey", "[ExternalStationHarvest]")
     // other .dat fixtures: those exist for the scanner, which treats a .dat as
     // an opaque leaf, so their shot data is deliberately not real Compass and
     // cavern rejects it.
-    // Bare names, not "s.s1": cavern's Compass and Walls readers don't turn the
-    // file's own survey names into naming levels the way "*begin" does. The
-    // region solve sees the same bare tails, which is what matters.
+    // Bare names in the file's spelling, not "s.S1": cavern's Compass and Walls
+    // readers don't turn the file's own survey names into naming levels the
+    // way "*begin" does. The region solve sees the same bare tails, which is
+    // what matters.
     CHECK(harvestNames(QStringLiteral("compass_solvable.dat"))
-          == QStringList({QStringLiteral("s1"),
-                          QStringLiteral("s2"),
-                          QStringLiteral("s3")}));
+          == QStringList({QStringLiteral("S1"),
+                          QStringLiteral("S2"),
+                          QStringLiteral("S3")}));
+}
+
+TEST_CASE("Harvest spells each member of a Compass case pair as the file does",
+          "[ExternalStationHarvest]")
+{
+    // Compass names are case-sensitive: P2 and p2 are two stations, and Q1
+    // keeps its spelling though nothing pairs with it.
+    CHECK(harvestNames(QStringLiteral("compass_case_pairs.dat")).join(QStringLiteral(", ")).toStdString()
+          == "P1, P2, P3, Q1, p1, p2, p3");
+}
+
+TEST_CASE("Harvest spells a fixed station of a preserved case pair as the file does",
+          "[ExternalStationHarvest]")
+{
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+
+    const QString path = QDir(directory.path()).filePath(QStringLiteral("preserved.svx"));
+    {
+        QFile file(path);
+        REQUIRE(file.open(QFile::WriteOnly | QFile::Text));
+        file.write("*case preserve\n"
+                   "*begin Foo\n"
+                   "*fix P2 0 0 0\n"
+                   "*data normal from to tape compass clino\n"
+                   "P1 P2 10 0 0\n"
+                   "P1 p2 10 90 0\n"
+                   "*end Foo\n");
+    }
+
+    const auto result = cwExternalStationHarvest::harvestWithFixes(path);
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    CHECK(result.value().names.join(QStringLiteral(", ")).toStdString()
+          == "foo.P1, foo.P2, foo.p2");
+    CHECK(result.value().fixedNames.join(QStringLiteral(", ")).toStdString() == "foo.P2");
+}
+
+namespace {
+
+cwExternalStationHarvest::Stations harvestStations(const QString& fileName)
+{
+    const auto result = cwExternalStationHarvest::harvestWithFixes(externalCenterlinePath(fileName));
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    return result.value();
+}
+
+//! \a labels as "spelling=label" pairs, sorted and comma-joined.
+std::string joinedLabels(const QHash<QString, QString>& labels)
+{
+    QStringList pairs;
+    for (auto it = labels.constBegin(); it != labels.constEnd(); ++it) {
+        pairs.append(it.key() + QLatin1Char('=') + it.value());
+    }
+    pairs.sort();
+    return pairs.join(QStringLiteral(", ")).toStdString();
+}
+
+} // namespace
+
+TEST_CASE("Harvest gives cavern's label of a station under a Walls #PREFIX",
+          "[ExternalStationHarvest][CasePairs]")
+{
+    // cavern labels them XY:P1 and so on; the spelling lowercases the level.
+    const cwExternalStationHarvest::Stations stations =
+        harvestStations(QStringLiteral("walls_prefix_fix.srv"));
+    CHECK(stations.names.join(QStringLiteral(", ")).toStdString() == "xy.P1, xy.P2, xy.P3");
+    CHECK(joinedLabels(stations.labels) == "xy.P1=XY.P1, xy.P2=XY.P2, xy.P3=XY.P3");
+}
+
+TEST_CASE("Harvest gives cavern's label of a station in a capitalized *case preserve block",
+          "[ExternalStationHarvest][CasePairs]")
+{
+    const cwExternalStationHarvest::Stations stations =
+        harvestStations(QStringLiteral("survex_case_preserve_blocks.svx"));
+    CHECK(stations.names.join(QStringLiteral(", ")).toStdString() == "foo.P1, foo.P2, foo.P3");
+    CHECK(joinedLabels(stations.labels) == "foo.P1=Foo.P1, foo.P2=Foo.P2, foo.P3=Foo.P3");
+}
+
+TEST_CASE("Harvest lists no label for a station cavern labels as it is spelled",
+          "[ExternalStationHarvest][CasePairs]")
+{
+    const cwExternalStationHarvest::Stations stations = harvestStations(QStringLiteral("compass_case_pairs.dat"));
+    CHECK(stations.names.join(QStringLiteral(", ")).toStdString() == "P1, P2, P3, Q1, p1, p2, p3");
+    CHECK(joinedLabels(stations.labels).empty());
+}
+
+TEST_CASE("Harvest spells each station the way cavern's case regime for its file reads it",
+          "[ExternalStationHarvest][CasePairs]")
+{
+    // Survey levels lowercase, the station name as cavern wrote it, and
+    // cavern's exact label wherever it differs from that spelling.
+    struct Case {
+        QString fileName;
+        std::string names;
+        std::string labels;
+    };
+    const Case harvestCase = GENERATE(
+        Case{QStringLiteral("survex_case_upper.svx"), "foo.P1, foo.P2, foo.P3",
+             "foo.P1=FOO.P1, foo.P2=FOO.P2, foo.P3=FOO.P3"},
+        Case{QStringLiteral("survex_default_case.svx"), "upper.p1, upper.p2, upper.p3", ""},
+        Case{QStringLiteral("walls_case_lower.srv"), "p1, p2, p3", ""},
+        Case{QStringLiteral("walls_case_upper.srv"), "P1, P2, P3", ""},
+        Case{QStringLiteral("walls_case_pairs.srv"), "xy.BB2, xy.Bb2, xy.P1, xy.P2, xy.p1, xy.p2",
+             "xy.BB2=XY.BB2, xy.Bb2=XY.Bb2, xy.P1=XY.P1, xy.P2=XY.P2, xy.p1=XY.p1, xy.p2=XY.p2"},
+        Case{QStringLiteral("survex_case_pair_block.svx"), "pairs.P1, pairs.P2, pairs.p1, pairs.p2", ""},
+        Case{QStringLiteral("compass_case_pairs.mak"),
+             "compass_case_pairs.P1, compass_case_pairs.P2, compass_case_pairs.P3, compass_case_pairs.Q1, "
+             "compass_case_pairs.p1, compass_case_pairs.p2, compass_case_pairs.p3",
+             ""});
+    INFO("fixture " << harvestCase.fileName.toStdString());
+
+    const cwExternalStationHarvest::Stations stations = harvestStations(harvestCase.fileName);
+    CHECK(stations.names.join(QStringLiteral(", ")).toStdString() == harvestCase.names);
+    CHECK(joinedLabels(stations.labels) == harvestCase.labels);
+    CHECK(stations.fixedNames.isEmpty());
 }
 
 TEST_CASE("Harvest names a Walls project", "[ExternalStationHarvest]")
@@ -91,10 +212,10 @@ TEST_CASE("Harvest names a Walls project", "[ExternalStationHarvest]")
     // driver *includes the entry by absolute path — nested references still
     // resolve against the entry's own directory.
     CHECK(harvestNames(QStringLiteral("walls_simple.wpj"))
-          == QStringList({QStringLiteral("a1"),
-                          QStringLiteral("a2"),
-                          QStringLiteral("a3"),
-                          QStringLiteral("a4")}));
+          == QStringList({QStringLiteral("A1"),
+                          QStringLiteral("A2"),
+                          QStringLiteral("A3"),
+                          QStringLiteral("A4")}));
 }
 
 TEST_CASE("Harvest loses the components netskel's one fix cannot reach",

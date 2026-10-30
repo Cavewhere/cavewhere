@@ -6,6 +6,8 @@
 #include "cwColorByUniform.h"
 #include "cwKeywordColorBy.h"
 #include "cwKeywordFilterModel.h"
+#include "cwKeywordFilterPipelineModel.h"
+#include "cwKeywordGroupByKeyModel.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
@@ -315,8 +317,7 @@ TEST_CASE("cwColorBy keyword mode follows keyword edits on visible items", "[Col
     RecordingProxy* a = fixture.add(QStringLiteral("A"));
     RecordingProxy* b = fixture.add(QStringLiteral("B"));
 
-    // The filter model reports only rows entering and leaving, as the
-    // keyword filter's accepted model does.
+    // The filter model forwards keyword edits on the rows it holds.
     cwKeywordFilterModel visible;
     visible.setSourceModel(&fixture.model);
     visible.insert(itemIndex(fixture.model, a));
@@ -345,4 +346,60 @@ TEST_CASE("cwColorBy keyword mode follows keyword edits on visible items", "[Col
     CHECK(colorBy.legendValues() == QStringList({QStringLiteral("Y"), QStringLiteral("Z")}));
     CHECK(b->colorValue() == 0.0f);
     CHECK(a->colorValue() == 1.0f);
+}
+
+TEST_CASE("cwColorBy keyword mode regroups a visible item edited behind the filter pipeline", "[ColorBy]")
+{
+    const QString tripKey = QStringLiteral("Trip");
+    const QString tripValue = QStringLiteral("T1");
+
+    ScopedSettings settings;
+    Fixture fixture;
+    RecordingProxy* a = fixture.add(QStringLiteral("A"));
+    RecordingProxy* c = fixture.add(QStringLiteral("C"));
+    for (const auto& item : fixture.items) {
+        item->keywordModel()->add(cwKeyword(tripKey, tripValue));
+    }
+
+    // Wired as cwRootData wires it; the default column accepts everything.
+    cwKeywordFilterPipelineModel pipeline;
+    pipeline.setKeywordModel(&fixture.model);
+
+    SECTION("Through one filter group") {
+        REQUIRE(pipeline.acceptedModel()->rowCount() == 2);
+    }
+
+    SECTION("Through two OR groups that both hold the item") {
+        pipeline.addRow();
+        REQUIRE(pipeline.setData(pipeline.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole));
+        auto tripColumn = pipeline.index(1).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<cwKeywordGroupByKeyModel*>();
+        REQUIRE(tripColumn);
+        tripColumn->setKey(tripKey);
+        for (int i = 0; i < tripColumn->rowCount(); ++i) {
+            if (tripColumn->index(i).data(cwKeywordGroupByKeyModel::ValueRole).toString() == tripValue) {
+                REQUIRE(tripColumn->setData(tripColumn->index(i), true, cwKeywordGroupByKeyModel::AcceptedRole));
+            }
+        }
+        REQUIRE(tripColumn->acceptedModel()->rowCount() == 2);
+        REQUIRE(pipeline.acceptedModel()->rowCount() == 2);
+    }
+
+    cwColorBy colorBy;
+    colorBy.setKeywordItemModel(&fixture.model);
+    colorBy.setVisibleKeywordModel(pipeline.acceptedModel());
+    colorBy.setKeywordKey(cwKeywordModel::CaveKey);
+    QSignalSpy legendSpy(&colorBy, &cwColorBy::legendChanged);
+    colorBy.setSource(cwColorBy::Source::Keyword);
+    REQUIRE(legendSpy.wait());
+    CHECK(colorBy.legendValues() == QStringList({QStringLiteral("A"), QStringLiteral("C")}));
+    CHECK(a->colorValue() == 0.0f);
+    CHECK(c->colorValue() == 1.0f);
+
+    // A stays visible while its cave moves past C.
+    fixture.items.at(0)->keywordModel()->replace(cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("Z")));
+    REQUIRE(legendSpy.wait());
+    CHECK(colorBy.legendValues() == QStringList({QStringLiteral("C"), QStringLiteral("Z")}));
+    CHECK(c->colorValue() == 0.0f);
+    CHECK(a->colorValue() == 1.0f);
+    CHECK(a->lastApplied == 1.0f);
 }

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Survex Compass X-Flag LRUD</title>
+<style>
+  :root {
+    --bg: #1a1d21; --panel: #23272e; --panel2: #2b3038; --ink: #e6e9ee;
+    --muted: #9aa4b2; --accent: #5aa9e6; --accent2: #7ddc8f; --warn: #e6b35a;
+    --bad: #e66a6a; --line: #3a414b; --code-bg: #15181c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg);
+    padding: 1.5px 6px; border-radius: 4px; color: #d8e0ea; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .fig { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 22px 0; text-align: center; }
+  .fig svg { max-width: 100%; height: auto; }
+  .figcap { color: var(--muted); font-size: 13.5px; margin-top: 12px; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+  .callout.warn { border-color: var(--warn); }
+  .callout.ok { border-color: var(--accent2); }
+  .cp { display:inline-block; font-family:var(--mono); font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:6px; background:rgba(90,169,230,.16); color:var(--accent);
+    border:1px solid rgba(90,169,230,.35); margin-right: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Survex: Compass X-Flag LRUD</h1>
+<p class="sub">Survex fork <code>Cavewhere/survex</code> branch <code>survexLib</code> · CaveWhere branch <code>externalFiles</code> ·
+upstream tracking <a href="https://github.com/Cavewhere/cavewhere/issues/719">#719</a> · 2026-10-25</p>
+
+<div class="callout">
+  <b>Goal.</b> An attached Compass project whose <code>.DAT</code> files exclude shots with the <code>X</code> flag
+  solves again. Since the survex 1.4.23 merge, cavern records the LRUD of an excluded shot even though it drops the
+  shot, then fails with <code>Cross section specified at non-existent station</code> for every station that only
+  excluded shots reach. A real Compass project with overland traverses flagged <code>#|PLX#</code> gives 50 of these
+  errors and no plot. With the excluded shots removed by hand, the same project solves with only 4 warnings.
+</div>
+
+<h2>The bug</h2>
+
+<p>Survex 1.4.23 added Compass LRUD support: upstream <code>fc573666</code> "Handle LRUD in Compass PLT"
+(2026-10-07) and <code>9a330547</code> "Fix Compass .DAT LRUD to be in feet". Before that, cavern ignored
+<code>.DAT</code> LRUDs, so an excluded shot left nothing behind. Survex 1.4.22 solves the repro below cleanly.</p>
+
+<p>In <code>survex/src/datain.c</code>, <code>data_normal()</code> handles <code>case CompassDATFlags:</code>
+(about line 6059) by calling <code>start_passage()</code> and <code>process_lrud()</code> first, then parsing the
+<code>#|...#</code> flags into <code>compass_dat_flags</code>. The <code>X</code> check that drops the shot comes later,
+in <code>case End:</code> (about line 6746). The cross-section is already queued on <code>next_lrud</code> by then,
+and <code>netskel.c</code> (about line 1066) rejects it because the station never got created.</p>
+
+<div class="fig">
+<svg viewBox="0 0 900 270" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="14">
+  <text x="20" y="28" fill="#e66a6a" font-weight="700">Today (1.4.23+)</text>
+  <g>
+    <rect x="20" y="42" width="180" height="46" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="110" y="70" fill="#e6e9ee" text-anchor="middle">read L R U D</text>
+    <rect x="240" y="42" width="190" height="46" rx="8" fill="#3a2a2a" stroke="#e66a6a"/>
+    <text x="335" y="63" fill="#e6e9ee" text-anchor="middle">process_lrud(stn)</text>
+    <text x="335" y="80" fill="#9aa4b2" text-anchor="middle" font-size="12">xsect queued</text>
+    <rect x="470" y="42" width="170" height="46" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="555" y="70" fill="#e6e9ee" text-anchor="middle">parse #|X#</text>
+    <rect x="680" y="42" width="200" height="46" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="780" y="63" fill="#e6e9ee" text-anchor="middle">End: X → drop leg</text>
+    <text x="780" y="80" fill="#e66a6a" text-anchor="middle" font-size="12">xsect left behind</text>
+    <path d="M200 65 H240 M430 65 H470 M640 65 H680" stroke="#9aa4b2" stroke-width="2"/>
+  </g>
+  <text x="20" y="150" fill="#7ddc8f" font-weight="700">Fixed</text>
+  <g>
+    <rect x="20" y="164" width="180" height="46" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="110" y="192" fill="#e6e9ee" text-anchor="middle">read L R U D</text>
+    <rect x="240" y="164" width="190" height="46" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="335" y="192" fill="#e6e9ee" text-anchor="middle">parse #|X#</text>
+    <rect x="470" y="164" width="170" height="46" rx="8" fill="#233a2a" stroke="#7ddc8f"/>
+    <text x="555" y="185" fill="#e6e9ee" text-anchor="middle">X? skip LRUD</text>
+    <text x="555" y="202" fill="#9aa4b2" text-anchor="middle" font-size="12">else process_lrud</text>
+    <rect x="680" y="164" width="200" height="46" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="780" y="185" fill="#e6e9ee" text-anchor="middle">End: X → drop leg</text>
+    <text x="780" y="202" fill="#7ddc8f" text-anchor="middle" font-size="12">nothing left behind</text>
+    <path d="M200 187 H240 M430 187 H470 M640 187 H680" stroke="#9aa4b2" stroke-width="2"/>
+  </g>
+  <text x="20" y="250" fill="#9aa4b2" font-size="12.5">Order of work inside data_normal() for one Compass .DAT shot line.</text>
+</svg>
+<div class="figcap"><b>The fix is an ordering change.</b> Read the flags before recording the LRUD, and record
+nothing for a shot the <code>X</code> flag excludes.</div>
+</div>
+
+<h3>Minimal repro</h3>
+<p>A <code>.DAT</code> with one good shot and two <code>#|X#</code> shots that carry LRUDs
+(<code>FORMAT: DDDDLRUDLADN</code>, CRLF line ends, form feed at the end):</p>
+<pre><code>          A1           A2    10.00    90.00     0.00     1.00     1.00     1.00     1.00
+          A2           X1    10.00    90.00     0.00     0.00     0.00     0.00     0.00  #|X#
+          X1           X2    10.00    90.00     0.00     0.00     0.00     0.00     0.00  #|X#</code></pre>
+<table>
+  <tr><th>cavern</th><th>Result</th></tr>
+  <tr><td>Homebrew 1.4.22</td><td><code>Survey contains 2 survey stations, joined by 1 shot.</code></td></tr>
+  <tr><td>Fork <code>37195dbf</code> (v1.4.24-87)</td><td><code>x.dat:11:24: error: Cross section specified at non-existent station "X1"</code>, no output</td></tr>
+</table>
+<p>The existing <code>survex/tests/flags.dat</code> only covers X shots whose <em>from</em> station also appears on
+a kept shot (<code>C2 C2a … #|X#</code>), so it passes today. It still records the excluded shots' LRUD, though:
+<code>tests/flags.dump</code> lines 35–38 are two one-station tubes at <code>[C2]</code> that come from the
+<code>C2→C2a</code> and <code>C2→C2b</code> X shots.</p>
+
+<h2>Decisions</h2>
+<ul>
+  <li><b>An X-flagged shot contributes no LRUD at all.</b> Compass treats <code>X</code> as "exclude this shot
+    entirely", and survex already drops its leg. The fix drops its cross-section on both stations too, including
+    when the station exists through other shots.</li>
+  <li><b>An X-flagged shot is invisible to passage tubes.</b> It neither calls <code>start_passage()</code> nor
+    updates <code>compass_lrud_previous_to</code>, so <code>A1→A2</code>, an excluded <code>A2→X1</code>, then
+    <code>A2→A3</code> stays one tube.</li>
+  <li><b>Only Compass <code>.DAT</code>/<code>.CLP</code> change.</b> Both formats share this code path
+    (<code>data_file_compass_dat_or_clp</code>). Walls has its own flag handling (<code>read_walls_srv_to</code>) and
+    is out of scope.</li>
+  <li><b>The patch stays upstreamable.</b> Write it in Olly Betts' style: tabs and spaces as in the surrounding
+    <code>datain.c</code>, a test in <code>tests/cavern.tst</code>, and no CaveWhere-specific code. Its hash goes on
+    <a href="https://github.com/Cavewhere/cavewhere/issues/719">#719</a> next to the two Walls patches.</li>
+</ul>
+
+<h2>Running survex's own tests against our build</h2>
+<div class="callout warn">
+  The fork's CMake build copies <code>en_US.msg</code> over <code>en.msg</code> on purpose
+  (<code>c19bb955</code> "Generate en.msg from en_US"). That makes CaveWhere print "shots" and "control points",
+  but <code>tests/*.out</code> expect upstream's "legs" and "fixed points", so <code>cavern.tst</code> fails every
+  test against <code>build/…/survex</code>. Leave the copy alone and give the harness its own message files.
+</div>
+<pre><code>S=&lt;scratch&gt;/survex-x-lrud
+L=/Users/cave/Documents/projects/cavewhere_3/survex/lib
+D=/Users/cave/Documents/projects/cavewhere_3/build/Qt_6_11_2_for_macOS_Debug/survex
+mkdir -p $S/msg $S/run
+(cd $S/msg &amp;&amp; perl $L/po-to-msg.pl $L/*.po)          # upstream-wording en.msg
+cd $S/run
+for t in &lt;tests&gt;; do
+  ASAN_OPTIONS=detect_container_overflow=0 SURVEXLIB=$S/msg \
+  CAVERN=$D/cavern DIFFPOS=$D/diffpos DUMP3D=$D/dump3d \
+  srcdir=/Users/cave/Documents/projects/cavewhere_3/survex/tests VERBOSE=1 \
+  sh /Users/cave/Documents/projects/cavewhere_3/survex/tests/cavern.tst $t &gt; $t.log 2&gt;&amp;1
+  echo "$t -&gt; $?"
+done</code></pre>
+<p>Build cavern first with <code>cmake --build build/Qt_6_11_2_for_macOS_Debug --target cavern diffpos dump3d</code>.
+Verified at HEAD: <code>flags.dat lrud.dat hanging_lrud passage clptest.dat</code> all exit 0 this way.
+<code>survexport</code> is not built, so leave out tests that need it (the <code>*export</code> ones).</p>
+
+<h2>Items</h2>
+
+<h3><span class="cp">S.1</span>Cavern drops the LRUD of Compass shots flagged X</h3>
+<p><b>Repo:</b> the <code>survex</code> submodule. Before committing, check out branch <code>survexLib</code> and
+fast-forward it to <code>origin/survexLib</code> (= <code>37195dbf</code>, the pinned commit), then commit on it.
+The submodule is in detached HEAD today and the local <code>survexLib</code> is 135 commits behind.</p>
+<ul>
+  <li><b>Code.</b> In <code>src/datain.c</code> <code>data_normal()</code>, <code>case CompassDATFlags:</code>, move
+    the <code>start_passage()</code> / <code>process_lrud()</code> / <code>compass_lrud_previous_to = to</code> block
+    after the flag-parsing <code>if (ch == '#') { … }</code>, and run it only when
+    <code>compass_dat_flags</code> has no <code>BIT('X' - 'A')</code>. The flag parser's two
+    <code>set_pos(&amp;fp)</code> fallbacks (a <code>#</code> that turns out not to open flags) leave the flags at
+    0, so those lines keep their LRUD.</li>
+  <li><b>New regression test</b> <code>tests/compassxlrud.dat</code> (CRLF, form feed after each survey, like
+    <code>flags.dat</code>). It covers: an X shot whose stations exist only through X shots (the repro), an X shot
+    from a kept station, and a kept shot after an X shot that continues the tube. Add it to the
+    <code>.dat</code> list in <code>tests/cavern.tst</code> with <code>pos=dump warn=0</code> (a <code>case</code>
+    entry next to <code>flags.dat)</code>), and commit the expected <code>tests/compassxlrud.dump</code> and
+    <code>.out</code> that upstream cavern wording produces.</li>
+  <li><b>Expected change to an existing test.</b> Regenerate <code>tests/flags.dump</code>. The two one-station
+    <code>[C2]</code> tubes from the X shots (lines 35–38 today) disappear. Nothing else in that dump may change;
+    the reviewer diffs it.</li>
+  <li><b>Fails today:</b> <code>compassxlrud.dat</code> exits 1 with the cross-section error, and
+    <code>flags.dat</code> passes against the old dump but fails against the new one.</li>
+  <li><b>Gate:</b> the harness above on <code>compassxlrud.dat flags.dat lrud.dat backread.dat corrections.dat
+    crcrlf.dat depthguage.dat karstcompat.dat nomeasure.dat noteam.dat clptest.dat clptest.clp badmak.mak
+    fixfeet.mak linkfix.mak folder.mak utm.mak passage hanging_lrud xsect_too_many_errors</code>, plus
+    <code>ctest -R cavernlib</code> in <code>build/Qt_6_11_2_for_macOS_Debug/survex</code>.</li>
+  <li><b>Commit</b> in the submodule, upstream style: subject "Skip LRUD on Compass shots flagged X", body naming
+    <code>fc573666</code> as the change that introduced it. Do not push.</li>
+</ul>
+
+<h3><span class="cp">S.2</span>CaveWhere solves an attached Compass file with X-flagged LRUD shots</h3>
+<p><b>Repo:</b> <code>cavewhere_3</code>, which takes the new survex pointer.</p>
+<ul>
+  <li><b>Fixture</b> <code>testcases/datasets/external-centerlines/compass_excluded_lrud.dat</code>, a small
+    synthetic survey shaped like the S.1 repro: a kept traverse with LRUDs plus an X-flagged side traverse with
+    LRUDs that reaches stations no kept shot reaches. Write it by hand; use no real survey data.</li>
+  <li><b>Test</b> in <code>testcases/test_cwLinePlotTask_AttachInclude.cpp</code>, tag <code>[Attach]</code>. It
+    attaches the fixture to a cave the way the "Cave-attached centerline skips trip loop" case does (about line
+    590), runs the solve, and checks for no solve error and positions for the kept stations only.
+    Fails today with the cavern cross-section error.</li>
+  <li><b>Gate:</b> <code>cavewhere-test "[Attach]"</code>.</li>
+  <li><b>Commit</b> the fixture, the test and the <code>survex</code> pointer together; the message says the
+    commit moves the survex submodule pointer.</li>
+</ul>
+
+<h2>After landing</h2>
+<ul>
+  <li>Add the S.1 commit hash to <a href="https://github.com/Cavewhere/cavewhere/issues/719">#719</a>.</li>
+  <li>Report the bug upstream to Olly Betts with the repro and the patch.</li>
+</ul>
+
+<h2>Out of scope</h2>
+<ul>
+  <li><b>A data error in another private project.</b> One shot has no azimuth front or back
+    (<code>-999</code> on both) on a level shot, so it isn't a plumb. Survex 1.4.22 and 1.4.24 both reject it with
+    <code>Compass reading may not be omitted except on plumbed shots</code>, which is correct. The data needs fixing,
+    not cavern.</li>
+  <li><b>A missing file in the same Compass project.</b> One <code>.DAT</code> named in the <code>.MAK</code> is
+    missing. Cavern reports it as a warning, which is correct.</li>
+</ul>
+
+</div>
+</body>
+</html>

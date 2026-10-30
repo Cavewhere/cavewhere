@@ -1,10 +1,14 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 //Our includes
 #include "cwTrip.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwErrorModel.h"
 #include "cwExternalCenterline.h"
 #include "cwKeywordModel.h"
 #include "cwKeyword.h"
@@ -15,6 +19,7 @@
 #include "cwScopeLabels.h"
 
 //Test includes
+#include "CasePairTestHelpers.h"
 #include "SurveyTreeTestHelper.h"
 #include "SurveyEditorTestHelper.h"
 
@@ -872,6 +877,103 @@ TEST_CASE("cwTrip::windowsWholeNode names the source root's own unit",
     }
 }
 
+namespace {
+
+//! The messages of \a trip's AttachedFileUnsolved rows.
+QStringList unsolvedFileRows(const cwTrip* trip)
+{
+    QStringList messages;
+    const QList<cwError> errors = trip->errorModel()->errors()->toList();
+    for (const cwError& error : errors) {
+        if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFileUnsolved)) {
+            CHECK(error.type() == cwError::Warning);
+            CHECK(error.targetId() == trip->id());
+            messages.append(error.message());
+        }
+    }
+    return messages;
+}
+
+} // namespace
+
+TEST_CASE("A trip inside a source root takes no survey file and warns about one it holds",
+          "[cwTrip][scope]")
+{
+    cwCavingRegion region;
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    cwCave* plain = new cwCave();
+    plain->setName(QStringLiteral("Plain"));
+    region.addCave(plain);
+
+    cwCave* holder = new cwCave();
+    holder->setName(QStringLiteral("Holder"));
+    region.addCave(holder);
+
+    // A trip in a plain cave takes a file and carries no warning.
+    cwTrip* plainTrip = new cwTrip();
+    plainTrip->setName(QStringLiteral("Attached"));
+    plain->addTrip(plainTrip);
+    CHECK(plainTrip->takesSurveyFile());
+    plainTrip->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+    CHECK(plainTrip->takesSurveyFile());
+    CHECK(plainTrip->unsolvedFileWarning().isEmpty());
+    CHECK(unsolvedFileRows(plainTrip).isEmpty());
+
+    // A source root, and a cave with a file of its own from before source
+    // roots, both read their trips' data from that file.
+    const bool sourced = GENERATE(true, false);
+    INFO((sourced ? "source root" : "legacy cave attachment"));
+    holder->setExternalCenterline(cwExternalCenterline(QStringLiteral("compass_case_pairs.mak")));
+    if (sourced) {
+        makeSourceRoot(holder);
+    }
+
+    // A derived node below the holder answers like the holder.
+    cwCave* below = new cwCave();
+    below->setName(QStringLiteral("Below"));
+    holder->addNode(below);
+
+    for (cwSurveyNode* node : std::initializer_list<cwSurveyNode*>{holder, below}) {
+        INFO("trip under " << node->name().toStdString());
+        cwTrip* trip = new cwTrip();
+        trip->setName(QStringLiteral("Native"));
+        node->addTrip(trip);
+        cwSignalSpy notifySpy(trip, &cwTrip::externallyBackedChanged);
+
+        CHECK_FALSE(trip->takesSurveyFile());
+        CHECK(trip->unsolvedFileWarning().isEmpty());
+        CHECK(unsolvedFileRows(trip).isEmpty());
+
+        trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
+        CHECK(notifySpy.count() >= 1);
+        CHECK_FALSE(trip->takesSurveyFile());
+        const QString warning = trip->unsolvedFileWarning();
+        INFO("warning: " << warning.toStdString());
+        CHECK(warning.contains(QStringLiteral("survex_simple.svx")));
+        CHECK(warning.contains(QStringLiteral("not solved")));
+        CHECK(unsolvedFileRows(trip) == QStringList{warning});
+        // The row counts on the trip's node and every node above it.
+        CHECK(region.rootNode()->errorModel()->warningCount() >= 1);
+
+        // Moving the trip out of the holder clears both.
+        plain->insertTrip(plain->tripCount(), trip);
+        CHECK(trip->takesSurveyFile());
+        CHECK(trip->unsolvedFileWarning().isEmpty());
+        CHECK(unsolvedFileRows(trip).isEmpty());
+
+        // Moving it back brings the warning back, and taking the file away
+        // clears it.
+        node->insertTrip(node->tripCount(), trip);
+        CHECK_FALSE(trip->unsolvedFileWarning().isEmpty());
+        CHECK(unsolvedFileRows(trip).size() == 1);
+        trip->setExternalCenterline(cwExternalCenterline());
+        CHECK(trip->unsolvedFileWarning().isEmpty());
+        CHECK(unsolvedFileRows(trip).isEmpty());
+    }
+}
+
 TEST_CASE("Derived trips read their stations by unit-set membership",
           "[cwTrip][scope]")
 {
@@ -1017,4 +1119,136 @@ TEST_CASE("cwTrip::removeChunks clamps an end past the last chunk to the last in
         CHECK(aboutToRemoveSpy.count() == 0);
         CHECK(removedSpy.count() == 0);
     }
+}
+
+namespace {
+
+//! Checks that every station of \a stations sits where casePairs::solvedLookup()
+//! puts the station its name resolves to.
+void checkCasePairPositions(const QList<QPair<QString, QVector3D>>& stations)
+{
+    const cwStationPositionLookup solved = casePairs::solvedLookup();
+    for (const auto& station : stations) {
+        INFO("station " << station.first.toStdString());
+        CHECK(casePairs::samePoint(station.second, solved.position(station.first)));
+    }
+}
+
+} // namespace
+
+TEST_CASE("cwTrip::knownStations lists both members of an attached file's case pair",
+          "[cwTrip][knownStations][CasePairs]")
+{
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = addExternalTrip(cave, QStringLiteral("Topo 1"));
+    trip->setExternalStations(casePairs::harvest());
+    SurveyTreeTestHelper::setScopedPositions(
+        cave, casePairs::solvedLookupUnder(cwStation::canonicalKey(trip->scopePrefix())));
+
+    // Q1 pairs with nothing, so the harvest's Q1 and the solve's q1 are one.
+    const QList<cwTrip::KnownStation> known = trip->knownStations();
+    CHECK(casePairs::joined(namesOf(known)) == casePairs::joined(casePairs::harvest()));
+
+    const cwStationPositionLookup solved = casePairs::solvedLookup();
+    for (const QString& name : casePairs::harvest()) {
+        INFO("station " << name.toStdString());
+        const std::optional<QVector3D> position = positionOf(known, name);
+        REQUIRE(position.has_value());
+        CHECK(casePairs::samePoint(*position, solved.position(name)));
+    }
+
+    SECTION("the snapshot overload lists the same stations") {
+        QStringList solvedNames;
+        for (const auto& station : trip->solvedStations()) {
+            solvedNames.append(station.first);
+        }
+        CHECK(casePairs::joined(cwTrip::knownStationNames(trip->data(), solvedNames))
+              == casePairs::joined(casePairs::harvest()));
+    }
+}
+
+TEST_CASE("cwTrip::knownStations keeps a native trip's A1 and a1 one station",
+          "[cwTrip][knownStations][CasePairs]")
+{
+    // Cavern lowercases a native name, so two spellings a person typed are one
+    // station, even in a cave whose own attached file has case pairs.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    const bool caveAttached = GENERATE(false, true);
+    INFO("the cave has an attached file: " << caveAttached);
+    if (caveAttached) {
+        cave->setExternalCenterline(cwExternalCenterline(casePairs::kFileName));
+    }
+
+    cwTrip* trip = new cwTrip();
+    cave->addTrip(trip);
+    addShot(trip, QStringLiteral("A1"), QStringLiteral("A2"));
+    addShot(trip, QStringLiteral("a1"), QStringLiteral("a3"));
+    REQUIRE(trip->externallyBacked() == caveAttached);
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("a1"), QVector3D(1, 2, 3));
+    lookup.setPosition(QStringLiteral("a2"), QVector3D(4, 5, 6));
+    lookup.setPosition(QStringLiteral("a3"), QVector3D(7, 8, 9));
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
+
+    const QList<cwTrip::KnownStation> known = trip->knownStations();
+    CHECK(namesOf(known) == QStringList({QStringLiteral("A1"), QStringLiteral("A2"),
+                                         QStringLiteral("a3")}));
+    CHECK(positionOf(known, QStringLiteral("A1")) == QVector3D(1, 2, 3));
+}
+
+TEST_CASE("A derived trip reads each case-pair member's own position",
+          "[cwTrip][scope][CasePairs]")
+{
+    // The line-plot labels draw solvedStations(): P2's label has to sit at P2.
+    cwCavingRegion region;
+    cwCave* root = new cwCave();
+    root->setName(QStringLiteral("Pairs"));
+    root->setExternalCenterline(cwExternalCenterline(casePairs::kFileName));
+    region.addCave(root);
+    makeSourceRoot(root);
+    cwTrip* derived = addDerivedTrip(root, QStringLiteral("Pairs"), QStringLiteral("pairs"),
+                                     casePairs::harvest());
+    REQUIRE(derived->scopePrefix().isEmpty());
+    REQUIRE_FALSE(derived->windowsWholeNode());
+    SurveyTreeTestHelper::setScopedPositions(root, casePairs::solvedLookupUnder(QString()));
+
+    const QList<QPair<QString, QVector3D>> stations = derived->solvedStations();
+    QStringList names;
+    for (const auto& station : stations) {
+        names.append(station.first);
+    }
+    CHECK(casePairs::joined(names) == casePairs::joined(casePairs::harvest()));
+    checkCasePairPositions(stations);
+}
+
+TEST_CASE("A native trip's P2 reads the station cavern lowercased it to",
+          "[cwTrip][scope][CasePairs]")
+{
+    // A cave-level Compass file with a case pair, and a native trip in the same
+    // scope: cavern reads the native P2 as p2, so that is where it sits.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Pairs"));
+    cave->setExternalCenterline(cwExternalCenterline(casePairs::kFileName));
+    region.addCave(cave);
+    cwTrip* native = new cwTrip();
+    cave->addTrip(native);
+    addShot(native, QStringLiteral("P2"), QStringLiteral("N1"));
+    REQUIRE(native->scopePrefix().isEmpty());
+
+    cwStationPositionLookup lookup = casePairs::solvedLookupUnder(QString());
+    lookup.setPosition(QStringLiteral("n1"), QVector3D(0, 0, 0));
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
+
+    const QMap<QString, QVector3D> stations = byName(native->solvedStations());
+    REQUIRE(stations.contains(QStringLiteral("P2")));
+    CHECK(casePairs::samePoint(stations.value(QStringLiteral("P2")),
+                               casePairs::solvedLookup().position(QStringLiteral("p2"))));
 }

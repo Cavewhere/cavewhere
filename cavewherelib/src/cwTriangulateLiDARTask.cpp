@@ -97,7 +97,8 @@ AsyncFuture::Limited<cwTriangulateLiDARTask::Result> cwTriangulateLiDARTask::tri
         QVector<cwRenderTexturedItems::Item> renderItems = reserveRenderItems(gltf.meshes);
         const cwGltfBaseColorTexture baseColorTexture(data.dataRootPath(),
                                                       data.gltfFilename(),
-                                                      noteScope);
+                                                      noteScope,
+                                                      [&promise]() { return promise.isCanceled(); });
 
         //Both loops run once per geometry, so both know their count. They fill
         //two slots of the note at once, since a geometry is morphed and then

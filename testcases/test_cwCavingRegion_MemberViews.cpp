@@ -16,6 +16,7 @@
 #include "cwSurveyNetwork.h"
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
+#include "CasePairTestHelpers.h"
 #include "ExternalCenterlineTestHelpers.h"
 
 // Qt
@@ -68,8 +69,9 @@ QString memberLocalKey(const QString& key, const QString& nodeCavernPath)
 }
 
 //! \a node's network built from the public pieces: the source root's view kept
-//! to node->sourceMembers(), member names local to the node. A shot to a
-//! non-member stays on the member's neighbor list without a station entry.
+//! to node->sourceMembers(), member names local to the node, each key copied
+//! as the root's view stores it. A shot to a non-member stays on the member's
+//! neighbor list without a station entry.
 cwSurveyNetwork referenceNetwork(const cwSurveyNode* node)
 {
     const cwSurveyNode::SourceMembers members = node->sourceMembers();
@@ -83,13 +85,13 @@ cwSurveyNetwork referenceNetwork(const cwSurveyNode* node)
         const QString local = memberLocalKey(station, cavernPath);
         for (const QString& neighbor : rootNetwork.neighbors(station)) {
             if (members.contains(neighbor)) {
-                network.addShot(local, memberLocalKey(neighbor, cavernPath));
+                network.addShotKeys(local, memberLocalKey(neighbor, cavernPath));
             } else {
-                network.addNeighbor(local, neighbor);
+                network.addNeighborKey(local, neighbor);
             }
         }
         if (rootNetwork.hasPosition(station)) {
-            network.setPosition(local, rootNetwork.position(station));
+            network.setPositionAtKey(local, rootNetwork.position(station));
         }
     }
     return network;
@@ -349,6 +351,32 @@ TEST_CASE("A derived node's member view keeps a shot to a non-member as an edge,
     CHECK_FALSE(rootAfter.hasStation(foreign));
     CHECK(rootAfter.neighbors(memberRootKey).contains(foreign));
     CHECK(rootAfter.hasStation(siblingRootKey));
+}
+
+TEST_CASE("A derived node's member views keep both members of a case pair",
+          "[cwCavingRegion][MemberViews][CasePairs]")
+{
+    // The .mak reads compass_case_pairs.dat into a survey named after its
+    // file, which the attach derives as one node.
+    auto fixture = makeProject(QStringLiteral("member-views-case-pairs"));
+    cwSurveyNode* root = attachAndCheck(fixture.get(), fixturePath(casePairs::kMakFileName));
+
+    const QList<const cwSurveyNode*> nodes = derivedNodes(root);
+    REQUIRE(nodes.size() == 1);
+    const cwSurveyNode* node = nodes.first();
+    INFO("node " << node->name().toStdString() << " (" << node->cavernPath().toStdString() << ")");
+
+    const cwSurveyNode::SourceMembers members = node->sourceMembers();
+    const QString cavernPath = cwStation::canonicalKey(node->cavernPath());
+    INFO("members: " << casePairs::joined(QStringList(members.stations.cbegin(), members.stations.cend())));
+    for (const QString& key : casePairs::keys(cavernPath)) {
+        INFO("member " << key.toStdString());
+        CHECK(members.stations.contains(key));
+    }
+
+    const cwStationPositionLookup view = node->scopedPositions();
+    CHECK(casePairs::storedKeys(view) == casePairs::joined(casePairs::keys(QString())));
+    casePairs::checkStations(view, node->scopedNetwork(), QString());
 }
 
 TEST_CASE("A member-view fan-out grows with the stations, not with nodes times stations",

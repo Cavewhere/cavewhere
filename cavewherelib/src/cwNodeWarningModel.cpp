@@ -35,6 +35,7 @@ constexpr int kOtherWarningKind = -2;
 //! what keeps the survey from its place on the map, then the rest.
 constexpr std::array kRollUpKindOrder = {
     kFileErrorKind,
+    static_cast<int>(cwErrorTypeId::AttachedFileUnsolved),
     static_cast<int>(cwErrorTypeId::AttachedFileFixWithoutCS),
     static_cast<int>(cwErrorTypeId::AttachedFileUnfixed),
     static_cast<int>(cwErrorTypeId::AttachedFileDefaultDatum),
@@ -53,6 +54,19 @@ constexpr int kMaxNamedNodes = 5;
 bool isShownWarning(const cwError& error)
 {
     return error.type() == cwError::Warning && !error.suppressed();
+}
+
+//! The warnings a node's page lists from its trips, which own them.
+constexpr std::array kTripWarningKinds = {
+    static_cast<int>(cwErrorTypeId::AttachedFileUnsolved),
+    static_cast<int>(cwErrorTypeId::UnconnectedStations)
+};
+
+bool isTripWarning(const cwError& error)
+{
+    return isShownWarning(error)
+           && std::find(kTripWarningKinds.cbegin(), kTripWarningKinds.cend(), error.errorTypeId())
+                  != kTripWarningKinds.cend();
 }
 
 /**
@@ -111,6 +125,10 @@ QString rollUpMessage(int kind, int nodeCount)
         return countedPhrase(nodeCount,
                              QStringLiteral("has a survey file that failed to read."),
                              QStringLiteral("have survey files that failed to read."));
+    case static_cast<int>(cwErrorTypeId::AttachedFileUnsolved):
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has a trip whose survey file is not solved."),
+                             QStringLiteral("have trips whose survey files are not solved."));
     case static_cast<int>(cwErrorTypeId::AttachedFileFixWithoutCS):
         return countedPhrase(nodeCount,
                              QStringLiteral("has fixes with no coordinate system."),
@@ -368,11 +386,10 @@ void cwNodeWarningModel::rebuild()
             }
         }
 
-        const int unconnectedStations = static_cast<int>(cwErrorTypeId::UnconnectedStations);
         for (cwTrip* trip : m_node->trips()) {
             const QList<cwError> tripErrors = trip->errorModel()->errors()->toList();
             for (const cwError& error : tripErrors) {
-                if (isShownWarning(error) && error.errorTypeId() == unconnectedStations) {
+                if (isTripWarning(error)) {
                     entries.append(Entry{error.message(), error.detail(), Target::TripPage, trip});
                 }
             }
@@ -447,7 +464,6 @@ QList<cwNodeWarningModel::Entry> cwNodeWarningModel::descendantEntries()
 {
     disconnectAll(m_descendantTripConnections);
 
-    const int unconnectedStations = static_cast<int>(cwErrorTypeId::UnconnectedStations);
     QHash<int, QList<cwSurveyNode*>> ownersByKind;
     const QList<cwSurveyNode*> descendants = m_node->allNodes();
     for (cwSurveyNode* descendant : descendants) {
@@ -469,8 +485,8 @@ QList<cwNodeWarningModel::Entry> cwNodeWarningModel::descendantEntries()
                         this, &cwNodeWarningModel::scheduleRebuild));
             const QList<cwError> tripErrors = trip->errorModel()->errors()->toList();
             for (const cwError& error : tripErrors) {
-                if (isShownWarning(error) && error.errorTypeId() == unconnectedStations) {
-                    kinds.insert(unconnectedStations);
+                if (isTripWarning(error)) {
+                    kinds.insert(error.errorTypeId());
                 }
             }
         }

@@ -11,6 +11,9 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QImage>
+#include <QProcess>
+#include <QProcessEnvironment>
+#include <QPromise>
 #include <QSemaphore>
 #include <QString>
 #include <QStringList>
@@ -24,9 +27,12 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <functional>
+#include <optional>
 #include <thread>
 
 #include "cwConcurrent.h"
+#include "cwEncodeShutdownChild.h"
 #include "cwDiskCacher.h"
 #include "cwKtx2Codec.h"
 #include "cwStreamedTexture.h"
@@ -890,4 +896,146 @@ TEST_CASE("The task-pool encoder is the default", "[Ktx2][EncodeLane]") {
     REQUIRE_FALSE(taskPool.hasError());
     CHECK(defaultEncode.value() == taskPool.value());
     CHECK_FALSE(cw::ktx2::transcode(defaultEncode.value(), QRhiTexture::RGBA8).hasError());
+}
+
+namespace {
+    //! The child drains its whole encode once shutdown waits for it, so leave room for that
+    constexpr int kChildTimeoutMs = 120000;
+
+    //! A known PROJ false positive aborts every ASan run at startup without this
+    const QString kContainerOverflowOption = QStringLiteral("detect_container_overflow");
+
+    QProcessEnvironment childEnvironment()
+    {
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        const QString asanOptionsName = QStringLiteral("ASAN_OPTIONS");
+        const QString asanOptions = environment.value(asanOptionsName);
+        if(!asanOptions.contains(kContainerOverflowOption)) {
+            const QString separator = asanOptions.isEmpty() ? QString() : QStringLiteral(":");
+            environment.insert(asanOptionsName,
+                               asanOptions + separator + kContainerOverflowOption + QStringLiteral("=0"));
+        }
+        return environment;
+    }
+}
+
+TEST_CASE("Quitting with an encode in flight exits cleanly", "[Ktx2][EncodeLane][EncodeShutdown]") {
+    QProcess child;
+    child.setProcessEnvironment(childEnvironment());
+    child.start(QStringLiteral(CW_ENCODE_SHUTDOWN_CHILD_PATH), QStringList());
+    REQUIRE(child.waitForStarted());
+
+    const bool finished = child.waitForFinished(kChildTimeoutMs);
+    const QString output = QString::fromUtf8(child.readAllStandardOutput());
+    const QString errors = QString::fromUtf8(child.readAllStandardError());
+    INFO("child stdout:\n" << output.toStdString());
+    INFO("child stderr:\n" << errors.toStdString());
+    REQUIRE(finished);
+
+    //Separates the shutdown under test from a child that died before its encode started
+    REQUIRE(output.contains(QString::fromLatin1(cw::encodeShutdownChild::kInFlightMarker)));
+
+    CHECK_FALSE(errors.contains(QStringLiteral("AddressSanitizer")));
+    CHECK(child.exitStatus() == QProcess::NormalExit);
+    CHECK(child.exitCode() == 0);
+}
+
+namespace {
+    //! A canceled encode stops after at most a wave or two, a small slice of the
+    //! whole encode; comparing against a whole encode on the same pool keeps the
+    //! check independent of machine speed and load
+    constexpr int kCancelSpeedup = 10;
+
+    bool encodeIsOnPool()
+    {
+        return cw::ktx2::encodeLane()->activeThreadCount() >= kSingleThread
+               && cwTask::threadPool()->activeThreadCount() >= kQueueProbeThreads;
+    }
+
+    //! Milliseconds an uncanceled encode of image takes on the current pool
+    qint64 wholeEncodeMs(const QImage& image)
+    {
+        QElapsedTimer timer;
+        timer.start();
+        EncodeFuture encode = cwConcurrent::run([image]() { return cw::ktx2::encodeRgba(image); });
+        REQUIRE(encodeFinished(encode, kEncodeTimeoutMs));
+        REQUIRE_FALSE(encode.result().hasError());
+        return timer.elapsed();
+    }
+}
+
+TEST_CASE("An encode that is already canceled returns an error", "[Ktx2][EncodeLane][EncodeCancel]") {
+    const QImage image = gradientImage(kQueueProbeSize, kQueueProbeSize);
+
+    const auto encoded = cw::ktx2::encodeRgba(image,
+                                              cw::ktx2::kDefaultUastcQuality,
+                                              cw::ktx2::kDefaultUastcEncoder,
+                                              []() { return true; });
+    CHECK(encoded.hasError());
+}
+
+TEST_CASE("A canceled encode stops between waves", "[Ktx2][EncodeLane][EncodeCancel]") {
+    const QImage image = gradientImage(kQueueProbeSize, kQueueProbeSize);
+    cwThreadCountRestorer threadCount(kQueueProbeThreads);
+
+    const qint64 wholeMs = wholeEncodeMs(image);
+
+    std::optional<Monad::Result<QByteArray>> outcome;
+    QFuture<void> encode = cwConcurrent::run([image, &outcome](QPromise<void>& promise) {
+        outcome = cw::ktx2::encodeRgba(image,
+                                       cw::ktx2::kDefaultUastcQuality,
+                                       cw::ktx2::kDefaultUastcEncoder,
+                                       [&promise]() { return promise.isCanceled(); });
+    });
+
+    REQUIRE(waitUntil(encodeIsOnPool, kLaneOccupiedTimeoutMs));
+    REQUIRE_FALSE(encode.isFinished());
+
+    QElapsedTimer sinceCancel;
+    sinceCancel.start();
+    encode.cancel();
+
+    REQUIRE(waitUntil([&encode]() { return encode.isFinished(); }, kEncodeTimeoutMs));
+    const qint64 cancelMs = sinceCancel.elapsed();
+
+    INFO("stopped " << cancelMs << " ms after the cancel; a whole encode takes " << wholeMs << " ms");
+    CHECK(cancelMs * kCancelSpeedup < wholeMs);
+    REQUIRE(outcome.has_value());
+    CHECK(outcome->hasError());
+}
+
+TEST_CASE("A canceled ensureEncodedEntry leaves no cache entry", "[Ktx2][EncodeLane][EncodeCancel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString cachePath = tempDir.path();
+    const cwDiskCacher::Key key = streamedKey(QStringLiteral("canceled-checksum"));
+    cwThreadCountRestorer threadCount(kQueueProbeThreads);
+
+    const qint64 wholeMs = wholeEncodeMs(gradientImage(kQueueProbeSize, kQueueProbeSize));
+
+    std::optional<Monad::ResultBase> outcome;
+    QFuture<void> ensure = cwConcurrent::run([cachePath, key, &outcome](QPromise<void>& promise) {
+        cwDiskCacher cacher{cachePath};
+        outcome = cw::ktx2::ensureEncodedEntry(cacher, key, []() {
+            return gradientImage(kQueueProbeSize, kQueueProbeSize);
+        }, {}, [&promise]() { return promise.isCanceled(); });
+    });
+
+    REQUIRE(waitUntil(encodeIsOnPool, kLaneOccupiedTimeoutMs));
+    REQUIRE_FALSE(ensure.isFinished());
+
+    QElapsedTimer sinceCancel;
+    sinceCancel.start();
+    ensure.cancel();
+
+    REQUIRE(waitUntil([&ensure]() { return ensure.isFinished(); }, kEncodeTimeoutMs));
+    const qint64 cancelMs = sinceCancel.elapsed();
+
+    INFO("stopped " << cancelMs << " ms after the cancel; a whole encode takes " << wholeMs << " ms");
+    CHECK(cancelMs * kCancelSpeedup < wholeMs);
+    REQUIRE(outcome.has_value());
+    CHECK(outcome->hasError());
+
+    const cwDiskCacher cacher{cachePath};
+    CHECK_FALSE(cacher.hasEntry(key));
 }

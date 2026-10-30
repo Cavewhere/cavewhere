@@ -13,6 +13,7 @@
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QDir>
+#include <QThreadPool>
 
 //Our inculdes
 #include "cwQmlImageProviderBinder.h"
@@ -20,6 +21,7 @@
 #include "cwRootData.h"
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
+#include "cwTask.h"
 
 //QuickGit includes
 #include "GitRepository.h"
@@ -117,6 +119,10 @@ int main(int argc, char **argv) \
     const char* qmlSourceDirectory = QUICK_TEST_SOURCE_DIR; //The source directory where the qml tests are located
     qDebug() << "qmlSourceDirectory:" << qmlSourceDirectory;
     int result = quick_test_main_with_setup(argc, argv, "CaveWhere-qml-tests", qmlSourceDirectory, &setup);
+    //Same drain as testcases/main.cpp: jobs left by the last test finish while
+    //both pools are still alive
+    QThreadPool::globalInstance()->waitForDone();
+    cwTask::threadPool()->waitForDone();
     QQuickGit::GitRepository::shutdownGitEngine();
     return result;
 }

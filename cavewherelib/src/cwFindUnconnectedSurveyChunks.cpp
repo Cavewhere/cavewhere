@@ -103,7 +103,7 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
         // other, and a node left with none gets the origin fix instead.
         bool fixed = false;
         for (const cwFixStation& fix : node.fixStations) {
-            const QString key = cwStation::canonicalKey(nodePrefix + fix.stationName().trimmed());
+            const QString key = cwStation::keyIn(nodePrefix + fix.stationName().trimmed(), nodeKeys);
             if (nodeKeys.contains(key)) {
                 anchors.insert(key);
                 fixed = true;
@@ -162,7 +162,7 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
                 visitSourcedSubtree(visitSourcedSubtree, rootPrefix, node, nativeKeys);
                 for (const cwFixStation& fix : node.fixStations) {
                     const QString key =
-                        cwStation::canonicalKey(rootPrefix + fix.stationName().trimmed());
+                        cwStation::keyIn(rootPrefix + fix.stationName().trimmed(), nativeKeys);
                     if (nativeKeys.contains(key)) {
                         anchors.insert(key);
                     }
@@ -174,8 +174,9 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
         visit(visit, cave);
     }
 
-    // Each tie joins its operands as the driver writes them; a tie the driver
-    // drops (an operand it cannot render) joins nothing.
+    // Each tie joins its operands as the driver writes them, keyed the way the
+    // reader keys a case pair; a tie the driver drops (an operand it cannot
+    // render) joins nothing.
     for (const cwEquate& equate : region.equates) {
         if (!equate.isValid()) {
             continue;
@@ -188,7 +189,7 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
                 operands.clear();
                 break;
             }
-            operands.append(cwStation::canonicalKey(operand));
+            operands.append(cwStation::keyIn(operand, anchors));
         }
         for (const QString& operand : std::as_const(operands)) {
             stations.join(operands.first(), operand);

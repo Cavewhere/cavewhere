@@ -2094,7 +2094,8 @@ TEST_CASE("A scanned fix names the station the harvest says the file fixes", "[S
     INFO("harvest: " << harvest.errorMessage().toStdString());
     REQUIRE_FALSE(harvest.hasError());
     REQUIRE(harvest.value().fixedNames.size() == 1);
-    CHECK(cwStation::canonicalKey(fixes.first().station) == harvest.value().fixedNames.first());
+    CHECK(cwStation::canonicalKey(fixes.first().station)
+          == cwStation::canonicalKey(harvest.value().fixedNames.first()));
 }
 
 namespace {

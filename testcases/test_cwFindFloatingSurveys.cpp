@@ -35,6 +35,7 @@
 #include "cwTrip.h"
 
 // Test helpers
+#include "CasePairTestHelpers.h"
 #include "ExternalCenterlineTestHelpers.h"
 
 // Qt
@@ -338,4 +339,38 @@ TEST_CASE("The derived trips of an attached survey file never float", "[Floating
     REQUIRE_FALSE(root->allTrips().isEmpty());
 
     CHECK(linePlot->floatingSurveys().isEmpty());
+}
+
+TEST_CASE("A floating attachment names both members of its file's case pair",
+          "[FloatingSurveys][CasePairs]")
+{
+    // Compass keeps P2 and p2 apart, so the record names each by its own key.
+    cwCavingRegionData region;
+
+    cwCaveData cave;
+    cave.name = QStringLiteral("Alpha");
+    cave.id = QUuid::createUuid();
+
+    cwTripData attached;
+    attached.name = QStringLiteral("Topo 1");
+    attached.id = QUuid::createUuid();
+    attached.externalCenterline = cwExternalCenterline(casePairs::kFileName);
+    attached.externalStations = casePairs::harvest();
+    cave.trips.append(attached);
+
+    region.caves.append(cave);
+
+    // The cave solved a station of its own, so it anchors; the attachment
+    // solved nothing.
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("alpha.a1"), QStringLiteral("alpha.a2"));
+
+    const QList<Result> floating =
+        cwFindFloatingSurveys::fromExternalScopes(region, network, cwScopeLabels(region));
+
+    REQUIRE(floating.size() == 1);
+    QStringList stations = floating.first().stations;
+    stations.sort();
+    CHECK(stations.join(QStringLiteral(", ")).toStdString()
+          == "topo_1.P1, topo_1.P2, topo_1.P3, topo_1.p1, topo_1.p2, topo_1.p3, topo_1.q1");
 }

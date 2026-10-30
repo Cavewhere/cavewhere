@@ -21,6 +21,8 @@
 #include "cwCavernRunner.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwEquate.h"
+#include "cwEquateModel.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwErrorModel.h"
@@ -44,6 +46,7 @@
 #include "cwTrip.h"
 
 // Test helpers
+#include "CasePairTestHelpers.h"
 #include "LoadProjectHelper.h"
 #include "TestHelper.h"
 
@@ -1184,5 +1187,67 @@ private:
     bool m_released = false;
     std::atomic<bool> m_holding = false;
 };
+
+namespace casePairs {
+
+//! The trip under \a node, or under a node below it, whose file holds
+//! \a station in any case: a cave-level file's derived trip, or one a .mak
+//! or a Survex block derives.
+inline cwTrip* fileTripHolding(const cwSurveyNode* node, const QString& station)
+{
+    for (const cwSurveyNode* holder : nodeAndDescendants(node)) {
+        for (cwTrip* trip : holder->trips()) {
+            if (!trip->sourcePath().isEmpty()
+                && trip->externalStations().contains(station, Qt::CaseInsensitive)) {
+                return trip;
+            }
+        }
+    }
+    FAIL("no file trip holds " << station.toStdString());
+    return nullptr;
+}
+
+//! The cave every typing context of a case pair is checked in.
+struct MixedCave {
+    cwCave* root = nullptr;
+    cwTrip* fileTrip = nullptr;
+    cwTrip* native = nullptr;
+};
+
+//! compass_case_pairs.dat attached as a source root under the region's root,
+//! beside a native trip Native with P2 -> N1, solved. The native trip ties
+//! to the file at Q1, away from the pairs: an equate on P2 would put the two
+//! labels at one point and make them one station.
+inline MixedCave addMixedCave(SavedProjectFixture* fixture)
+{
+    MixedCave cave;
+    cave.root = qobject_cast<cwCave*>(attachSourceThroughManager(
+        fixture, fixture->project->cavingRegion()->rootNode(), fixturePath(kFileName)));
+    REQUIRE(cave.root != nullptr);
+    drainPipelines(fixture);
+    cave.fileTrip = fileTripHolding(cave.root, QStringLiteral("P2"));
+
+    cave.native = addNativeTripWithShot(cave.root, QStringLiteral("Native"),
+                                        QStringLiteral("P2"), QStringLiteral("N1"));
+    fixture->project->cavingRegion()->equates()->appendEquate(
+        cwEquate({cave.native->stationHandle(QStringLiteral("N1")),
+                  cave.fileTrip->stationHandle(QStringLiteral("Q1"))}));
+    drainPipelines(fixture);
+
+    const cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+    REQUIRE_FALSE(cave.native->scopePrefix().isEmpty());
+    return cave;
+}
+
+//! The native trip's P2 as the mixed cave's root view keys it.
+inline QString nativeP2Key(const MixedCave& cave)
+{
+    return cwStation::canonicalKey(cave.native->scopePrefix()) + QStringLiteral("p2");
+}
+
+} // namespace casePairs
 
 #endif // EXTERNALCENTERLINETESTHELPERS_H

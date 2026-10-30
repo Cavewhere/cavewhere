@@ -35,6 +35,7 @@
 #include "cwStationPositionLookup.h"
 #include "cwExternalCenterlineManager.h"
 #include "ExternalCenterlineTestHelpers.h"
+#include "CasePairTestHelpers.h"
 #include "cwLead.h"
 #include "cwFutureManagerModel.h"
 #include "SurveyTreeTestHelper.h"
@@ -1133,6 +1134,89 @@ TEST_CASE("auto-calculate computes the note transform on the survey trip of a lo
 
     CHECK(scrap->noteTransformation()->scale()
           == Catch::Approx(kHalfScale / kMetersPerFoot).epsilon(kScaleTolerance));
+}
+
+TEST_CASE("auto-calculate computes the note transform for a scrap holding both members of a case pair",
+          "[cwScrapManager][Attach][NoteTransform][CasePairs]")
+{
+    requireAutomaticUpdatesEnabled();
+    auto fixture = makeSavedProject(QStringLiteral("note-auto-case-pairs"),
+                                    QStringLiteral("ScrapCave"),
+                                    QStringLiteral("ScrapTrip"));
+    cwTrip* trip = fixture->trip;
+    attachThroughManager(fixture.get(), trip, fixturePath(casePairs::kFileName));
+    settleScraps(fixture.get());
+
+    const cwStationPositionLookup lookup = trip->solvedStationPositions();
+    INFO("stored keys: " << casePairs::storedKeys(lookup));
+    REQUIRE(lookup.key(QStringLiteral("P2")) == QStringLiteral("P2"));
+    REQUIRE(lookup.key(QStringLiteral("p2")) == QStringLiteral("p2"));
+
+    cwScrap* scrap = addEmptySizedScrap(trip);
+    for (const auto& [name, key] : casePairs::turnedNoteStations()) {
+        cwNoteStation noteStation;
+        noteStation.setName(name);
+        noteStation.setPositionOnNote(casePairs::turnedOnNote(key));
+        scrap->addStation(noteStation);
+    }
+    settleScraps(fixture.get());
+
+    constexpr double kPageMeters = static_cast<double>(kAttachedNotePixels) / kAttachedNoteDotsPerMeter;
+    CHECK(scrap->noteTransformation()->scale()
+          == Catch::Approx(casePairs::kLegOnNote * kPageMeters / casePairs::kLegMeters)
+                 .epsilon(kScaleTolerance));
+    CHECK(scrap->noteTransformation()->northUp()
+          == Catch::Approx(casePairs::kTurnedNorthUp).margin(casePairs::kNorthToleranceDegrees));
+}
+
+TEST_CASE("auto-calculate computes the note transform for scraps beside a cave-level file's case pair",
+          "[cwScrapManager][Attach][NoteTransform][CasePairs]")
+{
+    requireAutomaticUpdatesEnabled();
+    auto fixture = makeSavedProject(QStringLiteral("note-auto-mixed-case-pairs"),
+                                    QStringLiteral("ScrapCave"),
+                                    QStringLiteral("ScrapTrip"));
+    const casePairs::MixedCave mixed = casePairs::addMixedCave(fixture.get());
+    settleScraps(fixture.get());
+    const cwStationPositionLookup rootLookup = mixed.root->scopedPositions();
+    INFO("stored keys: " << casePairs::storedKeys(rootLookup));
+
+    SECTION("A scrap on the native trip anchors at the trip's own P2")
+    {
+        // A note names its own trip's stations: P2 here is the native one.
+        const cwStationPositionLookup lookup = mixed.native->solvedStationPositions();
+        REQUIRE(lookup.hasPosition(QStringLiteral("P2")));
+        CHECK(casePairs::samePoint(lookup.position(QStringLiteral("P2")),
+                                   rootLookup.position(casePairs::nativeP2Key(mixed))));
+
+        // P2 -> N1 runs ten meters north; the page draws it five meters long.
+        cwScrap* scrap = addEmptySizedScrap(mixed.native);
+        addStationLikeTheEditor(scrap, kA1OnNote, QStringLiteral("P2"));
+        addStationLikeTheEditor(scrap, kA2OnNote, QStringLiteral("N1"));
+        settleScraps(fixture.get());
+
+        CHECK(scrap->noteTransformation()->scale()
+              == Catch::Approx(kHalfScale).epsilon(kScaleTolerance));
+    }
+
+    SECTION("A scrap on the file's trip anchors at each member of the pair")
+    {
+        cwScrap* scrap = addEmptySizedScrap(mixed.fileTrip);
+        for (const auto& [name, key] : casePairs::turnedNoteStations()) {
+            cwNoteStation noteStation;
+            noteStation.setName(name);
+            noteStation.setPositionOnNote(casePairs::turnedOnNote(key));
+            scrap->addStation(noteStation);
+        }
+        settleScraps(fixture.get());
+
+        constexpr double kPageMeters = static_cast<double>(kAttachedNotePixels) / kAttachedNoteDotsPerMeter;
+        CHECK(scrap->noteTransformation()->scale()
+              == Catch::Approx(casePairs::kLegOnNote * kPageMeters / casePairs::kLegMeters)
+                     .epsilon(kScaleTolerance));
+        CHECK(scrap->noteTransformation()->northUp()
+              == Catch::Approx(casePairs::kTurnedNorthUp).margin(casePairs::kNorthToleranceDegrees));
+    }
 }
 
 namespace {

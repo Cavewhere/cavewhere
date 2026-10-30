@@ -63,11 +63,15 @@ constexpr double kShotsOnlySnappedHigh = 20.0;
 // Line-list vertices of the shot reaching kShotDeepZ
 constexpr int kDeepShotFirstVertex = 4;
 constexpr int kVerticesPerShot = 2;
-// Loop error: the bar is fixed at 0..3 sigma
+// Loop error: the bar is fixed at 0..6 sigma
 constexpr double kGoodSigma = 1.0;
-constexpr double kOkaySigma = 2.0;
-constexpr double kBadSigma = 3.0;
-constexpr double kMidSigma = 1.5;
+constexpr double kFairSigma = 2.0;
+constexpr double kSuspectSigma = 3.0;
+constexpr double kPoorSigma = 4.0;
+constexpr double kBadSigma = 5.0;
+constexpr double kBlunderSigma = 6.0;
+constexpr double kMidSigma = 3.0;
+constexpr double kInsideGoodSigma = 1.5;
 constexpr float kLoopLegSigma = 0.8f;
 // LinePlot.frag's kNoDataColor
 constexpr double kNoDataGray = 0.55;
@@ -263,7 +267,7 @@ TEST_CASE("cwColorBy colors loop error on a fixed sigma scale", "[ColorBy]")
     CHECK(modeOf(colorBy) == cwColorByUniform::Sequential);
     CHECK(static_cast<int>(uniform.params[cwColorByUniform::ParamValueSource]) == cwColorByUniform::PerSegmentError);
     CHECK(uniform.range[cwColorByUniform::RangeMin] == Approx(0.0));
-    CHECK(uniform.range[cwColorByUniform::RangeMax] == Approx(kBadSigma));
+    CHECK(uniform.range[cwColorByUniform::RangeMax] == Approx(kBlunderSigma));
     CHECK(uniform.range[cwColorByUniform::RangePivot] == Approx(kMidSigma));
     CHECK(uniform.range[cwColorByUniform::RangeHalfExtent] == Approx(kMidSigma));
 
@@ -275,15 +279,16 @@ TEST_CASE("cwColorBy colors loop error on a fixed sigma scale", "[ColorBy]")
     CHECK(items.sharedUniformBlock() == cwColorByUniform::toBytes(uniform));
 
     // The ramp the shader samples is the loop error ramp: dark green at 0,
-    // lighter green at 1 sigma, dark red at the top
+    // lighter green at 1 sigma, dark purple at the top
     const cwColorRamp loopRamp = cwColorRamp::loopErrorRamp();
     const QColor first = loopRamp.colorAt(0.0);
     CHECK(uniform.ramp[0][0] == Approx(first.redF()));
     CHECK(uniform.ramp[0][1] == Approx(first.greenF()));
     CHECK(uniform.ramp[0][2] == Approx(first.blueF()));
     CHECK(first.name() == QStringLiteral("#1a9850"));
-    CHECK(loopRamp.colorAt(1.0).name() == QStringLiteral("#a50026"));
-    CHECK(loopRamp.colorAt(kGoodSigma / kBadSigma).lightnessF() > first.lightnessF());
+    CHECK(loopRamp.colorAt(kSuspectSigma / kBlunderSigma).name() == QStringLiteral("#e6c200"));
+    CHECK(loopRamp.colorAt(1.0).name() == QStringLiteral("#6a1b9a"));
+    CHECK(loopRamp.colorAt(kGoodSigma / kBlunderSigma).lightnessF() > first.lightnessF());
     CHECK_FALSE(colorBy.rampIds().contains(loopRamp.id()));
     CHECK_FALSE(cwColorRamp::preset(loopRamp.id()).isValid());
 
@@ -313,23 +318,27 @@ TEST_CASE("cwColorBy labels the loop error bar in sigma", "[ColorBy]")
     CHECK(ticksSpy.count() == 1);
 
     CHECK(colorBy.rangeMin() == Approx(0.0));
-    CHECK(colorBy.rangeMax() == Approx(kBadSigma));
-    CHECK(colorBy.legendTicks() == QList<double>{0.0, kGoodSigma, kOkaySigma, kBadSigma});
+    CHECK(colorBy.rangeMax() == Approx(kBlunderSigma));
+    CHECK(colorBy.legendTicks() == QList<double>{0.0, kGoodSigma, kFairSigma, kSuspectSigma, kPoorSigma, kBadSigma, kBlunderSigma});
     CHECK(colorBy.normalized(kMidSigma) == Approx(0.5));
-    CHECK(colorBy.normalized(kBadSigma * 2.0) == Approx(1.0));
+    CHECK(colorBy.normalized(kBlunderSigma * 2.0) == Approx(1.0));
 
     CHECK(colorBy.formatTick(0.0) == QStringLiteral(u"0 \u03c3"));
     CHECK(colorBy.formatTick(kGoodSigma) == QStringLiteral(u"1 \u03c3"));
-    CHECK(colorBy.formatTick(kOkaySigma) == QStringLiteral(u"2 \u03c3"));
-    CHECK(colorBy.formatTick(kBadSigma) == QStringLiteral(u"\u22653 \u03c3"));
+    CHECK(colorBy.formatTick(kFairSigma) == QStringLiteral(u"2 \u03c3"));
+    CHECK(colorBy.formatTick(kBadSigma) == QStringLiteral(u"5 \u03c3"));
+    CHECK(colorBy.formatTick(kBlunderSigma) == QStringLiteral(u"\u22656 \u03c3"));
 
-    CHECK(colorBy.bandName(0.0) == QStringLiteral("Perfect"));
-    CHECK(colorBy.bandName(kLoopLegSigma) == QStringLiteral("Perfect"));
+    CHECK(colorBy.bandName(0.0) == QStringLiteral("Excellent"));
+    CHECK(colorBy.bandName(kLoopLegSigma) == QStringLiteral("Excellent"));
     CHECK(colorBy.bandName(kGoodSigma) == QStringLiteral("Good"));
-    CHECK(colorBy.bandName(kMidSigma) == QStringLiteral("Good"));
-    CHECK(colorBy.bandName(kOkaySigma) == QStringLiteral("Okay"));
+    CHECK(colorBy.bandName(kInsideGoodSigma) == QStringLiteral("Good"));
+    CHECK(colorBy.bandName(kFairSigma) == QStringLiteral("Fair"));
+    CHECK(colorBy.bandName(kSuspectSigma) == QStringLiteral("Suspect"));
+    CHECK(colorBy.bandName(kPoorSigma) == QStringLiteral("Poor"));
     CHECK(colorBy.bandName(kBadSigma) == QStringLiteral("Bad"));
-    CHECK(colorBy.bandName(kBadSigma * 3.0) == QStringLiteral("Bad"));
+    CHECK(colorBy.bandName(kBlunderSigma) == QStringLiteral("Blunder"));
+    CHECK(colorBy.bandName(kBlunderSigma * 3.0) == QStringLiteral("Blunder"));
 
     CHECK(colorBy.noDataColor() == QColor::fromRgbF(kNoDataGray, kNoDataGray, kNoDataGray));
 

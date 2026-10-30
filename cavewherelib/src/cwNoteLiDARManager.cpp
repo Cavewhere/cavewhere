@@ -499,8 +499,7 @@ void cwNoteLiDARManager::liDARRowsAboutToBeRemoved(const QModelIndex& parent, in
             m_deletedNotes.insert(note);
             m_dirtyNotes.remove(note);
 
-            removeKeywordItemForNote(note);
-            m_noteToRender.remove(note);
+            removeRenderItemsForNote(note);
 
             disconnect(note->noteTransformation(), nullptr, this, nullptr);
             disconnect(note, nullptr, this, nullptr);
@@ -521,8 +520,7 @@ void cwNoteLiDARManager::noteDestroyed(QObject* noteObj)
         //reading the note — which updateState() would do while it is still in the
         //dirty set — is a use-after-free.
         const bool wasPending = m_dirtyNotes.remove(note) > 0;
-        removeKeywordItemForNote(note);
-        m_noteToRender.remove(note);
+        removeRenderItemsForNote(note);
 
         //Only once the pipeline has actually left Dirty. Still Dirty means nothing
         //changed, and announcing it would have the coordinator dispatch a batch
@@ -829,8 +827,7 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
             disconnect(note->noteTransformation(), nullptr, this, nullptr);
             m_deletedNotes.insert(note);
             m_dirtyNotes.remove(note);
-            removeKeywordItemForNote(note);
-            m_noteToRender.remove(note);
+            removeRenderItemsForNote(note);
         }
 
         announceStateChange(previousState);
@@ -949,7 +946,15 @@ void cwNoteLiDARManager::addKeywordItemForNote(cwNoteLiDAR *note)
     });
 }
 
-void cwNoteLiDARManager::removeKeywordItemForNote(cwNoteLiDAR *note)
+// Uses note only as a key: noteDestroyed calls this from ~QObject.
+void cwNoteLiDARManager::removeRenderItemsForNote(cwNoteLiDAR *note)
 {
     m_keywordRegistry.drop(note);
+
+    const QVector<uint32_t> renderIds = m_noteToRender.take(note);
+    if (m_render) {
+        for (const uint32_t id : renderIds) {
+            m_render->removeItem(id);
+        }
+    }
 }

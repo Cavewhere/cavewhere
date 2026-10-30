@@ -1,0 +1,6 @@
+; Synthetic survey under a #PREFIX level: cavern labels its stations XY:P1,
+; XY:P2 and XY:P3, with the level in capitals. Nothing fixes it.
+#PREFIX XY
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+P1	P2	10.0	90	0
+P2	P3	10.0	0	0

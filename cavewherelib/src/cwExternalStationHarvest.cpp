@@ -246,17 +246,33 @@ Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
                             LinePlotErrorCode::ParseFailed);
     }
 
-    //cwStationPositionLookup canonicalizes on insert and keeps its stations in
-    //a QMap, so its keys are already canonical and sorted.
+    //Spellings, not keys: the region solve wraps this file in the cave's and
+    //trip's *begin blocks and derives each station's key from wrapper +
+    //spelling, so the harvest keeps the spelling cavern wrote.
     cwExternalStationHarvest::Stations stations;
-    stations.names = lookup.positions().keys();
-    // A seed's *fix is the driver's, not the file's.
-    QSet<QString> seedKeys;
-    for(const QString& seed : seedStations) {
-        seedKeys.insert(cwStation::canonicalKey(seed));
+    stations.names = read.spellings.values();
+    stations.names.sort();
+    //Only where they differ, which is rare: most files keep every survey level
+    //lowercase, so the cache holds nothing extra for them.
+    for(auto it = read.spellings.cbegin(); it != read.spellings.cend(); ++it) {
+        const QString label = read.labels.value(it.key());
+        if(!label.isEmpty() && label != it.value()) {
+            stations.labels.insert(it.value(), label);
+        }
     }
+
+    QStringList fixedSpellings;
+    fixedSpellings.reserve(read.fixedStations.size());
     for(const QString& fixed : read.fixedStations) {
-        if(!seedKeys.contains(fixed)) {
+        fixedSpellings.append(read.spellings.value(fixed));
+    }
+    // A seed's *fix is the driver's, not the file's.
+    QSet<QString> seedSpellings;
+    for(const QString& seed : seedStations) {
+        seedSpellings.insert(cwStation::spellingIn(seed, fixedSpellings));
+    }
+    for(const QString& fixed : std::as_const(fixedSpellings)) {
+        if(!seedSpellings.contains(fixed)) {
             stations.fixedNames.append(fixed);
         }
     }

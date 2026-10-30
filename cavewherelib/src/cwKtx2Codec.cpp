@@ -6,6 +6,7 @@
 #include "cwTaskTrace.h"
 
 // Qt includes
+#include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
 #include <QMutex>
@@ -25,6 +26,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -206,6 +208,11 @@ namespace {
         return compressError;
     }
 
+    Monad::Result<QByteArray> canceledEncode()
+    {
+        return Monad::Result<QByteArray>(QStringLiteral("Canceled the KTX2 encode"));
+    }
+
     void ensureBasisuEncoderInitialized()
     {
         //libktx makes this call inside ktxTexture2_CompressBasisEx; the kernel
@@ -319,8 +326,13 @@ namespace {
      * future before queuing the next. Each wave's engine joins the back of the
      * pool queue, so a job queued during an encode waits about one chunk, the
      * encode holds at most one queue entry, and the lane runs no items itself.
+     *
+     * Polls isCanceled between waves and returns false once it is true, leaving
+     * the blocks partly written; returns true when every level is encoded.
      */
-    void encodeLevelsOnPool(const QVector<UastcLevel>& levels, int quality)
+    bool encodeLevelsOnPool(const QVector<UastcLevel>& levels,
+                            int quality,
+                            const std::function<bool()>& isCanceled)
     {
         ensureBasisuEncoderInitialized();
 
@@ -346,6 +358,9 @@ namespace {
             const std::span<const UastcChunk> allChunks(chunks.constData(), chunks.size());
             qsizetype next = 0;
             while(next < chunks.size()) {
+                if(isCanceled()) {
+                    return false;
+                }
                 const qsizetype width = std::max(kSmallestThreadCount, pool->maxThreadCount());
                 const std::span<const UastcChunk> wave = allChunks.subspan(next, std::min(width, chunks.size() - next));
                 QFuture<void> waveFinished = cwConcurrent::map(wave, encodeChunk);
@@ -354,14 +369,20 @@ namespace {
             }
         } else {
             for(const UastcChunk& chunk : std::as_const(chunks)) {
+                if(isCanceled()) {
+                    return false;
+                }
                 encodeChunk(chunk);
             }
         }
+        return true;
     }
 
     /**
      * One claim per cache entry while its encode runs; a second claimant waits,
-     * then reads the finished entry instead of queuing a duplicate encode.
+     * then reads the finished entry instead of queuing a duplicate encode. A
+     * claimant that cancels inserts nothing, so the waiter finds a miss and
+     * encodes the entry itself.
      */
     class EncodeClaim
     {
@@ -428,13 +449,30 @@ QThreadPool* encodeLane()
     [[maybe_unused]] static const bool configured = []() {
         lane.setMaxThreadCount(kEncodeLaneThreads);
         lane.setObjectName(QStringLiteral("cw::ktx2::encodeLane"));
+        //An encode waits on task pool maps, and a map's future waits through
+        //QThreadPool::globalInstance(). ~QCoreApplication deletes that pool, and
+        //the task pool with it, right after the post routines, so drain here.
+        //Registering needs no app yet; with no app the routine never runs and
+        //~QThreadPool drains the lane at static teardown instead.
+        qAddPostRoutine([]() { lane.waitForDone(); });
         return true;
     }();
     return &lane;
 }
 
-Monad::Result<QByteArray> encodeRgba(const QImage& image, int quality, UastcEncoder encoder)
+Monad::Result<QByteArray> encodeRgba(const QImage& image,
+                                     int quality,
+                                     UastcEncoder encoder,
+                                     const std::function<bool()>& isCanceled)
 {
+    const auto canceled = [&isCanceled]() {
+        return isCanceled && isCanceled();
+    };
+
+    if(canceled()) {
+        return canceledEncode();
+    }
+
     if(image.isNull()) {
         return Monad::Result<QByteArray>(QStringLiteral("Cannot encode a null image to KTX2"));
     }
@@ -516,9 +554,17 @@ Monad::Result<QByteArray> encodeRgba(const QImage& image, int quality, UastcEnco
             hasAlpha = hasAlpha || hasTranslucentPixel(levelPixels.at(i));
         }
 
-        runOnLane([&levels, quality]() {
-            encodeLevelsOnPool(levels, quality);
+        if(canceled()) {
+            return canceledEncode();
+        }
+
+        bool encodedAllLevels = false;
+        runOnLane([&levels, quality, &canceled, &encodedAllLevels]() {
+            encodedAllLevels = encodeLevelsOnPool(levels, quality, canceled);
         });
+        if(!encodedAllLevels) {
+            return canceledEncode();
+        }
 
         std::array<ktx_uint32_t, kUastcDfdWords> dfd = uastcDfd(hasAlpha);
         createInfo.vkFormat = kVkFormatUndefined;
@@ -547,6 +593,11 @@ Monad::Result<QByteArray> encodeRgba(const QImage& image, int quality, UastcEnco
         const QThreadPool* taskPool = cwTask::threadPool();
         const int poolThreads = taskPool != nullptr ? taskPool->maxThreadCount() : QThread::idealThreadCount();
         params.threadCount = static_cast<ktx_uint32_t>(std::max(kSmallestThreadCount, poolThreads));
+
+        //libktx's compress runs to the end once started, so only its start sees a cancel
+        if(canceled()) {
+            return canceledEncode();
+        }
 
         const KTX_error_code compressError = compressOnLane(texture.get(), &params);
         if(compressError != KTX_SUCCESS) {
@@ -703,11 +754,22 @@ QString cacheKeyId(const QString& baseKey)
 Monad::ResultBase ensureEncodedEntry(cwDiskCacher& cacher,
                                      const cwDiskCacher::Key& key,
                                      const std::function<QImage()>& source,
-                                     const cwProgressNodePtr& progressParent)
+                                     const cwProgressNodePtr& progressParent,
+                                     const std::function<bool()>& isCanceled)
 {
+    const auto canceled = [&isCanceled]() {
+        return isCanceled && isCanceled();
+    };
+
     //Claimed before the lookup, so a request that waited on another's encode
     //finds that encode's entry here.
     const EncodeClaim claim(cacher.filePath(key));
+
+    //A waiter canceled while the other encode ran wakes when that encode
+    //finishes or is itself canceled, and bails here
+    if(canceled()) {
+        return Monad::ResultBase(canceledEncode().errorMessage());
+    }
 
     //entry() rather than hasEntry(): an edited source lands on the same cache
     //file path with a new checksum, and only a read tells a current encode from
@@ -722,12 +784,22 @@ Monad::ResultBase ensureEncodedEntry(cwDiskCacher& cacher,
         qWarning() << "Re-encoding the damaged KTX2 cache entry at" << cacher.filePath(key);
     }
 
+    //source() may decode the whole image
+    if(canceled()) {
+        return Monad::ResultBase(canceledEncode().errorMessage());
+    }
+
     //Only a miss has anything to compress, so a hit grows no node at all. The
     //encode can't say how far along it is, so the node stays opaque.
     const cwProgressScope compressing(progressParent, QStringLiteral("Compressing texture"));
 
-    const auto encoded = encodeRgba(source());
+    //A cancel after the last wave still inserts: the entry is whole, so the
+    //next request reads it instead of encoding again
+    const auto encoded = encodeRgba(source(), kDefaultUastcQuality, kDefaultUastcEncoder, isCanceled);
     if(encoded.hasError()) {
+        if(canceled()) {
+            return Monad::ResultBase(encoded.errorMessage());
+        }
         qWarning() << "Can't encode the KTX2 cache entry at" << cacher.filePath(key)
                    << ":" << encoded.errorMessage();
         return Monad::ResultBase(encoded.errorMessage());

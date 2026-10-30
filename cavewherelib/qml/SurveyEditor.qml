@@ -25,6 +25,7 @@ QQ.Item {
     property SurveyNotesConcatModel notesModel: null
     property int currentNoteIndex: -1
     property bool _pendingAutoSelect: false
+    readonly property bool currentTripTakesSurveyFile: currentTrip !== null && currentTrip.takesSurveyFile
 
     signal collapseClicked();
     signal noteClicked(int noteIndex)
@@ -439,7 +440,9 @@ QQ.Item {
                     buttonObjectName: "addSurveyData"
                     text: qsTr("Add Survey Data")
                     iconSource: "qrc:/twbs-icons/icons/plus.svg"
-                    menu: addSurveyDataMenuId
+                    // The menu's one item is hidden inside a source root, so the
+                    // chevron goes with it.
+                    menu: clipArea.currentTripTakesSurveyFile ? addSurveyDataMenuId : null
                     menuToolTip: qsTr("More ways to add survey data")
                     Layout.alignment: Qt.AlignHCenter
                     visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount === 0
@@ -456,6 +459,9 @@ QQ.Item {
                     QC.MenuItem {
                         objectName: "addFromSurveyFileMenuItem"
                         text: qsTr("Add from survey file…")
+                        visible: clipArea.currentTripTakesSurveyFile
+                        enabled: visible
+                        height: visible ? implicitHeight : 0
 
                         onTriggered: {
                             clipArea.addFromSurveyFile()

@@ -153,7 +153,7 @@ private:
     void connectNote(cwNoteLiDAR* note);
     void updateIconFromCache(cwNoteLiDAR* note);
     void addKeywordItemForNote(cwNoteLiDAR* note);
-    void removeKeywordItemForNote(cwNoteLiDAR* note);
+    void removeRenderItemsForNote(cwNoteLiDAR* note);
 
     // Utilities
     static QList<cwNoteLiDAR*> notesFromModel(cwSurveyNoteLiDARModel* model);

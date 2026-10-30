@@ -192,9 +192,12 @@ TEST_CASE("Every native node exports as its own nested *begin block", "[Exporter
         QStringLiteral("*end side_cave ; End of Side Cave"),
         QStringLiteral("*end kentucky_field_seasons ; End of Kentucky field seasons"),
         QStringLiteral("*begin omega2 ;OMEGA2"),
+        // The include's own block ends the file's top-level settings with it.
+        QStringLiteral("*begin"),
         // The system the attachment chose for survex_blocks.svx's bare fix.
         QStringLiteral("*cs EPSG:32613"),
         QStringLiteral("*include \"%1\"").arg(tree.omega2Include),
+        QStringLiteral("*end"),
         QStringLiteral("*end omega2 ; End of OMEGA2"),
         QStringLiteral("*equate kentucky_field_seasons.side_cave.upper_level.dome_climb.simple.a1"
                        " omega2.doghill.d2"),
@@ -203,6 +206,12 @@ TEST_CASE("Every native node exports as its own nested *begin block", "[Exporter
         QStringLiteral("*end"),
     };
     CHECK(skeleton(driver) == expected);
+
+    // *infer exports on, right after *cs out and ahead of every block, so cavern checks no exports.
+    const QStringList lines = driver.split(QLatin1Char('\n'));
+    REQUIRE(lines.size() > 2);
+    CHECK(lines.at(1) == QStringLiteral("*cs out EPSG:32613"));
+    CHECK(lines.at(2) == QStringLiteral("*infer exports on"));
 }
 
 TEST_CASE("A nested tree solves with every station under its node's label path",

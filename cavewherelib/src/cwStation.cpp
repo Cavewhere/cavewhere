@@ -98,6 +98,37 @@ bool cwStation::nameIsValid(QString stationName)
     return QValidator::Acceptable == validator.validate(stationName);
 }
 
+QString cwStation::caseDistinctKey(const QStringList& surveyLevels, const QString& stationName)
+{
+    QString key;
+    for (const QString& level : surveyLevels) {
+        key += canonicalKey(level) + QLatin1Char('.');
+    }
+    return key + stationName;
+}
+
+QString cwStation::keyIn(const QString& name, const QSet<QString>& keys)
+{
+    return keys.contains(name) ? name : canonicalKey(name);
+}
+
+QString cwStation::spellingIn(const QString& name, const QStringList& spellings)
+{
+    if (spellings.contains(name)) {
+        return name;
+    }
+
+    QString match;
+    int matchCount = 0;
+    for (const QString& spelling : spellings) {
+        if (spelling.compare(name, Qt::CaseInsensitive) == 0) {
+            match = spelling;
+            ++matchCount;
+        }
+    }
+    return matchCount == 1 ? match : QString();
+}
+
 /**
  * @brief cwStation::setName
  * @param name

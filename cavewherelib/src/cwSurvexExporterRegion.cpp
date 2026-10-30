@@ -59,12 +59,18 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
         cwSurvexCS::writeCsLine(stream, sidecars, outputCS, true);
     }
 
+    // Once an included file uses *export, cavern checks exports across the
+    // whole solve, and CaveWhere's ties and fixes name stations no *export
+    // covers. This line precedes every *fix, *equate and *include.
+    stream << "*infer exports on" << Qt::endl;
+
     // Labels are assigned here and nowhere else: a label is unique only among
     // its siblings, so the whole tree is needed to assign one, and the "*begin"
     // lines and the equate operands below both have to name the same ones.
     const cwSurvexExporterCaveTask::DriverTree tree(region.caves, cwScopeLabels(region),
                                                     options.excludedExternalOwners,
-                                                    region.equates);
+                                                    region.equates,
+                                                    options.externalStationLabels);
     const cwSurvexExporterCaveTask::AnchorPlan plan(tree, options.externalFixedStations);
 
     cwSurvexExporterCaveTask nodeExporter;

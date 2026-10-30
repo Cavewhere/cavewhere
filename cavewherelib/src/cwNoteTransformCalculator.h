@@ -73,35 +73,40 @@ public:
 
 
     template <typename NoteStation>
-    static QList< QPair <NoteStation, NoteStation> > noteShots(QList<NoteStation> validStationList,
+    static QList< QPair <NoteStation, NoteStation> > noteShots(const QList<NoteStation>& validStationList,
                                                              const cwSurveyNetwork& network) {
-        //This makes the assumption that station are surveyed in assending order
-        //This usually helps prevent station flipping in profile mode
-        std::sort(validStationList.begin(), validStationList.end(),
-                  [](const NoteStation& s1, const NoteStation& s2)
-                  {
-                      return cwStation::canonicalKey(s1.name()) < cwStation::canonicalKey(s2.name());
-                  });
+        struct KeyedStation {
+            NoteStation station;
+            QString key;
+            QString order;
+            QStringList neighbors;
+        };
 
-        //Generate all the neighbor list for each station
-        QList< QStringList > stationNeighbors;
-        foreach(NoteStation station, validStationList) {
-            stationNeighbors.append(network.neighbors(station.name()));
+        QList<KeyedStation> keyedStations;
+        keyedStations.reserve(validStationList.size());
+        for(const NoteStation& station : validStationList) {
+            const QString key = network.key(station.name());
+            keyedStations.append({station,
+                                  key,
+                                  cwStation::canonicalKey(station.name()),
+                                  key.isEmpty() ? QStringList() : network.neighbors(key)});
         }
 
+        //Stations are usually surveyed in ascending order, which keeps profiles from flipping.
+        //The key breaks ties between the members of a case pair.
+        std::sort(keyedStations.begin(), keyedStations.end(),
+                  [](const KeyedStation& s1, const KeyedStation& s2)
+                  {
+                      return s1.order != s2.order ? s1.order < s2.order : s1.key < s2.key;
+                  });
+
         QList< QPair<NoteStation, NoteStation> > shotList;
-        for(int i = 0; i < validStationList.size(); i++) {
-            for(int j = i; j < validStationList.size(); j++) {
-                NoteStation station1 = validStationList[i];
-                NoteStation station2 = validStationList[j];
-
-                //Get neigbor lookup
-                auto neighborsStation1 = stationNeighbors[i];
-                auto neighborsStation2 = stationNeighbors[j];
-
-                //See if they make up a shot
-                if(neighborsStation1.contains(cwStation::canonicalKey(station2.name())) && neighborsStation2.contains(cwStation::canonicalKey(station1.name()))) {
-                    shotList.append(QPair<NoteStation, NoteStation>(station1, station2));
+        for(int i = 0; i < keyedStations.size(); i++) {
+            const KeyedStation& station1 = keyedStations.at(i);
+            for(int j = i + 1; j < keyedStations.size(); j++) {
+                const KeyedStation& station2 = keyedStations.at(j);
+                if(station1.neighbors.contains(station2.key) && station2.neighbors.contains(station1.key)) {
+                    shotList.append(QPair<NoteStation, NoteStation>(station1.station, station2.station));
                 }
             }
         }

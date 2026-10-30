@@ -31,6 +31,11 @@ cwRenderGLTF::cwRenderGLTF(QObject *parent)
 
 }
 
+cwRenderGLTF::~cwRenderGLTF()
+{
+    m_loadFuture.cancel();
+}
+
 void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 {
     if(m_gltfFilePath != filePath) {
@@ -43,23 +48,31 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
         m_items.clear();
 
         m_status = Status::Loading;
+        m_loadFuture.cancel();
 
         auto run = [this, filePath]() {
             auto renderObject = this;
             auto modelMatrix = m_modelMatrix.value();
             auto dataRootPath = m_dataRootPath;
 
-            auto future = cwConcurrent::run([filePath, renderObject, modelMatrix, dataRootPath]()->Monad::Result<Load> {
+            //The QPromise form lets a cancel reach the texture encode, which
+            //polls it between waves; a canceled load adds no result
+            m_loadFuture = cwConcurrent::run([filePath, renderObject, modelMatrix, dataRootPath](QPromise<Monad::Result<Load>>& promise) {
+                const auto isCanceled = [&promise]() { return promise.isCanceled(); };
+
                 cw::gltf::LoadOptions options;
                 options.requestedLayout = cwRenderTexturedItems::geometryLayout();
                 auto data = cw::gltf::Loader::loadGltf(filePath, options);
 
                 Load load;
                 load.items = cwTriangulateLiDARTask::reserveRenderItems(data.meshes);
-                const cwGltfBaseColorTexture baseColorTexture(dataRootPath, filePath);
+                const cwGltfBaseColorTexture baseColorTexture(dataRootPath, filePath, {}, isCanceled);
 
                 for(auto& mesh : data.meshes) {
                     for(auto& geometry : mesh.geometries) {
+                        if(isCanceled()) {
+                            return;
+                        }
 
                         //Add the render item
                         auto& item = load.items.emplaceBack(std::move(geometry));
@@ -70,10 +83,13 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
                     }
                 }
 
-                return load;
+                if(isCanceled()) {
+                    return;
+                }
+                promise.addResult(Monad::Result<Load>(std::move(load)));
             });
 
-            return handleLoadFuture(future);
+            return handleLoadFuture(m_loadFuture);
         };
 
         m_loadRestarter.restart(run);

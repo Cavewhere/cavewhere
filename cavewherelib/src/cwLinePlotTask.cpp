@@ -301,6 +301,7 @@ private:
         exportOptions.tripInjectedDeclinations = InputData.tripInjectedDeclinations;
         exportOptions.excludedExternalOwners = InputData.excludedExternalOwners;
         exportOptions.externalFixedStations = InputData.externalFixedStations;
+        exportOptions.externalStationLabels = InputData.externalStationLabels;
         exportOptions.externalOutputSystems = InputData.externalOutputSystems;
         exportOptions.externalBareFixOrigins = InputData.externalBareFixOrigins;
         // Cavern's positions come straight back into the scene, so *cs out has
@@ -692,7 +693,7 @@ private:
                 continue;
             }
 
-            lookup.setPosition(name, position);
+            lookup.setPositionAtKey(name, position);
         }
 
         return lookup;
@@ -825,8 +826,8 @@ private:
     }
 
     // The owning-node split for the splay tips.
-    // A tip lands only in its owning node's slice, keyed node-locally and
-    // canonically: that node's own trips are the ones that draw it. Positions
+    // A tip lands only in its owning node's slice, keyed by its node-local
+    // solved key: that node's own trips are the ones that draw it. Positions
     // are kept as cavern gave them: a tip only ever feeds geometry, so it is
     // never compared against a previous solve the way station positions are.
     QHash<QUuid, cwSplayTipsByStation> splitSplayTipsByNode(
@@ -844,7 +845,7 @@ private:
                 continue;
             }
 
-            nodeSplayTips[owner->id()].insert(cwStation::canonicalKey(tail), iter.value());
+            nodeSplayTips[owner->id()].insert(tail, iter.value());
         }
 
         return nodeSplayTips;
@@ -864,8 +865,8 @@ private:
 
             const int prefixSize = ScopeLabels.prefix(owner->id()).size();
             nodeLegErrors[owner->id()].insert(
-                cwSurvex3DFileReader::legKey(iter.key().first.sliced(prefixSize),
-                                             iter.key().second.sliced(prefixSize)),
+                cwSurvex3DFileReader::legKeyOfKeys(iter.key().first.sliced(prefixSize),
+                                                   iter.key().second.sliced(prefixSize)),
                 iter.value());
         }
 
@@ -1058,6 +1059,7 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
     input.tripAttachmentDirs = external.tripAttachmentDirs;
     input.excludedExternalOwners = external.excludedExternalOwners;
     input.externalFixedStations = external.externalFixedStations;
+    input.externalStationLabels = external.externalStationLabels;
     input.externalOutputSystems = external.externalOutputSystems;
     input.externalBareFixOrigins = external.externalBareFixOrigins;
     const QHash<QUuid, bool>& fileOwnsDeclination = external.fileOwnsDeclination;

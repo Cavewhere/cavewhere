@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QFile>
 #include <QSet>
+#include <QTextStream>
 
 // Our includes
 #include "cwScopeLabels.h"
@@ -25,6 +26,7 @@
 #include "cwFixStation.h"
 #include "cwStation.h"
 #include "cwShot.h"
+#include "cwSurvexCS.h"
 #include "LoadProjectHelper.h"
 
 namespace {
@@ -375,6 +377,148 @@ TEST_CASE("Fix validation drops fixes on unknown and duplicated stations",
     CHECK(errors.size() == 2);
 }
 
+TEST_CASE("Fix validation judges duplicates by the station each name resolves to",
+          "[cwSurvexExporterFix][CasePairs]") {
+    // P2 and p2 are a case pair, two stations; q1 has no pair.
+    const QSet<QString> stationKeys = {QStringLiteral("P2"), QStringLiteral("p2"),
+                                       QStringLiteral("q1")};
+
+    SECTION("Fixes on both members of a pair are two fixes") {
+        const QList<cwFixStation> fixes = {
+            makeFix("P2", QStringLiteral("EPSG:32616"), 100, 200, 0),
+            makeFix("p2", QStringLiteral("EPSG:32616"), 100, 230, 0),
+            makeFix("Q1", QStringLiteral("EPSG:32616"), 300, 400, 0),
+        };
+        QStringList errors;
+        const QList<cwFixStation> kept =
+            cwSurvexExporterUtils::validateFixStations(fixes, stationKeys, errors);
+        INFO(errors.join('\n').toStdString());
+        CHECK(errors.isEmpty());
+        REQUIRE(kept.size() == 3);
+        CHECK(kept.at(0).stationName() == QStringLiteral("P2"));
+        CHECK(kept.at(1).stationName() == QStringLiteral("p2"));
+    }
+
+    SECTION("A name typed in another case of one member still duplicates it") {
+        const QList<cwFixStation> fixes = {
+            makeFix("q1", QStringLiteral("EPSG:32616"), 100, 200, 0),
+            makeFix("Q1", QStringLiteral("EPSG:32616"), 300, 400, 0),
+        };
+        QStringList errors;
+        const QList<cwFixStation> kept =
+            cwSurvexExporterUtils::validateFixStations(fixes, stationKeys, errors);
+        CHECK(kept.size() == 1);
+        CHECK(errors == QStringList({QStringLiteral("Duplicate fix on station: \"Q1\"")}));
+    }
+
+    SECTION("A spelling that matches a pair with no lowercase member only by case is unknown") {
+        const QSet<QString> mixedPair = {QStringLiteral("BB2"), QStringLiteral("Bb2")};
+        QStringList errors;
+        const QList<cwFixStation> kept = cwSurvexExporterUtils::validateFixStations(
+            {makeFix("bB2", QStringLiteral("EPSG:32616"), 100, 200, 0)}, mixedPair, errors);
+        CHECK(kept.isEmpty());
+        CHECK(errors == QStringList({QStringLiteral("Fix references unknown station: \"bB2\"")}));
+    }
+}
+
+TEST_CASE("stationKeysBySpelling keys a case pair by its spelling and the rest by canonical key",
+          "[cwSurvexExporterFix][CasePairs]") {
+    const QStringList spellings = {QStringLiteral("P2"), QStringLiteral("p2"),
+                                   QStringLiteral("Q1"), QStringLiteral("xy.P3")};
+
+    const QHash<QString, QString> keys =
+        cwSurvexExporterUtils::stationKeysBySpelling(QStringLiteral("Trip1."), spellings);
+    CHECK(keys.size() == spellings.size());
+    CHECK(keys.value(QStringLiteral("P2")).toStdString() == "trip1.P2");
+    CHECK(keys.value(QStringLiteral("p2")).toStdString() == "trip1.p2");
+    CHECK(keys.value(QStringLiteral("Q1")).toStdString() == "trip1.q1");
+    CHECK(keys.value(QStringLiteral("xy.P3")).toStdString() == "trip1.xy.p3");
+
+    const QSet<QString> scoped =
+        cwSurvexExporterUtils::scopedStationKeys(QStringLiteral("Trip1."), spellings);
+    CHECK(scoped
+          == QSet<QString>({QStringLiteral("trip1.P2"), QStringLiteral("trip1.p2"),
+                            QStringLiteral("trip1.q1"), QStringLiteral("trip1.xy.p3")}));
+}
+
+TEST_CASE("keepsCase is true for a name with a capital", "[cwSurvexExporterFix][CasePairs]") {
+    CHECK(cwSurvexExporterUtils::keepsCase(QStringLiteral("K1")));
+    CHECK(cwSurvexExporterUtils::keepsCase(QStringLiteral("XY.P2")));
+    CHECK(cwSurvexExporterUtils::keepsCase(QStringLiteral("cave.Foo.p2")));
+    CHECK_FALSE(cwSurvexExporterUtils::keepsCase(QStringLiteral("k1")));
+    CHECK_FALSE(cwSurvexExporterUtils::keepsCase(QStringLiteral("xy.p2")));
+    CHECK_FALSE(cwSurvexExporterUtils::keepsCase(QStringLiteral("12")));
+}
+
+namespace {
+
+//! What writeFixStations() writes for \a fixes, or for \a fallback when
+//! \a fixes is empty.
+QString writtenFixes(const QList<cwFixStation>& fixes, const QString& fallback = QString(),
+                     const QString& globalCS = QString())
+{
+    cwSurvexCS::SidecarWriter sidecars;
+    cwSurvexExporterUtils::CsScope scope(sidecars);
+    QString text;
+    QTextStream stream(&text);
+    cwSurvexExporterUtils::writeFixStations(stream, fixes, fallback, globalCS, scope);
+    stream.flush();
+    return text;
+}
+
+//! The lines of \a text, trimmed, with blank ones dropped.
+QStringList linesOf(const QString& text)
+{
+    QStringList lines;
+    for (const QString& line : text.split(QLatin1Char('\n'))) {
+        if (!line.trimmed().isEmpty()) {
+            lines.append(line.trimmed());
+        }
+    }
+    return lines;
+}
+
+} // namespace
+
+TEST_CASE("A fix on a station spelled with a capital is written under *case preserve",
+          "[cwSurvexExporterFix][CasePairs]") {
+    const QString utm = QStringLiteral("EPSG:32616");
+
+    SECTION("Its *cs comes before the block, and a lowercase fix after it is written plainly") {
+        const QString text = writtenFixes({makeFix("XY.P2", utm, 500000, 4000000, 100),
+                                           makeFix("XY.P3", utm, 500010, 4000000, 100),
+                                           makeFix("k1", utm, 500020, 4000000, 100)});
+        INFO(text.toStdString());
+        const QStringList lines = linesOf(text);
+        REQUIRE(lines.size() == 10);
+        CHECK(lines.at(0).startsWith(QStringLiteral("*cs ")));
+        CHECK(lines.at(1) == QStringLiteral("*begin"));
+        CHECK(lines.at(2) == QStringLiteral("*case preserve"));
+        CHECK(lines.at(3).startsWith(QStringLiteral("*fix XY.P2 500000.")));
+        CHECK(lines.at(4) == QStringLiteral("*end"));
+        // Cavern drops a *cs at its block's *end, so the next fix needs none of
+        // its own: the system in scope outside the block is still the same.
+        CHECK(lines.at(5) == QStringLiteral("*begin"));
+        CHECK(lines.at(6) == QStringLiteral("*case preserve"));
+        CHECK(lines.at(7).startsWith(QStringLiteral("*fix XY.P3 500010.")));
+        CHECK(lines.at(8) == QStringLiteral("*end"));
+        CHECK(lines.at(9).startsWith(QStringLiteral("*fix k1 500020.")));
+    }
+
+    SECTION("The fallback fix keeps its capital the same way") {
+        const QStringList lines = linesOf(writtenFixes({}, QStringLiteral("K1")));
+        INFO(lines.join('\n').toStdString());
+        CHECK(lines
+              == QStringList({QStringLiteral("*begin"), QStringLiteral("*case preserve"),
+                              QStringLiteral("*fix K1 0 0 0"), QStringLiteral("*end")}));
+    }
+
+    SECTION("A lowercase fallback is written plainly") {
+        CHECK(linesOf(writtenFixes({}, QStringLiteral("k1")))
+              == QStringList({QStringLiteral("*fix k1 0 0 0")}));
+    }
+}
+
 TEST_CASE("Survex export drops a fix whose coordinate can't be read",
           "[cwSurvexExporterFix]") {
     // Only a Valid fix has components — every other state reads 0. Writing one
@@ -401,6 +545,61 @@ TEST_CASE("Survex export drops a fix whose coordinate can't be read",
     INFO(output.toStdString());
     CHECK(output.contains(QStringLiteral("*fix a1 500000.000000000 4000000.000000000 100.000000000")));
     CHECK_FALSE(output.contains(QStringLiteral("a2")));
+}
+
+TEST_CASE("Fix validation drops a fix whose system is a PROJ operation",
+          "[cwSurvexExporterFix][issue708]") {
+    // A pipeline is an operation, not a coordinate system: it has no area of
+    // use to check the coordinate against, and survex can't take it as *cs.
+    // The fix is dropped like any other unusable one, and the message names
+    // the system so the user can find the row.
+    const QString pipeline =
+        QStringLiteral("+proj=pipeline +step +proj=unitconvert +xy_in=m +xy_out=m");
+    const QSet<QString> stationKeys = {cwStation::canonicalKey(QStringLiteral("a1")),
+                                       cwStation::canonicalKey(QStringLiteral("a2"))};
+
+    const cwFixStation pipelineFix = makeFix("a1", pipeline, 500000.0, 4000000.0, 100.0);
+    REQUIRE(pipelineFix.state() == cwFixStation::Valid);
+
+    const QList<cwFixStation> fixes = {
+        pipelineFix,
+        makeFix("a2", QStringLiteral("EPSG:32616"), 500100.0, 4000050.0, 110.0)
+    };
+
+    QStringList errors;
+    const QList<cwFixStation> kept =
+        cwSurvexExporterUtils::validateFixStations(fixes, stationKeys, errors);
+
+    INFO(errors.join('\n').toStdString());
+    REQUIRE(kept.size() == 1);
+    CHECK(kept.first().stationName() == QStringLiteral("a2"));
+    REQUIRE(errors.size() == 1);
+    CHECK(errors.first().contains(QStringLiteral("a1")));
+    CHECK(errors.first().contains(pipeline));
+}
+
+TEST_CASE("Survex export writes no *cs for a fix whose system is a PROJ operation",
+          "[cwSurvexExporterFix][issue708]") {
+    // Written out, the pipeline became *cs CUSTOM "+proj=pipeline ..." and
+    // the solve failed on it; the good fix beside it carries the cave alone.
+    cwCavingRegionData region;
+
+    cwCaveData cave = makeCave(QStringLiteral("Operation"),
+                               {QStringLiteral("a1"), QStringLiteral("a2")});
+    cave.fixStations.append(makeFix("a1",
+                                    QStringLiteral("+proj=pipeline +step +proj=unitconvert "
+                                                   "+xy_in=m +xy_out=m"),
+                                    500000.0, 4000000.0, 100.0));
+    cave.fixStations.append(makeFix("a2", QStringLiteral("EPSG:32616"),
+                                    500100.0, 4000050.0, 110.0));
+    region.caves.append(cave);
+
+    const QString output = writeRegionToString(region);
+    INFO(output.toStdString());
+    CHECK_FALSE(output.contains(QStringLiteral("+proj=pipeline")));
+    CHECK_FALSE(output.contains(QStringLiteral("*fix a1")));
+    CHECK(output.contains(QStringLiteral("*cs EPSG:32616")));
+    CHECK(output.contains(QStringLiteral("*fix a2 500100.000000000 4000050.000000000 110.000000000")));
 }
 
 TEST_CASE("Survex export writes a geographic fix to the last digit the user typed",

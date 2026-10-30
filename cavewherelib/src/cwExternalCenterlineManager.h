@@ -431,6 +431,9 @@ private:
         // The harvested names each owner's file fixes itself, for owners
         // whose file fixes any (cwExternalStationHarvest::Stations).
         QHash<QUuid, QStringList> ownerFixedStations;
+        // Cavern's label of each harvested name whose label differs from its
+        // spelling (cwExternalStationHarvest::Stations::labels), per owner.
+        QHash<QUuid, QHash<QString, QString>> ownerStationLabels;
         // Owners (cave or trip) whose in-project entry file depends on a
         // path outside the project's data root, with the reason. Such an
         // owner is dropped from the solve entirely — see B7 in
@@ -625,6 +628,7 @@ private:
     QSet<const cwSurveyNode*> m_pendingFixSubtrees;
     bool m_fixRefreshPending = false;
     QHash<QUuid, QStringList> m_ownerFixedStations;
+    QHash<QUuid, QHash<QString, QString>> m_ownerStationLabels;
     QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> m_ownerDefaultedDatums;
     QHash<QUuid, QString> m_ownerOutputSystems;
     QHash<QUuid, QString> m_ownerFixSystems;

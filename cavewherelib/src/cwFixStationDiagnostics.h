@@ -90,13 +90,20 @@ enum class StationConflict {
     Duplicate    //!< an earlier row of the same node fixes the station
 };
 
+//! The solved key a fix on \a stationName anchors in \a network: the stored
+//! key it resolves to, exactly for a case-pair member and ignoring case
+//! otherwise, or its canonicalKey() while \a network has none.
+CAVEWHERE_LIB_EXPORT QString fixStationKey(const QString& stationName,
+                                           const cwSurveyNetwork& network);
+
 //! How row \a row of \a fixes conflicts with the other fixes on its station.
-//! \a fileFixedStations is cwSurveyNode::fileFixedStations(). Follows the
-//! export: a file's own fix wins over every row, and of two rows the first
-//! wins.
+//! \a fileFixedStations is cwSurveyNode::fileFixedStations(), and each fix
+//! names the station fixStationKey() resolves it to in \a network, so fixes
+//! on P2 and p2 of a case pair are two fixes. Follows the export: a file's own
+//! fix wins over every row, and of two rows the first wins.
 CAVEWHERE_LIB_EXPORT StationConflict classifyStationConflict(
     const QList<cwFixStation>& fixes, qsizetype row,
-    const QHash<QString, QString>& fileFixedStations);
+    const QHash<QString, QString>& fileFixedStations, const cwSurveyNetwork& network);
 
 //! Why a fix on \a station is dropped when the attached file \a fileName fixes
 //! that station itself. Shared by the export's error and the Fix Stations

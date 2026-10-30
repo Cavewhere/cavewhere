@@ -14,6 +14,9 @@
 #include "TestHelper.h"
 #include "cwThreadCountRestorer.h"
 #include "LimitedRunTestHelper.h"
+#include "CasePairTestHelpers.h"
+#include "cwTriangulateTask.h"
+#include "cwTriangulateWarpingData.h"
 
 //Qt includes
 #include <QDir>
@@ -54,6 +57,29 @@ cwTriangulateLiDARInData liDARInData(const QString& gltfPath, const QString& dat
     return data;
 }
 
+}
+
+TEST_CASE("A LiDAR note holding both members of a case pair interpolates each member's own shots",
+          "[cwTriangulateLiDARTask][CasePairs]")
+{
+    const QStringList anchors = casePairs::morphAnchors();
+    QList<cwNoteLiDARStation> noteStations;
+    for (const QString& name : anchors) {
+        cwNoteLiDARStation station;
+        station.setName(name);
+        station.setPositionOnNote(casePairs::notePositionOf(name));
+        noteStations.append(station);
+    }
+
+    cwTriangulateLiDARInData data;
+    data.setNoteStations(noteStations);
+    data.setStationLookup(casePairs::solvedLookup());
+    data.setSurveyNetwork(casePairs::solvedNetwork());
+
+    // A LiDAR note morphs with the default spacing.
+    casePairs::checkInterpolatedShots(
+        cwTriangulateTask::buildStationsWithInterpolatedShots(data), anchors, casePairs::morphAnchorShots(),
+        cwTriangulateWarpingData().shotInterpolationSpacingMeters);
 }
 
 TEST_CASE("cwTriangulateLiDARTask returns one future per input, in input order", "[cwTriangulateLiDARTask]")

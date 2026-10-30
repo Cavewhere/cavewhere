@@ -78,6 +78,8 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(bool isScoped READ isScoped NOTIFY scopeChanged)
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
     Q_PROPERTY(bool windowsWholeNode READ windowsWholeNode NOTIFY externallyBackedChanged)
+    Q_PROPERTY(bool takesSurveyFile READ takesSurveyFile NOTIFY externallyBackedChanged)
+    Q_PROPERTY(QString unsolvedFileWarning READ unsolvedFileWarning NOTIFY externallyBackedChanged)
     Q_PROPERTY(double solvedLength READ solvedLength NOTIFY solvedLengthChanged)
     Q_PROPERTY(QStringList externalStations READ externalStations NOTIFY externalStationsChanged FINAL)
     Q_PROPERTY(QString externalStationsError READ externalStationsError NOTIFY externalStationsErrorChanged FINAL)
@@ -244,6 +246,16 @@ public:
     //! alike.
     static bool windowsWholeNode(const cwTripData& trip, const cwCaveData& node);
 
+    //! True when a survey file attached here is solved: no node at or above the
+    //! trip's node has a file of its own. A trip inside a source root takes its
+    //! survey data through the root's file.
+    bool takesSurveyFile() const;
+
+    //! The warning a trip shows when it holds a survey file the solve never
+    //! reads (one attached inside a source root, from a project saved before
+    //! such attachments were refused); empty otherwise.
+    QString unsolvedFileWarning() const;
+
     //! The length in meters of the legs this trip draws in the last solve, the
     //! per-trip counterpart of cwSurveyNode::length(). It is what an externally
     //! backed trip, which has no shots to add up, reports as its length.
@@ -358,11 +370,12 @@ public:
     //! would make each consumer's answer depend on which one it picked, which is
     //! the disagreement this accessor exists to end.
     //!
-    //! Deduplicated by canonical key, keeping the authored spelling where a
-    //! source has one, and sorted in natural order ("a2" before "a10"). The one
-    //! answer to "what stations does this trip have?" — every consumer asking it
-    //! of a live trip calls this, and knownStationsChanged() is the single pulse
-    //! that says the answer moved.
+    //! Deduplicated by the station each name resolves to, so both members of
+    //! an attached file's case pair (P2 and p2) list; keeping the authored
+    //! spelling where a source has one, and sorted in natural order ("a2"
+    //! before "a10"). The one answer to "what stations does this trip have?" —
+    //! every consumer asking it of a live trip calls this, and
+    //! knownStationsChanged() is the single pulse that says the answer moved.
     QList<KnownStation> knownStations() const;
 
     //! Snapshot overload: the same union over a cwTripData, for the worker-side
@@ -565,6 +578,8 @@ private:
 
     //True when appliedDeclination() is the calibration's rather than the file's.
     bool readsCalibrationDeclination() const;
+
+    void updateUnsolvedFileWarning();
 
     // void Copy(const cwTrip& object);
 

@@ -10,6 +10,9 @@
 #include "cwRenderTexturedItems.h"
 #include "CaveWhereLibExport.h"
 
+// Std includes
+#include <functional>
+
 /**
  * Points a render item at the KTX2 form of a glTF material's baseColor texture,
  * held in the project's .cw_cache, and falls back to the decoded RGBA image when
@@ -28,13 +31,16 @@ class CAVEWHERE_LIB_EXPORT cwGltfBaseColorTexture
 {
 public:
     //`parent` is the progress node the file checksum reports under. A null
-    //scope leaves the checksum untracked.
+    //scope leaves the checksum untracked. `isCanceled` reaches every encode,
+    //as in cw::ktx2::ensureEncodedEntry(); empty never cancels.
     cwGltfBaseColorTexture(const QString& dataRootPath,
                            const QString& gltfFilename,
-                           const cwProgressScope& parent = {});
+                           const cwProgressScope& parent = {},
+                           const std::function<bool()>& isCanceled = {});
 
     //`parent` is this texture's own progress node. Only an encode hangs a child
-    //off it, so a cache hit leaves it childless.
+    //off it, so a cache hit leaves it childless. Once canceled, item keeps its
+    //texture, since the caller drops the run.
     void setOn(cwRenderTexturedItems::Item& item,
                const cw::gltf::SceneCPU& scene,
                const cw::gltf::MaterialCPU& material,
@@ -44,10 +50,12 @@ private:
     cwStreamedTexture streamedSource(const cw::gltf::SceneCPU& scene,
                                      int textureIndex,
                                      const cwProgressScope& parent) const;
+    bool isCanceled() const;
 
     QString m_dataRootPath;
     QString m_gltfFilename;
     QString m_fileChecksum;
+    std::function<bool()> m_isCanceled;
 
     //A transient hand-off within a single task run, not a persistent in-memory
     //cache — commit 335671ba removed the process-lifetime scene cache and that

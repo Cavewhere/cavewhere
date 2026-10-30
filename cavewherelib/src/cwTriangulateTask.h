@@ -94,13 +94,13 @@ public:
 
             for (const auto& station : data.noteStations()) {
                 const QString stationName = station.name();
-                const QString normalizedName = cwStation::canonicalKey(stationName);
-                if(stationLookup.hasPosition(normalizedName)) [[likely]] {
-                    notePositions.insert(normalizedName, QVector3D(station.positionOnNote()));
+                const QString key = stationLookup.key(stationName);
+                if(!key.isEmpty()) [[likely]] {
+                    notePositions.insert(key, QVector3D(station.positionOnNote()));
                     stations.append(cwTriangulateStation(
                         stationName,
                         QVector3D(station.positionOnNote()),
-                        stationLookup.position(stationName)));
+                        stationLookup.position(key)));
                 }
             }
 
@@ -124,22 +124,21 @@ public:
 
         const auto noteStations = data.noteStations();
         for(const auto& noteStation : noteStations) {
-            const QString from = noteStation.name();
+            const QString from = stationLookup.key(noteStation.name());
 
-            if(!stationLookup.hasPosition(from)) [[unlikely]] {
+            if(from.isEmpty()) [[unlikely]] {
                 continue;
             }
 
             const QVector3D fromNote = QVector3D(noteStation.positionOnNote());
             const QVector3D fromWorld = stationLookup.position(from);
 
-            for (const QString& toStation : network.neighbors(from)) {
-                if(!notePositions.contains(toStation)) {
+            for (const QString& to : network.neighbors(from)) {
+                if(!notePositions.contains(to)) {
                     continue;
                 }
 
-                const QString to = cwStation::canonicalKey(toStation);
-                QString shotKey = from < to ? from + "|" + to : to + "|" + from;
+                const QString shotKey = from < to ? from + u'|' + to : to + u'|' + from;
                 if (processedShots.contains(shotKey)) {
                     continue;
                 }
@@ -167,7 +166,7 @@ public:
                     const float t = static_cast<float>(i);
                     QVector3D notePos = fromNote + noteStep * t;
                     QVector3D worldPos = fromWorld + worldStep * t;
-                    const QString dummyName = QString("%1_%2_%3").arg(from, to).arg(i);
+                    const QString dummyName = QStringLiteral("%1_%2_%3").arg(from, to).arg(i);
                     stations.append(cwTriangulateStation(dummyName, notePos, worldPos));
                 }
             }

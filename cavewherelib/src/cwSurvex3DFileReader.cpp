@@ -17,6 +17,7 @@
 #include <QHash>
 #include <QDebug>
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -53,13 +54,17 @@ QVector3D toVector3D(const img_point& p) {
     return QVector3D(p.x, p.y, p.z);
 }
 
-QString normalizedLabel(const char* label, QChar separator)
+QString normalizedLabel(QString name, QChar separator)
 {
-    QString name = QString::fromUtf8(label);
     if (separator != QLatin1Char('.')) {
         name.replace(separator, QLatin1Char('.'));
     }
     return name;
+}
+
+QString normalizedLabel(const char* label, QChar separator)
+{
+    return normalizedLabel(QString::fromUtf8(label), separator);
 }
 
 // Picks which of the labels at one coordinate names a leg's end. An equate or
@@ -99,16 +104,61 @@ QString legEndName(const QStringList& candidates, const QStringList& legSurvey)
     return best;
 }
 
+struct Label {
+    QString name;
+    QStringList surveyLevels;
+    QString station;
+    CoordKey coord;
+    QVector3D position;
+    bool fixed;
+    bool entrance;
+};
+
+Label readLabel(const img* pimg, const img_point& pt, QChar separator)
+{
+    const QString raw = QString::fromUtf8(pimg->label);
+    QStringList levels = raw.split(separator);
+    const QString station = levels.takeLast();
+    return {normalizedLabel(raw, separator),
+            levels,
+            station,
+            toKey(pt),
+            toVector3D(pt),
+            (pimg->flags & img_SFLAG_FIXED) != 0,
+            (pimg->flags & img_SFLAG_ENTRANCE) != 0};
+}
+
+// The label that names a group of labels at one coordinate: its all-lowercase
+// spelling when it has one, otherwise the first label in .3d order.
+const Label& representative(const QList<Label>& labels, const QList<qsizetype>& indexes)
+{
+    for (const qsizetype index : indexes) {
+        const Label& label = labels.at(index);
+        if (label.station == cwStation::canonicalKey(label.station)) {
+            return label;
+        }
+    }
+    return labels.at(indexes.first());
+}
+
+QString spellingOf(const Label& label)
+{
+    return cwStation::caseDistinctKey(label.surveyLevels, label.station);
+}
+
 } // namespace
 
 QPair<QString, QString> cwSurvex3DFileReader::legKey(const QString& from, const QString& to)
 {
-    const QString first = cwStation::canonicalKey(from);
-    const QString second = cwStation::canonicalKey(to);
-    if (second < first) {
-        return {second, first};
+    return legKeyOfKeys(cwStation::canonicalKey(from), cwStation::canonicalKey(to));
+}
+
+QPair<QString, QString> cwSurvex3DFileReader::legKeyOfKeys(const QString& fromKey, const QString& toKey)
+{
+    if (toKey < fromKey) {
+        return {toKey, fromKey};
     }
-    return {first, second};
+    return {fromKey, toKey};
 }
 
 cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLookup(const QString& threeDFilePath)
@@ -143,6 +193,7 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
     // index so pass 2 can resolve LINE endpoints. Skip anonymous stations —
     // they're never referenced as shot endpoints.
     QHash<CoordKey, QStringList> coordToNames;
+    QList<Label> labels;
 
     img_point pt;
     int code;
@@ -156,20 +207,69 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
             if (pimg->flags & img_SFLAG_ANON) {
                 continue;
             }
-            const QString name = normalizedLabel(pimg->label, separator);
-            const QVector3D position = toVector3D(pt);
-            out.lookup.setPosition(name, position);
-            out.network.setPosition(name, position);
-            if (pimg->flags & img_SFLAG_FIXED) {
-                out.fixedStations.append(cwStation::canonicalKey(name));
-            }
-            if (pimg->flags & img_SFLAG_ENTRANCE) {
-                out.entranceStations.append(name);
-            }
+            labels.append(readLabel(pimg, pt, separator));
 
             // Equated or coincident stations share a coordinate; pass 2 picks
             // among them by the leg's survey.
-            coordToNames[toKey(pt)].append(name);
+            coordToNames[labels.last().coord].append(labels.last().name);
+        }
+    }
+
+    // Cavern folds case only where the data asks it to (a Compass or Walls
+    // file, or *case preserve), so P2 and p2 can be two stations. Labels that
+    // lowercase alike are one station when they share a coordinate (an equate
+    // or a coincidence) and keep the lowercase key. At different coordinates
+    // they are a case pair, and each member keys by its own spelling.
+    QHash<QString, QList<qsizetype>> labelsByCanonical;
+    labelsByCanonical.reserve(labels.size());
+    for (qsizetype i = 0; i < labels.size(); ++i) {
+        labelsByCanonical[cwStation::canonicalKey(labels.at(i).name)].append(i);
+    }
+
+    QHash<QString, QString> keyOfName;
+    keyOfName.reserve(labels.size());
+    const auto addStation = [&](const QList<qsizetype>& indexes, bool isCasePair) {
+        const Label& named = representative(labels, indexes);
+        const QString key = isCasePair ? spellingOf(named) : cwStation::canonicalKey(named.name);
+        out.lookup.setPositionAtKey(key, named.position);
+        out.network.setPositionAtKey(key, named.position);
+        out.spellings.insert(key, spellingOf(named));
+        out.labels.insert(key, named.name);
+        for (const qsizetype index : indexes) {
+            keyOfName.insert(labels.at(index).name, key);
+        }
+    };
+
+    for (auto group = labelsByCanonical.cbegin(); group != labelsByCanonical.cend(); ++group) {
+        const QList<qsizetype>& indexes = group.value();
+
+        // Groups are a handful of labels, so a linear scan per coordinate stays cheap.
+        QList<QList<qsizetype>> byCoord;
+        for (const qsizetype index : indexes) {
+            const CoordKey& coord = labels.at(index).coord;
+            const auto sameCoord = std::find_if(byCoord.begin(), byCoord.end(),
+                                                [&](const QList<qsizetype>& atCoord) {
+                return labels.at(atCoord.first()).coord == coord;
+            });
+            if (sameCoord == byCoord.end()) {
+                byCoord.append({index});
+            } else {
+                sameCoord->append(index);
+            }
+        }
+
+        const bool isCasePair = byCoord.size() > 1;
+        for (const QList<qsizetype>& atCoord : std::as_const(byCoord)) {
+            addStation(atCoord, isCasePair);
+        }
+    }
+
+    for (const Label& label : std::as_const(labels)) {
+        if (label.fixed) {
+            out.fixedStations.append(keyOfName.value(label.name));
+        }
+        if (label.entrance) {
+            out.entranceStations.append(label.name);
         }
     }
 
@@ -231,16 +331,16 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
                 if (fromIsNamed && toIsNamed) {
                     // Both ends are real stations, so this is a leg of the
                     // network even when it carries *flags splay.
-                    const QString fromName = endName(*fromIt);
-                    const QString toName = endName(*toIt);
-                    out.network.addShot(fromName, toName);
-                    legsSinceMove.append(legKey(fromName, toName));
+                    const QString fromStation = keyOfName.value(endName(*fromIt));
+                    const QString toStation = keyOfName.value(endName(*toIt));
+                    out.network.addShotKeys(fromStation, toStation);
+                    legsSinceMove.append(legKeyOfKeys(fromStation, toStation));
                 } else if ((pimg->flags & img_FLAG_SPLAY) && (fromIsNamed || toIsNamed)) {
                     // Exactly one end named: that end is the station the splay
                     // hangs off, and the anonymous end is where it lands.
                     const QString anchor = endName(fromIsNamed ? *fromIt : *toIt);
                     const img_point& tip = fromIsNamed ? pt : prev;
-                    out.splayTips[cwStation::canonicalKey(anchor)].append(toVector3D(tip));
+                    out.splayTips[keyOfName.value(anchor)].append(toVector3D(tip));
                 }
             }
             prev = pt;

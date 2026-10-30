@@ -75,9 +75,10 @@ public:
     //! Row of the fix anchoring \a stationName, or -1 if no row does. Matching
     //! follows the same rule as every other place a fix is resolved to a survey
     //! station (cwFixStationDiagnostics::classifyStationReference via
-    //! cwSurveyNetwork::hasStation): trim, then case-insensitive. An empty name
-    //! matches nothing, so a blank scaffold row is never "the fix for no
-    //! station".
+    //! cwSurveyNetwork::hasStation): trim, then the exact name, then
+    //! case-insensitive, so P2 and p2 of a case pair each find their own row.
+    //! An empty name matches nothing, so a blank scaffold row is never "the
+    //! fix for no station".
     Q_INVOKABLE int indexOf(const QString& stationName) const;
 
     //! Row of the fix carrying \a fixId, or -1. The identity that survives an

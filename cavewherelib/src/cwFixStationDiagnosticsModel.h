@@ -19,6 +19,7 @@
 class cwSurveyNode;
 class cwFixStation;
 class cwFixStationModel;
+class cwSurveyNetwork;
 
 /**
  * Adds the read-only, computed error roles on top of a survey node's cwFixStationModel.
@@ -162,7 +163,8 @@ private:
 
     //! The conflict half of stationErrorMessage(): empty when no other fix
     //! claims the row's station.
-    QString stationConflictMessage(const QList<cwFixStation>& fixes, int row) const;
+    QString stationConflictMessage(const QList<cwFixStation>& fixes, int row,
+                                   const cwSurveyNetwork& network) const;
 
     //! The source row's fix, or null when there is no source model or the index
     //! is out of range.

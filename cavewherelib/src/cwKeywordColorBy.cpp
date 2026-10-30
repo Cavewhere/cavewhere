@@ -40,14 +40,6 @@ void cwKeywordColorBy::setItemModel(QAbstractItemModel* model)
     m_groups->setSourceModel(model);
 }
 
-void cwKeywordColorBy::regroup()
-{
-    if (m_groups->key().isEmpty()) {
-        return;
-    }
-    m_groups->updateAllRows();
-}
-
 QString cwKeywordColorBy::key() const
 {
     return m_groups->key();

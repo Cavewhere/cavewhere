@@ -44,15 +44,26 @@ public:
         //! \a nodes are the snapshot's top-level nodes and \a labels the pool
         //! built from that same snapshot. \a equates are the ties the driver
         //! writes after its blocks, which AnchorPlan reads to group the blocks.
+        //! \a externalStationLabels is
+        //! cwSurvexExporterRegion::Options::externalStationLabels: per owner,
+        //! cavern's label of each harvested spelling whose label differs.
         DriverTree(const QList<cwCaveData>& nodes,
                    const cwScopeLabels& labels,
                    const QSet<QUuid>& excludedExternalOwners = {},
-                   const QList<cwEquate>& equates = {});
+                   const QList<cwEquate>& equates = {},
+                   const QHash<QUuid, QHash<QString, QString>>& externalStationLabels = {});
         Q_DISABLE_COPY_MOVE(DriverTree)
 
         const cwScopeLabels& labels() const { return m_labels; }
         const QSet<QUuid>& excludedExternalOwners() const { return m_excludedExternalOwners; }
         const QList<cwEquate>& equates() const { return m_equates; }
+
+        //! Cavern's label of the harvested station \a spelling of \a ownerId's
+        //! file, or \a spelling itself when the two agree.
+        QString externalStationLabel(const QUuid& ownerId, const QString& spelling) const
+        {
+            return m_externalStationLabels.value(ownerId).value(spelling, spelling);
+        }
         const QList<cwCaveData>& nodes() const { return m_nodes; }
 
         //! True when \a nodeId's subtree gives cavern something to read: a
@@ -67,7 +78,8 @@ public:
         //! handle's trip scope, then the tail. Inside a sourced subtree a
         //! derived trip's station is the root's label path, the trip's node's
         //! cavern path, then the tail, and a native trip's is the root's label
-        //! path, the trip's label in the root's block, then the tail.
+        //! path, the trip's label in the root's block, then the tail. A tail on
+        //! a trip's own attached file names the station as cavern labels it.
         //!
         //! Empty when the driver opens no scope for the handle: its container is
         //! in no node of the tree, sits inside an excluded owner or below a
@@ -104,6 +116,7 @@ public:
         const cwScopeLabels m_labels;
         const QSet<QUuid> m_excludedExternalOwners;
         const QList<cwEquate> m_equates;
+        const QHash<QUuid, QHash<QString, QString>> m_externalStationLabels;
         QSet<QUuid> m_emittingNodeIds;
         QHash<QUuid, Owner> m_nodeOwners;
         QHash<QUuid, Owner> m_tripOwners;
@@ -240,13 +253,18 @@ public:
     //! The station the driver fixes at the origin for an attached file that
     //! fixes none of its own (\a fileFixedStations empty): the file's first
     //! harvested station, named as cavern resolves it inside the *include.
-    //! Survex entry files only, whose default *case lower matches the
-    //! harvest's lowercase names; Compass and Walls spell names the harvest
-    //! cannot give back. Empty when no fallback applies, including before the
-    //! harvest has named the file's stations.
+    //! Survex entry files only; Compass and Walls spell names the harvest
+    //! cannot give back. The name is a harvest spelling, which stationLabel()
+    //! turns into cavern's label. Empty when no fallback applies, including
+    //! before the harvest has named the file's stations.
     static QString originStation(const cwExternalCenterline& centerline,
                                  const QStringList& externalStations,
                                  const QStringList& fileFixedStations);
+
+    //! Cavern's label of the harvested station \a spelling of \a ownerId's
+    //! file (cwSurvexExporterRegion::Options::externalStationLabels), or
+    //! \a spelling itself when the two agree.
+    QString stationLabel(const QUuid& ownerId, const QString& spelling) const;
 
 protected:
     QString writeStandaloneHeader(QTextStream& stream) override;

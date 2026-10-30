@@ -13,7 +13,7 @@ MainWindowTest {
 
         readonly property int depthIndex: 1
         readonly property int loopErrorIndex: 2
-        readonly property int sigmaTickCount: 4
+        readonly property int sigmaTickCount: 7
         readonly property real feetPerMeter: 3.28084
         readonly property real pivotTolerance: 0.01
         readonly property real edgeTolerance: 1
@@ -449,7 +449,7 @@ MainWindowTest {
             let ticks = findChild(legend, "colorByTicks");
             verify(ticks, "found the tick repeater");
             tryCompare(ticks, "count", sigmaTickCount);
-            const expected = ["0 \u03c3", "1 \u03c3", "2 \u03c3", "\u22653 \u03c3"];
+            const expected = ["0 \u03c3", "1 \u03c3", "2 \u03c3", "3 \u03c3", "4 \u03c3", "5 \u03c3", "\u22656 \u03c3"];
             for (let i = 0; i < sigmaTickCount; ++i) {
                 let label = tickLabel(ticks.itemAt(i));
                 compare(label.text, expected[i]);
@@ -491,7 +491,7 @@ MainWindowTest {
             tryVerify(() => noLoopRow.visible, 5000, "loop error shows the No loop row");
 
             // Ticks run bottom (0 sigma) to top, and each band word centers on its mark
-            const expected = ["Perfect", "Good", "Okay", "Bad"];
+            const expected = ["Excellent", "Good", "Fair", "Suspect", "Poor", "Bad", "Blunder"];
             const centerY = item => item.y + item.height / 2;
             for (let i = 0; i < sigmaTickCount; ++i) {
                 const tick = ticks.itemAt(i);

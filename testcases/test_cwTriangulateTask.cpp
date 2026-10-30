@@ -36,6 +36,7 @@
 #include "asyncfuture.h"
 #include "cwThreadCountRestorer.h"
 #include "LimitedRunTestHelper.h"
+#include "CasePairTestHelpers.h"
 
 //Qt includes
 #include <QFileInfo>
@@ -113,6 +114,33 @@ TEST_CASE("A boundary-scoped external note station resolves against the cave loo
     }
 }
 
+TEST_CASE("A scrap holding both members of a case pair interpolates each member's own shots",
+          "[cwTriangulateTask][CasePairs]") {
+    const QStringList anchors = casePairs::morphAnchors();
+    QList<cwNoteStation> noteStations;
+    for (const QString& name : anchors) {
+        cwNoteStation station;
+        station.setName(name);
+        station.setPositionOnNote(casePairs::notePositionOf(name).toPointF());
+        noteStations.append(station);
+    }
+
+    // Debug and release builds default to different spacings.
+    constexpr double kSpacingMeters = 1.0;
+    cwTriangulateWarpingData morphing;
+    morphing.shotInterpolationSpacingMeters = kSpacingMeters;
+
+    cwTriangulateInData data;
+    data.setNoteStation(noteStations);
+    data.setStationLookup(casePairs::solvedLookup());
+    data.setSurveyNetwork(casePairs::solvedNetwork());
+    data.setMorphingSettings(morphing);
+
+    casePairs::checkInterpolatedShots(
+        cwTriangulateTask::buildStationsWithInterpolatedShots(data), anchors, casePairs::morphAnchorShots(),
+        kSpacingMeters);
+}
+
 TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateTask]") {
     cwPDFSettings::initialize();
     if (!cwPDFConverter::isSupported()) {
@@ -131,6 +159,8 @@ TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateT
         auto cave = project->cavingRegion()->cave(0);
         REQUIRE(cave->tripCount() == 1);
         auto trip = cave->trip(0);
+        //Loading only queues the solve; the morph needs its station positions.
+        REQUIRE(waitUntil([&] { return !trip->solvedStationPositions().isEmpty(); }));
         auto notes = trip->notes()->notes();
         REQUIRE(notes.size() >= 2);
         cwNote* note = notes.at(1);

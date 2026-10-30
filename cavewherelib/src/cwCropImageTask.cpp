@@ -59,7 +59,8 @@ namespace {
                                                const QString& pathToImage,
                                                const QString& keyPrefix,
                                                quint64 parentHash,
-                                               const cwProgressNodePtr& progressParent)
+                                               const cwProgressNodePtr& progressParent,
+                                               const std::function<bool()>& isCanceled)
     {
         const cwDiskCacher::Key key = cwImageProvider::imageCacheKey(
             pathToImage,
@@ -72,7 +73,7 @@ namespace {
             //compressed texture must carry the same flip
             //cwOpenGLUtils::toGLTexture() gives the uncompressed path
             return cwOpenGLUtils::toGLTexture(croppedImage);
-        }, progressParent);
+        }, progressParent, isCanceled);
 
         if(ensured.hasError()) {
             return {};
@@ -201,7 +202,8 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
                                                                     originalPath,
                                                                     keyPrefix,
                                                                     parentHash,
-                                                                    progressParent);
+                                                                    progressParent,
+                                                                    [&promise]() { return promise.isCanceled(); });
                 if(promise.isCanceled()) {
                     return;
                 }

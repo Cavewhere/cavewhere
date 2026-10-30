@@ -70,9 +70,11 @@ constexpr const char* kOkabeIto[] = {
     "#0072B2", "#D55E00", "#CC79A7", "#999999"
 };
 
-// Loop error: dark green, light green, orange, dark red
+// Loop error, one stop per sigma: dark green, green, yellow-green, gold,
+// orange, red, dark purple. Gold rather than pure yellow stays visible on
+// light backgrounds; purple is darker than red so lightness keeps falling.
 constexpr const char* kLoopError[] = {
-    "#1a9850", "#a6d96a", "#fdae61", "#a50026"
+    "#1a9850", "#66bd63", "#a6d96a", "#e6c200", "#fd8d3c", "#d73027", "#6a1b9a"
 };
 
 constexpr double kQuarter = 0.25;

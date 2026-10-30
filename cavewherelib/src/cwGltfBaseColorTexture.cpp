@@ -58,10 +58,12 @@ namespace {
 
 cwGltfBaseColorTexture::cwGltfBaseColorTexture(const QString& dataRootPath,
                                                const QString& gltfFilename,
-                                               const cwProgressScope& parent) :
+                                               const cwProgressScope& parent,
+                                               const std::function<bool()>& isCanceled) :
     m_dataRootPath(dataRootPath),
     m_gltfFilename(gltfFilename),
-    m_fileChecksum(dataRootPath.isEmpty() ? QString() : fileChecksum(gltfFilename, parent))
+    m_fileChecksum(dataRootPath.isEmpty() ? QString() : fileChecksum(gltfFilename, parent)),
+    m_isCanceled(isCanceled)
 {
 }
 
@@ -71,6 +73,12 @@ void cwGltfBaseColorTexture::setOn(cwRenderTexturedItems::Item& item,
                                    const cwProgressScope& parent) const
 {
     const cwStreamedTexture streamed = streamedSource(scene, material.baseColorTextureIndex, parent);
+
+    //A canceled encode leaves no entry, and decoding the fallback image would
+    //only delay a run the caller is about to drop
+    if(streamed.isNull() && isCanceled()) {
+        return;
+    }
 
     //The descriptor path never decodes: baseColorImage() runs only when there
     //is no entry to stream.
@@ -121,7 +129,7 @@ cwStreamedTexture cwGltfBaseColorTexture::streamedSource(const cw::gltf::SceneCP
 
     const auto ensured = cw::ktx2::ensureEncodedEntry(cacher, streamed.key, [&texture]() {
         return texture.toImage();
-    }, parent.node());
+    }, parent.node(), m_isCanceled);
 
     if(ensured.hasError()) {
         m_sourceByIndex.insert(textureIndex, cwStreamedTexture());
@@ -130,4 +138,9 @@ cwStreamedTexture cwGltfBaseColorTexture::streamedSource(const cw::gltf::SceneCP
 
     m_sourceByIndex.insert(textureIndex, streamed);
     return streamed;
+}
+
+bool cwGltfBaseColorTexture::isCanceled() const
+{
+    return m_isCanceled && m_isCanceled();
 }

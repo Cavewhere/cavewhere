@@ -28,6 +28,7 @@
 #include "cwTrip.h"
 
 // Test helpers
+#include "CasePairTestHelpers.h"
 #include "ExternalCenterlineTestHelpers.h"
 
 // Qt
@@ -479,4 +480,31 @@ TEST_CASE("A trip two levels down is offered ties from its node's solved station
     CHECK(stationAt(model, 0) == QStringLiteral("D2"));
     CHECK(candidateTripAt(model, 0) == QStringLiteral("Second"));
     CHECK(matchAt(model, 0) == cwTieSuggestionModel::SameName);
+}
+
+TEST_CASE("Both members of an attached file's case pair are offered for a like-named station",
+          "[TieSuggestionModel][CasePairs]")
+{
+    // Compass keeps P2 and p2 apart, so a native P2 could tie to either.
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* native = addNativeTripWithShot(cave, QStringLiteral("Native"),
+                                           QStringLiteral("P2"), QStringLiteral("N1"));
+    cwTrip* attached = addAttachedTrip(cave, QStringLiteral("Attached"), casePairs::kFileName);
+    attached->setExternalStations(casePairs::harvest());
+
+    cwTieSuggestionModel model;
+    model.setTrip(native);
+
+    QStringList candidates;
+    for (int row = 0; row < model.rowCount(); ++row) {
+        if (stationAt(model, row) == QStringLiteral("P2")) {
+            INFO("candidate " << candidateAt(model, row).toStdString());
+            CHECK(matchAt(model, row) == cwTieSuggestionModel::SameName);
+            CHECK(candidateTripAt(model, row) == QStringLiteral("Attached"));
+            candidates.append(candidateAt(model, row));
+        }
+    }
+    candidates.sort();
+    CHECK(candidates.join(QStringLiteral(", ")).toStdString() == "P2, p2");
 }

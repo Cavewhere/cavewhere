@@ -243,10 +243,16 @@ void cwFixStationModel::addFixStation()
 
 int cwFixStationModel::indexOf(const QString& stationName) const
 {
-    const QString key = fixKey(stationName);
-    if (key.isEmpty()) {
+    const QString trimmed = stationName.trimmed();
+    if (trimmed.isEmpty()) {
         return -1;
     }
+    for (int i = 0; i < m_fixStations.size(); i++) {
+        if (m_fixStations.at(i).stationName().trimmed() == trimmed) {
+            return i;
+        }
+    }
+    const QString key = fixKey(trimmed);
     for (int i = 0; i < m_fixStations.size(); i++) {
         if (fixKey(m_fixStations.at(i).stationName()) == key) {
             return i;
