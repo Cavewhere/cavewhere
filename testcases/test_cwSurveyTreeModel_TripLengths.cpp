@@ -39,16 +39,6 @@ constexpr double kRightMeters = 3.0;
 constexpr double kLowerMeters = kLeftMeters + kRightMeters;
 constexpr double kFileMeters = kSystemTripMeters + kUpperMeters + kLowerMeters;
 
-cwTrip* tripNamed(const cwSurveyNode* node, const QString& name)
-{
-    for (cwTrip* trip : node->trips()) {
-        if (trip->name() == name) {
-            return trip;
-        }
-    }
-    return nullptr;
-}
-
 //! The Length cell of \a trip's row, in meters. The model hands a trip row its
 //! length in the unit the trip's calibration surveys in.
 double tripRowMeters(const cwSurveyTreeModel& model, cwTrip* trip)

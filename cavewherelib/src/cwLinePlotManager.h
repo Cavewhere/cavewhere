@@ -347,10 +347,12 @@ private:
     //! leaves the last warning standing, and a cleared result clears it.
     void publishUnfixedFileWarnings(const QSet<QUuid>& originFixedOwners);
     //! Installs a result's solved entrances, and writes one EntranceUnplaced
-    //! warning on each node naming its entrances the solve did not flag,
-    //! leaving out a station the node also fixes. \a solved is false for a
-    //! cleared result, which clears every such warning.
+    //! warning on each node naming its entrances outside \a placedEntrances
+    //! (the entries the solve flagged), leaving out a station the node also
+    //! fixes. \a solved is false for a cleared result, which clears every
+    //! such warning.
     void publishSolvedEntrances(const QHash<QUuid, QList<cwSolvedEntrance>>& entrances,
+                                const QHash<QUuid, QSet<QString>>& placedEntrances,
                                 bool solved);
     void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys,
                                 bool externalScopesChecked);

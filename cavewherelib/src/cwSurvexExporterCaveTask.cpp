@@ -257,6 +257,10 @@ private:
         QString firstValidKey;
         //! Keyed by the attached file's owner: a trip, or the node itself.
         QHash<QUuid, QSet<QString>> fileKeys;
+        //! Keyed by the node holding each written entrance entry: the entry's
+        //! canonical name, mapped to the canonical key of the station its
+        //! *entrance names, relative to the block.
+        QHash<QUuid, QHash<QString, QString>> entranceKeys;
     };
 
     // A fallback today's top-down rule writes, unless its group has an anchor.
@@ -323,6 +327,12 @@ private:
         const QString prefix = cwStation::canonicalKey(m_tree.labels().prefix(node.id));
         for (const cwFixStation& fix : fixes.kept) {
             m_realAnchors.append(prefix + cwStation::canonicalKey(fix.stationName().trimmed()));
+        }
+        for (auto holder = stations.entranceKeys.cbegin(); holder != stations.entranceKeys.cend(); ++holder) {
+            QHash<QString, QString>& regionKeys = m_plan.m_entranceKeys[holder.key()];
+            for (auto entry = holder->cbegin(); entry != holder->cend(); ++entry) {
+                regionKeys.insert(entry.key(), prefix + entry.value());
+            }
         }
         joinChunks(prefix, stations.chunkKeys);
 
@@ -401,6 +411,67 @@ private:
         for (const cwCaveData& child : node.nodes) {
             addDerivedStations(child, keys);
         }
+    }
+
+    // The attached file's stations in \a root's block, each canonical key
+    // mapped to the name as the file spells it below its canonical scope, as
+    // DriverTree::sourcedTripOperand spells a derived station.
+    void addFileSpellings(const cwCaveData& root, QHash<QString, QString>& spellings) const
+    {
+        for (const QString& station : root.externalStations) {
+            spellings.insert(cwStation::canonicalKey(station), station);
+        }
+        const cwScopeLabels& labels = m_tree.labels();
+        const auto addTrips = [&](const cwCaveData& node, const QStringList&) {
+            for (const cwTripData& trip : node.trips) {
+                if (trip.sourcePath.isEmpty()) {
+                    continue;
+                }
+                const QString scope = cwStation::canonicalKey(
+                    labels.cavernPath(node.id) + cwTrip::scopePrefix(trip, labels, node.id));
+                for (const QString& station : trip.externalStations) {
+                    spellings.insert(scope + cwStation::canonicalKey(station), scope + station);
+                }
+            }
+        };
+        addTrips(root, QStringList());
+        walkCaveDataTree(root.nodes, addTrips);
+    }
+
+    // How \a holder's entrance \a name is spelled in the block of its source
+    // root, or empty when it names no station in \a knownKeys. The first
+    // match wins: the name below the holder's cavern path (a derived station),
+    // the name below a native trip's label in the holder (as the survey
+    // editor stores it), then the name as given when it starts with such a
+    // label. A station of the attached file keeps the file's spelling from
+    // \a fileSpellings; any other is canonical, since the block folds it.
+    QString sourcedEntranceName(const cwCaveData& holder, const QString& name,
+                                const QSet<QString>& knownKeys,
+                                const QHash<QString, QString>& fileSpellings) const
+    {
+        const cwScopeLabels& labels = m_tree.labels();
+        const QString derivedKey = cwStation::canonicalKey(labels.cavernPath(holder.id) + name);
+        if (knownKeys.contains(derivedKey)) {
+            return fileSpellings.value(derivedKey, derivedKey);
+        }
+        const QString key = cwStation::canonicalKey(name);
+        for (const cwTripData& trip : holder.trips) {
+            if (!isNativeTrip(trip)) {
+                continue;
+            }
+            const QString tripScope = cwTrip::scopePrefix(trip, labels, holder.id);
+            if (tripScope.isEmpty()) {
+                continue;
+            }
+            const QString nativeKey = cwStation::canonicalKey(tripScope + name);
+            if (knownKeys.contains(nativeKey)) {
+                return nativeKey;
+            }
+            if (key.startsWith(cwStation::canonicalKey(tripScope)) && knownKeys.contains(key)) {
+                return key;
+            }
+        }
+        return QString();
     }
 
     // Validates \a node's fixes against the station names its block knows
@@ -514,19 +585,56 @@ private:
             fixes.makFixes[makOwner->ownerId].append(inFileScope);
         }
 
-        QSet<QString> entranceKeys;
-        for (const cwEntrance& entrance : node.entrances) {
-            const QString name = entrance.stationName().trimmed();
-            const QString key = cwStation::canonicalKey(name);
-            if (!stationNamesLower.contains(key) || entranceKeys.contains(key)) {
-                continue;
+        // A source root's block is the only one its subtree writes, so it
+        // writes the entrances of every node in that subtree. A derived station
+        // outside the harvest is still in the file, so a .mak places it.
+        QSet<QString> derivedKeys;
+        const bool sourceRoot = isSourceRoot(node);
+        const bool makRoot =
+            sourceRoot && cwCompassMakFile::isMakFile(node.externalCenterline.entryFile());
+        QSet<QString> writtenKeys;
+        const auto writeEntrance = [&](const QUuid& holderId, const QString& entry,
+                                       const QString& spelled) {
+            const QString key = cwStation::canonicalKey(spelled);
+            stations.entranceKeys[holderId].insert(cwStation::canonicalKey(entry), key);
+            if (writtenKeys.contains(key)) {
+                return;
             }
-            entranceKeys.insert(key);
+            writtenKeys.insert(key);
             const auto makOwner = makStationOwners.constFind(key);
-            if (makOwner == makStationOwners.constEnd()) {
-                fixes.entrances.append(name);
+            if (makOwner != makStationOwners.constEnd()) {
+                fixes.makEntrances[makOwner->ownerId].append(spelled.mid(makOwner->scope.size()));
+            } else if (makRoot && derivedKeys.contains(key)) {
+                fixes.makEntrances[node.id].append(spelled);
+            } else if (sourceRoot && spelled != key) {
+                fixes.fileSpelledEntrances.append(spelled);
             } else {
-                fixes.makEntrances[makOwner->ownerId].append(name.mid(makOwner->scope.size()));
+                fixes.entrances.append(spelled);
+            }
+        };
+
+        if (sourceRoot) {
+            addDerivedStations(node, derivedKeys);
+            const QSet<QString> knownKeys = stationNamesLower + derivedKeys;
+            QHash<QString, QString> fileSpellings;
+            addFileSpellings(node, fileSpellings);
+            const auto writeHolderEntrances = [&](const cwCaveData& holder, const QStringList&) {
+                for (const cwEntrance& entrance : holder.entrances) {
+                    const QString name = entrance.stationName().trimmed();
+                    const QString spelled = sourcedEntranceName(holder, name, knownKeys, fileSpellings);
+                    if (!spelled.isEmpty()) {
+                        writeEntrance(holder.id, name, spelled);
+                    }
+                }
+            };
+            writeHolderEntrances(node, QStringList());
+            walkCaveDataTree(node.nodes, writeHolderEntrances);
+        } else {
+            for (const cwEntrance& entrance : node.entrances) {
+                const QString name = entrance.stationName().trimmed();
+                if (stationNamesLower.contains(cwStation::canonicalKey(name))) {
+                    writeEntrance(node.id, name, name);
+                }
             }
         }
         return fixes;
@@ -967,6 +1075,11 @@ cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData
     cwSurvexExporterUtils::writeFixStations(stream, fixes.direct, plan.fallbackStation(node.id),
                                             globalCS, scope);
     cwSurvexExporterUtils::writeEntrances(stream, fixes.entrances);
+    if (!fixes.fileSpelledEntrances.isEmpty()) {
+        stream << "*begin" << Qt::endl << "*case preserve" << Qt::endl;
+        cwSurvexExporterUtils::writeEntrances(stream, fixes.fileSpelledEntrances);
+        stream << "*end" << Qt::endl;
+    }
     return fixes;
 }
 

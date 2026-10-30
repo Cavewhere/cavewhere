@@ -674,6 +674,16 @@ inline cwSurveyNode* childNodeNamed(const cwSurveyNode* parent, const QString& n
     return nullptr;
 }
 
+inline cwTrip* tripNamed(const cwSurveyNode* node, const QString& name)
+{
+    for (cwTrip* trip : node->trips()) {
+        if (trip->name() == name) {
+            return trip;
+        }
+    }
+    return nullptr;
+}
+
 inline QStringList childNodeNames(const cwSurveyNode* node)
 {
     QStringList names;

@@ -286,6 +286,10 @@ public:
         //! id; std::nullopt leaves the last answer standing.
         std::optional<QHash<QUuid, QList<cwSolvedEntrance>>> SolvedEntrances;
 
+        //! Each node's entrance entries the solve flagged, by canonical name;
+        //! read with SolvedEntrances.
+        QHash<QUuid, QSet<QString>> PlacedEntrances;
+
         //! A result asserting "there is nothing, and I looked" — what the
         //! manager publishes to wipe state on setRegion, and what a region with
         //! nothing solvable in it produces. Distinct from a default-constructed

@@ -47,16 +47,6 @@ std::string expectedDeclination(const char* origin, double degrees)
     return QStringLiteral("%1 %2").arg(QLatin1String(origin)).arg(degrees, 0, 'f', kDegreesPlaces).toStdString();
 }
 
-cwTrip* tripNamed(const cwSurveyNode* node, const QString& name)
-{
-    for (cwTrip* trip : node->trips()) {
-        if (trip->name() == name) {
-            return trip;
-        }
-    }
-    return nullptr;
-}
-
 //! A trip row's Decl cell as "<origin> <degrees>": the DeclinationOrigin's key,
 //! then DeclinationRole to four places. "missing" stands for an origin the
 //! model does not give.

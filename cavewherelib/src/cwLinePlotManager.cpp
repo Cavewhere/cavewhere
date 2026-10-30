@@ -838,12 +838,14 @@ void cwLinePlotManager::publishResults(const cwLinePlotTask::LinePlotResultData&
         publishUnfixedFileWarnings(*results.OriginFixedOwners);
     }
     if (results.SolvedEntrances.has_value()) {
-        publishSolvedEntrances(*results.SolvedEntrances, !results.DriverSource.isEmpty());
+        publishSolvedEntrances(*results.SolvedEntrances, results.PlacedEntrances,
+                               !results.DriverSource.isEmpty());
     }
     publishUnconnectedStationWarnings();
 }
 
 void cwLinePlotManager::publishSolvedEntrances(const QHash<QUuid, QList<cwSolvedEntrance>>& entrances,
+                                               const QHash<QUuid, QSet<QString>>& placedEntrances,
                                                bool solved)
 {
     if (Region == nullptr) {
@@ -857,15 +859,12 @@ void cwLinePlotManager::publishSolvedEntrances(const QHash<QUuid, QList<cwSolved
         }
         QStringList unplaced;
         if (solved) {
-            QSet<QString> solvedKeys;
-            for (const cwSolvedEntrance& solvedEntrance : entrances.value(node->id())) {
-                solvedKeys.insert(solvedEntrance.stationName.toCaseFolded());
-            }
+            const QSet<QString> placed = placedEntrances.value(node->id());
             for (const cwEntrance& entrance : node->entrances()->entrances()) {
                 const QString station = entrance.stationName().trimmed();
                 // A fix on the same station already warns through
                 // FixStationReference.
-                if (!solvedKeys.contains(station.toCaseFolded()) && !node->fixStations()->isFixed(station)) {
+                if (!placed.contains(cwStation::canonicalKey(station)) && !node->fixStations()->isFixed(station)) {
                     unplaced.append(QStringLiteral("\"%1\"").arg(station));
                 }
             }

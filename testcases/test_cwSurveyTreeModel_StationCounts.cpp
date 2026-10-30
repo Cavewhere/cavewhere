@@ -36,16 +36,6 @@ const QString kCountsFixture = QStringLiteral("survex_station_counts/counts.svx"
 constexpr int kEventSliceMs = 10;
 constexpr int kRefreshWaitMs = 5000;
 
-cwTrip* tripNamed(const cwSurveyNode* node, const QString& name)
-{
-    for (cwTrip* trip : node->trips()) {
-        if (trip->name() == name) {
-            return trip;
-        }
-    }
-    return nullptr;
-}
-
 int stationCountOf(const cwSurveyTreeModel& model, QObject* object)
 {
     const QModelIndex index = model.indexOf(object);

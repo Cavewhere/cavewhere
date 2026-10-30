@@ -183,10 +183,10 @@ void cwEntranceMarkerSource::nodeDestroyed(QObject* node)
 }
 
 /**
- * The entrances to draw: every node's solved entrances, named by the owning
- * node's entrance label or the name of the node they sit in, with that node's
- * numbers. An entrance whose deepest node is its owning node sits in that
- * node's cave.
+ * The entrances to draw: every node's solved entrances, named by the entrance
+ * label (from the deepest node's entry when it holds one, else the owning
+ * node's) or the name of the node they sit in, with that node's numbers. An
+ * entrance whose deepest node is its owning node sits in that node's cave.
  */
 QList<cwEntranceMarkerSource::Entrance> cwEntranceMarkerSource::desiredEntrances() const
 {
@@ -235,6 +235,13 @@ QList<cwEntranceMarkerSource::Entrance> cwEntranceMarkerSource::desiredEntrances
             cwSurveyNode* deepestNode = nodesById.value(solvedEntrance.deepestNodeId, node);
             cwSurveyNode* caveNode = deepestNode == node ? node->caveNode() : deepestNode;
 
+            // An entry the deepest node holds below its owning node carries
+            // the label.
+            const bool heldBelow = deepestNode != node && !solvedEntrance.entryName.isEmpty();
+            const cwEntranceModel* deepestModel = deepestNode->entrances();
+            const cwEntrance labeledEntry =
+                heldBelow ? deepestModel->entranceAt(deepestModel->indexOf(solvedEntrance.entryName)) : entry;
+
             Entrance entrance;
             entrance.id = entranceId(node, solvedEntrance.stationName);
             entrance.node = node;
@@ -244,7 +251,7 @@ QList<cwEntranceMarkerSource::Entrance> cwEntranceMarkerSource::desiredEntrances
             entrance.position = solvedEntrance.position;
             entrance.fixed = solvedEntrance.fixed;
             entrance.caveName = caveNode->name();
-            entrance.label = entry.label();
+            entrance.label = labeledEntry.label();
             entrance.statsText = statsTextOf(caveNode);
             desired.append(entrance);
         }

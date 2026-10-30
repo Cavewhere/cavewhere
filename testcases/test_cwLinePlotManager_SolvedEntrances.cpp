@@ -13,6 +13,8 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwEntranceModel.h"
+#include "cwEquate.h"
+#include "cwEquateModel.h"
 #include "cwError.h"
 #include "cwErrorModel.h"
 #include "cwExternalCenterline.h"
@@ -23,6 +25,7 @@
 #include "cwShot.h"
 #include "cwSolvedEntrance.h"
 #include "cwStation.h"
+#include "cwStationHandle.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
@@ -306,6 +309,129 @@ TEST_CASE("An attached Survex *entrance names the innermost block node holding i
     REQUIRE(entrances.size() == 1);
     CHECK(entrances.first().stationName.compare(QStringLiteral("outer.inner.i2"), Qt::CaseInsensitive) == 0);
     CHECK(entrances.first().deepestNodeId == inner->id());
+}
+
+TEST_CASE("An entrance marked on a nested Survex block's node is solved in that node",
+          "[LinePlotManager][SolvedEntrances]")
+{
+    auto project = makeSavedProject(QStringLiteral("survex-child-entrance"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        project.get(), project->project->cavingRegion()->rootNode(),
+        fixturePath(kSurvexNestedEntranceFixture));
+    drainPipelines(project.get());
+
+    const cwLinePlotManager* manager = project->rootData->linePlotManager();
+    REQUIRE_FALSE(manager->hasSolveError());
+    cwSurveyNode* outer = childNodeNamed(root, QStringLiteral("outer"));
+    REQUIRE(outer != nullptr);
+    cwSurveyNode* inner = childNodeNamed(outer, QStringLiteral("inner"));
+    REQUIRE(inner != nullptr);
+
+    // The survey editor stores the entrance on inner, which holds i1.
+    REQUIRE(inner->entrances()->addEntrance(QStringLiteral("i1")) >= 0);
+    drainPipelines(project.get());
+    INFO("driver:\n" << manager->driverSource().toStdString());
+    INFO("cavern log:\n" << manager->cavernLog().toStdString());
+    REQUIRE_FALSE(manager->hasSolveError());
+
+    const QList<cwSolvedEntrance> entrances = manager->solvedEntrances(root->id());
+    INFO("solved entrances: " << stationNames(entrances).join(QStringLiteral(", ")).toStdString());
+    CHECK(manager->solvedEntrances(inner->id()).isEmpty());
+    const std::optional<cwSolvedEntrance> marked =
+        entranceNamed(entrances, QStringLiteral("outer.inner.i1"));
+    REQUIRE(marked.has_value());
+    CHECK(marked->deepestNodeId == inner->id());
+    CHECK(marked->entryName == QStringLiteral("i1"));
+    CHECK_FALSE(marked->fixed);
+    checkAt(*marked, root->scopedPositions(), QStringLiteral("outer.inner.i1"));
+    // The file's own *entrance stays.
+    CHECK(entranceNamed(entrances, QStringLiteral("outer.inner.i2")).has_value());
+
+    const std::optional<cwError> warning = unplacedEntranceWarning(inner);
+    INFO("warning: " << (warning.has_value() ? warning->message().toStdString() : std::string()));
+    CHECK_FALSE(warning.has_value());
+}
+
+TEST_CASE("An entrance marked on an attached Compass .dat's node is solved in that node",
+          "[LinePlotManager][SolvedEntrances]")
+{
+    auto project = makeSavedProject(QStringLiteral("compass-child-entrance"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        project.get(), project->project->cavingRegion()->rootNode(),
+        fixturePath(kCompassProjectFixture));
+    drainPipelines(project.get());
+
+    const cwLinePlotManager* manager = project->rootData->linePlotManager();
+    REQUIRE_FALSE(manager->hasSolveError());
+    cwSurveyNode* alpha = childNodeNamed(root, QStringLiteral("Alpha"));
+    REQUIRE(alpha != nullptr);
+
+    // A3 is no fixed point of PROJECT.MAK, so only Alpha's entry flags it.
+    REQUIRE(alpha->entrances()->addEntrance(QStringLiteral("A3")) >= 0);
+    drainPipelines(project.get());
+    INFO("driver:\n" << manager->driverSource().toStdString());
+    INFO("cavern log:\n" << manager->cavernLog().toStdString());
+    REQUIRE_FALSE(manager->hasSolveError());
+
+    const QList<cwSolvedEntrance> entrances = manager->solvedEntrances(root->id());
+    INFO("solved entrances: " << stationNames(entrances).join(QStringLiteral(", ")).toStdString());
+    const std::optional<cwSolvedEntrance> marked = entranceNamed(entrances, QStringLiteral("alpha.A3"));
+    REQUIRE(marked.has_value());
+    CHECK(marked->deepestNodeId == alpha->id());
+    CHECK(marked->entryName == QStringLiteral("A3"));
+    CHECK_FALSE(marked->fixed);
+    checkAt(*marked, root->scopedPositions(), QStringLiteral("alpha.A3"));
+
+    const std::optional<cwError> warning = unplacedEntranceWarning(alpha);
+    INFO("warning: " << (warning.has_value() ? warning->message().toStdString() : std::string()));
+    CHECK_FALSE(warning.has_value());
+}
+
+TEST_CASE("An entrance marked on a native trip's station under a derived node is solved in that node",
+          "[LinePlotManager][SolvedEntrances]")
+{
+    auto project = makeSavedProject(QStringLiteral("compass-native-child-entrance"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        project.get(), project->project->cavingRegion()->rootNode(),
+        fixturePath(kCompassProjectFixture));
+    drainPipelines(project.get());
+
+    auto* alpha = qobject_cast<cwCave*>(childNodeNamed(root, QStringLiteral("Alpha")));
+    REQUIRE(alpha != nullptr);
+    cwTrip* alpha1 = tripNamed(alpha, QStringLiteral("ALPHA1"));
+    REQUIRE(alpha1 != nullptr);
+    cwTrip* dig = addNativeTripWithShot(alpha, QStringLiteral("Dig"),
+                                        QStringLiteral("D1"), QStringLiteral("D2"));
+    REQUIRE(dig->scopePrefix() == QStringLiteral("dig."));
+    project->project->cavingRegion()->equates()->appendEquate(
+        cwEquate({dig->stationHandle(QStringLiteral("D1")),
+                  alpha1->stationHandle(QStringLiteral("A5"))}));
+    drainPipelines(project.get());
+
+    const cwLinePlotManager* manager = project->rootData->linePlotManager();
+    REQUIRE_FALSE(manager->hasSolveError());
+
+    // The survey editor marks the station by its name in the trip.
+    REQUIRE(alpha->entrances()->addEntrance(QStringLiteral("D2")) >= 0);
+    drainPipelines(project.get());
+    INFO("driver:\n" << manager->driverSource().toStdString());
+    INFO("cavern log:\n" << manager->cavernLog().toStdString());
+    REQUIRE_FALSE(manager->hasSolveError());
+
+    const QList<cwSolvedEntrance> entrances = manager->solvedEntrances(root->id());
+    INFO("solved entrances: " << stationNames(entrances).join(QStringLiteral(", ")).toStdString());
+    const std::optional<cwSolvedEntrance> marked = entranceNamed(entrances, QStringLiteral("dig.d2"));
+    REQUIRE(marked.has_value());
+    CHECK(marked->deepestNodeId == alpha->id());
+    CHECK(marked->entryName == QStringLiteral("D2"));
+    checkAt(*marked, alpha->scopedPositions(), QStringLiteral("dig.d2"));
+
+    const std::optional<cwError> warning = unplacedEntranceWarning(alpha);
+    INFO("warning: " << (warning.has_value() ? warning->message().toStdString() : std::string()));
+    CHECK_FALSE(warning.has_value());
 }
 
 TEST_CASE("A native entrance on an unfixed cave is a solved, unfixed entrance",

@@ -20,7 +20,8 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
                                      const QString& outputPath,
                                      const Options& options,
                                      QSet<QUuid>* originFixedOwners,
-                                     QSet<QString>* fallbackStationKeys)
+                                     QSet<QString>* fallbackStationKeys,
+                                     QHash<QUuid, QHash<QString, QString>>* entranceKeys)
 {
     if (region.caves.isEmpty()) {
         return Monad::ResultBase(QStringLiteral("No caves to do loop closure"),
@@ -103,6 +104,9 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     }
     if (fallbackStationKeys != nullptr) {
         *fallbackStationKeys = plan.fallbackStationKeys();
+    }
+    if (entranceKeys != nullptr) {
+        *entranceKeys = plan.entranceKeys();
     }
     return Monad::ResultBase();
 }

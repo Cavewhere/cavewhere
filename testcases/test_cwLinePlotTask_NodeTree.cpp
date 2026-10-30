@@ -195,17 +195,6 @@ cwCave* childNamed(const cwSurveyNode* parent, const QString& name)
     return nullptr;
 }
 
-cwTrip* tripNamed(const cwSurveyNode* node, const QString& name)
-{
-    const QList<cwTrip*> trips = node->trips();
-    for (cwTrip* trip : trips) {
-        if (trip->name() == name) {
-            return trip;
-        }
-    }
-    return nullptr;
-}
-
 } // namespace
 
 TEST_CASE("A nested tree solves into one region lookup, each node's view holding its subtree",

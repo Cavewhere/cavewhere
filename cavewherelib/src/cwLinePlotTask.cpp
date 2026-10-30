@@ -29,6 +29,8 @@
 #include "cwStation.h"
 #include "cwDebug.h"
 #include "cwLength.h"
+#include "cwEntrance.h"
+#include "cwEntranceModel.h"
 #include "cwErrorModel.h"
 #include "cwData.h"
 #include "cwExternalStationHarvest.h"
@@ -191,7 +193,8 @@ struct cwLinePlotTask::LinePlotWorker {
         indexStations();
         const cwStationPositionLookup stationPositions = regionStationPositions(parsed.lookup);
         updateStationPositions(stationPositions, result);
-        result.SolvedEntrances = solvedEntrancesByNode(parsed, stationPositions);
+        result.SolvedEntrances = solvedEntrancesByNode(parsed, stationPositions,
+                                                       result.PlacedEntrances);
         const QHash<QUuid, cwSplayTipsByStation> nodeSplayTips =
             splitSplayTipsByNode(parsed.splayTips);
         updateSplayTipsForNodes(nodeSplayTips, result);
@@ -260,6 +263,9 @@ private:
     // The region-qualified canonical keys of the stations the driver fixed at
     // the origin: cavern flags them fixed, but the data fixes none of them.
     QSet<QString> FallbackStationKeys;
+    // Each node's entrance entries the driver wrote, by canonical name, mapped
+    // to the region-qualified canonical key of the station each names.
+    QHash<QUuid, QHash<QString, QString>> EntranceKeys;
 
     void initializeScopeLabels()
     {
@@ -305,7 +311,8 @@ private:
         QSet<QUuid> originFixedOwners;
         const Monad::ResultBase r =
             cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions,
-                                                 &originFixedOwners, &FallbackStationKeys);
+                                                 &originFixedOwners, &FallbackStationKeys,
+                                                 &EntranceKeys);
         if (r.hasError()) {
             cwLinePlotTask::SolveError error;
             error.step = cwLinePlotTask::SolveError::Step::Export;
@@ -741,14 +748,41 @@ private:
         return false;
     }
 
+    // A node's entrance entry the driver wrote, by canonical name.
+    struct EntranceHolder {
+        const cwSurveyNode* node = nullptr;
+        QString entry;
+    };
+
+    // The nodes holding an entry for each station the driver wrote an
+    // *entrance for, keyed by the station's region-qualified canonical key.
+    QHash<QString, QList<EntranceHolder>> entranceHoldersByStation() const
+    {
+        QHash<QString, QList<EntranceHolder>> holders;
+        for (auto node = EntranceKeys.cbegin(); node != EntranceKeys.cend(); ++node) {
+            const cwSurveyNode* holder = InternalNodeById.value(node.key(), nullptr);
+            if (holder == nullptr) {
+                continue;
+            }
+            for (auto entry = node->cbegin(); entry != node->cend(); ++entry) {
+                holders[entry.value()].append({holder, entry.key()});
+            }
+        }
+        return holders;
+    }
+
     // The stations cavern flagged as entrances, grouped by owning node and
     // named node-locally, as the node's fix and entrance lists name them.
+    // \a placed receives, for each node, the canonical names of its entrance
+    // entries among them.
     QHash<QUuid, QList<cwSolvedEntrance>> solvedEntrancesByNode(
         const cwSurvex3DFileReader::NetworkAndLookup& parsed,
-        const cwStationPositionLookup& stationPositions) const
+        const cwStationPositionLookup& stationPositions,
+        QHash<QUuid, QSet<QString>>& placed) const
     {
         const QSet<QString> fixedKeys(parsed.fixedStations.cbegin(), parsed.fixedStations.cend());
         const QHash<QString, const cwSurveyNode*> derivedNodesByScope = derivedNodesByCavernScope();
+        const QHash<QString, QList<EntranceHolder>> holdersByStation = entranceHoldersByStation();
         QHash<QUuid, QList<cwSolvedEntrance>> entrances;
         for (const QString& name : parsed.entranceStations) {
             const cwSurveyNode* owner = owningNode(name);
@@ -765,7 +799,26 @@ private:
             entrance.qualifiedName = name;
             entrance.position = stationPositions.position(name);
             entrance.fixed = fixedKeys.contains(key) && !FallbackStationKeys.contains(key);
-            entrance.deepestNodeId = deepestNode(key, owner, derivedNodesByScope)->id();
+
+            // A cavern scope names a derived node; a native trip's station
+            // under a derived node is named by the node holding its entry.
+            const QList<EntranceHolder> holders = holdersByStation.value(key);
+            const cwSurveyNode* deepest = deepestNode(key, owner, derivedNodesByScope);
+            if (deepest == owner) {
+                for (const EntranceHolder& holder : holders) {
+                    if (holder.node != deepest && isInSubtree(holder.node, deepest)) {
+                        deepest = holder.node;
+                    }
+                }
+            }
+            entrance.deepestNodeId = deepest->id();
+            for (const EntranceHolder& holder : holders) {
+                placed[holder.node->id()].insert(holder.entry);
+                if (holder.node == deepest) {
+                    const cwEntranceModel* model = holder.node->entrances();
+                    entrance.entryName = model->entranceAt(model->indexOf(holder.entry)).stationName();
+                }
+            }
             entrances[owner->id()].append(entrance);
         }
         return entrances;

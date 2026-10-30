@@ -15,6 +15,8 @@
 #include <QSet>
 
 // Our includes
+#include "cwScopeLabels.h"
+#include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwSurvexExporterUtils.h"
 #include "cwCavingRegionData.h"
@@ -110,6 +112,46 @@ QString writeRegionToString(const cwCavingRegionData& region,
     cwSurvexExporterRegion::Options options;
     options.outputCSPolicy = policy;
     return writeRegionToString(region, options);
+}
+
+//! A derived node of a sourced subtree: \a cavernLabel is the naming level
+//! cavern opens for it, and \a sourcePath its place inside the source.
+cwCaveData derivedNode(const cwCaveData& root, const QString& name,
+                       const QString& cavernLabel, const QString& sourcePath)
+{
+    cwCaveData node;
+    node.id = QUuid::createUuid();
+    node.name = name;
+    node.sourceId = root.sourceId;
+    node.sourcePath = sourcePath;
+    node.cavernLabel = cavernLabel;
+    return node;
+}
+
+//! survex_nested_entrance.svx attached as a source root, with the harvest's
+//! stations: outer nests inner, which nests side. The caller nests the
+//! derived nodes the scan builds for the blocks.
+cwCaveData nestedEntranceRoot()
+{
+    cwCaveData root;
+    root.id = QUuid::createUuid();
+    root.name = QStringLiteral("Nested");
+    root.sourceId = QUuid::createUuid();
+    root.externalCenterline = cwExternalCenterline(QStringLiteral("survex_nested_entrance.svx"));
+    root.externalStations = {QStringLiteral("outer.o1"), QStringLiteral("outer.o2"),
+                             QStringLiteral("outer.inner.i1"), QStringLiteral("outer.inner.i2"),
+                             QStringLiteral("outer.inner.side.s1"),
+                             QStringLiteral("outer.inner.side.s2")};
+    return root;
+}
+
+cwSurvexExporterRegion::Options attachedOptions(const cwCaveData& root)
+{
+    cwSurvexExporterRegion::Options options;
+    options.caveAttachmentDirs.insert(
+        root.id, testcasesDatasetSourcePath(QStringLiteral("external-centerlines")));
+    options.externalFixedStations.insert(root.id, {QStringLiteral("outer.o1")});
+    return options;
 }
 
 } // namespace
@@ -494,4 +536,112 @@ TEST_CASE("Survex export writes an attached cave's entrance before the file's *i
     REQUIRE(includeIdx >= 0);
     CHECK(entranceIdx < includeIdx);
     CHECK_FALSE(output.contains(QStringLiteral("ghost")));
+}
+
+TEST_CASE("Survex export writes an entrance on a nested block's node in the source root's block",
+          "[cwSurvexExporterFix][SurvexEntrance]") {
+    // The survey editor stores an entrance on the node that holds the
+    // station. The root's block is the only one the sourced subtree writes,
+    // so the entrance is named there by the node's cavern path.
+    cwCaveData root = nestedEntranceRoot();
+    cwCaveData outer = derivedNode(root, QStringLiteral("outer"), QStringLiteral("outer"),
+                                   QStringLiteral("outer"));
+    cwCaveData inner = derivedNode(root, QStringLiteral("inner"), QStringLiteral("inner"),
+                                   QStringLiteral("outer/inner"));
+    inner.entrances.append(makeEntrance(QStringLiteral("i1")));
+
+    SECTION("an entrance on the innermost node") {
+    }
+
+    SECTION("the same station marked on two nodes, in two spellings") {
+        outer.entrances.append(makeEntrance(QStringLiteral("inner.I1")));
+    }
+
+    const QUuid innerId = inner.id;
+    outer.nodes.append(inner);
+    root.nodes.append(outer);
+    cwCavingRegionData region;
+    region.caves.append(root);
+
+    const QString output = writeRegionToString(region, attachedOptions(root));
+    INFO(output.toStdString());
+    const int entranceIdx = output.indexOf(QStringLiteral("*entrance outer.inner.i1\n"),
+                                           0, Qt::CaseInsensitive);
+    REQUIRE(entranceIdx >= 0);
+    const int includeIdx = output.indexOf(QStringLiteral("*include"));
+    REQUIRE(includeIdx >= 0);
+    CHECK(entranceIdx < includeIdx);
+    CHECK(output.count(QStringLiteral("*entrance outer.inner.i1\n"), Qt::CaseInsensitive) == 1);
+
+    // The plan maps inner's entry to the station its *entrance names, in
+    // region scope.
+    const cwScopeLabels labels(region);
+    const cwSurvexExporterCaveTask::DriverTree tree(region.caves, labels);
+    const cwSurvexExporterCaveTask::AnchorPlan plan(tree, attachedOptions(root).externalFixedStations);
+    CHECK(plan.entranceKeys().value(innerId).value(QStringLiteral("i1")).toStdString()
+          == cwStation::canonicalKey(labels.prefix(root.id) + QStringLiteral("outer.inner.i1")).toStdString());
+}
+
+TEST_CASE("Survex export writes a nested block's entrance as a case-preserving file spells it",
+          "[cwSurvexExporterFix][SurvexEntrance]") {
+    // A file under *case preserve keeps its station's case, so the root's
+    // block names it in the file's spelling, whichever spelling the nodes use.
+    cwCaveData root = nestedEntranceRoot();
+    root.externalStations.replace(root.externalStations.indexOf(QStringLiteral("outer.inner.i1")),
+                                  QStringLiteral("outer.inner.I1"));
+    cwCaveData outer = derivedNode(root, QStringLiteral("outer"), QStringLiteral("outer"),
+                                   QStringLiteral("outer"));
+    cwCaveData inner = derivedNode(root, QStringLiteral("inner"), QStringLiteral("inner"),
+                                   QStringLiteral("outer/inner"));
+    inner.entrances.append(makeEntrance(QStringLiteral("i1")));
+    outer.entrances.append(makeEntrance(QStringLiteral("inner.i1")));
+    // A native trip's station is read under the block's *case lower.
+    cwTripData dig = tripWithStations({QStringLiteral("D1"), QStringLiteral("D2")});
+    dig.name = QStringLiteral("Dig");
+    outer.trips.append(dig);
+    outer.entrances.append(makeEntrance(QStringLiteral("D2")));
+    outer.nodes.append(inner);
+    root.nodes.append(outer);
+    cwCavingRegionData region;
+    region.caves.append(root);
+
+    const QString output = writeRegionToString(region, attachedOptions(root));
+    INFO(output.toStdString());
+    CHECK(output.count(QStringLiteral("*case preserve\n*entrance outer.inner.I1\n*end\n")) == 1);
+    CHECK(output.count(QStringLiteral("*entrance outer.inner.i1\n"), Qt::CaseInsensitive) == 1);
+    CHECK(output.count(QStringLiteral("*entrance dig.d2\n")) == 1);
+    CHECK(output.count(QStringLiteral("*case preserve")) == 1);
+}
+
+TEST_CASE("Survex export writes a native entrance in the node's spelling, under *case lower",
+          "[cwSurvexExporterFix][SurvexEntrance]") {
+    cwCavingRegionData region;
+    cwCaveData cave = makeCave(QStringLiteral("Upper"), {QStringLiteral("A1"), QStringLiteral("A2")});
+    cave.entrances.append(makeEntrance(QStringLiteral("A2")));
+    region.caves.append(cave);
+
+    const QString output = writeRegionToString(region);
+    INFO(output.toStdString());
+    CHECK(output.count(QStringLiteral("*entrance A2\n")) == 1);
+    CHECK_FALSE(output.contains(QStringLiteral("*case preserve")));
+}
+
+TEST_CASE("Survex export writes an entrance on a native trip's station under a derived node",
+          "[cwSurvexExporterFix][SurvexEntrance]") {
+    // The survey editor marks the station by its name in the trip, and the
+    // root's block writes the trip under its label.
+    cwCaveData root = nestedEntranceRoot();
+    cwCaveData outer = derivedNode(root, QStringLiteral("outer"), QStringLiteral("outer"),
+                                   QStringLiteral("outer"));
+    cwTripData dig = tripWithStations({QStringLiteral("D1"), QStringLiteral("D2")});
+    dig.name = QStringLiteral("Dig");
+    outer.trips.append(dig);
+    outer.entrances.append(makeEntrance(QStringLiteral("D2")));
+    root.nodes.append(outer);
+    cwCavingRegionData region;
+    region.caves.append(root);
+
+    const QString output = writeRegionToString(region, attachedOptions(root));
+    INFO(output.toStdString());
+    CHECK(output.count(QStringLiteral("*entrance dig.d2\n"), Qt::CaseInsensitive) == 1);
 }

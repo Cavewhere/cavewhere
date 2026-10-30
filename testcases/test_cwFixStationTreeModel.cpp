@@ -174,19 +174,6 @@ const cwSurveyNode* derivedNode(const cwSurveyNode* root, const QString& sourceP
     return nullptr;
 }
 
-//! \a node's trip named \a name.
-const cwTrip* tripNamed(const cwSurveyNode* node, const QString& name)
-{
-    for (const cwTrip* trip : node->trips()) {
-        if (trip->name() == name) {
-            return trip;
-        }
-    }
-    INFO("trip " << name.toStdString());
-    FAIL("No trip has that name");
-    return nullptr;
-}
-
 //! The fixes \a trip lists, by station.
 QStringList tripFixStations(const cwTrip* trip)
 {

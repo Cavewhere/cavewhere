@@ -32,6 +32,9 @@ struct cwSolvedEntrance {
     //! node below the owning node that cavern scopes an attached station
     //! under, else the owning node itself.
     QUuid deepestNodeId;
+    //! The station as the deepest node's entrance list spells it, when that
+    //! list marks it; empty otherwise.
+    QString entryName;
 
     bool operator==(const cwSolvedEntrance& other) const = default;
 };

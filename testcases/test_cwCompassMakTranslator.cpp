@@ -12,8 +12,10 @@
 #include "ExternalCenterlineTestHelpers.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwCavingRegionData.h"
 #include "cwCompassMakFile.h"
 #include "cwCompassMakTranslator.h"
+#include "cwEntrance.h"
 #include "cwEntranceModel.h"
 #include "cwExternalCenterline.h"
 #include "cwFixStation.h"
@@ -81,10 +83,9 @@ cwCave* addAttachedCave(cwCavingRegion& region, const QString& name, const QStri
     return cave;
 }
 
-QString driverFor(const cwCavingRegion& region, const cwSurvexExporterRegion::Options& options,
+QString driverFor(const cwCavingRegionData& regionData, const cwSurvexExporterRegion::Options& options,
                   const QString& globalCS, QStringList* errors = nullptr)
 {
-    const cwCavingRegionData regionData = region.data();
     const cwSurvexExporterCaveTask::DriverTree tree(regionData.caves, cwScopeLabels(regionData));
     const cwSurvexExporterCaveTask::AnchorPlan plan(tree, options.externalFixedStations);
     cwSurvexExporterCaveTask task;
@@ -100,6 +101,12 @@ QString driverFor(const cwCavingRegion& region, const cwSurvexExporterRegion::Op
         *errors = task.errors();
     }
     return driver;
+}
+
+QString driverFor(const cwCavingRegion& region, const cwSurvexExporterRegion::Options& options,
+                  const QString& globalCS, QStringList* errors = nullptr)
+{
+    return driverFor(region.data(), options, globalCS, errors);
 }
 
 //! Fails unless every one of \a lines appears in \a driver, in that order.
@@ -271,6 +278,48 @@ TEST_CASE("The driver writes a node entrance on a .mak station inside the statio
                           QStringLiteral("*entrance A2\n"),
                           QStringLiteral("*end compass_zone_no_datum\n")});
     CHECK(driver.count(QStringLiteral("*entrance A2\n")) == 1);
+}
+
+TEST_CASE("The driver writes an entrance on a .dat's node inside that .dat's block",
+          "[cwSurvexExporter][Compass][SurvexEntrance]")
+{
+    // The survey editor stores the entrance on the .dat's node, named as the
+    // file names the station; the .mak's translation places it in the block.
+    cwCaveData root;
+    root.id = QUuid::createUuid();
+    root.name = QStringLiteral("Zone");
+    root.sourceId = QUuid::createUuid();
+    root.externalCenterline = cwExternalCenterline(kZoneNoDatumMak);
+    root.externalStations = {QStringLiteral("compass_zone_no_datum.A1"),
+                             QStringLiteral("compass_zone_no_datum.A2"),
+                             QStringLiteral("compass_zone_no_datum.A3")};
+
+    cwCaveData dat;
+    dat.id = QUuid::createUuid();
+    dat.name = QStringLiteral("compass_zone_no_datum");
+    dat.sourceId = root.sourceId;
+    dat.sourcePath = QStringLiteral("compass_zone_no_datum.dat");
+    dat.cavernLabel = QStringLiteral("compass_zone_no_datum");
+    cwEntrance entrance;
+    entrance.setStationName(QStringLiteral("A3"));
+    dat.entrances.append(entrance);
+    root.nodes.append(dat);
+
+    cwCavingRegionData region;
+    region.caves.append(root);
+
+    cwSurvexExporterRegion::Options options;
+    options.caveAttachmentDirs.insert(root.id, fixtureDir());
+    options.externalFixedStations.insert(root.id, {QStringLiteral("compass_zone_no_datum.A1")});
+
+    const QString driver = driverFor(region, options, kUtm13N);
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK_FALSE(driver.contains(QStringLiteral("*entrance compass_zone_no_datum."), Qt::CaseInsensitive));
+    checkInOrder(driver, {QStringLiteral("*begin compass_zone_no_datum\n"),
+                          QStringLiteral("*entrance A3\n"),
+                          QStringLiteral("*end compass_zone_no_datum\n")});
+    CHECK(driver.count(QStringLiteral("*entrance A3\n")) == 1);
 }
 
 TEST_CASE("The driver translates a trip-attached .mak inside the trip's block",

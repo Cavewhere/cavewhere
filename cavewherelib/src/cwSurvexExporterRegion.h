@@ -126,13 +126,17 @@ public:
     //! When given, \a originFixedOwners receives the attached-file owners (trip
     //! ids and sourced-root node ids) whose *include the driver fixes at the
     //! origin, and \a fallbackStationKeys the region-qualified canonical key
-    //! of every station the driver fixes at the origin; both are written only
-    //! when the driver is written in full.
+    //! of every station the driver fixes at the origin, and \a entranceKeys
+    //! each node's entrance entries mapped to the region-qualified canonical
+    //! key of the station each *entrance names
+    //! (cwSurvexExporterCaveTask::AnchorPlan::entranceKeys); all are written
+    //! only when the driver is written in full.
     static Monad::ResultBase exportRegion(const cwCavingRegionData& region,
                                           const QString& outputPath,
                                           const Options& options,
                                           QSet<QUuid>* originFixedOwners = nullptr,
-                                          QSet<QString>* fallbackStationKeys = nullptr);
+                                          QSet<QString>* fallbackStationKeys = nullptr,
+                                          QHash<QUuid, QHash<QString, QString>>* entranceKeys = nullptr);
 };
 
 #endif // CWSURVEXEXPORTERREGION_H

@@ -64,16 +64,6 @@ cwSurveyNode* regionRoot(SavedProjectFixture* fixture)
     return fixture->project->cavingRegion()->rootNode();
 }
 
-cwTrip* tripNamed(const cwSurveyNode* node, const QString& name)
-{
-    for (cwTrip* trip : node->trips()) {
-        if (trip->name() == name) {
-            return trip;
-        }
-    }
-    return nullptr;
-}
-
 QString attachmentDirOf(SavedProjectFixture* fixture, const cwSurveyNode* root)
 {
     return fixture->saveLoad()->externalCenterlineDir(qobject_cast<const cwCave*>(root)).absolutePath();

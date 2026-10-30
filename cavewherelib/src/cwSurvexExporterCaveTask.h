@@ -148,9 +148,15 @@ public:
             QStringList errors;
             //! The node's entrances on stations its block knows, trimmed and
             //! once per station, that the block writes itself: every one
-            //! except those in makEntrances. An entrance on a station the
-            //! block does not know is left out, since cavern warns about it.
+            //! except those in makEntrances. A source root's block also writes
+            //! the entrances of every node in its subtree, named in the
+            //! root's scope. An entrance on a station the block does not know
+            //! is left out, since cavern warns about it.
             QStringList entrances;
+            //! A source root's entrances on its attached file's stations whose
+            //! file spelling differs from the canonical one, written inside
+            //! *case preserve so cavern keeps that spelling.
+            QStringList fileSpelledEntrances;
             //! The entrances on an attached Compass .mak's stations, keyed and
             //! named as makFixes are.
             QHash<QUuid, QStringList> makEntrances;
@@ -173,6 +179,11 @@ public:
         //! fixes at the origin.
         const QSet<QString>& fallbackStationKeys() const { return m_fallbackStationKeys; }
 
+        //! For each node whose entrances the driver writes: each entry's
+        //! canonical name, mapped to the region-qualified canonical key of the
+        //! station its *entrance names.
+        const QHash<QUuid, QHash<QString, QString>>& entranceKeys() const { return m_entranceKeys; }
+
     private:
         class Builder;
 
@@ -180,6 +191,7 @@ public:
         QHash<QUuid, QString> m_fallbackStations;
         QSet<QUuid> m_originFixedOwners;
         QSet<QString> m_fallbackStationKeys;
+        QHash<QUuid, QHash<QString, QString>> m_entranceKeys;
     };
 
     //! The single-cave export: \a cave and its subtree, standing alone, labeled

@@ -706,6 +706,45 @@ TEST_CASE("The entrance MarkerView renames an attached entrance with its deepest
     CHECK(solvedSpy.count() == 0);
 }
 
+TEST_CASE("The entrance MarkerView names an entrance marked on its deepest node by that node's label",
+          "[cwEntranceMarkerSource]")
+{
+    // The survey editor stored the entrance on inner, a Survex block's node
+    // below the source root; the solve files it under the root.
+    EntranceFixture f;
+    cwCave* sourceRoot = SurveyTreeTestHelper::addNode(&f.region, nullptr, cwSurveyNode::Kind::SurvexFile,
+                                                       QStringLiteral("nested.svx"));
+    const QString innerName = QStringLiteral("inner");
+    cwCave* inner = f.addMeasuredNode(sourceRoot, cwSurveyNode::Kind::SurvexBlock, innerName,
+                                      kAlphaLengthMeters, kAlphaDepthMeters);
+    const QString entryName = QStringLiteral("i1");
+    const QString qualifiedStation = QStringLiteral("outer.inner.i1");
+    const int entryRow = inner->entrances()->addEntrance(entryName);
+    REQUIRE(entryRow >= 0);
+
+    cwSolvedEntrance marked = solvedEntrance(qualifiedStation, kSolvedPosition, false);
+    marked.deepestNodeId = inner->id();
+    marked.entryName = entryName;
+    SurveyTreeTestHelper::setSolvedEntrances(sourceRoot, {marked});
+
+    SECTION("an unlabeled entry draws the node's name") {
+        REQUIRE(f.waitForOneEntrance());
+        CHECK(joined(f.drawnTexts()) == joined({innerName}));
+    }
+
+    SECTION("a labeled entry draws its label") {
+        const QString label = QStringLiteral("North Door");
+        REQUIRE(inner->entrances()->setData(inner->entrances()->index(entryRow), label,
+                                            cwEntranceModel::LabelRole));
+        REQUIRE(f.waitForOneEntrance());
+        CHECK(waitUntil([&] { return f.drawnTexts() == QStringList{label}; }));
+        CHECK(joined(f.drawnTexts()) == joined({label}));
+        QQuickItem* point = f.point(QStringLiteral("entrancePoint_") + qualifiedStation);
+        REQUIRE(point != nullptr);
+        CHECK(point->property("label").toString().toStdString() == label.toStdString());
+    }
+}
+
 TEST_CASE("The entrance MarkerView renames an entrance's line 1 from its label without a re-solve",
           "[cwEntranceMarkerSource]")
 {
