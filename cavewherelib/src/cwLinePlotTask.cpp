@@ -756,7 +756,8 @@ private:
     };
 
     // The nodes holding an entry for each station the driver wrote an
-    // *entrance for, keyed by the station's region-qualified canonical key.
+    // *entrance for, keyed by the station's region-qualified solved key: its
+    // canonical key, or a case-pair member's caseDistinctKey.
     QHash<QString, QList<EntranceHolder>> entranceHoldersByStation() const
     {
         QHash<QString, QList<EntranceHolder>> holders;
@@ -801,9 +802,17 @@ private:
             entrance.position = stationPositions.position(name);
             entrance.fixed = fixedKeys.contains(key) && !FallbackStationKeys.contains(key);
 
+            // A case-pair member's holders are keyed by its own spelling.
+            QStringList levels = name.split(QLatin1Char('.'));
+            const QString station = levels.takeLast();
+            const auto distinctHolders =
+                holdersByStation.constFind(cwStation::caseDistinctKey(levels, station));
+            const QList<EntranceHolder> holders = distinctHolders != holdersByStation.cend()
+                                                      ? distinctHolders.value()
+                                                      : holdersByStation.value(key);
+
             // A cavern scope names a derived node; a native trip's station
             // under a derived node is named by the node holding its entry.
-            const QList<EntranceHolder> holders = holdersByStation.value(key);
             const cwSurveyNode* deepest = deepestNode(key, owner, derivedNodesByScope);
             if (deepest == owner) {
                 for (const EntranceHolder& holder : holders) {

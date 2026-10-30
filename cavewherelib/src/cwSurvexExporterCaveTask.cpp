@@ -427,25 +427,29 @@ private:
         }
     }
 
-    // The attached file's stations in \a root's block, each canonical key
+    // The attached file's stations in \a root's block, each solved key
     // mapped to the name as the file spells it below its canonical scope, as
-    // DriverTree::sourcedTripOperand spells a derived station.
+    // DriverTree::sourcedTripOperand spells a derived station. Each member
+    // of a case pair keeps a key of its own.
     void addFileSpellings(const cwCaveData& root, QHash<QString, QString>& spellings) const
     {
-        for (const QString& station : root.externalStations) {
-            spellings.insert(cwStation::canonicalKey(station), station);
-        }
+        const auto addStations = [&](const QString& scope, const QStringList& stations) {
+            const QString scopeKey = cwStation::canonicalKey(scope);
+            const QHash<QString, QString> keys =
+                cwSurvexExporterUtils::stationKeysBySpelling(scope, stations);
+            for (auto it = keys.cbegin(); it != keys.cend(); ++it) {
+                spellings.insert(it.value(), scopeKey + it.key());
+            }
+        };
+        addStations(QString(), root.externalStations);
         const cwScopeLabels& labels = m_tree.labels();
         const auto addTrips = [&](const cwCaveData& node, const QStringList&) {
             for (const cwTripData& trip : node.trips) {
                 if (trip.sourcePath.isEmpty()) {
                     continue;
                 }
-                const QString scope = cwStation::canonicalKey(
-                    labels.cavernPath(node.id) + cwTrip::scopePrefix(trip, labels, node.id));
-                for (const QString& station : trip.externalStations) {
-                    spellings.insert(scope + cwStation::canonicalKey(station), scope + station);
-                }
+                addStations(labels.cavernPath(node.id) + cwTrip::scopePrefix(trip, labels, node.id),
+                            trip.externalStations);
             }
         };
         addTrips(root, QStringList());
@@ -458,13 +462,15 @@ private:
     // the name below a native trip's label in the holder (as the survey
     // editor stores it), then the name as given when it starts with such a
     // label. A station of the attached file keeps the file's spelling from
-    // \a fileSpellings; any other is canonical, since the block folds it.
+    // \a fileSpellings, and a name spelled as one member of a case pair names
+    // that member; any other is canonical, since the block folds it.
     QString sourcedEntranceName(const cwCaveData& holder, const QString& name,
                                 const QSet<QString>& knownKeys,
                                 const QHash<QString, QString>& fileSpellings) const
     {
         const cwScopeLabels& labels = m_tree.labels();
-        const QString derivedKey = cwStation::canonicalKey(labels.cavernPath(holder.id) + name);
+        const QString derivedKey = cwStation::keyIn(
+            cwStation::canonicalKey(labels.cavernPath(holder.id)) + name, knownKeys);
         if (knownKeys.contains(derivedKey)) {
             return fileSpellings.value(derivedKey, derivedKey);
         }
@@ -617,18 +623,19 @@ private:
         QSet<QString> writtenKeys;
         const auto writeEntrance = [&](const QUuid& holderId, const QString& entry,
                                        const QString& spelled) {
-            const QString key = cwStation::canonicalKey(spelled);
+            const QString key = cwStation::keyIn(spelled, stationKeys);
             stations.entranceKeys[holderId].insert(cwStation::canonicalKey(entry), key);
             if (writtenKeys.contains(key)) {
                 return;
             }
             writtenKeys.insert(key);
-            const auto makOwner = makStationOwners.constFind(key);
-            if (makOwner != makStationOwners.constEnd()) {
-                fixes.makEntrances[makOwner->ownerId].append(spelled.mid(makOwner->scope.size()));
+            const auto fileStation = fileStations.constFind(key);
+            if (fileStation != fileStations.constEnd() && fileStation->isMak) {
+                fixes.makEntrances[fileStation->ownerId].append(
+                    m_tree.externalStationLabel(fileStation->ownerId, fileStation->spelling));
             } else if (makRoot && derivedKeys.contains(key)) {
                 fixes.makEntrances[node.id].append(spelled);
-            } else if (sourceRoot && spelled != key) {
+            } else if (sourceRoot && spelled != cwStation::canonicalKey(spelled)) {
                 fixes.fileSpelledEntrances.append(spelled);
             } else {
                 fixes.entrances.append(spelled);
@@ -637,7 +644,7 @@ private:
 
         if (sourceRoot) {
             addDerivedStations(node, derivedKeys);
-            const QSet<QString> knownKeys = stationNamesLower + derivedKeys;
+            const QSet<QString> knownKeys = stationKeys + derivedKeys;
             QHash<QString, QString> fileSpellings;
             addFileSpellings(node, fileSpellings);
             const auto writeHolderEntrances = [&](const cwCaveData& holder, const QStringList&) {
@@ -654,7 +661,7 @@ private:
         } else {
             for (const cwEntrance& entrance : node.entrances) {
                 const QString name = entrance.stationName().trimmed();
-                if (stationNamesLower.contains(cwStation::canonicalKey(name))) {
+                if (stationKeys.contains(cwStation::keyIn(name, stationKeys))) {
                     writeEntrance(node.id, name, name);
                 }
             }

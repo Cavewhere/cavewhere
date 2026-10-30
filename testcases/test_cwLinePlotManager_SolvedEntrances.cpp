@@ -8,6 +8,7 @@
 // Catch
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 // Cavewhere
 #include "cwCave.h"
@@ -349,6 +350,51 @@ TEST_CASE("An entrance marked on a nested Survex block's node is solved in that 
     CHECK(entranceNamed(entrances, QStringLiteral("outer.inner.i2")).has_value());
 
     const std::optional<cwError> warning = unplacedEntranceWarning(inner);
+    INFO("warning: " << (warning.has_value() ? warning->message().toStdString() : std::string()));
+    CHECK_FALSE(warning.has_value());
+}
+
+TEST_CASE("An entrance marked on one member of an attached file's case pair is solved at that member",
+          "[LinePlotManager][SolvedEntrances][CasePairs]")
+{
+    // survex_case_pair_block.svx: pairs.P2 and pairs.p2 are two stations 30 m apart.
+    constexpr double kPairSeparationMeters = 30.0;
+    const QString marked = GENERATE(QStringLiteral("pairs.P2"), QStringLiteral("pairs.p2"));
+    const QString other = marked == QStringLiteral("pairs.P2") ? QStringLiteral("pairs.p2")
+                                                               : QStringLiteral("pairs.P2");
+    INFO("the entrance names " << marked.toStdString());
+
+    auto project = makeSavedProject(QStringLiteral("case-pair-entrance"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        project.get(), project->project->cavingRegion()->rootNode(),
+        fixturePath(QStringLiteral("survex_case_pair_block.svx")));
+    drainPipelines(project.get());
+
+    const cwLinePlotManager* manager = project->rootData->linePlotManager();
+    REQUIRE_FALSE(manager->hasSolveError());
+
+    REQUIRE(root->entrances()->addEntrance(marked) >= 0);
+    drainPipelines(project.get());
+    INFO("driver:\n" << manager->driverSource().toStdString());
+    INFO("cavern log:\n" << manager->cavernLog().toStdString());
+    REQUIRE_FALSE(manager->hasSolveError());
+
+    const cwStationPositionLookup lookup = root->scopedPositions();
+    REQUIRE(lookup.hasPosition(marked));
+    REQUIRE(lookup.hasPosition(other));
+    REQUIRE(lookup.position(marked).distanceToPoint(lookup.position(other))
+            == Catch::Approx(kPairSeparationMeters).margin(kPositionMarginMeters));
+
+    const QList<cwSolvedEntrance> entrances = manager->solvedEntrances(root->id());
+    INFO("solved entrances: " << stationNames(entrances).join(QStringLiteral(", ")).toStdString());
+    REQUIRE(entrances.size() == 1);
+    const cwSolvedEntrance& entrance = entrances.first();
+    CHECK(entrance.stationName == marked);
+    CHECK(entrance.entryName == marked);
+    checkAt(entrance, lookup, marked);
+
+    const std::optional<cwError> warning = unplacedEntranceWarning(root);
     INFO("warning: " << (warning.has_value() ? warning->message().toStdString() : std::string()));
     CHECK_FALSE(warning.has_value());
 }
