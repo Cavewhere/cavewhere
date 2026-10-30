@@ -28,12 +28,15 @@ QString keywordKeyKey() { return QStringLiteral("colorBy/keywordKey"); }
 constexpr double kDefaultScrapStrength = 0.6;
 constexpr float kOpaque = 1.0f;
 
-// Loop error bar: fixed 0..kBadSigma standard deviations, one tick per
+// Loop error bar: fixed 0..kBlunderSigma standard deviations, one tick per
 // sigma. A value lands in the band of the highest threshold it reaches.
-constexpr double kPerfectSigma = 0.0;
+constexpr double kExcellentSigma = 0.0;
 constexpr double kGoodSigma = 1.0;
-constexpr double kOkaySigma = 2.0;
-constexpr double kBadSigma = 3.0;
+constexpr double kFairSigma = 2.0;
+constexpr double kSuspectSigma = 3.0;
+constexpr double kPoorSigma = 4.0;
+constexpr double kBadSigma = 5.0;
+constexpr double kBlunderSigma = 6.0;
 
 // Matches kNoDataColor in LinePlot.frag
 constexpr double kNoDataGray = 0.55;
@@ -226,7 +229,7 @@ void cwColorBy::setSource(Source source)
 cwColorBy::Range cwColorBy::activeRange() const
 {
     if (m_source == Source::LoopError) {
-        return {kPerfectSigma, kBadSigma};
+        return {kExcellentSigma, kBlunderSigma};
     }
     return {m_rangeMin, m_rangeMax};
 }
@@ -234,7 +237,7 @@ cwColorBy::Range cwColorBy::activeRange() const
 QList<double> cwColorBy::legendTicks() const
 {
     if (m_source == Source::LoopError) {
-        return {kPerfectSigma, kGoodSigma, kOkaySigma, kBadSigma};
+        return {kExcellentSigma, kGoodSigma, kFairSigma, kSuspectSigma, kPoorSigma, kBadSigma, kBlunderSigma};
     }
     return m_legendTicks;
 }
@@ -378,7 +381,7 @@ QString cwColorBy::formatTick(double value) const
 {
     if (m_source == Source::LoopError) {
         // The top of the scale also stands for every larger error
-        const QString atLeast = value >= kBadSigma ? QStringLiteral(u"\u2265") : QString();
+        const QString atLeast = value >= kBlunderSigma ? QStringLiteral(u"\u2265") : QString();
         return QStringLiteral(u"%1%2 \u03c3").arg(atLeast, wholeNumberText(value));
     }
     return formatDepth(value);
@@ -389,16 +392,25 @@ QString cwColorBy::bandName(double sigma) const
     if (m_source != Source::LoopError) {
         return {};
     }
+    if (sigma >= kBlunderSigma) {
+        return tr("Blunder");
+    }
     if (sigma >= kBadSigma) {
         return tr("Bad");
     }
-    if (sigma >= kOkaySigma) {
-        return tr("Okay");
+    if (sigma >= kPoorSigma) {
+        return tr("Poor");
+    }
+    if (sigma >= kSuspectSigma) {
+        return tr("Suspect");
+    }
+    if (sigma >= kFairSigma) {
+        return tr("Fair");
     }
     if (sigma >= kGoodSigma) {
         return tr("Good");
     }
-    return tr("Perfect");
+    return tr("Excellent");
 }
 
 QColor cwColorBy::noDataColor() const

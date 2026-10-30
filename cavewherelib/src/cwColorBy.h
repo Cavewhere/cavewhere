@@ -80,7 +80,7 @@ public:
     void setPivotManual(double pivot);
     bool hasPivotManual() const { return m_hasPivotManual; }
     Q_INVOKABLE void clearPivotManual();
-    // The bar's range: 0..3 sigma for loop error, otherwise the visible z
+    // The bar's range: 0..6 sigma for loop error, otherwise the visible z
     // extent snapped outward to the legend's tick interval, in meters.
     double rangeMin() const { return activeRange().lo; }
     double rangeMax() const { return activeRange().hi; }
@@ -105,7 +105,7 @@ public:
     cwUnits::UnitSystem unitSystem() const { return m_unitSystem; }
     void setUnitSystem(cwUnits::UnitSystem system);
 
-    // Loop error ticks are 0, 1, 2, 3 sigma. Depth ticks are in meters: every
+    // Loop error ticks are 0 through 6 sigma. Depth ticks are in meters: every
     // multiple of a {1,2,5}x10^n step (picked in the depth unit) from rangeMin
     // to rangeMax inclusive, at most seven. The range is snapped to the step,
     // so both ends are ticks.
@@ -113,10 +113,11 @@ public:
     // A depth in the unit system's depth unit, whole numbers, with a real
     // minus sign (U+2212): "−500 m", "−1640 ft".
     Q_INVOKABLE QString formatDepth(double meters) const;
-    // A legend tick label: whole sigma for loop error ("0 σ", "≥3 σ" at the
+    // A legend tick label: whole sigma for loop error ("0 σ", "≥6 σ" at the
     // top of the scale), formatDepth otherwise.
     Q_INVOKABLE QString formatTick(double value) const;
-    // The loop error band a sigma value falls in: Perfect, Good, Okay or Bad.
+    // The loop error band a sigma value falls in: Excellent, Good, Fair,
+    // Suspect, Poor, Bad or Blunder.
     // Empty in the other sources.
     Q_INVOKABLE QString bandName(double sigma) const;
     // The gray the centerline draws legs without a loop in. Keep in sync with
