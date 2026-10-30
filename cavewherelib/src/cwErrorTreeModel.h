@@ -13,12 +13,12 @@
 #include <QPointer>
 #include <QQmlEngine>
 #include <QSortFilterProxyModel>
-class QConcatenateTablesProxyModel;
 
 //Our includes
 #include "cwGlobals.h"
 #include "cwErrorListModel.h"
 class cwErrorModel;
+class cwErrorTreeListModel;
 
 /**
  * Every error under root (trip -> chunks -> cells) as one flat list, live as
@@ -27,6 +27,10 @@ class cwErrorModel;
  *
  * Rows are the source cwErrorListModels' own rows, so setData(SuppressedRole)
  * here is the same operation as ticking the cell popup's checkbox.
+ *
+ * Child models that join arrive together in one queued pass; child models that
+ * leave take their rows with them at once. count and kinds follow in a queued
+ * pass.
  */
 class CAVEWHERE_LIB_EXPORT cwErrorTreeModel : public QSortFilterProxyModel
 {
@@ -85,22 +89,33 @@ protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
 
 private:
-    QConcatenateTablesProxyModel* m_concat;
+    cwErrorTreeListModel* m_flat;
     QPointer<cwErrorModel> m_root;
     bool m_ignoredOnly = false;
     QString m_kindFilter;
     QStringList m_kinds;
     int m_count = 0;
 
-    //Each tracked node and the list model it contributed to m_concat
+    //Each tracked node and the list model it contributes to m_flat
     QHash<cwErrorModel*, QPointer<cwErrorListModel>> m_tracked;
+    //Tracked nodes whose list models join m_flat in the next pass
+    QList<cwErrorModel*> m_pendingAdds;
+    bool m_passScheduled = false;
+    bool m_summaryDirty = false;
 
-    bool passesSuppressedFilter(const QModelIndex& concatIndex) const;
-    void track(cwErrorModel* node);
+    bool passesSuppressedFilter(const cwError& error) const;
+    void track(cwErrorModel* node, QList<cwErrorModel*>* trackedNodes);
+    void addChild(cwErrorModel* child);
     void untrack(cwErrorModel* node);
+    void untrackSubtree(cwErrorModel* node, QList<cwErrorListModel*>* lists);
     void untrackAll();
     void forgetDestroyedNode(QObject* node);
-    void removeSourceOf(cwErrorModel* node);
+    void clearForDestroyedRoot();
+    void addPendingSources();
+    void onFlatDataChanged(const QModelIndex& topLeft, const QModelIndex& bottomRight, const QList<int>& roles);
+    void markSummaryDirty();
+    void schedulePass();
+    void runPass();
     void refresh();
 };
 
