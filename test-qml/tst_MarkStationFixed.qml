@@ -16,7 +16,7 @@ MainWindowTest {
         testWindow: rootId
     }
 
-    TestCase {
+    ExternalCenterlineTestCase {
         name: "MarkStationFixed"
         when: windowShown
 
@@ -80,13 +80,15 @@ MainWindowTest {
 
             let markItem = null
             let removeItem = null
+            let entranceItem = null
             tryVerify(() => {
                 markItem = findChild(stationBox, "markStationFixedMenuItem")
                 removeItem = findChild(stationBox, "removeStationFixMenuItem")
-                return markItem !== null && removeItem !== null
-            }, 5000, "fix caret menu should have both items")
+                entranceItem = findChild(stationBox, "markStationEntranceMenuItem")
+                return markItem !== null && removeItem !== null && entranceItem !== null
+            }, 5000, "fix caret menu should have the fix items and the entrance item")
 
-            return { mark: markItem, remove: removeItem }
+            return { mark: markItem, remove: removeItem, entrance: entranceItem }
         }
 
         function fixStationPopup() {
@@ -135,13 +137,43 @@ MainWindowTest {
             const stationBox = focusedStationBox(context, 0)
             const menu = openFixMenu(stationBox)
             compare(menu.mark.text, "Mark Station as Fixed")
+            compare(menu.mark.enabled, true)
             compare(menu.remove.enabled, false)
+            compare(menu.entrance.enabled, true)
 
             menu.mark.triggered()
 
             tryCompare(context.cave.fixStations, "count", 1)
             const model = context.cave.fixStations
             compare(model.data(model.index(0), FixStationModel.StationNameRole), "A1")
+        }
+
+        // A hand-entered trip under a node derived from an attached file: the
+        // node cannot hold fixes, so the editor offers no fix, while marking
+        // an entrance stays available.
+        function test_nativeTripUnderAnAttachedChildNodeOffersNoFix() {
+            const root = attachCompassProject("markFixedUnderAttached")
+            const alpha = childNamed(root, "Alpha")
+            verify(alpha !== null, "the attached project should hold Alpha's node")
+            compare(alpha.canHoldFixes, false)
+
+            const trip = addTripNamingStations(alpha, ["D1", "D2"])
+            trip.name = "Dig"
+            compare(trip.externallyBacked, false)
+
+            const context = surveyTableId.openSurveyTableForTrip(
+                              this,
+                              "Source/Data/Node=" + root.name + "/Node=" + alpha.name + "/Trip=" + trip.name,
+                              trip)
+
+            const stationBox = focusedStationBox(context, 0)
+            compare(stationBox.canFix, false)
+
+            const menu = openFixMenu(stationBox)
+            compare(menu.mark.enabled, false)
+            compare(menu.remove.enabled, false)
+            compare(menu.entrance.enabled, true)
+            compare(alpha.fixStations.count, 0)
         }
 
         function test_fixedStationShowsBadge() {

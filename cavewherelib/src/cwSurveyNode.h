@@ -254,7 +254,8 @@ public:
     //! cwFixStationModel::addFixStation(name) does. When this creates the fix it
     //! also marks the station an entrance, unless it already is one. A station
     //! already fixed is left as it is (Edit Fixed Coordinates). -1 for an
-    //! empty name.
+    //! empty name, and -1 with nothing stored (no fix, no entrance) on a node
+    //! where canHoldFixes() is false.
     Q_INVOKABLE int addFixedEntrance(const QString& stationName);
 
     //! The user's "Remove Fix": removes the fix on \a stationName and the

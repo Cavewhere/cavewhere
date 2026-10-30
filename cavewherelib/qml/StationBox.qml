@@ -57,7 +57,10 @@ DataBox {
     // row, which offers neither action.
     readonly property bool hasStationName: stationBox.stationNameValue.trim() !== ""
 
-    readonly property bool canFix: stationBox.fixStationPopup !== null && stationBox.hasStationName
+    // A derived child node of an attached file cannot hold fixes.
+    readonly property bool canFix: stationBox.fixStationPopup !== null
+                                   && stationBox.hasStationName
+                                   && (stationBox.fixStationPopup.cave?.canHoldFixes ?? false)
 
     readonly property bool canEditEntrance: stationBox.entrancePopup !== null && stationBox.hasStationName
 

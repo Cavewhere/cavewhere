@@ -1630,6 +1630,10 @@ cwSurveyNode* cwSurveyNode::caveNode()
 
 int cwSurveyNode::addFixedEntrance(const QString& stationName)
 {
+    if (!canHoldFixes()) {
+        return -1;
+    }
+
     const int existingRow = m_fixStations->indexOf(stationName);
     if (existingRow >= 0) {
         return existingRow;

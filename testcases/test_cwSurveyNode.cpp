@@ -7,6 +7,7 @@
 #include "cwCave.h"
 #include "cwCaveData.h"
 #include "cwCavingRegion.h"
+#include "cwEntranceModel.h"
 #include "cwFixStationModel.h"
 #include "cwSignalSpy.h"
 #include "cwSurveyNode.h"
@@ -1273,5 +1274,51 @@ TEST_CASE("caveNode is the nearest Cave at or above a node", "[SurveyNode][cwEnt
         section->setKind(cwSurveyNode::Kind::Folder);
         cave->setKind(cwSurveyNode::Kind::Folder);
         CHECK(deeper->caveNode() == deeper);
+    }
+}
+
+TEST_CASE("addFixedEntrance stores a fix only on a node that can hold fixes",
+          "[SurveyNode][cwEntranceModel]")
+{
+    cwCavingRegion region;
+    using SurveyTreeTestHelper::addNode;
+    cwCave* native = addNode(&region, nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Native Cave"));
+    cwCave* sourceRoot = addNode(&region, nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Survey"));
+    cwCave* derived = addNode(&region, sourceRoot, cwSurveyNode::Kind::Folder, QStringLiteral("Alpha"));
+
+    const QUuid sourceId = QUuid::createUuid();
+    sourceRoot->setSourceId(sourceId);
+    derived->setSourceId(sourceId);
+    derived->setSourcePath(QStringLiteral("alpha"));
+
+    REQUIRE(native->canHoldFixes());
+    REQUIRE(sourceRoot->canHoldFixes());
+    REQUIRE_FALSE(derived->canHoldFixes());
+
+    const QString station = QStringLiteral("A1");
+
+    SECTION("a derived child node of a sourced root refuses the fix and the entrance") {
+        CHECK(derived->addFixedEntrance(station) == -1);
+        CHECK(derived->fixStations()->count() == 0);
+        CHECK(derived->entrances()->count() == 0);
+    }
+
+    SECTION("the region root refuses the fix and the entrance") {
+        cwSurveyNode* root = region.rootNode();
+        CHECK(root->addFixedEntrance(station) == -1);
+        CHECK(root->fixStations()->count() == 0);
+        CHECK(root->entrances()->count() == 0);
+    }
+
+    SECTION("the source root stores the fix and the entrance") {
+        CHECK(sourceRoot->addFixedEntrance(station) == 0);
+        CHECK(sourceRoot->fixStations()->count() == 1);
+        CHECK(sourceRoot->entrances()->isEntrance(station));
+    }
+
+    SECTION("a native node stores the fix and the entrance") {
+        CHECK(native->addFixedEntrance(station) == 0);
+        CHECK(native->fixStations()->count() == 1);
+        CHECK(native->entrances()->isEntrance(station));
     }
 }

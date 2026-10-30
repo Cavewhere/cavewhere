@@ -45,8 +45,13 @@ QQ.QtObject {
         trip.name = tripName
         trip.addNewChunk()
 
-        RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Node=" + cave.name + "/Trip=" + trip.name
+        return openSurveyTableForTrip(testCase, "Source/Data/Node=" + cave.name + "/Trip=" + trip.name, trip)
+    }
+
+    // Opens the survey table on `trip`, whose first chunk exists, at the page
+    // address `tripAddress`. Returns the same context openSurveyTable does.
+    function openSurveyTableForTrip(testCase, tripAddress, trip) {
+        RootData.pageSelectionModel.currentPageAddress = tripAddress
         testCase.tryVerify(() => RootData.pageView.currentPageItem !== null
                                  && RootData.pageView.currentPageItem.objectName === "tripPage",
                            5000, "should land on tripPage")
@@ -59,7 +64,7 @@ QQ.QtObject {
         }, 5000, "survey editor view should show the new trip")
 
         return {
-            cave: cave,
+            cave: trip.parentCave,
             trip: trip,
             chunk: trip.chunk(0),
             view: view,
