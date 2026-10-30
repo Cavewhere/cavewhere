@@ -1,0 +1,9 @@
+; Synthetic survey whose shots reach into surveys B and C, which no file
+; opens with #PREFIX. B:X1 is the first station in B and is named once;
+; C:Y1 is the first station in C and is named twice.
+#PREFIX A
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+A1	A2	10.0	0	0
+A2	B:X1	10.0	90	0
+A2	C:Y1	10.0	180	0
+C:Y1	C:Y2	10.0	180	0

@@ -682,6 +682,40 @@ TEST_CASE("Cave-attached Compass file solves with X-flagged shots that carry LRU
     CHECK(lookup.positions().size() == kept.size());
 }
 
+TEST_CASE("Cave-attached Walls file solves a station that is the first and only mention of its survey",
+          "[Attach][Cave][Walls]")
+{
+    // The driver's *infer exports on turns on cavern's export check for the
+    // whole solve, and B:X1 is the first station created in survey B.
+    const QString fixtureName = QStringLiteral("walls_first_station_in_survey.srv");
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("walls-first-station")),
+                                             fixturePath(fixtureName));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("FirstStation"));
+    cave->setExternalCenterline(cwExternalCenterline(fixtureName));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{cave->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    const QStringList expected = {QStringLiteral("a.a1"),
+                                  QStringLiteral("a.a2"),
+                                  QStringLiteral("b.x1"),
+                                  QStringLiteral("c.y1"),
+                                  QStringLiteral("c.y2")};
+    for (const QString& key : expected) {
+        INFO("expected key: " << key.toStdString());
+        CHECK(lookup.hasPosition(key));
+    }
+}
+
 TEST_CASE("A file with no case pair keeps today's lowercase keys",
           "[Attach][Cave][CasePairs]")
 {
