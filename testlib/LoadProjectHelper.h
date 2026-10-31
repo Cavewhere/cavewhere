@@ -20,6 +20,7 @@
 #include <QEventLoop>
 #include <QElapsedTimer>
 #include <QThread>
+#include <QUrl>
 
 //Std includes
 #include <memory>
@@ -56,6 +57,13 @@ inline QString testcasesDatasetSourcePath(const QString& relativePath) {
 }
 inline QString qmlTestDatasetSourcePath(const QString& relativePath) {
     return QStringLiteral(CW_QML_TEST_DATASET_DIR "/") + relativePath;
+}
+
+/**
+ * Returns the id QQuickPixmapCache hands to an image provider for \a imageUrl.
+ */
+inline QString imageProviderRequestId(const QString& imageUrl) {
+    return QUrl(imageUrl).toString(QUrl::RemoveScheme | QUrl::RemoveAuthority).mid(1);
 }
 
 /**

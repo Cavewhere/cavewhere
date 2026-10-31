@@ -28,6 +28,9 @@
 
 namespace {
 
+constexpr int testImageEdge = 16;
+constexpr int cropTimeoutMs = 2000;
+
 struct ProjectFixture {
     QTemporaryDir rootDir;
     std::unique_ptr<cwProject> project;
@@ -53,12 +56,25 @@ ProjectFixture makeProjectFixture()
 
 QString writeTestImage(const QDir& dir, const QString& fileName, const QColor& color)
 {
-    QImage image(16, 16, QImage::Format_ARGB32);
+    QImage image(testImageEdge, testImageEdge, QImage::Format_ARGB32);
     image.fill(color);
     QDir().mkpath(dir.absolutePath());
     const QString path = dir.filePath(fileName);
     REQUIRE(image.save(path));
     return path;
+}
+
+QFuture<cwTrackedImagePtr> cropWholeImage(const QDir& dataRootDir, const QString& imagePath)
+{
+    cwImage original;
+    original.setPath(imagePath);
+    original.setOriginalSize(QSize(testImageEdge, testImageEdge));
+
+    cwCropImageTask task;
+    task.setDataRootDir(dataRootDir);
+    task.setOriginal(original);
+    task.setRectF(QRectF(0.0, 0.0, 1.0, 1.0));
+    return task.crop();
 }
 
 QByteArray pngBytes(const QImage& image)
@@ -110,17 +126,8 @@ TEST_CASE("cwCropImageTask writes cache under dataRoot", "[cwCropImageTask][cach
     const QDir notesDir = QDir(fixture.dataRootDir.filePath("notes"));
     const QString imagePath = writeTestImage(notesDir, QStringLiteral("crop-source.png"), QColor(Qt::blue));
 
-    cwImage original;
-    original.setPath(imagePath);
-    original.setOriginalSize(QSize(16, 16));
-
-    cwCropImageTask task;
-    task.setDataRootDir(fixture.dataRootDir);
-    task.setOriginal(original);
-    task.setRectF(QRectF(0.0, 0.0, 1.0, 1.0));
-
-    auto future = task.crop();
-    REQUIRE(AsyncFuture::waitForFinished(future, 2000));
+    auto future = cropWholeImage(fixture.dataRootDir, imagePath);
+    REQUIRE(AsyncFuture::waitForFinished(future, cropTimeoutMs));
 
     cwTrackedImagePtr cropped = future.result();
     REQUIRE(!cropped.isNull());
@@ -128,6 +135,20 @@ TEST_CASE("cwCropImageTask writes cache under dataRoot", "[cwCropImageTask][cach
     const QString cachedPath = QFileInfo(cropped->path()).absoluteFilePath();
     CHECK(cachedPath.contains(QStringLiteral("/.cw_cache/")));
     CHECK(cachedPath.startsWith(fixture.dataRootDir.absolutePath() + QStringLiteral("/")));
+}
+
+TEST_CASE("cwCropImageTask crops an image from folders named with #", "[cwCropImageTask][cache][dataRoot]") {
+    auto fixture = makeProjectFixture();
+
+    const QDir notesDir = QDir(fixture.dataRootDir.filePath(QStringLiteral("Cave#2/trips/Trip#3/notes")));
+    const QString imagePath = writeTestImage(notesDir, QStringLiteral("crop-source.png"), QColor(Qt::blue));
+
+    auto future = cropWholeImage(fixture.dataRootDir, imagePath);
+    REQUIRE(AsyncFuture::waitForFinished(future, cropTimeoutMs));
+
+    INFO("Source:" << imagePath.toStdString());
+    cwTrackedImagePtr cropped = future.result();
+    REQUIRE(!cropped.isNull());
 }
 
 TEST_CASE("cwCacheImageProvider reads cached data from dataRoot", "[cwCacheImageProvider][cache][dataRoot]") {

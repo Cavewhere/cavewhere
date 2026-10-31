@@ -1,5 +1,6 @@
 //Catch2 includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include "LoadProjectHelper.h"
 
 //Qt includes
@@ -12,10 +13,13 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QImageReader>
+#include <QTemporaryDir>
+#include <QUrl>
 #include <cmath>
 
 //Our includes
 #include "cwImageProvider.h"
+#include "cwImage.h"
 #include "cwPDFSettings.h"
 #include "cwSvgReader.h"
 #include "cwUnits.h"
@@ -307,6 +311,113 @@ TEST_CASE("cwImageProvider scales SVG units correctly", "[cwImageProvider]") {
 
     settings->setResolutionImport(originalResolution);
 }
+
+namespace {
+
+//MediaBox of the second page of test_cwPDFConverter/2page-test.pdf; the first page is square
+constexpr QSizeF secondPagePoints(150.0, 100.0);
+constexpr int secondPageIndex = 1;
+
+} // namespace
+
+TEST_CASE("cwImageProvider loads images from folders named with #, % and spaces", "[cwImageProvider]") {
+    const QString folder = GENERATE(QStringLiteral("Proj#1/Cave#2/trips/Trip#3/notes"),
+                                    QStringLiteral("100% cave/notes"),
+                                    QStringLiteral("with space/notes"),
+                                    //Folders the user can pick for the project root; sanitizeFileName
+                                    //only covers project, cave and trip names
+                                    QStringLiteral("what?/notes"),
+                                    QStringLiteral("what?#/notes"),
+                                    QStringLiteral("[bracket]/notes"),
+                                    QStringLiteral("a+b/notes"),
+                                    QStringLiteral("a&b=c;d/notes"),
+                                    QStringLiteral("a%23b/notes"),
+                                    QStringLiteral("a%20b/notes"),
+                                    QStringLiteral("H\u00f6hle/notes"));
+    INFO("Folder:" << folder.toStdString());
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QDir rootDir(tempDir.path());
+    REQUIRE(rootDir.mkpath(folder));
+
+    const QString sourcePath = testcasesDatasetSourcePath(QStringLiteral("test_cwImageProvider/testpage.png"));
+    const QString absolutePath = QDir(rootDir.filePath(folder)).filePath(QStringLiteral("testpage.png"));
+    REQUIRE(QFile::copy(sourcePath, absolutePath));
+
+    const QSize expectedSize = QImageReader(sourcePath).size();
+    REQUIRE(expectedSize.isValid());
+
+    cwImageProvider provider;
+    provider.setDataRootDir(rootDir);
+
+    const QString imageUrl = cwImageProvider::imageUrl(cwImage(), absolutePath);
+    const QString id = imageProviderRequestId(imageUrl);
+    INFO("Url:" << imageUrl.toStdString());
+    INFO("Id:" << id.toStdString());
+
+    //A png carries no #page fragment, so the whole id is the encoded path. A raw ? or #
+    //would be split off by parseImageRequest and cut the path short.
+    CHECK(!id.contains(QLatin1Char('?')));
+    CHECK(!id.contains(QLatin1Char('#')));
+    CHECK(QUrl::fromPercentEncoding(id.toUtf8()).toStdString() == absolutePath.toStdString());
+
+    QSize returnedSize;
+    const QImage image = provider.requestImage(id, &returnedSize, QSize());
+    REQUIRE(!image.isNull());
+    CHECK(image.size() == expectedSize);
+    CHECK(returnedSize == expectedSize);
+}
+
+TEST_CASE("cwImageProvider request id keeps the PDF page as the final fragment", "[cwImageProvider]") {
+    const QString absolutePath = QStringLiteral("/tmp/Proj#1/100% cave/trips/Trip #3/notes/scan.pdf");
+
+    cwImage image;
+    image.setPage(secondPageIndex);
+
+    const QString id = cwImageProvider::imageRequestId(image, absolutePath);
+    INFO("Id:" << id.toStdString());
+
+    CHECK(id.endsWith(QStringLiteral("#page=%1").arg(secondPageIndex + 1)));
+
+    const int fragmentIndex = id.lastIndexOf(QLatin1Char('#'));
+    REQUIRE(fragmentIndex >= 0);
+    CHECK(id.indexOf(QLatin1Char('#')) == fragmentIndex);
+    CHECK(QUrl::fromPercentEncoding(id.left(fragmentIndex).toUtf8()).toStdString() == absolutePath.toStdString());
+}
+
+#ifdef CW_WITH_PDF_SUPPORT
+TEST_CASE("cwImageProvider renders a PDF page from a folder named with #", "[cwImageProvider]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QDir rootDir(tempDir.path());
+    const QString folder = QStringLiteral("Proj#1/Cave#2/trips/Trip#3/notes");
+    REQUIRE(rootDir.mkpath(folder));
+
+    const QString absolutePath = QDir(rootDir.filePath(folder)).filePath(QStringLiteral("2page-test.pdf"));
+    REQUIRE(QFile::copy(testcasesDatasetSourcePath(QStringLiteral("test_cwPDFConverter/2page-test.pdf")), absolutePath));
+
+    cwPDFSettings::initialize();
+    const int resolutionPpi = cwPDFSettings::instance()->resolutionImport();
+    const double scale = resolutionPpi / cwUnits::PointsPerInch;
+    const QSize expectedSize(qRound(secondPagePoints.width() * scale),
+                             qRound(secondPagePoints.height() * scale));
+
+    cwImageProvider provider;
+    provider.setDataRootDir(rootDir);
+
+    cwImage image;
+    image.setPage(secondPageIndex);
+    const QString id = imageProviderRequestId(cwImageProvider::imageUrl(image, absolutePath));
+    INFO("Id:" << id.toStdString());
+
+    QSize returnedSize;
+    const QImage rendered = provider.requestImage(id, &returnedSize, QSize());
+    REQUIRE(!rendered.isNull());
+    CHECK(rendered.size() == expectedSize);
+    CHECK(returnedSize == expectedSize);
+}
+#endif
 
 TEST_CASE("cwSvgReader identifies SVG formats", "[cwSvgReader]") {
     CHECK(cwSvgReader::isSvg(QByteArrayLiteral("svg")) == true);
