@@ -366,11 +366,20 @@ const QRegularExpression& wallsDateRegex()
     return regex;
 }
 
-// Walls writes y-m-d with '-' between digit runs of any length
-// ("2005-11-5"); the block walk and the metadata pass share this parse.
+// cavern's Walls reader (read_walls_srv_date): y-m-d or y/m/d with one
+// separator throughout, read as m-d-y when the first field is below 100;
+// years share read_year's bounds. The block walk and the metadata pass
+// share this parse.
 QDate parseWallsDate(const QString& token)
 {
-    const QStringList fields = token.split(QLatin1Char('-'));
+    const auto separator = std::find_if(token.cbegin(), token.cend(), [](QChar c) {
+        return c == QLatin1Char('-') || c == QLatin1Char('/');
+    });
+    if (separator == token.cend()) {
+        return QDate();
+    }
+
+    const QStringList fields = token.split(*separator);
     if (fields.size() != kWallsDateFields) {
         return QDate();
     }
@@ -383,7 +392,19 @@ QDate parseWallsDate(const QString& token)
         }
         values.at(i) = *value;
     }
-    return QDate(values.at(0), values.at(1), values.at(2));
+
+    if (values.at(0) < kSurvexTwoDigitYearLimit) {
+        std::rotate(values.begin(), values.end() - 1, values.end());
+    }
+    int year = values.at(0);
+    if (year < kSurvexTwoDigitYearLimit) {
+        year += kSurvexTwoDigitYearBase;
+    }
+
+    if (year < kSurvexMinYear || year > kSurvexMaxYear) {
+        return QDate();
+    }
+    return QDate(year, values.at(1), values.at(2));
 }
 
 QString canonicalize(const QString& path)

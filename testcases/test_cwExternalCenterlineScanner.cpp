@@ -900,23 +900,73 @@ TEST_CASE("a Walls #Date with an unpadded month or day dates the block, root, an
     }
 }
 
-TEST_CASE("a Walls #Date with a month out of range warns and stays unset",
+TEST_CASE("a Walls #Date reads the slash and US month-day-year forms cavern reads",
           "[Scanner][Walls]")
 {
+    struct WallsDateForm
+    {
+        QString operand;
+        QDate expected;
+    };
+    // Cavern's Walls reader takes '-' or '/' and reads a first field below
+    // 100 as the month of a month-day-year date; a two-digit year is 19xx.
+    const WallsDateForm form = GENERATE(values<WallsDateForm>({
+        {QStringLiteral("2005/11/05"), QDate(2005, 11, 5)},
+        {QStringLiteral("11/5/2005"), QDate(2005, 11, 5)},
+        {QStringLiteral("11-05-2005"), QDate(2005, 11, 5)},
+        {QStringLiteral("09-09-00"), QDate(1900, 9, 9)},
+    }));
+    const QString& operand = form.operand;
+    INFO("operand: " << operand.toStdString());
+
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    const QString path = tempPath(tempDir, QStringLiteral("bad-month.srv"));
+    const QString path = tempPath(tempDir, QStringLiteral("walls-date-form.srv"));
     writeUtf8File(path,
-                  QByteArrayLiteral("#PREFIX XY\n"
-                                    "#Date 2005-13-05\n"
-                                    "W1\tW2\t10.0\t0\t0\n"));
+                  QStringLiteral("#PREFIX XY\n"
+                                 "#Date %1\n"
+                                 "W1\tW2\t10.0\t0\t0\n")
+                      .arg(operand)
+                      .toUtf8());
 
     auto result = cwExternalCenterlineScanner::scanWalls(path);
     REQUIRE_FALSE(result.hasError());
     const ScanResult scan = result.value();
 
-    CHECK(anyWarningContains(scan, QStringLiteral("could not parse #DATE: 2005-13-05")));
+    CHECK(scan.warnings.isEmpty());
+    CHECK(scan.seededMetadata.date.value_or(QDate()) == form.expected);
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK(scan.blocks.first().path == QStringLiteral("XY"));
+    CHECK(scan.blocks.first().date == form.expected);
+}
+
+TEST_CASE("a Walls #Date cavern rejects warns and stays unset",
+          "[Scanner][Walls]")
+{
+    // A month out of range, a year before 1900, and a second separator that
+    // differs from the first.
+    const QString operand = GENERATE(QStringLiteral("2005-13-05"),
+                                     QStringLiteral("1850-01-01"),
+                                     QStringLiteral("2005-11/05"));
+    INFO("operand: " << operand.toStdString());
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("walls-rejected-date.srv"));
+    writeUtf8File(path,
+                  QStringLiteral("#PREFIX XY\n"
+                                 "#Date %1\n"
+                                 "W1\tW2\t10.0\t0\t0\n")
+                      .arg(operand)
+                      .toUtf8());
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK(anyWarningContains(scan, QStringLiteral("could not parse #DATE: %1").arg(operand)));
     CHECK_FALSE(scan.seededMetadata.date.has_value());
     CHECK_FALSE(scan.rootDate.isValid());
     REQUIRE(scan.blocks.size() == 1);
