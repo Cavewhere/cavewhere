@@ -14,6 +14,8 @@
 #include "cwFutureManagerModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
+#include "cwTeam.h"
+#include "cwTeamMember.h"
 #include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
 
@@ -562,4 +564,103 @@ TEST_CASE("A Save As to a bundle mid-fill leaves the project modified until the 
     REQUIRE(modifiedAtFileSaved.size() == 2);
     CHECK_FALSE(modifiedAtFileSaved.at(1));
     CHECK_FALSE(project->modified());
+}
+
+namespace {
+
+const QString kAnonymousTripsFixture = QStringLiteral("survex_anonymous_trips.svx");
+const QString kAnonymousTripsNode = QStringLiteral("alpha");
+
+cwTrip* tripAtSourcePath(const cwSurveyNode* node, const QString& sourcePath)
+{
+    for (cwTrip* trip : node->trips()) {
+        if (trip->sourcePath() == sourcePath) {
+            return trip;
+        }
+    }
+    return nullptr;
+}
+
+QStringList teamNames(const cwTrip* trip)
+{
+    QStringList names;
+    for (const cwTeamMember& member : trip->team()->teamMembers()) {
+        names.append(member.name());
+    }
+    return names;
+}
+
+//! Attaches the anonymous-trips fixture under the region's root and returns
+//! the source root.
+cwSurveyNode* attachAnonymousTrips(SavedProjectFixture* fixture)
+{
+    cwSurveyNode* root = attachSourceThroughManager(fixture, regionRoot(fixture),
+                                                    fixturePath(kAnonymousTripsFixture));
+    drainPipelines(fixture);
+    return root;
+}
+
+} // namespace
+
+TEST_CASE("Attaching a Survex file names each anonymous block's trip Trip N and seeds its *team",
+          "[Attach][AttachFill][AnonymousTrips]")
+{
+    auto fixture = makeProject(QStringLiteral("fill-anonymous-team"));
+    cwSurveyNode* sourceRoot = attachAnonymousTrips(fixture.get());
+    cwSurveyNode* alpha = childNodeNamed(sourceRoot, kAnonymousTripsNode);
+    REQUIRE(alpha != nullptr);
+
+    const struct {
+        QString sourcePath;
+        QString name;
+        QString member;
+    } expected[] = {
+        {QStringLiteral("alpha/#1"), QStringLiteral("Trip 1"), QStringLiteral("Ann Example")},
+        {QStringLiteral("alpha/#2"), QStringLiteral("Trip 2"), QStringLiteral("Bob Sample")},
+        {QStringLiteral("alpha/#3"), QStringLiteral("Trip 3"), QStringLiteral("Cy Placeholder")},
+    };
+    for (const auto& trip : expected) {
+        INFO("trip " << trip.sourcePath.toStdString());
+        const cwTrip* live = tripAtSourcePath(alpha, trip.sourcePath);
+        REQUIRE(live != nullptr);
+        CHECK(live->name() == trip.name);
+        CHECK(teamNames(live) == QStringList({trip.member}));
+    }
+}
+
+TEST_CASE("Reloading a Survex file keeps a renamed anonymous-block trip's name and edited team",
+          "[Attach][AttachFill][AnonymousTrips]")
+{
+    auto fixture = makeProject(QStringLiteral("fill-anonymous-reload"));
+    cwSurveyNode* sourceRoot = attachAnonymousTrips(fixture.get());
+    cwSurveyNode* alpha = childNodeNamed(sourceRoot, kAnonymousTripsNode);
+    REQUIRE(alpha != nullptr);
+
+    QPointer<cwTrip> trip2 = tripAtSourcePath(alpha, QStringLiteral("alpha/#2"));
+    REQUIRE(trip2 != nullptr);
+    CHECK(teamNames(trip2) == QStringList({QStringLiteral("Bob Sample")}));
+
+    const QString userName = QStringLiteral("Trip Renamed Alpha");
+    const QString userMember = QStringLiteral("Gus Fictional");
+    trip2->setName(userName);
+    trip2->team()->setTeamMembers({cwTeamMember(userMember, QStringList())});
+
+    auto future = managerOf(fixture.get())->reloadFromSource(sourceRoot);
+    waitForAttach(future);
+    requireSucceeded(future);
+    drainPipelines(fixture.get());
+
+    REQUIRE(trip2 != nullptr);
+    CHECK(tripAtSourcePath(alpha, QStringLiteral("alpha/#2")) == trip2.data());
+    CHECK(trip2->name() == userName);
+    CHECK(teamNames(trip2) == QStringList({userMember}));
+
+    const cwTrip* trip1 = tripAtSourcePath(alpha, QStringLiteral("alpha/#1"));
+    REQUIRE(trip1 != nullptr);
+    CHECK(trip1->name() == QStringLiteral("Trip 1"));
+    CHECK(teamNames(trip1) == QStringList({QStringLiteral("Ann Example")}));
+    const cwTrip* trip3 = tripAtSourcePath(alpha, QStringLiteral("alpha/#3"));
+    REQUIRE(trip3 != nullptr);
+    CHECK(trip3->name() == QStringLiteral("Trip 3"));
+    CHECK(teamNames(trip3) == QStringList({QStringLiteral("Cy Placeholder")}));
 }

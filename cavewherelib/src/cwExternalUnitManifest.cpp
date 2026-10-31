@@ -37,6 +37,7 @@ const QString kHasSurveyContentKey = QStringLiteral("hasSurveyContent");
 const QString kMissingKey = QStringLiteral("missing");
 const QString kStationCountKey = QStringLiteral("stationCount");
 const QString kDateKey = QStringLiteral("date");
+const QString kTeamKey = QStringLiteral("team");
 const QString kStationsKey = QStringLiteral("stations");
 
 QStringList canonicalStations(const QStringList& stations)
@@ -68,6 +69,9 @@ QJsonObject rowToJson(const cwScanRow& row)
     if (row.date.isValid()) {
         object.insert(kDateKey, row.date.toString(Qt::ISODate));
     }
+    if (!row.team.isEmpty()) {
+        object.insert(kTeamKey, QJsonArray::fromStringList(row.team));
+    }
     if (row.isUnit) {
         object.insert(kStationsKey, QJsonArray::fromStringList(canonicalStations(row.stations)));
     }
@@ -96,6 +100,10 @@ std::optional<cwScanRow> rowFromJson(const QJsonObject& object)
     row.missing = object.value(kMissingKey).toBool();
     row.stationCount = object.value(kStationCountKey).toInt();
     row.date = QDate::fromString(object.value(kDateKey).toString(), Qt::ISODate);
+    const QJsonArray team = object.value(kTeamKey).toArray();
+    for (const QJsonValue& member : team) {
+        row.team.append(member.toString());
+    }
     const QJsonArray stations = object.value(kStationsKey).toArray();
     for (const QJsonValue& station : stations) {
         row.stations.append(station.toString());

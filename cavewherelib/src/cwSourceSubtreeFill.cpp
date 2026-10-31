@@ -15,6 +15,8 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteSketchModel.h"
+#include "cwTeam.h"
+#include "cwTeamMember.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "cwUnits.h"
@@ -40,6 +42,7 @@ struct TripRecord {
     QString name;
     QString sourcePath;
     QDate date;
+    QStringList team;
 };
 
 //! A new derived node, planned but not yet built, with everything under it.
@@ -109,6 +112,9 @@ QList<cwTrip*> buildTrips(const QList<TripRecord>& records, cwUnits::LengthUnit 
         trip->setSourcePath(record.sourcePath);
         if (record.date.isValid()) {
             trip->setDate(QDateTime(record.date, QTime()));
+        }
+        for (const QString& name : record.team) {
+            trip->team()->addTeamMember(cwTeamMember(name, QStringList()));
         }
         trips.append(trip);
     }
@@ -296,9 +302,10 @@ void cwSourceSubtreeFill::plan(const QList<cwScanRow>& rows)
             continue;
         }
         // Seeding is create-only: a trip that already exists was matched
-        // above, so a reload never writes over a date the user set.
+        // above, so a reload never writes over a date or team the user set.
         const TripRecord trip {
-            cwNameUtils::sanitizeFileName(row.displayName), tripPath, dateAtDepth.at(row.depth)
+            cwNameUtils::sanitizeFileName(row.displayName), tripPath, dateAtDepth.at(row.depth),
+            row.team
         };
         if (unitParent.record != nullptr) {
             unitParent.record->trips.append(trip);

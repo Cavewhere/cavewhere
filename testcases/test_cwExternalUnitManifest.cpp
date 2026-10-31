@@ -49,6 +49,7 @@ TEST_CASE("units.json round-trips the scan rows with canonical station names",
     block.isUnit = true;
     block.hasSurveyContent = true;
     block.stationCount = 3;
+    block.team = {QStringLiteral("Ann Example"), QStringLiteral("Bob Sample")};
     // Dotted, mixed-case, and two spellings of one station.
     block.stations = {QStringLiteral("Big-Passage.P1"), QStringLiteral("Big-Passage.east.E1"),
                       QStringLiteral("big-passage.p1"), QStringLiteral("Big-Passage.A2")};
@@ -109,6 +110,28 @@ TEST_CASE("units.json round-trips a scanned Compass project", "[Manifest]")
     // The station ALPHA's two surveys share reads back in both units.
     CHECK(read.value().at(2).stations.contains(QStringLiteral("alpha.a5")));
     CHECK(read.value().at(3).stations.contains(QStringLiteral("alpha.a5")));
+}
+
+TEST_CASE("units.json round-trips a trip row's team names in order", "[Manifest]")
+{
+    cwScanRow trip;
+    trip.kind = Kind::SurvexBlock;
+    trip.sourcePath = QStringLiteral("alpha/#1");
+    trip.displayName = QStringLiteral("Trip 1");
+    trip.depth = 2;
+    trip.isUnit = true;
+    trip.hasSurveyContent = true;
+    trip.stationCount = 1;
+    trip.stations = {QStringLiteral("alpha.a1")};
+    // A *team line per name, a repeated name included.
+    trip.team = {QStringLiteral("Cy Placeholder"), QStringLiteral("Ann Example"),
+                 QStringLiteral("Cy Placeholder")};
+
+    const auto read = cwExternalUnitManifest::fromJson(cwExternalUnitManifest::toJson({trip}));
+    REQUIRE_FALSE(read.hasError());
+    REQUIRE(read.value().size() == 1);
+    CHECK(read.value().first().team == trip.team);
+    CHECK(read.value().first() == trip);
 }
 
 TEST_CASE("units.json refuses a missing file, malformed JSON, and an unknown kind",

@@ -2786,9 +2786,9 @@ TEST_CASE("Each anonymous Survex block with shots is a unit-only trip row under 
     CHECK(describe(scan.rows) == QStringList({
         QStringLiteral("0 SurvexFile '' 'survex_anonymous_trips' '' node 9"),
         QStringLiteral("1 SurvexBlock 'alpha' 'alpha' 'alpha' node+unit 9"),
-        QStringLiteral("2 SurvexBlock 'alpha/#1' '#1' '' unit 4"),
-        QStringLiteral("2 SurvexBlock 'alpha/#2' '#2' '' unit 4"),
-        QStringLiteral("2 SurvexBlock 'alpha/#3' '#3' '' unit 3"),
+        QStringLiteral("2 SurvexBlock 'alpha/#1' 'Trip 1' '' unit 4"),
+        QStringLiteral("2 SurvexBlock 'alpha/#2' 'Trip 2' '' unit 4"),
+        QStringLiteral("2 SurvexBlock 'alpha/#3' 'Trip 3' '' unit 3"),
     }));
 
     CHECK(rowAt(scan, QStringLiteral("alpha")).stations
@@ -2842,7 +2842,7 @@ TEST_CASE("A nested anonymous block's shots belong to the anonymous trip around 
     // Trip 2's first shot is inside its nested *flags duplicate block,
     // yet the trip is still the second row and holds that shot's b9.
     const cwScanRow trip2 = rowAt(scan, QStringLiteral("alpha/#2"));
-    CHECK(trip2.displayName == QStringLiteral("#2"));
+    CHECK(trip2.displayName == QStringLiteral("Trip 2"));
     CHECK(trip2.cavernLabel.isEmpty());
     CHECK(trip2.isUnit);
     CHECK_FALSE(trip2.isNode);
@@ -2921,7 +2921,7 @@ TEST_CASE("an anonymous *begin is a trip row while its shots still count toward 
     CHECK(describe(scan.rows) == QStringList({
         QStringLiteral("0 SurvexFile '' 'anonymous' '' node 4"),
         QStringLiteral("1 SurvexBlock 'Named' 'Named' 'Named' node+unit 4"),
-        QStringLiteral("2 SurvexBlock 'Named/#1' '#1' '' unit 2"),
+        QStringLiteral("2 SurvexBlock 'Named/#1' 'Trip 1' '' unit 2"),
     }));
     CHECK(rowAt(scan, QStringLiteral("Named/#1")).stations
           == QStringList({QStringLiteral("Named.N2"), QStringLiteral("Named.N3")}));
@@ -2952,7 +2952,7 @@ TEST_CASE("An anonymous Survex block at the file root is a trip row under the ro
 
     CHECK(describe(scan.rows) == QStringList({
         QStringLiteral("0 SurvexFile '' 'root_anonymous' '' node 4"),
-        QStringLiteral("1 SurvexBlock '#1' '#1' '' unit 2"),
+        QStringLiteral("1 SurvexBlock '#1' 'Trip 1' '' unit 2"),
         QStringLiteral("1 SurvexBlock 'side' 'side' 'side' unit 2"),
     }));
     CHECK(rowAt(scan, QStringLiteral("#1")).stations
@@ -2990,7 +2990,7 @@ TEST_CASE("A named Survex block inside an anonymous one hangs from the named con
     CHECK(describe(scan.rows) == QStringList({
         QStringLiteral("0 SurvexFile '' 'named_in_anonymous' '' node 5"),
         QStringLiteral("1 SurvexBlock 'Outer' 'Outer' 'Outer' node 5"),
-        QStringLiteral("2 SurvexBlock 'Outer/#1' '#1' '' unit 3"),
+        QStringLiteral("2 SurvexBlock 'Outer/#1' 'Trip 1' '' unit 3"),
         QStringLiteral("2 SurvexBlock 'Outer/Inner' 'Inner' 'Inner' unit 2"),
     }));
     CHECK(rowAt(scan, QStringLiteral("Outer/#1")).stations
@@ -3028,6 +3028,54 @@ TEST_CASE("Shots an *include adds inside an anonymous Survex block belong to its
     CHECK(describe(scan.rows) == QStringList({
         QStringLiteral("0 SurvexFile '' 'include_in_anonymous' '' node 3"),
         QStringLiteral("1 SurvexBlock 'Outer' 'Outer' 'Outer' node 3"),
-        QStringLiteral("2 SurvexBlock 'Outer/#1' '#1' '' unit 3"),
+        QStringLiteral("2 SurvexBlock 'Outer/#1' 'Trip 1' '' unit 3"),
     }));
+}
+
+TEST_CASE("Each anonymous Survex trip row carries its own *team names",
+          "[Scanner][Survex][AnonymousTrips]")
+{
+    const ScanResult scan = scanFixture(kAnonymousTripsFixture);
+
+    CHECK(rowAt(scan, QStringLiteral("alpha/#1")).team
+          == QStringList({QStringLiteral("Ann Example")}));
+    CHECK(rowAt(scan, QStringLiteral("alpha/#2")).team
+          == QStringList({QStringLiteral("Bob Sample")}));
+    CHECK(rowAt(scan, QStringLiteral("alpha/#3")).team
+          == QStringList({QStringLiteral("Cy Placeholder")}));
+    // alpha's own scope holds no *team line.
+    CHECK(rowAt(scan, QStringLiteral("alpha")).team.isEmpty());
+}
+
+TEST_CASE("A *team in a nested anonymous block, before the trip's first shot, belongs to the trip",
+          "[Scanner][Survex][AnonymousTrips]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("nested_team.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin Outer\n"
+                                    "*team \"Dee Invented\" compass\n"
+                                    "o0 o1 2.0 0 0\n"
+                                    "*begin\n"
+                                    "*team Eve tape\n"
+                                    "*begin\n"
+                                    "*team \"Fay Madeup\" notes\n"
+                                    "*flags duplicate\n"
+                                    "o1 o2 5.0 0 0\n"
+                                    "*end\n"
+                                    "o2 o3 5.0 0 0\n"
+                                    "*end\n"
+                                    "*end Outer\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK(rowAt(scan, QStringLiteral("Outer/#1")).team
+          == QStringList({QStringLiteral("Eve"), QStringLiteral("Fay Madeup")}));
+    // The named block keeps only its own scope's names.
+    CHECK(rowAt(scan, QStringLiteral("Outer")).team
+          == QStringList({QStringLiteral("Dee Invented")}));
 }

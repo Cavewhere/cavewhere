@@ -395,6 +395,21 @@ const QRegularExpression& survexDateRegex()
     return regex;
 }
 
+const QRegularExpression& survexTeamRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*team\s+(?:"([^"]+)"|(\S+)))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// The member a survexTeamRegex() match names: the quoted form, else the bareword.
+QString survexTeamName(const QRegularExpressionMatch& match)
+{
+    const QString quoted = match.captured(1);
+    return quoted.isEmpty() ? match.captured(2) : quoted;
+}
+
 // "*calibrate declination <zero error> [<units>]"
 const QRegularExpression& survexCalibrateDeclinationRegex()
 {
@@ -688,6 +703,8 @@ struct OpenBlock {
     QSet<QString> stations;
     // An anonymous run's first *date, held until its trip row exists.
     QDate date;
+    // An anonymous run's *team names, held until its trip row exists.
+    QStringList team;
 };
 
 struct ScanState {
@@ -777,6 +794,12 @@ QString joined(const QString& head, QChar separator, const QString& tail)
 QString positionalSegment(qsizetype index)
 {
     return QLatin1Char('#') + QString::number(index + 1);
+}
+
+// The display name of the anonymous Survex block at positionalSegment(index).
+QString anonymousTripName(qsizetype index)
+{
+    return QStringLiteral("Trip %1").arg(index + 1);
 }
 
 /**
@@ -933,13 +956,32 @@ int shotRow(ScanState& state)
     }
     if (owner->row == kNoRow) {
         const int parent = containerRow(state);
-        const QString segment = positionalSegment(state.tree[parent].anonymousTrips++);
-        const int row = childRow(state, parent, segment,
-                                 cwSurveyNodeKind::Kind::SurvexBlock, segment, QString());
+        const int index = state.tree[parent].anonymousTrips++;
+        const int row = childRow(state, parent, positionalSegment(index),
+                                 cwSurveyNodeKind::Kind::SurvexBlock,
+                                 anonymousTripName(index), QString());
         owner->row = row;
         stampRowDate(state, row, owner->date);
+        state.tree[row].row.team.append(owner->team);
     }
     return owner->row;
+}
+
+/**
+ * Adds a *team name to the row of the scope that writes it: the open anonymous
+ * run's trip row (held on the run until a shot creates it), else the innermost
+ * named block's row, else the root row.
+ */
+void recordSurvexTeam(ScanState& state, const QString& name)
+{
+    OpenBlock* owner = anonymousRunOwner(state);
+    if (owner == nullptr) {
+        state.tree[containerRow(state)].row.team.append(name);
+    } else if (owner->row == kNoRow) {
+        owner->team.append(name);
+    } else {
+        state.tree[owner->row].row.team.append(name);
+    }
 }
 
 // Takes the row a referencing file handed over, or the container row.
@@ -1328,6 +1370,14 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
             if (const auto date = parseSurvexDateToken(dateMatch.captured(1));
                 date.has_value()) {
                 recordSurvexDate(state, date.value());
+            }
+            continue;
+        }
+
+        if (const auto teamMatch = survexTeamRegex().match(line);
+            teamMatch.hasMatch()) {
+            if (const QString name = survexTeamName(teamMatch); !name.isEmpty()) {
+                recordSurvexTeam(state, name);
             }
             continue;
         }
@@ -2201,10 +2251,6 @@ void parseSurvexMetadata(const QStringList& lines,
                          SeededTripMetadata& metadata,
                          QStringList& warnings)
 {
-    static const QRegularExpression teamRegex(
-        QStringLiteral(R"RX(^\*team\s+(?:"([^"]+)"|(\S+)))RX"),
-        QRegularExpression::CaseInsensitiveOption);
-
     // Seeded as cavern applies it.
     const auto seedDeclination = [&](const QString& token,
                                      const char* directiveName,
@@ -2238,12 +2284,8 @@ void parseSurvexMetadata(const QStringList& lines,
             continue;
         }
 
-        if (const auto match = teamRegex.match(line); match.hasMatch()) {
-            QString name = match.captured(1);  // quoted form
-            if (name.isEmpty()) {
-                name = match.captured(2);      // bareword form
-            }
-            if (!name.isEmpty()) {
+        if (const auto match = survexTeamRegex().match(line); match.hasMatch()) {
+            if (const QString name = survexTeamName(match); !name.isEmpty()) {
                 metadata.team.append(name);
             }
             continue;

@@ -158,6 +158,10 @@ Q_DECLARE_METATYPE(cwScanBlock)
  *
  * kind names a node row's node kind. A unit-only Survex block row keeps
  * SurvexBlock; every other unit-only row carries its parent's.
+ *
+ * team is the names of the Survex *team lines in the row's own scope, one per
+ * line, in file order; an anonymous trip's team includes its nested anonymous
+ * blocks' lines.
  */
 class CAVEWHERE_LIB_EXPORT cwScanRow
 {
@@ -173,6 +177,7 @@ public:
     bool missing = false;
     int stationCount = 0;
     QDate date;
+    QStringList team;
     QStringList stations;
     //! The declination cavern applies to the unit's shots, Unknown when they
     //! take more than one; meaningful on unit rows only.
@@ -386,13 +391,14 @@ struct ScanResult {
      *             so it becomes one trip; a block that nests another is a
      *             node, and a unit too when it has shots of its own. A block
      *             with no shots stays a node. An anonymous *begin with shots
-     *             is a unit-only SurvexBlock row "#N" (the parent's Nth such
-     *             block) under the innermost named block or the root, with an
-     *             empty cavernLabel, that also holds the *fix lines in its
-     *             scope. Anonymous blocks nested in it fold into it, a named
-     *             block inside it hangs from the named container, and one
-     *             with neither shots nor a *fix makes no row and takes no
-     *             number. A file included from two scopes is read in each.
+     *             is a unit-only SurvexBlock row "#N" named "Trip N" (the
+     *             parent's Nth such block) under the innermost named block
+     *             or the root, with an empty cavernLabel, that also holds the
+     *             *fix lines in its scope. Anonymous blocks nested in it fold
+     *             into it, a named block inside it hangs from the named
+     *             container, and one with neither shots nor a *fix makes no
+     *             row and takes no number. A file included from two scopes is
+     *             read in each.
      */
     QList<cwScanRow> rows;
 
