@@ -20,6 +20,9 @@ Rectangle {
     //This window's shared text editor, for tests that drive or assert on it
     readonly property ShadowEditorHost shadowEditor: rootId.windowOverlay?.shadowEditor ?? null
 
+    //The item this window delivers key presses to
+    readonly property Item activeFocusItem: rootId.Window.activeFocusItem
+
     color: Theme.background
 
     //Every test in a file shares this window, so an editor one test left open

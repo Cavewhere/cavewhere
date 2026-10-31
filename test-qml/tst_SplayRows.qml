@@ -199,6 +199,7 @@ MainWindowTest {
             const downBox = findChild(surveyTableId.rowItem(this, context, stationRow),
                                       "dataBox." + stationRow + "." + SurveyChunk.StationDownRole)
             verify(downBox !== null, "station 0 should have a D box")
+            surveyTableId.waitForKeysOn(this, downBox.objectName)
             keyClick(Qt.Key_Tab)
 
             tryCompare(context.editorModel, "focusedRole", SurveyEditorCellIndex.StationSplaysCell, 5000,
@@ -226,6 +227,7 @@ MainWindowTest {
             context.editorModel.setFocusedCell(
                         context.editorModel.cellIndex(stationRow, SurveyChunk.StationDownRole))
             tryCompare(context.editorModel, "focusedRole", SurveyChunk.StationDownRole)
+            surveyTableId.waitForKeysOn(this, "dataBox." + stationRow + "." + SurveyChunk.StationDownRole)
 
             keyClick(Qt.Key_Tab)
             tryCompare(context.editorModel, "focusedRole",
@@ -1293,6 +1295,7 @@ MainWindowTest {
             tryCompare(context.editorModel, "focusedRow", stationRow, 5000)
             tryCompare(context.editorModel, "focusedRole",
                        SurveyEditorCellIndex.StationSplaysCell)
+            surveyTableId.waitForKeysOn(this, "splaysBox." + stationRow)
 
             keyClick(Qt.Key_Tab)
             tryCompare(context.editorModel, "focusedRow", firstSplayRow, 5000,
@@ -1312,6 +1315,8 @@ MainWindowTest {
                         context.editorModel.cellIndex(surveyTableId.stationRow(context, 1),
                                                       SurveyChunk.StationLeftRole))
             tryCompare(context.editorModel, "focusedRole", SurveyChunk.StationLeftRole, 5000)
+            surveyTableId.waitForKeysOn(this, "dataBox." + surveyTableId.stationRow(context, 1)
+                                        + "." + SurveyChunk.StationLeftRole)
 
             keyClick(Qt.Key_Backtab, Qt.ShiftModifier)
             tryCompare(context.editorModel, "focusedRow", blankRowIndex, 5000,

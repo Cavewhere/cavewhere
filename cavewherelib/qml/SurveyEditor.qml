@@ -19,7 +19,7 @@ QQ.Item {
 
     property Trip currentTrip
     property TripCalibration currentCalibration: currentTrip.calibration
-    readonly property alias contentWidth: scrollAreaId.width //For animation
+    readonly property alias contentWidth: viewId.width //For animation
     property bool isNarrow: false
     property bool showNotes: false
     property SurveyNotesConcatModel notesModel: null
@@ -33,7 +33,7 @@ QQ.Item {
 
     clip: false
 
-    width: isNarrow ? parent.width : scrollAreaId.width
+    width: isNarrow ? parent.width : viewId.width
     height: 100
 
     TripLengthTask {
@@ -70,7 +70,7 @@ QQ.Item {
 
         //Sits above the table rather than over it: the stations the banner asks
         //the user to click are the ones it would otherwise cover
-        width: scrollAreaId.width
+        width: viewId.width
         height: splayMoveLabelId.implicitHeight + 2 * Theme.delegatePadding
         visible: editorModel.splayMoveActive
 
@@ -155,382 +155,391 @@ QQ.Item {
         }
     }
 
-    QC.ScrollView {
-        id: scrollAreaId
+    // The view takes its scroll bar directly rather than sitting in a
+    // ScrollView: a ScrollView follows its implicit height until its anchors
+    // apply, so the view's first fill would span every row of the trip.
+    QQ.ListView {
+        id: viewId
+        objectName: "view"
+
+        readonly property int contentMargin: clipArea.isNarrow ? 10 : 30
+        //How far the arrow keys scroll the table when no cell takes them
+        readonly property real keyScrollStep: 50
 
         anchors.top: splayMoveBannerId.visible ? splayMoveBannerId.bottom : parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
-        anchors.margins: 1;
-
-        QC.ScrollBar.vertical.stepSize: 50;
-        QC.ScrollBar.vertical.policy: clipArea.isNarrow ? QC.ScrollBar.AlwaysOff : QC.ScrollBar.AsNeeded
+        anchors.margins: 1
 
         width: clipArea.isNarrow ? clipArea.width : 500
-        visible: true
         clip: true
 
-        QQ.ListView {
-            id: viewId
-            objectName: "view"
+        //A mouse scrolls the table with the wheel or the scroll bar; only touch flicks it
+        acceptedButtons: Qt.NoButton
 
-            QC.ButtonGroup {
-                id: errorButtonGroupId
+        model: editorModel
+
+        //reuseItem can cause instablity in testcases and crashes in qml, by default it's false
+        // reuseItems: true
+
+        currentIndex: -1 //The currentIndex should change
+
+        //Prevents default keyboard interaction
+        keyNavigationEnabled: false
+
+        QC.ScrollBar.vertical: QC.ScrollBar {
+            id: verticalScrollBarId
+            stepSize: viewId.keyScrollStep / Math.max(1, viewId.contentHeight)
+            policy: clipArea.isNarrow ? QC.ScrollBar.AlwaysOff : QC.ScrollBar.AsNeeded
+        }
+
+        function syncFocusedCellInView() {
+            let row = editorModel.focusedRow
+            let role = editorModel.focusedRole
+            if(row < 0 || role < 0) {
+                return
+            }
+            let focusedCell = editorModel.cellIndex(row, role)
+            if(!editorModel.isCellValid(focusedCell)) {
+                return
             }
 
-            StationValidator {
-                id: stationValidatorId
+            editorModel.setFocusedChunk(editorModel.chunkForRow(row))
+
+            if(editorModel.isShotCell(role)) {
+                //Since the shot row has a height of zero, this -1 and +1 forces shot to be visible in the list view
+                viewId.positionViewAtIndex(row - 1, QQ.ListView.Contain)
+                viewId.positionViewAtIndex(row + 1, QQ.ListView.Contain)
+            } else {
+                viewId.positionViewAtIndex(row, QQ.ListView.Contain)
             }
+        }
 
-            DistanceValidator {
-                id: distanceValidatorId
+        QQ.Keys.onUpPressed: verticalScrollBarId.decrease()
+        QQ.Keys.onDownPressed: verticalScrollBarId.increase()
+
+        QC.ButtonGroup {
+            id: errorButtonGroupId
+        }
+
+        StationValidator {
+            id: stationValidatorId
+        }
+
+        DistanceValidator {
+            id: distanceValidatorId
+        }
+
+        CompassValidator {
+            id: compassValidatorId
+        }
+
+        ClinoValidator {
+            id: clinoValidatorId
+        }
+
+        QQ.Connections {
+            target: editorModel
+            function onFocusedRowChanged() {
+                Qt.callLater(viewId.syncFocusedCellInView)
             }
-
-            CompassValidator {
-                id: compassValidatorId
+            function onFocusedRoleChanged() {
+                Qt.callLater(viewId.syncFocusedCellInView)
             }
+        }
 
-            ClinoValidator {
-                id: clinoValidatorId
-            }
+        header: ColumnLayout {
+            id: column
+            spacing: 5
+            width: viewId.width - viewId.contentMargin
 
-            function syncFocusedCellInView() {
-                let row = editorModel.focusedRow
-                let role = editorModel.focusedRole
-                if(row < 0 || role < 0) {
-                    return
-                }
-                let focusedCell = editorModel.cellIndex(row, role)
-                if(!editorModel.isCellValid(focusedCell)) {
-                    return
-                }
+            ColumnLayout {
+                Layout.fillWidth: true
 
-                editorModel.setFocusedChunk(editorModel.chunkForRow(row))
 
-                if(editorModel.isShotCell(role)) {
-                    //Since the shot row has a height of zero, this -1 and +1 forces shot to be visible in the list view
-                    viewId.positionViewAtIndex(row - 1, QQ.ListView.Contain)
-                    viewId.positionViewAtIndex(row + 1, QQ.ListView.Contain)
-                } else {
-                    viewId.positionViewAtIndex(row, QQ.ListView.Contain)
-                }
-            }
-
-            QQ.Connections {
-                target: editorModel
-                function onFocusedRowChanged() {
-                    Qt.callLater(viewId.syncFocusedCellInView)
-                }
-                function onFocusedRoleChanged() {
-                    Qt.callLater(viewId.syncFocusedCellInView)
-                }
-            }
-
-            //reuseItem can cause instablity in testcases and crashes in qml, by default it's false
-            // reuseItems: true
-
-            currentIndex: -1 //The currentIndex should change
-
-            //Prevents default keyboard interaction
-            keyNavigationEnabled: false
-
-            header: ColumnLayout {
-                id: column
-                spacing: 5
-                width: scrollAreaId.width - viewId.contentMargin
-
-                ColumnLayout {
+                QQ.Item {
                     Layout.fillWidth: true
-
-
-                    QQ.Item {
-                        Layout.fillWidth: true
-                        implicitHeight: collapseButton.height
-                        visible: !clipArea.isNarrow
-                        SectionLabel {
-                            text: "Trip"
-                        }
-
-                        QC.Button {
-                            id: collapseButton
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.margins: 3
-                            icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
-                            icon.width: 16
-                            icon.height: 16
-                            onClicked:  clipArea.collapseClicked()
-                        }
+                    implicitHeight: collapseButton.height
+                    visible: !clipArea.isNarrow
+                    SectionLabel {
+                        text: "Trip"
                     }
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        DoubleClickTextInput {
-                            id: tripNameText
-                            objectName: "tripNameText"
-                            text: clipArea.currentTrip.name
-                            font.bold: true
-                            font.pixelSize: Theme.fontSizeTitle
-                            autoResize: true
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: 0
-
-                            onFinishedEditting: (newText) => {
-                                                    clipArea.currentTrip.name = newText
-                                                }
-                        }
-
-                        DoubleClickTextInput {
-                            id: tripDate
-                            objectName: "tripDate"
-
-                            text: Qt.formatDate(clipArea.currentTrip.date, "yyyy-MM-dd")
-
-                            font.bold: true
-                            Layout.alignment: Qt.AlignRight
-
-                            onFinishedEditting: function(newText) {
-                                let dateTime = newText + " 00:00:00";
-                                clipArea.currentTrip.date = Date.fromLocaleString(Qt.locale(), dateTime, "yyyy-MM-dd HH:mm:ss");
-                            }
-                        }
-                    }
-
-                    SurveyErrorOverview {
-                        trip: currentTrip
-                        Layout.fillWidth: true
-                    }
-
-                    IgnoredWarningsSection {
-                        trip: clipArea.currentTrip
-                        surveyEditorModel: editorModel
-                        Layout.fillWidth: true
+                    QC.Button {
+                        id: collapseButton
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 3
+                        icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
+                        icon.width: 16
+                        icon.height: 16
+                        onClicked:  clipArea.collapseClicked()
                     }
                 }
 
-                BreakLine { }
-
-                CalibrationEditor {
+                RowLayout {
                     Layout.fillWidth: true
-                    calibration: currentTrip === null ? null : clipArea.currentTrip.calibration
+                    spacing: 8
+
+                    DoubleClickTextInput {
+                        id: tripNameText
+                        objectName: "tripNameText"
+                        text: clipArea.currentTrip.name
+                        font.bold: true
+                        font.pixelSize: Theme.fontSizeTitle
+                        autoResize: true
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+
+                        onFinishedEditting: (newText) => {
+                                                clipArea.currentTrip.name = newText
+                                            }
+                    }
+
+                    DoubleClickTextInput {
+                        id: tripDate
+                        objectName: "tripDate"
+
+                        text: Qt.formatDate(clipArea.currentTrip.date, "yyyy-MM-dd")
+
+                        font.bold: true
+                        Layout.alignment: Qt.AlignRight
+
+                        onFinishedEditting: function(newText) {
+                            let dateTime = newText + " 00:00:00";
+                            clipArea.currentTrip.date = Date.fromLocaleString(Qt.locale(), dateTime, "yyyy-MM-dd HH:mm:ss");
+                        }
+                    }
                 }
 
-                BreakLine { }
+                SurveyErrorOverview {
+                    trip: currentTrip
+                    Layout.fillWidth: true
+                }
 
-                TripSettingsEditor {
+                IgnoredWarningsSection {
                     trip: clipArea.currentTrip
+                    surveyEditorModel: editorModel
                     Layout.fillWidth: true
-                }
-
-                BreakLine { }
-
-                TeamTable {
-                    id: teamTable
-                    model: currentTrip !== null ? clipArea.currentTrip.team : null
-                    Layout.fillWidth: true
-                }
-
-                // Note thumbnails — hidden when full gallery is shown (wide mode)
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    visible: clipArea.showNotes && clipArea.notesModel !== null
-
-                    BreakLine { }
-
-                    SectionHeader {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: "Notes"
-                        addControl: QQ.Component {
-                            AddNoteMenuButton {
-                                objectName: "addNoteMenuButton"
-                                notesModel: clipArea.notesModel
-                                onSketchRequested: {
-                                    if (clipArea.notesModel !== null) {
-                                        clipArea.noteClicked(clipArea.notesModel.rowCount() - 1)
-                                    }
-                                }
-                                onFilesRequested: clipArea._pendingAutoSelect = true
-                            }
-                        }
-                    }
-
-                    QQ.Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: notesFlow.implicitHeight + 2 * Theme.flowSpacing
-                        visible: notesRepeater.count > 0
-                        color: Theme.floatingWidgetColor
-                        radius: 7
-
-                        QQ.Flow {
-                            id: notesFlow
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.margins: Theme.flowSpacing
-                            spacing: Theme.flowSpacing
-
-                            QQ.Repeater {
-                                id: notesRepeater
-                                model: clipArea.notesModel
-
-                                delegate: QQ.Item {
-                                    id: thumbDelegate
-                                    required property url iconPath
-                                    required property QQ.QtObject noteObject
-                                    required property int index
-
-                                    readonly property real thumbSize: 80
-
-                                    width: thumbSize
-                                    height: thumbSize
-
-                                    QQ.Rectangle {
-                                        anchors.fill: parent
-                                        visible: thumbDelegate.index === clipArea.currentNoteIndex
-                                        color: Theme.accent
-                                        radius: Theme.floatingWidgetRadius
-                                    }
-
-                                    QQ.Image {
-                                        id: thumbImage
-                                        anchors.fill: parent
-                                        anchors.margins: 2
-                                        source: thumbDelegate.iconPath
-                                        fillMode: QQ.Image.PreserveAspectFit
-                                        asynchronous: true
-                                        sourceSize: Qt.size(width, height)
-                                        rotation: thumbDelegate.noteObject?.rotate ?? 0
-                                    }
-
-                                    ImageBusyIndicator {
-                                        image: thumbImage
-                                    }
-
-                                    NotePlaceholderIcon {
-                                        anchors.fill: parent
-                                        anchors.margins: 2
-                                        visible: thumbDelegate.iconPath.toString().length === 0
-                                        noteObject: thumbDelegate.noteObject
-                                    }
-
-                                    QQ.TapHandler {
-                                        gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
-                                        onSingleTapped: {
-                                            RootData.sketchManager.flushIconIfDirty(thumbDelegate.noteObject)
-                                            clipArea.noteClicked(thumbDelegate.index)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                }
-
-                BreakLine { }
-
-                SectionLabel {
-                    text: "Data"
-                    Layout.alignment: Qt.AlignHCenter
-                }
-
-                SplitButton {
-                    buttonObjectName: "addSurveyData"
-                    text: qsTr("Add Survey Data")
-                    iconSource: "qrc:/twbs-icons/icons/plus.svg"
-                    // The menu's one item is hidden inside a source root, so the
-                    // chevron goes with it.
-                    menu: clipArea.currentTripTakesSurveyFile ? addSurveyDataMenuId : null
-                    menuToolTip: qsTr("More ways to add survey data")
-                    Layout.alignment: Qt.AlignHCenter
-                    visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount === 0
-
-                    onClicked: {
-                        clipArea.currentTrip.addNewChunk()
-                    }
-                }
-
-                QC.Menu {
-                    id: addSurveyDataMenuId
-                    objectName: "addSurveyDataMenu"
-
-                    QC.MenuItem {
-                        objectName: "addFromSurveyFileMenuItem"
-                        text: qsTr("Add from survey file…")
-                        visible: clipArea.currentTripTakesSurveyFile
-                        enabled: visible
-                        height: visible ? implicitHeight : 0
-
-                        onTriggered: {
-                            clipArea.addFromSurveyFile()
-                        }
-                    }
                 }
             }
 
+            BreakLine { }
 
+            CalibrationEditor {
+                Layout.fillWidth: true
+                calibration: currentTrip === null ? null : clipArea.currentTrip.calibration
+            }
+
+            BreakLine { }
+
+            TripSettingsEditor {
+                trip: clipArea.currentTrip
+                Layout.fillWidth: true
+            }
+
+            BreakLine { }
+
+            TeamTable {
+                id: teamTable
+                model: currentTrip !== null ? clipArea.currentTrip.team : null
+                Layout.fillWidth: true
+            }
+
+            // Note thumbnails — hidden when full gallery is shown (wide mode)
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: clipArea.showNotes && clipArea.notesModel !== null
+
+                BreakLine { }
+
+                SectionHeader {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "Notes"
+                    addControl: QQ.Component {
+                        AddNoteMenuButton {
+                            objectName: "addNoteMenuButton"
+                            notesModel: clipArea.notesModel
+                            onSketchRequested: {
+                                if (clipArea.notesModel !== null) {
+                                    clipArea.noteClicked(clipArea.notesModel.rowCount() - 1)
+                                }
+                            }
+                            onFilesRequested: clipArea._pendingAutoSelect = true
+                        }
+                    }
+                }
+
+                QQ.Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: notesFlow.implicitHeight + 2 * Theme.flowSpacing
+                    visible: notesRepeater.count > 0
+                    color: Theme.floatingWidgetColor
+                    radius: 7
+
+                    QQ.Flow {
+                        id: notesFlow
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: Theme.flowSpacing
+                        spacing: Theme.flowSpacing
+
+                        QQ.Repeater {
+                            id: notesRepeater
+                            model: clipArea.notesModel
+
+                            delegate: QQ.Item {
+                                id: thumbDelegate
+                                required property url iconPath
+                                required property QQ.QtObject noteObject
+                                required property int index
+
+                                readonly property real thumbSize: 80
+
+                                width: thumbSize
+                                height: thumbSize
+
+                                QQ.Rectangle {
+                                    anchors.fill: parent
+                                    visible: thumbDelegate.index === clipArea.currentNoteIndex
+                                    color: Theme.accent
+                                    radius: Theme.floatingWidgetRadius
+                                }
+
+                                QQ.Image {
+                                    id: thumbImage
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    source: thumbDelegate.iconPath
+                                    fillMode: QQ.Image.PreserveAspectFit
+                                    asynchronous: true
+                                    sourceSize: Qt.size(width, height)
+                                    rotation: thumbDelegate.noteObject?.rotate ?? 0
+                                }
+
+                                ImageBusyIndicator {
+                                    image: thumbImage
+                                }
+
+                                NotePlaceholderIcon {
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    visible: thumbDelegate.iconPath.toString().length === 0
+                                    noteObject: thumbDelegate.noteObject
+                                }
+
+                                QQ.TapHandler {
+                                    gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+                                    onSingleTapped: {
+                                        RootData.sketchManager.flushIconIfDirty(thumbDelegate.noteObject)
+                                        clipArea.noteClicked(thumbDelegate.index)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+            }
+
+            BreakLine { }
+
+            SectionLabel {
+                text: "Data"
+                Layout.alignment: Qt.AlignHCenter
+            }
+
+            SplitButton {
+                buttonObjectName: "addSurveyData"
+                text: qsTr("Add Survey Data")
+                iconSource: "qrc:/twbs-icons/icons/plus.svg"
+                // The menu's one item is hidden inside a source root, so the
+                // chevron goes with it.
+                menu: clipArea.currentTripTakesSurveyFile ? addSurveyDataMenuId : null
+                menuToolTip: qsTr("More ways to add survey data")
+                Layout.alignment: Qt.AlignHCenter
+                visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount === 0
+
+                onClicked: {
+                    clipArea.currentTrip.addNewChunk()
+                }
+            }
+
+            QC.Menu {
+                id: addSurveyDataMenuId
+                objectName: "addSurveyDataMenu"
+
+                QC.MenuItem {
+                    objectName: "addFromSurveyFileMenuItem"
+                    text: qsTr("Add from survey file…")
+                    visible: clipArea.currentTripTakesSurveyFile
+                    enabled: visible
+                    height: visible ? implicitHeight : 0
+
+                    onTriggered: {
+                        clipArea.addFromSurveyFile()
+                    }
+                }
+            }
+        }
+
+
+        SurveyEditorColumnTitles {
+            id: titleTemplate
+            width: viewId.width - viewId.contentMargin
+            visible: false
+            listViewIndex: -1
+            chunk: null
+            lrudVisible: clipArea.currentCalibration === null || clipArea.currentCalibration.lruds
+            splaysVisible: clipArea.currentCalibration === null || clipArea.currentCalibration.splays
+        }
+
+
+        delegate: DrySurveyComponent {
+            calibration: currentCalibration
+            errorButtonGroup: errorButtonGroupId
+            // view: viewId
             model: editorModel
-
-            readonly property int contentMargin: clipArea.isNarrow ? 10 : 30
-
-            SurveyEditorColumnTitles {
-                id: titleTemplate
-                width: viewId.width - viewId.contentMargin
-                visible: false
-                listViewIndex: -1
-                chunk: null
-                lrudVisible: clipArea.currentCalibration === null || clipArea.currentCalibration.lruds
-                splaysVisible: clipArea.currentCalibration === null || clipArea.currentCalibration.splays
-            }
+            removePreview: removePreviewId
+            fixStationPopup: fixStationPopupId
+            entrancePopup: entrancePopupId
+            splayRemoveChallenge: removeSplaysChallengeId
+            stationValidator: stationValidatorId
+            distanceValidator: distanceValidatorId
+            compassValidator: compassValidatorId
+            clinoValidator: clinoValidatorId
+            columnTemplate: titleTemplate
+        }
 
 
-            delegate: DrySurveyComponent {
-                calibration: currentCalibration
-                errorButtonGroup: errorButtonGroupId
-                // view: viewId
-                model: editorModel
-                removePreview: removePreviewId
-                fixStationPopup: fixStationPopupId
-                entrancePopup: entrancePopupId
-                splayRemoveChallenge: removeSplaysChallengeId
-                stationValidator: stationValidatorId
-                distanceValidator: distanceValidatorId
-                compassValidator: compassValidatorId
-                clinoValidator: clinoValidatorId
-                columnTemplate: titleTemplate
-            }
+        footer: ColumnLayout {
+            width: viewId.width - viewId.contentMargin
 
-
-            footer: ColumnLayout {
-                width: scrollAreaId.width - viewId.contentMargin
-
-                QC.Label {
-                    objectName: "totalLengthText"
-                    text: {
-                        if(clipArea.currentTrip === null) { return "" }
-                        var unit = ""
-                        switch(clipArea.currentTrip.calibration.distanceUnit) {
-                        case Units.Meters:
-                            unit = "m"
-                            break;
-                        case Units.Feet:
-                            unit = "ft"
-                            break;
-                        }
-
-                        return "Total Length: " + Utils.fixed(tripLengthTask.length, 2) + " " + unit;
+            QC.Label {
+                objectName: "totalLengthText"
+                text: {
+                    if(clipArea.currentTrip === null) { return "" }
+                    var unit = ""
+                    switch(clipArea.currentTrip.calibration.distanceUnit) {
+                    case Units.Meters:
+                        unit = "m"
+                        break;
+                    case Units.Feet:
+                        unit = "ft"
+                        break;
                     }
-                }
 
-                QC.Button {
-                    objectName: "spaceAddBar"
-                    visible: currentTrip !== null && currentTrip.chunkCount > 0
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "Press <b>Space</b> to add another data block"
-                    onClicked: clipArea.currentTrip.addNewChunk();
+                    return "Total Length: " + Utils.fixed(tripLengthTask.length, 2) + " " + unit;
                 }
+            }
+
+            QC.Button {
+                objectName: "spaceAddBar"
+                visible: currentTrip !== null && currentTrip.chunkCount > 0
+                Layout.alignment: Qt.AlignHCenter
+                text: "Press <b>Space</b> to add another data block"
+                onClicked: clipArea.currentTrip.addNewChunk();
             }
         }
     }

@@ -72,6 +72,15 @@ QQ.QtObject {
         }
     }
 
+    // Waits until the window delivers key presses to the cell named `cellName`.
+    // A cell holds the focus within the view a turn before the window hands
+    // it the keys, so a key pressed in between goes to the old focus item.
+    function waitForKeysOn(testCase, cellName) {
+        testCase.tryVerify(() => helperId.testWindow.activeFocusItem !== null
+                                 && helperId.testWindow.activeFocusItem.objectName === cellName,
+                           5000, cellName + " should take the keys")
+    }
+
     // The editor the table sits in, for the things it owns rather than the rows
     // — popups, and the challenge that guards deleting a whole splay cluster.
     function surveyEditor() {

@@ -432,6 +432,7 @@ MainWindowTest {
                     currentItem.model.setFocusedCell(
                                 currentItem.model.cellIndex(currentItem.listViewIndex,
                                                             currentItem.dataValue.cellRole))
+                    surveyTableId.waitForKeysOn(this, currentItem.objectName)
                 }
 
                 keyClick(key, modifier)
