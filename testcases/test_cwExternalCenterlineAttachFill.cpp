@@ -571,16 +571,6 @@ namespace {
 const QString kAnonymousTripsFixture = QStringLiteral("survex_anonymous_trips.svx");
 const QString kAnonymousTripsNode = QStringLiteral("alpha");
 
-cwTrip* tripAtSourcePath(const cwSurveyNode* node, const QString& sourcePath)
-{
-    for (cwTrip* trip : node->trips()) {
-        if (trip->sourcePath() == sourcePath) {
-            return trip;
-        }
-    }
-    return nullptr;
-}
-
 QStringList teamNames(const cwTrip* trip)
 {
     QStringList names;

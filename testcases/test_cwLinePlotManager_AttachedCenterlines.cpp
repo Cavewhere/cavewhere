@@ -14,6 +14,7 @@
 #include "cwAttachedCenterlinesModel.h"
 #include "cwAttachedFixModel.h"
 #include "cwCave.h"
+#include "cwCavernRunner.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwExternalCenterline.h"
@@ -38,6 +39,8 @@
 #include "cwStation.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
+#include "cwSurveyNetwork.h"
+#include "cwSurvex3DFileReader.h"
 #include "cwTrip.h"
 
 // Test helpers
@@ -51,7 +54,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QMap>
 #include <QRegularExpression>
+#include <QSet>
 #include <QSignalSpy>
 #include <QString>
 #include <QStringList>
@@ -803,6 +808,172 @@ TEST_CASE("walls_project's books take their stations by unit membership",
     }
     const QStringList rootKeys = root->scopedPositions().positions().keys();
     CHECK(covered == QSet<QString>(rootKeys.cbegin(), rootKeys.cend()));
+}
+
+namespace {
+
+const QString kAnonymousTripsFixture = QStringLiteral("survex_anonymous_trips.svx");
+const QString kAnonymousTripsNode = QStringLiteral("alpha");
+// The station alpha's *fix places, named below the attach prefix.
+const QString kAnonymousTripsFixedStation = QStringLiteral("alpha.a1");
+// a1 a2 tie hub (Trip 1), b9 b1 (Trip 2), c1 c2 (Trip 3), and z1 (alpha's own shot).
+constexpr int kAnonymousTripsStationCount = 9;
+// Every derived trip: Trip 1..3 and alpha's own unit.
+constexpr int kAnonymousTripsTripCount = 4;
+// The .3d stores centimeters, so two solves of the same legs agree to that.
+constexpr double kThreeDPositionMarginMeters = 0.01;
+
+QSet<QString> stationSet(const cwSurveyNetwork& network)
+{
+    const QStringList stations = network.stations();
+    return QSet<QString>(stations.cbegin(), stations.cend());
+}
+
+//! The stations of \a network reachable from \a start over its legs.
+QSet<QString> reachableFrom(const cwSurveyNetwork& network, const QString& start)
+{
+    QSet<QString> reached({start});
+    QStringList frontier({start});
+    while (!frontier.isEmpty()) {
+        const QString station = frontier.takeLast();
+        for (const QString& neighbor : network.neighbors(station)) {
+            if (network.hasStation(neighbor) && !reached.contains(neighbor)) {
+                reached.insert(neighbor);
+                frontier.append(neighbor);
+            }
+        }
+    }
+    return reached;
+}
+
+} // namespace
+
+TEST_CASE("An attached file of anonymous Survex blocks solves as one connected cave with one trip per block",
+          "[LinePlotManager][Attach][SourcedFixtures][AnonymousTrips]")
+{
+    auto project = makeSavedProject(QStringLiteral("anonymous-trips-solve"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* sourceRoot = attachSourceAndSolve(project.get(), kAnonymousTripsFixture);
+    requireSolved(project.get());
+
+    const cwSurveyNode* alpha = childNodeNamed(sourceRoot, kAnonymousTripsNode);
+    REQUIRE(alpha != nullptr);
+    REQUIRE(sourceRoot->allTrips().size() == kAnonymousTripsTripCount);
+    for (const cwTrip* trip : sourceRoot->allTrips()) {
+        INFO("trip " << trip->name().toStdString() << " at " << trip->sourcePath().toStdString());
+        CHECK(trip->isDerived());
+        CHECK_FALSE(trip->solvedStations().isEmpty());
+    }
+
+    const cwTrip* trip1 = tripAtSourcePath(alpha, QStringLiteral("alpha/#1"));
+    const cwTrip* trip2 = tripAtSourcePath(alpha, QStringLiteral("alpha/#2"));
+    const cwTrip* trip3 = tripAtSourcePath(alpha, QStringLiteral("alpha/#3"));
+    const cwTrip* alphaOwn = tripAtSourcePath(alpha, QStringLiteral("alpha/") + cwTrip::ownUnitSourcePath());
+    REQUIRE(trip1 != nullptr);
+    REQUIRE(trip2 != nullptr);
+    REQUIRE(trip3 != nullptr);
+    REQUIRE(alphaOwn != nullptr);
+
+    // The trips share alpha's namespace, so each names its stations below
+    // alpha's cavern path; trip 2 holds its nested duplicate block's b9.
+    const QMap<QString, QVector3D> solved1 = solvedByName(trip1);
+    const QMap<QString, QVector3D> solved2 = solvedByName(trip2);
+    const QMap<QString, QVector3D> solved3 = solvedByName(trip3);
+    const QMap<QString, QVector3D> solvedOwn = solvedByName(alphaOwn);
+    CHECK(solved1.keys() == QStringList({QStringLiteral("a1"), QStringLiteral("a2"),
+                                         QStringLiteral("hub"), QStringLiteral("tie")}));
+    CHECK(solved2.keys() == QStringList({QStringLiteral("b1"), QStringLiteral("b9"),
+                                         QStringLiteral("hub"), QStringLiteral("tie")}));
+    CHECK(solved3.keys() == QStringList({QStringLiteral("c1"), QStringLiteral("c2"),
+                                         QStringLiteral("hub")}));
+    CHECK(solvedOwn.keys() == QStringList({QStringLiteral("c2"), QStringLiteral("z1")}));
+
+    // A tie station is one station of alpha, at one position in every trip
+    // that shares it.
+    const cwStationPositionLookup alphaView = alpha->scopedPositions();
+    const struct {
+        QString station;
+        QList<const QMap<QString, QVector3D>*> trips;
+    } ties[] = {
+        {QStringLiteral("tie"), {&solved1, &solved2}},
+        {QStringLiteral("hub"), {&solved1, &solved2, &solved3}},
+        {QStringLiteral("c2"), {&solved3, &solvedOwn}},
+    };
+    for (const auto& tie : ties) {
+        INFO("tie " << tie.station.toStdString());
+        REQUIRE(alphaView.hasPosition(tie.station));
+        const QVector3D position = alphaView.position(tie.station);
+        for (const QMap<QString, QVector3D>* trip : tie.trips) {
+            REQUIRE(trip->contains(tie.station));
+            CHECK(trip->value(tie.station) == position);
+        }
+    }
+
+    // One connected piece: every station of the attachment is reachable from
+    // the fixed one over the solved legs.
+    const cwSurveyNetwork network =
+        project->rootData->linePlotManager()->regionNetwork().scoped(sourceRoot->scopePrefix());
+    CHECK(network.stationCount() == kAnonymousTripsStationCount);
+    REQUIRE(network.hasStation(kAnonymousTripsFixedStation));
+    CHECK(reachableFrom(network, network.key(kAnonymousTripsFixedStation)) == stationSet(network));
+    CHECK(sourceRoot->scopedPositions().positions().size() == kAnonymousTripsStationCount);
+}
+
+TEST_CASE("An attached file of anonymous Survex blocks solves to the same stations as the bare file",
+          "[LinePlotManager][Attach][SourcedFixtures][AnonymousTrips]")
+{
+    auto project = makeSavedProject(QStringLiteral("anonymous-trips-gate"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* sourceRoot = attachSourceAndSolve(project.get(), kAnonymousTripsFixture);
+    requireSolved(project.get());
+
+    // a1's *fix names no system and the project has no frame, so the driver
+    // places the file as a local grid with a1 at the origin: the driver's
+    // solve is the bare file's shifted by a1's fix, which is why each station
+    // is compared by its offset from a1.
+    CHECK(project->project->cavingRegion()->geoReference()->state() == cwGeoReference::LocalGrid);
+
+    const QString driverSource = project->rootData->linePlotManager()->driverSource();
+    INFO("driver:\n" << driverSource.toStdString());
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QDir dir(tempDir.path());
+    const QString driverPath = dir.absoluteFilePath(QStringLiteral("driver.svx"));
+    overwriteFile(driverPath, driverSource.toUtf8());
+
+    const QString bare3d = dir.absoluteFilePath(QStringLiteral("bare.3d"));
+    const auto bareRan = cwCavernRunner::run(fixturePath(kAnonymousTripsFixture), bare3d);
+    INFO("bare cavern: " << bareRan.errorMessage().toStdString());
+    REQUIRE_FALSE(bareRan.hasError());
+    const QString driver3d = dir.absoluteFilePath(QStringLiteral("driver.3d"));
+    const auto driverRan = cwCavernRunner::run(driverPath, driver3d);
+    INFO("driver cavern: " << driverRan.errorMessage().toStdString());
+    REQUIRE_FALSE(driverRan.hasError());
+
+    cwSurvex3DFileReader reader;
+    const cwSurveyNetwork bare = reader.readNetworkAndLookup(bare3d).network;
+    const cwSurveyNetwork attached =
+        reader.readNetworkAndLookup(driver3d).network.scoped(sourceRoot->scopePrefix());
+
+    CHECK(bare.stationCount() == kAnonymousTripsStationCount);
+    REQUIRE(stationSet(attached) == stationSet(bare));
+
+    REQUIRE(bare.hasPosition(kAnonymousTripsFixedStation));
+    REQUIRE(attached.hasPosition(kAnonymousTripsFixedStation));
+    const QVector3D bareOrigin = bare.position(kAnonymousTripsFixedStation);
+    const QVector3D attachedOrigin = attached.position(kAnonymousTripsFixedStation);
+    for (const QString& station : bare.stations()) {
+        INFO("station " << station.toStdString());
+        REQUIRE(bare.hasPosition(station));
+        REQUIRE(attached.hasPosition(station));
+        const QVector3D bareOffset = bare.position(station) - bareOrigin;
+        const QVector3D attachedOffset = attached.position(station) - attachedOrigin;
+        CHECK(attachedOffset.x() == Catch::Approx(bareOffset.x()).margin(kThreeDPositionMarginMeters));
+        CHECK(attachedOffset.y() == Catch::Approx(bareOffset.y()).margin(kThreeDPositionMarginMeters));
+        CHECK(attachedOffset.z() == Catch::Approx(bareOffset.z()).margin(kThreeDPositionMarginMeters));
+    }
+    // z passes through the local grid, so the fixed station keeps its elevation.
+    CHECK(attachedOrigin.z() == Catch::Approx(bareOrigin.z()).margin(kThreeDPositionMarginMeters));
 }
 
 TEST_CASE("A native trip under a derived node solves in place once a region equate ties it",

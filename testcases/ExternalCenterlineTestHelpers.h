@@ -687,6 +687,17 @@ inline cwTrip* tripNamed(const cwSurveyNode* node, const QString& name)
     return nullptr;
 }
 
+//! \a node's derived trip whose sourcePath() is \a sourcePath.
+inline cwTrip* tripAtSourcePath(const cwSurveyNode* node, const QString& sourcePath)
+{
+    for (cwTrip* trip : node->trips()) {
+        if (trip->sourcePath() == sourcePath) {
+            return trip;
+        }
+    }
+    return nullptr;
+}
+
 inline QStringList childNodeNames(const cwSurveyNode* node)
 {
     QStringList names;
