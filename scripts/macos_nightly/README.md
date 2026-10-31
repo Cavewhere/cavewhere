@@ -11,7 +11,8 @@ Automated overnight test runner that clones CaveWhere fresh, builds in Release m
 5. Runs both suites 16 times in parallel (4 cpp + 2 qml concurrent)
 6. Each test run has a 22-minute timeout (kills hung tests)
 7. Generates `summary.txt` with per-run pass/fail and failing test frequency
-8. Sends a macOS notification (click to open logs directory)
+8. Records every failure in the shared flaky-test ledger (`~/.cavewhere/flaky.sqlite`, see `scripts/flaky/flaky.py`): a test that failed in some runs and passed in others is flaky
+9. Sends a macOS notification (click to open logs directory)
 
 Logs and builds go to `/var/tmp/cavewhere-nightly/<timestamp>/`.
 

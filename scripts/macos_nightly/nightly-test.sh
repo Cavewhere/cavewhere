@@ -103,9 +103,6 @@ CPP_PARALLEL="${CPP_PARALLEL:-4}"
 QML_PARALLEL="${QML_PARALLEL:-1}"
 echo "=== Running tests (cpp: $CPP_RUNS runs x$CPP_PARALLEL parallel, then qml: $QML_RUNS runs x$QML_PARALLEL parallel) ==="
 
-# Directory for exit code files
-mkdir -p "$LOG_DIR/exit_codes"
-
 # Helper script for running a single test
 RUN_SCRIPT="$LOG_DIR/run-test.sh"
 cat > "$RUN_SCRIPT" <<RUNEOF
@@ -130,11 +127,11 @@ QML_JOBS="$LOG_DIR/qml-jobs.txt"
 > "$QML_JOBS"
 for i in $(seq 1 "$CPP_RUNS"); do
     ii=$(printf "%02d" "$i")
-    echo "$CPP_TEST $LOG_DIR/cpp-test-run-${ii}.log $LOG_DIR/exit_codes/cpp-${ii} --platform offscreen" >> "$CPP_JOBS"
+    echo "$CPP_TEST $LOG_DIR/cpp-test-run-${ii}.log $LOG_DIR/cpp-test-run-${ii}.exit --platform offscreen -r console -r xml::out=$LOG_DIR/cpp-test-run-${ii}.xml" >> "$CPP_JOBS"
 done
 for i in $(seq 1 "$QML_RUNS"); do
     ii=$(printf "%02d" "$i")
-    echo "$QML_TEST $LOG_DIR/qml-test-run-${ii}.log $LOG_DIR/exit_codes/qml-${ii} --platform offscreen" >> "$QML_JOBS"
+    echo "$QML_TEST $LOG_DIR/qml-test-run-${ii}.log $LOG_DIR/qml-test-run-${ii}.exit --platform offscreen -o $LOG_DIR/qml-test-run-${ii}.xml,xml -o -,txt" >> "$QML_JOBS"
 done
 
 # Run cpp tests first, then qml tests (no overlap to avoid load-induced flakiness)
@@ -152,7 +149,7 @@ qml_results=()
 
 for i in $(seq 1 "$CPP_RUNS"); do
     ii=$(printf "%02d" "$i")
-    cpp_exit=$(cat "$LOG_DIR/exit_codes/cpp-${ii}" 2>/dev/null || echo 1)
+    cpp_exit=$(cat "$LOG_DIR/cpp-test-run-${ii}.exit" 2>/dev/null || echo 1)
     if [[ "$cpp_exit" -eq 0 ]]; then
         cpp_results+=("PASS")
     else
@@ -163,7 +160,7 @@ done
 
 for i in $(seq 1 "$QML_RUNS"); do
     ii=$(printf "%02d" "$i")
-    qml_exit=$(cat "$LOG_DIR/exit_codes/qml-${ii}" 2>/dev/null || echo 1)
+    qml_exit=$(cat "$LOG_DIR/qml-test-run-${ii}.exit" 2>/dev/null || echo 1)
     if [[ "$qml_exit" -eq 0 ]]; then
         qml_results+=("PASS")
     else
@@ -230,6 +227,15 @@ SUMMARY="$LOG_DIR/summary.txt"
 } > "$SUMMARY"
 
 cat "$SUMMARY"
+
+# --- Record failures in the shared flaky-test ledger (~/.cavewhere/flaky.sqlite) ---
+# A test that failed in some runs and passed in others is recorded as flaky.
+echo ">>> Recording results in the flaky-test ledger..."
+FLAKY="$(pwd)/scripts/flaky/flaky.py"
+python3 "$FLAKY" ingest --suite cpp --build "$BUILD_DIR" "$LOG_DIR"/cpp-test-run-*.log \
+    || echo "WARNING: could not record cavewhere-test results in the ledger"
+python3 "$FLAKY" ingest --suite qml --build "$BUILD_DIR" "$LOG_DIR"/qml-test-run-*.log \
+    || echo "WARNING: could not record cavewhere-qml-test results in the ledger"
 
 # --- macOS notification ---
 total_failures=$((cpp_failures + qml_failures))

@@ -32,6 +32,20 @@ cmake --build build/<preset> --target cavewhere-test cavewhere-qml-test
 
 Always redirect test output to a log file so failures can be inspected without re-running. Keep `$$` (the shell PID) in the log name: sibling checkouts and the nightly runner write to `/tmp` too, and a fixed path lets one run silently clobber another's log — producing a mixed-up log whose failures belong to a different working tree. Run a single C++ test with Catch2 tags (`cavewhere-test "[TagName]"`); run a single QML test with `cavewhere-qml-test --platform offscreen -input test-qml/tst_YourTest.qml`. Always run both suites before pushing.
 
+### Flaky tests
+
+Run the suites through `scripts/flaky/flaky.py`. It keeps one ledger, `~/.cavewhere/flaky.sqlite`, shared by every checkout, every session, and the nightly runner:
+
+```bash
+scripts/flaky/flaky.py run --build build/<preset>                                  # both suites
+scripts/flaky/flaky.py run cpp --build build/<preset> -- "[TagName]"
+scripts/flaky/flaky.py run qml --build build/<preset> -- -input test-qml/tst_YourTest.qml
+```
+
+It reruns each failing test alone five times and labels it **FLAKY** (a rerun passed), **BROKEN** (every rerun failed), or **UNVERIFIED** (it could not be rerun alone). A test the suite timeout cut off is **INTERRUPTED** and is left out of flake counts. It exits 0 only when every test ran and every failure was flaky. Treat BROKEN, UNVERIFIED, and an INCOMPLETE suite (a crash or timeout left tests unrun) as real failures. A FLAKY result marked as the test's first flake on a tree with uncommitted changes may come from your change, so check before setting it aside. A full run plus reruns can outlast the 10-minute Bash limit; run it in the background.
+
+Let the script do the reruns. If you already reran a failure by hand, log it: `flaky.py record --suite cpp --test "<name>" --reruns N --rerun-failures M`. Before fixing a failing test, `flaky.py show "<name>"` lists its history (seed, load, ASAN, other suites running, kept logs). `flaky.py report` ranks flakes by frequency. `flaky.py promote "<name>"` drafts a GitHub issue labeled `flaky-test`; `--post` sends it, and only the owner runs that or approves it.
+
 ## Architecture Overview
 
 `main.cpp` exposes `cwRootData` as a QML singleton — the hub owning every major subsystem, and the place to start when looking for one.
