@@ -8,6 +8,7 @@
 // Catch
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 // Our
 #include "cwExternalCenterlineScanner.h"
@@ -28,6 +29,9 @@
 #include <QMetaEnum>
 #include <QString>
 #include <QTemporaryDir>
+
+// Std
+#include <algorithm>
 
 namespace {
 
@@ -97,6 +101,23 @@ bool anyWarningContains(const ScanResult& result, const QString& needle)
         }
     }
     return false;
+}
+
+QString survexDateWarning(const QString& operand)
+{
+    return QStringLiteral("*date \"%1\" is not a date Survex reads (YYYY.MM.DD or YYYY-MM-DD)")
+        .arg(operand);
+}
+
+QDate blockDate(const ScanResult& result, const QString& path)
+{
+    for (const auto& block : result.blocks) {
+        if (block.path == path) {
+            return block.date;
+        }
+    }
+    FAIL("no scan block has path " << path.toStdString());
+    return QDate();
 }
 
 } // namespace
@@ -555,7 +576,91 @@ TEST_CASE("seededMetadata warns on a malformed *date and leaves it unset",
     REQUIRE_FALSE(result.hasError());
     const ScanResult scan = result.value();
     CHECK_FALSE(scan.seededMetadata.date.has_value());
-    CHECK(anyWarningContains(scan, QStringLiteral("*date")));
+    CHECK(scan.warnings.count(survexDateWarning(QStringLiteral("xyzzy"))) == 1);
+}
+
+TEST_CASE("seededMetadata warns once for a rejected *date that repeats",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("bad-month.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin BadMonth\n"
+                                    "*date 2005.13.5\n"
+                                    "*date 2005.13.5\n"
+                                    "*data normal from to tape compass clino\n"
+                                    "A1 A2 10.0 0 0\n"
+                                    "*end BadMonth\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.warnings.count(survexDateWarning(QStringLiteral("2005.13.5"))) == 1);
+    CHECK(std::count_if(scan.warnings.cbegin(), scan.warnings.cend(),
+                        [](const QString& warning) {
+                            return warning.contains(QStringLiteral("*date"));
+                        })
+          == 1);
+    CHECK_FALSE(scan.seededMetadata.date.has_value());
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK_FALSE(scan.blocks.first().date.isValid());
+}
+
+TEST_CASE("seededMetadata names the whole operand of a *date cavern rejects",
+          "[Scanner][Metadata]")
+{
+    // Each operand is one cavern rejects: a dotted date after a qualifier,
+    // a year before 1900, and a day past the end of its month.
+    const QString operand = GENERATE(QStringLiteral("surveyed 2005.11.05"),
+                                     QStringLiteral("1850"),
+                                     QStringLiteral("2005.2.30"));
+    INFO("operand: " << operand.toStdString());
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("rejected-date.svx"));
+    writeUtf8File(path,
+                  QStringLiteral("*begin Rejected\n"
+                                 "*date %1\n"
+                                 "*data normal from to tape compass clino\n"
+                                 "A1 A2 10.0 0 0\n"
+                                 "*end Rejected\n")
+                      .arg(operand)
+                      .toUtf8());
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.warnings.count(survexDateWarning(operand)) == 1);
+    CHECK_FALSE(scan.seededMetadata.date.has_value());
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK_FALSE(scan.blocks.first().date.isValid());
+}
+
+TEST_CASE("an explored-only *date sets no date and raises no warning",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("explored.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin Explored\n"
+                                    "*date explored 2005-11-05\n"
+                                    "*data normal from to tape compass clino\n"
+                                    "A1 A2 10.0 0 0\n"
+                                    "*end Explored\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK_FALSE(anyWarningContains(scan, QStringLiteral("*date")));
+    CHECK_FALSE(scan.seededMetadata.date.has_value());
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK_FALSE(scan.blocks.first().date.isValid());
 }
 
 TEST_CASE("seededMetadata warns on a non-numeric *calibrate declination",
@@ -1115,6 +1220,40 @@ TEST_CASE("an unparseable *date leaves the block dateless and silent",
     REQUIRE(scan.blocks.size() == 1);
     CHECK_FALSE(scan.blocks.first().date.isValid());
     CHECK_FALSE(anyWarningContains(scan, QStringLiteral("*date")));
+}
+
+TEST_CASE("*date reads every form cavern reads as the first day of its period",
+          "[Scanner][Blocks][Metadata]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("survex_date_forms.svx"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK_FALSE(anyWarningContains(scan, QStringLiteral("*date")));
+
+    // The entry file's first *date line is the outer block's unpadded one.
+    REQUIRE(scan.seededMetadata.date.has_value());
+    CHECK(scan.seededMetadata.date.value() == QDate(2003, 2, 1));
+    CHECK(blockDate(scan, QStringLiteral("dateforms")) == QDate(2003, 2, 1));
+
+    CHECK(blockDate(scan, QStringLiteral("dateforms.dotted-unpadded")) == QDate(2005, 11, 5));
+    CHECK(blockDate(scan, QStringLiteral("dateforms.dotted-padded")) == QDate(2005, 11, 5));
+    CHECK(blockDate(scan, QStringLiteral("dateforms.iso-unpadded")) == QDate(2005, 11, 5));
+    CHECK(blockDate(scan, QStringLiteral("dateforms.year")) == QDate(2005, 1, 1));
+    CHECK(blockDate(scan, QStringLiteral("dateforms.dotted-month")) == QDate(2005, 11, 1));
+    CHECK(blockDate(scan, QStringLiteral("dateforms.iso-month")) == QDate(2005, 11, 1));
+    CHECK(blockDate(scan, QStringLiteral("dateforms.dotted-range")) == QDate(2004, 1, 5));
+    CHECK(blockDate(scan, QStringLiteral("dateforms.iso-space-range")) == QDate(2004, 1, 5));
+    CHECK(blockDate(scan, QStringLiteral("dateforms.year-range")) == QDate(1973, 1, 1));
+    CHECK(blockDate(scan, QStringLiteral("dateforms.surveyed")) == QDate(2005, 11, 5));
+    CHECK_FALSE(blockDate(scan, QStringLiteral("dateforms.explored")).isValid());
+    CHECK(blockDate(scan, QStringLiteral("dateforms.two-digit-year")) == QDate(1999, 1, 5));
+
+    // Dated by the block walk alone: the metadata pass reads the entry file only.
+    CHECK(blockDate(scan, QStringLiteral("dateforms.included")) == QDate(2008, 2, 9));
 }
 
 TEST_CASE("rootDate takes the first Compass survey's SURVEY DATE",

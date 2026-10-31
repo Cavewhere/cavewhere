@@ -1,0 +1,7 @@
+; Included by survex_date_forms.svx: the entry-file metadata pass never
+; reads this file, so only the block walk dates this block.
+*begin included
+*data normal from to tape compass clino
+*date 2008.2.9
+s1 s2 1.0 0 0
+*end included

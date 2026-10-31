@@ -1,0 +1,85 @@
+; Synthetic fixture for cavern-compatible *date parsing: one inner block
+; per *date form cavern reads (plans/SURVEX_DATE_PARSING_PLAN.md section 1).
+; The outer block's unpadded date is the entry file's first valid date,
+; and the included child dates its block through the block walk alone.
+*begin dateforms
+*date 2003.2.1
+*fix o1 0 0 0
+*data normal from to tape compass clino
+o1 o2 1.0 0 0
+o2 dotted-unpadded.s1 1.0 0 0
+o2 dotted-padded.s1 1.0 0 0
+o2 iso-unpadded.s1 1.0 0 0
+o2 year.s1 1.0 0 0
+o2 dotted-month.s1 1.0 0 0
+o2 iso-month.s1 1.0 0 0
+o2 dotted-range.s1 1.0 0 0
+o2 iso-space-range.s1 1.0 0 0
+o2 year-range.s1 1.0 0 0
+o2 surveyed.s1 1.0 0 0
+o2 explored.s1 1.0 0 0
+o2 two-digit-year.s1 1.0 0 0
+o2 included.s1 1.0 0 0
+
+*begin dotted-unpadded
+*date 2005.11.5
+s1 s2 1.0 0 0
+*end dotted-unpadded
+
+*begin dotted-padded
+*date 2005.11.05
+s1 s2 1.0 0 0
+*end dotted-padded
+
+*begin iso-unpadded
+*date 2005-11-5
+s1 s2 1.0 0 0
+*end iso-unpadded
+
+*begin year
+*date 2005
+s1 s2 1.0 0 0
+*end year
+
+*begin dotted-month
+*date 2005.11
+s1 s2 1.0 0 0
+*end dotted-month
+
+*begin iso-month
+*date 2005-11
+s1 s2 1.0 0 0
+*end iso-month
+
+*begin dotted-range
+*date 2004.01.05-2004.01.07
+s1 s2 1.0 0 0
+*end dotted-range
+
+*begin iso-space-range
+*date 2004-01-05 2004-01-07
+s1 s2 1.0 0 0
+*end iso-space-range
+
+*begin year-range
+*date 1973-1975
+s1 s2 1.0 0 0
+*end year-range
+
+*begin surveyed
+*date surveyed 2005-11-05
+s1 s2 1.0 0 0
+*end surveyed
+
+*begin explored
+*date explored 2005-11-05
+s1 s2 1.0 0 0
+*end explored
+
+*begin two-digit-year
+*date 99.1.5
+s1 s2 1.0 0 0
+*end two-digit-year
+
+*include survex_date_forms_child.svx
+*end dateforms

@@ -28,6 +28,7 @@
 #include <QStringDecoder>
 
 //Std includes
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <optional>
@@ -44,8 +45,14 @@ constexpr const char* kWallsSrvExtension = ".srv";
 // parent (cavern's WALLS_WPJ_STATUS_DETACHED).
 constexpr int kWallsDetachedStatusBit = 0x2;
 constexpr int kCompassYearPivot = 1900;
-// Both Survex date spellings - yyyy.mm.dd and yyyy-mm-dd - are this long.
-constexpr int kSurvexDateLength = 10;
+// cavern's read_year: a year below kSurvexTwoDigitYearLimit is 19xx, and
+// any other year outside kSurvexMinYear..kSurvexMaxYear skips the line.
+constexpr int kSurvexTwoDigitYearLimit = 100;
+constexpr int kSurvexTwoDigitYearBase = 1900;
+constexpr int kSurvexMinYear = 1900;
+constexpr int kSurvexMaxYear = 2078;
+constexpr int kSurvexMaxDateFields = 3;
+constexpr int kSurvexMaxRangeTokens = 2;
 
 // UTF-8 byte-order mark (0xEF 0xBB 0xBF).
 const QByteArray kUtf8Bom = QByteArray::fromHex("EFBBBF");
@@ -55,12 +62,50 @@ bool hasExtension(const QString& path, const char* extension)
     return path.endsWith(QLatin1String(extension), Qt::CaseInsensitive);
 }
 
-std::optional<QDate> parseIsoOrDottedDate(const QString& token)
+/**
+ * Reads one Survex date, "2005", "2005.11", "2005-11-5" and so on, as the
+ * first day of the period it names. Fields are digit runs of any length
+ * separated by '.' or '-' (one separator per date, '.' only when
+ * dotAllowed is true), checked the way cavern's cmd_date checks them.
+ */
+std::optional<QDate> readSurvexSingleDate(const QString& token, bool dotAllowed)
 {
-    QDate date = QDate::fromString(token, QStringLiteral("yyyy.MM.dd"));
-    if (!date.isValid()) {
-        date = QDate::fromString(token, QStringLiteral("yyyy-MM-dd"));
+    const bool hasDot = token.contains(QLatin1Char('.'));
+    const bool hasDash = token.contains(QLatin1Char('-'));
+    if (hasDot && (hasDash || !dotAllowed)) {
+        return std::nullopt;
     }
+
+    const QChar separator = hasDot ? QLatin1Char('.') : QLatin1Char('-');
+    const QStringList fields = token.split(separator);
+    if (fields.size() > kSurvexMaxDateFields) {
+        return std::nullopt;
+    }
+
+    std::array<int, kSurvexMaxDateFields> values = {0, 1, 1};
+    for (int i = 0; i < fields.size(); ++i) {
+        const QString& field = fields.at(i);
+        const bool isDigitRun = !field.isEmpty()
+            && std::all_of(field.cbegin(), field.cend(), [](QChar c) {
+                   return c >= QLatin1Char('0') && c <= QLatin1Char('9');
+               });
+        bool ok = false;
+        if (isDigitRun) {
+            values.at(i) = field.toInt(&ok);
+        }
+        if (!ok) {
+            return std::nullopt;
+        }
+    }
+
+    int year = values.at(0);
+    if (year < kSurvexTwoDigitYearLimit) {
+        year += kSurvexTwoDigitYearBase;
+    } else if (year < kSurvexMinYear || year > kSurvexMaxYear) {
+        return std::nullopt;
+    }
+
+    const QDate date(year, values.at(1), values.at(2));
     if (!date.isValid()) {
         return std::nullopt;
     }
@@ -68,20 +113,94 @@ std::optional<QDate> parseIsoOrDottedDate(const QString& token)
 }
 
 /**
- * Reads a Survex *date operand. A range ("2024.01.05-2024.01.07")
- * takes its start date: both accepted spellings are exactly
- * kSurvexDateLength characters, so the token splits only where a full
- * leading date is followed by '-'. That keeps a dotted date from
- * being mis-split on a '-' it uses as its own separator.
+ * Reads a single-word Survex date or range ("2004.01.05-2004.01.07",
+ * "1973-1975") as its start date. The whole word is tried first, so
+ * "2005-11-05" stays one date; otherwise the first '-' that splits the
+ * word into two dates is the range separator.
  */
-std::optional<QDate> parseSurvexDateToken(const QString& token)
+std::optional<QDate> readSurvexDateWord(const QString& word, bool dotAllowed)
 {
-    if (const auto whole = parseIsoOrDottedDate(token); whole.has_value()) {
+    if (const auto whole = readSurvexSingleDate(word, dotAllowed); whole.has_value()) {
         return whole;
     }
-    if (token.size() > kSurvexDateLength
-        && token.at(kSurvexDateLength) == QLatin1Char('-')) {
-        return parseIsoOrDottedDate(token.left(kSurvexDateLength));
+    for (qsizetype dash = word.indexOf(QLatin1Char('-')); dash >= 0;
+         dash = word.indexOf(QLatin1Char('-'), dash + 1)) {
+        const auto start = readSurvexSingleDate(word.left(dash), dotAllowed);
+        if (start.has_value()
+            && readSurvexSingleDate(word.mid(dash + 1), dotAllowed).has_value()) {
+            return start;
+        }
+    }
+    return std::nullopt;
+}
+
+// A *date line cavern reads: its start date, and whether it sets the
+// surveyed date (cavern parses and ignores an EXPLORED-only line).
+struct SurvexDate
+{
+    QDate start;
+    bool setsSurveyedDate = true;
+};
+
+/**
+ * Reads a Survex *date operand the way cavern's cmd_date does: optional
+ * SURVEYED / EXPLORED qualifiers (which allow only '-' as the separator),
+ * then a date, a period, a one-word range or an ISO range of two words.
+ * Returns nullopt for every operand cavern rejects.
+ */
+std::optional<SurvexDate> readSurvexDate(const QString& operand)
+{
+    QStringList words = operand.simplified().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+
+    bool surveyed = false;
+    bool explored = false;
+    while (!words.isEmpty()) {
+        const QString& word = words.constFirst();
+        bool* qualifier = nullptr;
+        if (word.compare(QLatin1String("surveyed"), Qt::CaseInsensitive) == 0) {
+            qualifier = &surveyed;
+        } else if (word.compare(QLatin1String("explored"), Qt::CaseInsensitive) == 0) {
+            qualifier = &explored;
+        } else {
+            break;
+        }
+        if (*qualifier) {
+            return std::nullopt;
+        }
+        *qualifier = true;
+        words.removeFirst();
+    }
+
+    const bool hasQualifier = surveyed || explored;
+    const bool dotAllowed = !hasQualifier;
+
+    std::optional<QDate> start;
+    if (words.size() == 1) {
+        start = readSurvexDateWord(words.constFirst(), dotAllowed);
+    } else if (words.size() == kSurvexMaxRangeTokens
+               && !words.constFirst().contains(QLatin1Char('.'))) {
+        start = readSurvexSingleDate(words.constFirst(), dotAllowed);
+        if (!readSurvexSingleDate(words.constLast(), dotAllowed).has_value()) {
+            start.reset();
+        }
+    }
+
+    if (!start.has_value()) {
+        return std::nullopt;
+    }
+    return SurvexDate{start.value(), surveyed || !hasQualifier};
+}
+
+/**
+ * The surveyed date a Survex *date operand sets: the first day of its
+ * period or range. Returns nullopt for an operand cavern rejects and for
+ * an EXPLORED-only one, which sets no surveyed date.
+ */
+std::optional<QDate> parseSurvexDate(const QString& operand)
+{
+    const auto date = readSurvexDate(operand);
+    if (date.has_value() && date->setsSurveyedDate) {
+        return date->start;
     }
     return std::nullopt;
 }
@@ -390,7 +509,7 @@ const QRegularExpression& survexFixRegex()
 const QRegularExpression& survexDateRegex()
 {
     static const QRegularExpression regex(
-        QStringLiteral(R"RX(^\*date\s+(\S+))RX"),
+        QStringLiteral(R"RX(^\*date\s+(.+)$)RX"),
         QRegularExpression::CaseInsensitiveOption);
     return regex;
 }
@@ -1365,9 +1484,9 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
 
         if (const auto dateMatch = survexDateRegex().match(line);
             dateMatch.hasMatch()) {
-            // An unparseable date stamps nothing and says nothing -
-            // cavern is the validator for date syntax.
-            if (const auto date = parseSurvexDateToken(dateMatch.captured(1));
+            // cavern reports a date it rejects; the walk stamps only the
+            // dates cavern reads.
+            if (const auto date = parseSurvexDate(dateMatch.captured(1).trimmed());
                 date.has_value()) {
                 recordSurvexDate(state, date.value());
             }
@@ -2273,13 +2392,18 @@ void parseSurvexMetadata(const QStringList& lines,
         }
 
         if (const auto match = survexDateRegex().match(line); match.hasMatch()) {
-            const QString token = match.captured(1);
-            const auto date = parseSurvexDateToken(token);
-            if (!date.has_value()) {
-                warnings.append(
-                    QStringLiteral("could not parse *date: %1").arg(token));
-            } else if (!metadata.date.has_value()) {
-                metadata.date = date;
+            const QString operand = match.captured(1).trimmed();
+            if (const auto date = readSurvexDate(operand); date.has_value()) {
+                if (date->setsSurveyedDate && !metadata.date.has_value()) {
+                    metadata.date = date->start;
+                }
+            } else {
+                const QString warning =
+                    QStringLiteral("*date \"%1\" is not a date Survex reads (YYYY.MM.DD or YYYY-MM-DD)")
+                        .arg(operand);
+                if (!warnings.contains(warning)) {
+                    warnings.append(warning);
+                }
             }
             continue;
         }
