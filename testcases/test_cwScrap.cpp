@@ -45,6 +45,7 @@
 #include <QtGlobal>
 #include "cwSignalSpy.h"
 #include <algorithm>
+#include <cmath>
 
 class TestRow {
 public:
@@ -629,6 +630,104 @@ TEST_CASE("Auto-calculated note transform accounts for grid convergence", "[cwSc
 
     INFO("plain=" << plain << " georeferenced=" << georeferenced);
     CHECK(georeferenced == Catch::Approx(plain).margin(1e-6));
+}
+
+namespace {
+
+struct PlacedStation {
+    QString name;
+    QVector3D positionInCave;
+    QPointF positionOnNote;
+};
+
+struct AutoTransform {
+    double scale;
+    double north;
+};
+
+//! Auto-calculates a plan scrap over \a stations, joined by \a shots, in an
+//! in-memory cave and returns the resulting scale and north.
+AutoTransform autoPlanTransform(const QList<PlacedStation>& stations,
+                                const QList<QPair<QString, QString>>& shots)
+{
+    cwCavingRegion region;
+    region.addCave();
+    cwCave* cave = region.cave(region.caveCount() - 1);
+    REQUIRE(cave != nullptr);
+
+    auto* trip = new cwTrip(cave);
+    cave->addTrip(trip);
+    auto* note = new cwNote();
+    trip->notes()->addNotes({note});
+    auto* scrap = new cwScrap();
+    note->addScrap(scrap);
+    scrap->setType(cwScrap::Plan);
+    scrap->setCalculateNoteTransform(true);
+
+    cwStationPositionLookup lookup;
+    QList<cwNoteStation> noteStations;
+    for(const PlacedStation& placed : stations) {
+        lookup.setPosition(placed.name, placed.positionInCave);
+        cwNoteStation noteStation;
+        noteStation.setName(placed.name);
+        noteStation.setPositionOnNote(placed.positionOnNote);
+        noteStations.append(noteStation);
+    }
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
+
+    cwSurveyNetwork network;
+    for(const auto& shot : shots) {
+        network.addShot(shot.first, shot.second);
+    }
+    SurveyTreeTestHelper::setScopedNetwork(cave, network);
+
+    scrap->setStations(noteStations);
+    scrap->updateNoteTransformation();
+
+    return {scrap->noteTransformation()->scale(), scrap->noteTransformation()->northUp()};
+}
+
+const QVector3D kCaveA(0.0f, 0.0f, 0.0f);
+const QVector3D kCaveB(0.0f, 10.0f, 0.0f);        // 10 m north of A
+const QVector3D kCaveBelowB(0.0f, 10.0f, -5.0f);  // 5 m straight down from B
+const QVector3D kCaveEastOfB(4.0f, 10.0f, 0.0f);  // 4 m east of B
+const QPointF kPageA(0.4, 0.5);
+const QPointF kPageB(0.5, 0.5);                   // 0.1 normalized units east of A, so north is turned
+constexpr double kNorthMarginDegrees = 1e-6;
+
+} // namespace
+
+TEST_CASE("A shot drawn as a point drops out of the auto-calculated note transform", "[cwScrap]") {
+    const QString a = QStringLiteral("A");
+    const QString b = QStringLiteral("B");
+    const QString c = QStringLiteral("C");
+
+    const AutoTransform goodShotOnly = autoPlanTransform({{a, kCaveA, kPageA}, {b, kCaveB, kPageB}},
+                                                         {{a, b}});
+    REQUIRE(std::isfinite(goodShotOnly.scale));
+    REQUIRE(goodShotOnly.scale > 0.0);
+    REQUIRE(goodShotOnly.north != Catch::Approx(0.0).margin(kNorthMarginDegrees));
+
+    auto checkMatchesGoodShot = [&](const AutoTransform& transform) {
+        INFO("scale=" << transform.scale << " good scale=" << goodShotOnly.scale
+             << " north=" << transform.north << " good north=" << goodShotOnly.north);
+        CHECK(transform.scale == Catch::Approx(goodShotOnly.scale));
+        CHECK(transform.north == Catch::Approx(goodShotOnly.north).margin(kNorthMarginDegrees));
+    };
+
+    SECTION("A vertical leg drawn at its upper station") {
+        checkMatchesGoodShot(autoPlanTransform({{a, kCaveA, kPageA},
+                                                {b, kCaveB, kPageB},
+                                                {c, kCaveBelowB, kPageB}},
+                                               {{a, b}, {b, c}}));
+    }
+
+    SECTION("A horizontal leg drawn at one station") {
+        checkMatchesGoodShot(autoPlanTransform({{a, kCaveA, kPageA},
+                                                {b, kCaveB, kPageB},
+                                                {c, kCaveEastOfB, kPageB}},
+                                               {{a, b}, {b, c}}));
+    }
 }
 
 TEST_CASE("Auto-calculate scrap transform handles declination correctly", "[cwScrap]") {

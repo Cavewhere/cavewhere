@@ -1,6 +1,21 @@
 #include "cwNoteTransformCalculator.h"
 #include "cwDebug.h"
 
+//Std includes
+#include <cmath>
+
+namespace {
+bool isValidTransform(const cwNoteTransformCalculator::ShotTransform& transformation)
+{
+    const QVector3D& error = transformation.ErrorVector;
+    return std::isfinite(transformation.Scale)
+           && transformation.Scale > 0.0
+           && std::isfinite(error.x())
+           && std::isfinite(error.y())
+           && std::isfinite(error.z());
+}
+}
+
 cwNoteTransformCalculator::ShotTransform cwNoteTransformCalculator::averageTransformations(const QList<ShotTransform> &shotTransforms) {
 
     if(shotTransforms.empty()) {
@@ -16,8 +31,7 @@ cwNoteTransformCalculator::ShotTransform cwNoteTransformCalculator::averageTrans
 
     //Sum all the values
     foreach(ShotTransform transformation, shotTransforms) {
-        //Make sure the note transform scale is valid
-        if(transformation.Scale != 0.0) {
+        if(isValidTransform(transformation)) {
             errorVectorAverage += transformation.ErrorVector;
 
             // cwNoteTranformation test;

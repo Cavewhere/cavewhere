@@ -20,6 +20,9 @@ class cwNoteTransformCalculator
 public:
     cwNoteTransformCalculator() = delete;
 
+    //Shorter page or cave lengths, in meters, make a shot degenerate
+    static constexpr double kMinimumShotLength = 1e-6;
+
 
     /**
      * @brief The ScrapShot class
@@ -178,6 +181,11 @@ public:
 
         double lengthOnPage = noteVector.length(); //Length on page
         double lengthInCave = realVector.length(); //Length in cave
+
+        //Stations drawn at one point, or a leg seen end-on, carry no scale or direction
+        if(lengthOnPage < kMinimumShotLength || lengthInCave < kMinimumShotLength) {
+            return ShotTransform();
+        }
 
         //calculate the scale
         double scale = lengthInCave / lengthOnPage;
