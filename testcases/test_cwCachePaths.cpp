@@ -64,7 +64,7 @@ QString writeTestImage(const QDir& dir, const QString& fileName, const QColor& c
     return path;
 }
 
-QFuture<cwTrackedImagePtr> cropWholeImage(const QDir& dataRootDir, const QString& imagePath)
+QFuture<cwCropImageTask::Result> cropWholeImage(const QDir& dataRootDir, const QString& imagePath)
 {
     cwImage original;
     original.setPath(imagePath);
@@ -147,7 +147,7 @@ TEST_CASE("cwCropImageTask crops an image from folders named with #", "[cwCropIm
     REQUIRE(AsyncFuture::waitForFinished(future, cropTimeoutMs));
 
     INFO("Source:" << imagePath.toStdString());
-    cwTrackedImagePtr cropped = future.result();
+    cwTrackedImagePtr cropped = future.result().image;
     REQUIRE(!cropped.isNull());
 }
 
