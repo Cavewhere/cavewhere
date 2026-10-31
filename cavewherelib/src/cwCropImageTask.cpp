@@ -141,10 +141,10 @@ QFuture<cwCropImageTask::Result> cwCropImageTask::crop()
             const QString originalPath = originalImage.path();
             cwImageProvider provider;
             provider.setDataRootDir(dataRootDir);
-            const QString requestPath = cwImageProvider::imagePath(originalImage, originalPath);
+            const QString requestId = cwImageProvider::imageRequestId(originalImage, originalPath);
 
             QSize imageSize;
-            QImage image = provider.requestImage(requestPath, &imageSize, QSize());
+            QImage image = provider.requestImage(requestId, &imageSize, QSize());
             image.setColorSpace(QColorSpace());
             cropping.advance();
             if(promise.isCanceled()) {

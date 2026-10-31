@@ -27,6 +27,7 @@
 #include <QJsonDocument>
 #include <QBuffer>
 #include <QImageReader>
+#include <QUrl>
 #include <QUrlQuery>
 #include <cmath>
 
@@ -75,7 +76,7 @@ ImageRequestDetails parseImageRequest(const QString& id)
         pathPart = pathPart.left(queryIndex);
     }
 
-    details.filePath = pathPart;
+    details.filePath = QUrl::fromPercentEncoding(pathPart.toUtf8());
 
     if (!queryPart.isEmpty()) {
         const QUrlQuery query(queryPart);
@@ -529,19 +530,19 @@ cwImageData cwImageProvider::createDxt1(QSize size, const QByteArray &uncompress
     return cwImageData(size, 0, cwImageProvider::dxt1GzExtension(), outputData);
 }
 
-QString cwImageProvider::imagePath(const cwImage& image, const QString& absolutePath)
+QString cwImageProvider::imageRequestId(const cwImage& image, const QString& path)
 {
-    QString path = absolutePath;
-    const QFileInfo info(absolutePath);
+    QString id = QString::fromLatin1(QUrl::toPercentEncoding(path, QByteArrayLiteral("/:")));
+    const QFileInfo info(path);
     if (info.suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) == 0 && image.page() >= 0) {
-        path += QStringLiteral("#page=%1").arg(image.page() + 1);
+        id += QStringLiteral("#page=%1").arg(image.page() + 1);
     }
-    return path;
+    return id;
 }
 
 QString cwImageProvider::imageUrl(const cwImage& image, const QString& absolutePath)
 {
-    return QStringLiteral("image://") + cwImageProvider::name() + QStringLiteral("/") + imagePath(image, absolutePath);
+    return QStringLiteral("image://") + cwImageProvider::name() + QStringLiteral("/") + imageRequestId(image, absolutePath);
 }
 
 quint64 cwImageProvider::imageHash(const QImage &image)

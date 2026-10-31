@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 // Qt
 #include <QCoreApplication>
@@ -17,6 +18,7 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwImageProvider.h"
 #include "cwTrip.h"
+#include "cwNote.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwProject.h"
@@ -100,14 +102,25 @@ TEST_CASE("cwSurveyNotesConcatModel integrates with real cwTrip models", "[cwSur
 }
 
 TEST_CASE("cwSurveyNotesConcatModel addFiles uses absolute paths with cwImageProvider", "[cwSurveyNotesConcatModel]") {
+    struct Names {
+        QString cave;
+        QString trip;
+    };
+    const Names names = GENERATE(Names{QStringLiteral("test"), QStringLiteral("test trip")},
+                                 Names{QStringLiteral("Cave #2"), QStringLiteral("Trip #3")},
+                                 Names{QStringLiteral("100% cave"), QStringLiteral("50% trip")},
+                                 Names{QStringLiteral("Cave a%23b"), QStringLiteral("Trip a%23b")},
+                                 Names{QStringLiteral("Cave #a%23b%"), QStringLiteral("Trip #%20%")});
+    INFO("Cave:" << names.cave.toStdString() << " Trip:" << names.trip.toStdString());
+
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
     cwCave* cave = new cwCave();
-    cave->setName("test");
+    cave->setName(names.cave);
 
     cwTrip* trip = new cwTrip();
-    trip->setName("test trip");
+    trip->setName(names.trip);
     cave->addTrip(trip);
     project->cavingRegion()->addCave(cave);
 
@@ -125,6 +138,16 @@ TEST_CASE("cwSurveyNotesConcatModel addFiles uses absolute paths with cwImagePro
     const QModelIndex index = concat.index(0, 0);
     REQUIRE(index.isValid());
 
+    //sanitizeFileName keeps # and % today, so the cave and trip folders on disk carry the
+    //names as written. This flags the day sanitizing changes.
+    REQUIRE(trip->notes()->notes().size() == 1);
+    const cwNote* note = trip->notes()->notes().first();
+    const QString noteAbsolutePath = project->absolutePath(note);
+    const QString expectedSegments = QStringLiteral("/%1/trips/%2/notes/").arg(names.cave, names.trip);
+    INFO("NoteAbsolutePath:\"" << noteAbsolutePath.toStdString() << "\"");
+    CHECK(noteAbsolutePath.contains(expectedSegments));
+    CHECK(QFileInfo::exists(noteAbsolutePath));
+
     const QString imageUrlString = concat.data(index, cwSurveyNoteModelBase::PathRole).toString();
     REQUIRE(imageUrlString.startsWith(QStringLiteral("image://")));
 
@@ -133,22 +156,21 @@ TEST_CASE("cwSurveyNotesConcatModel addFiles uses absolute paths with cwImagePro
     CHECK(imageUrl.scheme() == QStringLiteral("image"));
     CHECK(imageUrl.host() == cwImageProvider::name());
 
-    QString providerPath = imageUrl.path(QUrl::FullyDecoded);
-    if (providerPath.size() >= 3 && providerPath[0] == QLatin1Char('/') && providerPath[2] == QLatin1Char(':')) {
-        //Strip the leading "/" on windows                                                                                                                                                                                                                                                             }
-        providerPath.remove(0, 1);
-    }
+    const QString requestId = imageProviderRequestId(imageUrlString);
+    const QString providerPath = QUrl::fromPercentEncoding(requestId.toUtf8());
 
-    INFO("Url:" << imageUrl.toString().toStdString());
-    INFO("ProviderPath:\"" << imageUrl.path().toStdString() << "\"");
+    INFO("Url:" << imageUrlString.toStdString());
+    INFO("ProviderPath:\"" << providerPath.toStdString() << "\"");
+    INFO("RequestId:\"" << requestId.toStdString() << "\"");
     REQUIRE(QFileInfo(providerPath).isAbsolute());
     REQUIRE(QFileInfo(providerPath).exists());
+    CHECK(providerPath.toStdString() == noteAbsolutePath.toStdString());
 
     cwImageProvider provider;
     provider.setDataRootDir(project->dataRootDir());
 
     QSize size;
-    const QImage image = provider.requestImage(providerPath, &size, QSize(64, 64));
+    const QImage image = provider.requestImage(requestId, &size, QSize(64, 64));
     REQUIRE(!image.isNull());
     REQUIRE(size.isValid());
 }

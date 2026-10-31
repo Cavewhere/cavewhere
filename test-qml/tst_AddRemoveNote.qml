@@ -53,6 +53,30 @@ MainWindowTest {
 
         }
 
+        function test_addNoteUnderHashNames() {
+            RootData.project.newProject()
+            RootData.region.addCave()
+            let cave = RootData.region.cave(0)
+            cave.name = "Cave #2"
+            cave.addTrip()
+            cave.trip(0).name = "Trip #3"
+
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave #2/Trip=Trip #3"
+            tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+            let phakeCavePath = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
+            noteGallery.imagesAdded([phakeCavePath]);
+
+            let noteGalleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView");
+            tryVerify(() => { return noteGalleryView.count === 1 });
+
+            let noteImageItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage0->noteImageItem")
+            tryVerify(() => { return noteImageItem !== null })
+            tryVerify(() => { return noteImageItem.status === Image.Ready })
+        }
+
         function test_autoSelectNewNote() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"

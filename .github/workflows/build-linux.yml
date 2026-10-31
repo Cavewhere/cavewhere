@@ -60,6 +60,22 @@ jobs:
             squashfs-tools \
             desktop-file-utils
 
+      # Qt's x86_64 desktop binaries are built on RHEL 9.6, where libtiff has the
+      # soname libtiff.so.5, so its qtiff plugin needs that library. Ubuntu 24.04
+      # ships only libtiff.so.6, so linuxdeploy-plugin-qt fails the build with
+      # "Could not find dependency: libtiff.so.5". Install jammy's libtiff5 so the
+      # plugin resolves and linuxdeploy bundles the matching library into the
+      # AppImage — end users on Ubuntu 24.04 lack it too. Every TIFF symbol the
+      # plugin imports is exported by libtiff 4.3.0. The arm64 Qt binaries are
+      # built on Ubuntu 24.04 and already link the libtiff.so.6 the runner has.
+      - name: Install libtiff.so.5 for the Qt TIFF plugin
+        if: matrix.arch == 'x86_64'
+        run: |
+          LIBTIFF5_DEB=libtiff5_4.3.0-6ubuntu0.13_amd64.deb
+          curl -fsSL -o "$LIBTIFF5_DEB" \
+            "http://archive.ubuntu.com/ubuntu/pool/main/t/tiff/$LIBTIFF5_DEB"
+          sudo apt-get install -y "./$LIBTIFF5_DEB"
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         env:
