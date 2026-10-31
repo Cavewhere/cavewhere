@@ -860,6 +860,70 @@ TEST_CASE("seededMetadata reads Walls #DATE, #UNITS DECL, and #NOTE team",
           == QStringList({QStringLiteral("Alice"), QStringLiteral("Bob")}));
 }
 
+TEST_CASE("a Walls #Date with an unpadded month or day dates the block, root, and metadata",
+          "[Scanner][Walls]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    SECTION("prefixed block and seeded metadata")
+    {
+        const QString path = tempPath(tempDir, QStringLiteral("unpadded-prefixed.srv"));
+        writeUtf8File(path,
+                      QByteArrayLiteral("#PREFIX XY\n"
+                                        "#Date 2005-11-5\n"
+                                        "W1\tW2\t10.0\t0\t0\n"));
+
+        auto result = cwExternalCenterlineScanner::scanWalls(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        CHECK(scan.warnings.isEmpty());
+        CHECK(scan.seededMetadata.date.value_or(QDate()) == QDate(2005, 11, 5));
+        REQUIRE(scan.blocks.size() == 1);
+        CHECK(scan.blocks.first().path == QStringLiteral("XY"));
+        CHECK(scan.blocks.first().date == QDate(2005, 11, 5));
+    }
+    SECTION("root date without a prefix")
+    {
+        const QString path = tempPath(tempDir, QStringLiteral("unpadded-root.srv"));
+        writeUtf8File(path,
+                      QByteArrayLiteral("#Date 2005-1-5\n"
+                                        "W1\tW2\t10.0\t0\t0\n"));
+
+        auto result = cwExternalCenterlineScanner::scanWalls(path);
+        REQUIRE_FALSE(result.hasError());
+        const ScanResult scan = result.value();
+
+        CHECK(scan.warnings.isEmpty());
+        CHECK(scan.rootDate == QDate(2005, 1, 5));
+    }
+}
+
+TEST_CASE("a Walls #Date with a month out of range warns and stays unset",
+          "[Scanner][Walls]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("bad-month.srv"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("#PREFIX XY\n"
+                                    "#Date 2005-13-05\n"
+                                    "W1\tW2\t10.0\t0\t0\n"));
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK(anyWarningContains(scan, QStringLiteral("could not parse #DATE: 2005-13-05")));
+    CHECK_FALSE(scan.seededMetadata.date.has_value());
+    CHECK_FALSE(scan.rootDate.isValid());
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK(scan.blocks.first().path == QStringLiteral("XY"));
+    CHECK_FALSE(scan.blocks.first().date.isValid());
+}
+
 TEST_CASE("seededMetadata parses CRLF-terminated files",
           "[Scanner][Metadata]")
 {

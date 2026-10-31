@@ -53,6 +53,7 @@ constexpr int kSurvexMinYear = 1900;
 constexpr int kSurvexMaxYear = 2078;
 constexpr int kSurvexMaxDateFields = 3;
 constexpr int kSurvexMaxRangeTokens = 2;
+constexpr int kWallsDateFields = 3;
 
 // UTF-8 byte-order mark (0xEF 0xBB 0xBF).
 const QByteArray kUtf8Bom = QByteArray::fromHex("EFBBBF");
@@ -60,6 +61,24 @@ const QByteArray kUtf8Bom = QByteArray::fromHex("EFBBBF");
 bool hasExtension(const QString& path, const char* extension)
 {
     return path.endsWith(QLatin1String(extension), Qt::CaseInsensitive);
+}
+
+// A non-empty run of ASCII digits as an int; toInt alone would also take
+// a sign or surrounding whitespace.
+std::optional<int> readDigitRun(const QString& field)
+{
+    const bool isDigitRun = !field.isEmpty()
+        && std::all_of(field.cbegin(), field.cend(), [](QChar c) {
+               return c >= QLatin1Char('0') && c <= QLatin1Char('9');
+           });
+    if (isDigitRun) {
+        bool ok = false;
+        const int value = field.toInt(&ok);
+        if (ok) {
+            return value;
+        }
+    }
+    return std::nullopt;
 }
 
 /**
@@ -84,18 +103,11 @@ std::optional<QDate> readSurvexSingleDate(const QString& token, bool dotAllowed)
 
     std::array<int, kSurvexMaxDateFields> values = {0, 1, 1};
     for (int i = 0; i < fields.size(); ++i) {
-        const QString& field = fields.at(i);
-        const bool isDigitRun = !field.isEmpty()
-            && std::all_of(field.cbegin(), field.cend(), [](QChar c) {
-                   return c >= QLatin1Char('0') && c <= QLatin1Char('9');
-               });
-        bool ok = false;
-        if (isDigitRun) {
-            values.at(i) = field.toInt(&ok);
-        }
-        if (!ok) {
+        const std::optional<int> value = readDigitRun(fields.at(i));
+        if (!value) {
             return std::nullopt;
         }
+        values.at(i) = *value;
     }
 
     int year = values.at(0);
@@ -354,11 +366,24 @@ const QRegularExpression& wallsDateRegex()
     return regex;
 }
 
-// Walls writes one date spelling, so the block walk and the metadata
-// pass read it through the same parse.
+// Walls writes y-m-d with '-' between digit runs of any length
+// ("2005-11-5"); the block walk and the metadata pass share this parse.
 QDate parseWallsDate(const QString& token)
 {
-    return QDate::fromString(token, QStringLiteral("yyyy-MM-dd"));
+    const QStringList fields = token.split(QLatin1Char('-'));
+    if (fields.size() != kWallsDateFields) {
+        return QDate();
+    }
+
+    std::array<int, kWallsDateFields> values = {};
+    for (int i = 0; i < kWallsDateFields; ++i) {
+        const std::optional<int> value = readDigitRun(fields.at(i));
+        if (!value) {
+            return QDate();
+        }
+        values.at(i) = *value;
+    }
+    return QDate(values.at(0), values.at(1), values.at(2));
 }
 
 QString canonicalize(const QString& path)
