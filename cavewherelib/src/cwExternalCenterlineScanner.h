@@ -44,9 +44,10 @@
  * stations are reported as ScanResult::rootStationCount instead.
  *
  * Per-format mapping:
- *   Survex  - the *begin / *end tree. An anonymous *begin folds
- *             into its parent: it makes no block and its shots
- *             count toward the enclosing named block.
+ *   Survex  - the *begin / *end tree. An anonymous *begin makes
+ *             no block, since cavern builds no naming level for
+ *             it: its shots count toward the enclosing named block
+ *             (its trip row is in ScanResult::rows).
  *   Compass - none. cavern discards a .dat's "SURVEY NAME:" value
  *             and reads each .mak '#' DAT into a survey named
  *             after its file (survex datain.c mak_dat_survey), so a
@@ -124,23 +125,25 @@ Q_DECLARE_METATYPE(cwScanBlock)
  * One row of the tree an attach builds from a survey file: a node (a source
  * root, a Compass file, a Walls book, a Survex block that nests another), a
  * unit (the stations one future derived trip owns: a Survex block with shots
- * and no nested block among them), or both (a Survex root, or a Survex block
- * that nests another and has shots of its own). ScanResult::rows lists them in
- * pre-order; depth is the number of ancestors, so the root is depth 0.
+ * and no nested block among them, or an anonymous Survex block with shots),
+ * or both (a Survex root, or a Survex block that nests another and has shots
+ * of its own). ScanResult::rows lists them in pre-order; depth is the number
+ * of ancestors, so the root is depth 0.
  *
  * sourcePath is the row's identity inside the source, the value a derived
  * record's source_path holds: empty for the root, otherwise '/'-joined
  * segments from the root down - a Compass '#' reference then a SURVEY NAME
  * ("ALPHA.DAT/ALPHA1"), Walls book and survey .NAMEs ("SURVEYS/DEC2001/D01"),
  * Survex block names ("doghill/big-passage"). An entry that writes no name
- * takes '#' and its 1-based position among its siblings ("FILE.DAT/#3"), so
- * its identity is positional.
+ * takes '#' and its 1-based position among its siblings ("FILE.DAT/#3"); an
+ * anonymous Survex block counts only among its parent's anonymous trips
+ * ("alpha/#2"). Such an identity is positional.
  *
  * cavernLabel is the naming level cavern builds for the row: the lower-cased
  * .dat stem for a Compass file inside a .mak, the block name for a Survex
- * block (a unit-only one included), empty for the root, a Walls book, and
- * every other unit-only row. A row's cavern path is its ancestors' and its own
- * cavernLabels joined with '.'.
+ * block (a unit-only one included), empty for the root, a Walls book, an
+ * anonymous Survex block, and every other unit-only row. A row's cavern path
+ * is its ancestors' and its own cavernLabels joined with '.'.
  *
  * stations is the unit's station names relative to cavern's root label,
  * spelled as the file spells them and sorted: the cavern path, then any Walls
@@ -382,8 +385,14 @@ struct ScanResult {
      *             unit. A block with shots and no nested block is a unit only,
      *             so it becomes one trip; a block that nests another is a
      *             node, and a unit too when it has shots of its own. A block
-     *             with no shots stays a node. A file included from two scopes
-     *             is read in each.
+     *             with no shots stays a node. An anonymous *begin with shots
+     *             is a unit-only SurvexBlock row "#N" (the parent's Nth such
+     *             block) under the innermost named block or the root, with an
+     *             empty cavernLabel, that also holds the *fix lines in its
+     *             scope. Anonymous blocks nested in it fold into it, a named
+     *             block inside it hangs from the named container, and one
+     *             with neither shots nor a *fix makes no row and takes no
+     *             number. A file included from two scopes is read in each.
      */
     QList<cwScanRow> rows;
 

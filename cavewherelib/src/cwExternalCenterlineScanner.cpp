@@ -675,13 +675,19 @@ struct TreeRow {
     QSet<QString> stations;
     // set once a station stamped row.declination
     bool declinationStamped = false;
+    // anonymous Survex blocks that became trip rows under this one, for #N
+    int anonymousTrips = 0;
 };
 
 // One *begin currently on the block stack.
 struct OpenBlock {
     int blockIndex = kNoBlock;
+    // A named block's row. On an anonymous block, the trip row its run shares,
+    // held by the run's outermost block once a shot or *fix creates it.
     int row = kNoRow;
     QSet<QString> stations;
+    // An anonymous run's first *date, held until its trip row exists.
+    QDate date;
 };
 
 struct ScanState {
@@ -869,7 +875,8 @@ bool scanningEntryFile(const ScanState& state)
 /**
  * The innermost open block that owns a cwScanBlock, or nullptr when
  * every open scope is anonymous - an anonymous *begin makes no block
- * of its own, so what it holds belongs to the named block around it.
+ * of its own, so its stations count toward the named block around it
+ * (its shots and fixes record on shotRow).
  * The file root owns no block either, so a directive outside every
  * *begin lands nowhere.
  */
@@ -895,6 +902,46 @@ int containerRow(ScanState& state)
     return open == nullptr ? kRootRow : open->row;
 }
 
+/**
+ * The outermost block of the anonymous run that ends the block stack, the one
+ * that holds the run's trip row, or nullptr when the innermost open block is
+ * named or no block is open.
+ */
+OpenBlock* anonymousRunOwner(ScanState& state)
+{
+    OpenBlock* owner = nullptr;
+    for (qsizetype i = state.openBlocks.size() - 1; i >= 0; --i) {
+        OpenBlock& open = state.openBlocks[i];
+        if (open.blockIndex != kNoBlock) {
+            break;
+        }
+        owner = &open;
+    }
+    return owner;
+}
+
+/**
+ * The row shots and fixes in scope record on: the open anonymous run's trip
+ * row, created on first use as the container's next "#N" unit-only row with
+ * no cavern label; else the container row.
+ */
+int shotRow(ScanState& state)
+{
+    OpenBlock* owner = anonymousRunOwner(state);
+    if (owner == nullptr) {
+        return containerRow(state);
+    }
+    if (owner->row == kNoRow) {
+        const int parent = containerRow(state);
+        const QString segment = positionalSegment(state.tree[parent].anonymousTrips++);
+        const int row = childRow(state, parent, segment,
+                                 cwSurveyNodeKind::Kind::SurvexBlock, segment, QString());
+        owner->row = row;
+        stampRowDate(state, row, owner->date);
+    }
+    return owner->row;
+}
+
 // Takes the row a referencing file handed over, or the container row.
 int takePendingRow(ScanState& state)
 {
@@ -904,14 +951,14 @@ int takePendingRow(ScanState& state)
 }
 
 /**
- * Records a station name against the innermost open named block, or
- * against the file root when no named block is open. Counts stay
- * current as they are recorded, so an unclosed *begin still reports
- * the stations it saw.
+ * Records a station name on the shot row (see shotRow) and counts it
+ * toward the innermost open named block, or toward the file root when
+ * no named block is open. Counts stay current as they are recorded, so
+ * an unclosed *begin still reports the stations it saw.
  *
  * A dotted token written at the root ("side.s1") names a station
  * inside the block it points at, so the block's window owns it and
- * the root count leaves it out.
+ * the root count and the root's anonymous trips leave it out.
  */
 void recordStation(ScanState& state, const QString& station)
 {
@@ -919,19 +966,17 @@ void recordStation(ScanState& state, const QString& station)
     // corrects nothing.
     const bool readsBearing = !state.passageStyles.constLast();
     OpenBlock* open = innermostNamedBlock(state);
-    if (open == nullptr) {
-        if (!station.contains(QLatin1Char('.'))) {
-            state.rootStations.insert(station);
-            recordUnitStation(state, kRootRow, station);
-            if (readsBearing) {
-                stampRowDeclination(state, kRootRow, state.declinations.constLast());
-            }
-        }
+    if (open == nullptr && station.contains(QLatin1Char('.'))) {
         return;
     }
-    recordUnitStation(state, open->row, station);
+    const int row = shotRow(state);
+    recordUnitStation(state, row, station);
     if (readsBearing) {
-        stampRowDeclination(state, open->row, state.declinations.constLast());
+        stampRowDeclination(state, row, state.declinations.constLast());
+    }
+    if (open == nullptr) {
+        state.rootStations.insert(station);
+        return;
     }
     open->stations.insert(station);
     state.blocks[open->blockIndex].stationCount =
@@ -941,10 +986,19 @@ void recordStation(ScanState& state, const QString& station)
 /**
  * Stamps a *date onto the innermost open named block that has none
  * yet, so the first *date a block writes is the one it keeps. A
- * *date at the file root stamps the root date the same way.
+ * *date at the file root stamps the root date the same way. Inside an
+ * anonymous run it also dates the run's trip row, holding the date
+ * until a shot creates that row.
  */
 void recordSurvexDate(ScanState& state, const QDate& date)
 {
+    if (OpenBlock* owner = anonymousRunOwner(state)) {
+        if (owner->row != kNoRow) {
+            stampRowDate(state, owner->row, date);
+        } else if (!owner->date.isValid()) {
+            owner->date = date;
+        }
+    }
     const OpenBlock* open = innermostNamedBlock(state);
     if (open == nullptr) {
         if (!state.rootDate.isValid()) {
@@ -1252,7 +1306,7 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
             continue;
         }
         if (const auto fixMatch = survexFixRegex().match(line); fixMatch.hasMatch()) {
-            recordFix(state, containerRow(state), QString(), fixMatch.captured(1),
+            recordFix(state, shotRow(state), QString(), fixMatch.captured(1),
                       line.mid(fixMatch.capturedEnd(0)).trimmed(),
                       state.coordinateSystems.constLast(), QString(),
                       canonical, static_cast<int>(lineIndex) + 1,

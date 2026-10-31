@@ -1117,31 +1117,6 @@ TEST_CASE("an unparseable *date leaves the block dateless and silent",
     CHECK_FALSE(anyWarningContains(scan, QStringLiteral("*date")));
 }
 
-TEST_CASE("a *date inside an anonymous *begin stamps the enclosing block",
-          "[Scanner][Blocks]")
-{
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-
-    // An anonymous *begin makes no block of its own, so its date belongs
-    // to the named block around it - the same fold recordStation makes.
-    const QString path = tempPath(tempDir, QStringLiteral("anon.svx"));
-    writeUtf8File(path,
-                  QByteArrayLiteral("*begin Outer\n"
-                                    "*begin\n"
-                                    "*date 2024.02.03\n"
-                                    "a1 a2 1.0 0 0\n"
-                                    "*end\n"
-                                    "*end Outer\n"));
-
-    auto result = cwExternalCenterlineScanner::scanSurvex(path);
-    REQUIRE_FALSE(result.hasError());
-    const ScanResult scan = result.value();
-    REQUIRE(scan.blocks.size() == 1);
-    CHECK(scan.blocks.first().path == QStringLiteral("Outer"));
-    CHECK(scan.blocks.first().date == QDate(2024, 2, 3));
-}
-
 TEST_CASE("rootDate takes the first Compass survey's SURVEY DATE",
           "[Scanner][Blocks]")
 {
@@ -1221,34 +1196,6 @@ TEST_CASE("blocks nest across an *include boundary", "[Scanner][Blocks]")
 
     // The entry writes only *begin / *include / *end.
     CHECK_FALSE(scan.entryHasOwnShots);
-}
-
-TEST_CASE("an anonymous *begin folds its shots into the parent block",
-          "[Scanner][Blocks]")
-{
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-
-    const QString path = tempPath(tempDir, QStringLiteral("anonymous.svx"));
-    writeUtf8File(path,
-                  QByteArrayLiteral("*begin Named\n"
-                                    "*data normal from to tape compass clino\n"
-                                    "N1 N2 5.0 0 0\n"
-                                    "*begin\n"
-                                    "N2 N3 5.0 0 0\n"
-                                    "*end\n"
-                                    "N3 N4 5.0 0 0\n"
-                                    "*end Named\n"));
-
-    auto result = cwExternalCenterlineScanner::scanSurvex(path);
-    REQUIRE_FALSE(result.hasError());
-    const ScanResult scan = result.value();
-
-    REQUIRE(scan.blocks.size() == 1);
-    CHECK(scan.blocks.first().path == QStringLiteral("Named"));
-    CHECK(scan.blocks.first().depth == 0);
-    CHECK(scan.blocks.first().stationCount == 4);  // N1 .. N4
-    CHECK(scan.entryHasOwnShots);
 }
 
 TEST_CASE("a Survex master of *include lines has no shots of its own",
@@ -2819,4 +2766,268 @@ TEST_CASE("A Survex passage line leaves the unit's declination to its shots",
     const ScanResult scan = scanFixture(kDeclinationDir + QStringLiteral("/passage.svx"));
 
     CHECK(unitDeclination(scan, QStringLiteral("lrud")) == "Value -2");
+}
+
+namespace {
+
+const QString kAnonymousTripsFixture = QStringLiteral("survex_anonymous_trips.svx");
+
+} // namespace
+
+TEST_CASE("Each anonymous Survex block with shots is a unit-only trip row under its named block",
+          "[Scanner][Survex][AnonymousTrips]")
+{
+    const ScanResult scan = scanFixture(kAnonymousTripsFixture);
+
+    // alpha's distinct names: a1 a2 tie hub (trip 1), b9 b1 (trip 2),
+    // c1 c2 (trip 3) and z1 (its own shot), so tie and hub count once.
+    // The shot-less block between trips 2 and 3 makes no row, so the
+    // last trip is #3.
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'survex_anonymous_trips' '' node 9"),
+        QStringLiteral("1 SurvexBlock 'alpha' 'alpha' 'alpha' node+unit 9"),
+        QStringLiteral("2 SurvexBlock 'alpha/#1' '#1' '' unit 4"),
+        QStringLiteral("2 SurvexBlock 'alpha/#2' '#2' '' unit 4"),
+        QStringLiteral("2 SurvexBlock 'alpha/#3' '#3' '' unit 3"),
+    }));
+
+    CHECK(rowAt(scan, QStringLiteral("alpha")).stations
+          == QStringList({QStringLiteral("alpha.c2"), QStringLiteral("alpha.z1")}));
+    CHECK(rowAt(scan, QStringLiteral("alpha/#1")).stations
+          == QStringList({QStringLiteral("alpha.a1"), QStringLiteral("alpha.a2"),
+                          QStringLiteral("alpha.hub"), QStringLiteral("alpha.tie")}));
+    CHECK(rowAt(scan, QStringLiteral("alpha/#3")).stations
+          == QStringList({QStringLiteral("alpha.c1"), QStringLiteral("alpha.c2"),
+                          QStringLiteral("alpha.hub")}));
+
+    // Anonymous blocks build no cavern naming level, so alpha stays the
+    // only block and folds every trip's stations into its count.
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK(scan.blocks.first().path == QStringLiteral("alpha"));
+    CHECK(scan.blocks.first().depth == 0);
+    CHECK(scan.blocks.first().stationCount == 9);
+    CHECK(scan.blocks.first().date == QDate(2020, 1, 11));
+}
+
+TEST_CASE("Each anonymous Survex trip row carries its own *date",
+          "[Scanner][Survex][AnonymousTrips]")
+{
+    const ScanResult scan = scanFixture(kAnonymousTripsFixture);
+
+    CHECK(rowAt(scan, QStringLiteral("alpha/#1")).date == QDate(2020, 1, 11));
+    CHECK(rowAt(scan, QStringLiteral("alpha/#2")).date == QDate(2020, 2, 22));
+    CHECK(rowAt(scan, QStringLiteral("alpha/#3")).date == QDate(2020, 3, 30));
+    // The named block keeps the first date in its scope, as its cwScanBlock does.
+    CHECK(rowAt(scan, QStringLiteral("alpha")).date == QDate(2020, 1, 11));
+}
+
+TEST_CASE("Each anonymous Survex trip row carries its own *calibrate declination",
+          "[Scanner][Survex][AnonymousTrips][Declination]")
+{
+    const ScanResult scan = scanFixture(kAnonymousTripsFixture);
+
+    CHECK(unitDeclination(scan, QStringLiteral("alpha/#1")) == "Value -1.5");
+    CHECK(unitDeclination(scan, QStringLiteral("alpha/#2")) == "Value -2.5");
+    CHECK(unitDeclination(scan, QStringLiteral("alpha/#3")) == "Value -3.5");
+    // alpha's own shot sits outside every trip's *calibrate.
+    CHECK(unitDeclination(scan, QStringLiteral("alpha")) == "None");
+    CHECK(unknownUnits(scan).empty());
+}
+
+TEST_CASE("A nested anonymous block's shots belong to the anonymous trip around it",
+          "[Scanner][Survex][AnonymousTrips]")
+{
+    const ScanResult scan = scanFixture(kAnonymousTripsFixture);
+
+    // Trip 2's first shot is inside its nested *flags duplicate block,
+    // yet the trip is still the second row and holds that shot's b9.
+    const cwScanRow trip2 = rowAt(scan, QStringLiteral("alpha/#2"));
+    CHECK(trip2.displayName == QStringLiteral("#2"));
+    CHECK(trip2.cavernLabel.isEmpty());
+    CHECK(trip2.isUnit);
+    CHECK_FALSE(trip2.isNode);
+    CHECK(trip2.stations
+          == QStringList({QStringLiteral("alpha.b1"), QStringLiteral("alpha.b9"),
+                          QStringLiteral("alpha.hub"), QStringLiteral("alpha.tie")}));
+}
+
+TEST_CASE("A *fix inside an anonymous Survex block is homed to that block's trip",
+          "[Scanner][Survex][AnonymousTrips]")
+{
+    const ScanResult scan = scanFixture(kAnonymousTripsFixture);
+
+    // The *fix comes before trip 1's first shot.
+    CHECK(describeFixHomes(scan) == QStringList({
+        QStringLiteral("alpha.a1 node 'alpha' trip 'alpha/#1'"),
+    }));
+}
+
+TEST_CASE("a *date inside an anonymous *begin dates its trip row and the enclosing block",
+          "[Scanner][Blocks][AnonymousTrips]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("anon.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin Outer\n"
+                                    "*begin\n"
+                                    "*date 2024.02.03\n"
+                                    "a1 a2 1.0 0 0\n"
+                                    "*end\n"
+                                    "*end Outer\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK(scan.blocks.first().path == QStringLiteral("Outer"));
+    CHECK(scan.blocks.first().date == QDate(2024, 2, 3));
+
+    const cwScanRow trip = rowAt(scan, QStringLiteral("Outer/#1"));
+    CHECK(trip.date == QDate(2024, 2, 3));
+    CHECK(trip.cavernLabel.isEmpty());
+    CHECK(trip.isUnit);
+    CHECK_FALSE(trip.isNode);
+}
+
+TEST_CASE("an anonymous *begin is a trip row while its shots still count toward the parent block",
+          "[Scanner][Blocks][AnonymousTrips]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("anonymous.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin Named\n"
+                                    "*data normal from to tape compass clino\n"
+                                    "N1 N2 5.0 0 0\n"
+                                    "*begin\n"
+                                    "N2 N3 5.0 0 0\n"
+                                    "*end\n"
+                                    "N3 N4 5.0 0 0\n"
+                                    "*end Named\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK(scan.blocks.first().path == QStringLiteral("Named"));
+    CHECK(scan.blocks.first().depth == 0);
+    CHECK(scan.blocks.first().stationCount == 4);  // N1 .. N4
+    CHECK(scan.entryHasOwnShots);
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'anonymous' '' node 4"),
+        QStringLiteral("1 SurvexBlock 'Named' 'Named' 'Named' node+unit 4"),
+        QStringLiteral("2 SurvexBlock 'Named/#1' '#1' '' unit 2"),
+    }));
+    CHECK(rowAt(scan, QStringLiteral("Named/#1")).stations
+          == QStringList({QStringLiteral("Named.N2"), QStringLiteral("Named.N3")}));
+}
+
+TEST_CASE("An anonymous Survex block at the file root is a trip row under the root",
+          "[Scanner][Survex][AnonymousTrips]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // side.s1 names a station inside the side block, so the root trip
+    // leaves it out, as the root's own unit does.
+    const QString path = tempPath(tempDir, QStringLiteral("root_anonymous.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin\n"
+                                    "*fix r1 0 0 0\n"
+                                    "r1 r2 5.0 0 0\n"
+                                    "r2 side.s1 5.0 90 0\n"
+                                    "*end\n"
+                                    "*begin side\n"
+                                    "s1 s2 5.0 0 0\n"
+                                    "*end side\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'root_anonymous' '' node 4"),
+        QStringLiteral("1 SurvexBlock '#1' '#1' '' unit 2"),
+        QStringLiteral("1 SurvexBlock 'side' 'side' 'side' unit 2"),
+    }));
+    CHECK(rowAt(scan, QStringLiteral("#1")).stations
+          == QStringList({QStringLiteral("r1"), QStringLiteral("r2")}));
+    CHECK(scan.rootStationCount == 2);
+    CHECK(describeFixHomes(scan) == QStringList({
+        QStringLiteral("r1 node '' trip '#1'"),
+    }));
+}
+
+TEST_CASE("A named Survex block inside an anonymous one hangs from the named container",
+          "[Scanner][Survex][AnonymousTrips]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // Cavern skips the anonymous level, so Inner is Outer.Inner; the
+    // anonymous trip keeps only the shots outside Inner.
+    const QString path = tempPath(tempDir, QStringLiteral("named_in_anonymous.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin Outer\n"
+                                    "*begin\n"
+                                    "o1 o2 5.0 0 0\n"
+                                    "*begin Inner\n"
+                                    "i1 i2 5.0 0 0\n"
+                                    "*end Inner\n"
+                                    "o2 o3 5.0 0 0\n"
+                                    "*end\n"
+                                    "*end Outer\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'named_in_anonymous' '' node 5"),
+        QStringLiteral("1 SurvexBlock 'Outer' 'Outer' 'Outer' node 5"),
+        QStringLiteral("2 SurvexBlock 'Outer/#1' '#1' '' unit 3"),
+        QStringLiteral("2 SurvexBlock 'Outer/Inner' 'Inner' 'Inner' unit 2"),
+    }));
+    CHECK(rowAt(scan, QStringLiteral("Outer/#1")).stations
+          == QStringList({QStringLiteral("Outer.o1"), QStringLiteral("Outer.o2"),
+                          QStringLiteral("Outer.o3")}));
+
+    REQUIRE(scan.blocks.size() == 2);
+    CHECK(scan.blocks.at(0).path == QStringLiteral("Outer"));
+    CHECK(scan.blocks.at(0).stationCount == 3);
+    CHECK(scan.blocks.at(1).path == QStringLiteral("Outer.Inner"));
+    CHECK(scan.blocks.at(1).stationCount == 2);
+}
+
+TEST_CASE("Shots an *include adds inside an anonymous Survex block belong to its trip",
+          "[Scanner][Survex][AnonymousTrips]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    writeUtf8File(tempPath(tempDir, QStringLiteral("part.svx")),
+                  QByteArrayLiteral("p1 p2 5.0 0 0\n"
+                                    "p2 p3 5.0 0 0\n"));
+    const QString path = tempPath(tempDir, QStringLiteral("include_in_anonymous.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin Outer\n"
+                                    "*begin\n"
+                                    "*include part.svx\n"
+                                    "*end\n"
+                                    "*end Outer\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'include_in_anonymous' '' node 3"),
+        QStringLiteral("1 SurvexBlock 'Outer' 'Outer' 'Outer' node 3"),
+        QStringLiteral("2 SurvexBlock 'Outer/#1' '#1' '' unit 3"),
+    }));
 }

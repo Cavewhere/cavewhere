@@ -1,0 +1,44 @@
+; Synthetic fixture: one named block holding three anonymous trips. Cavern
+; builds no naming level for an anonymous *begin, so the trips share alpha's
+; namespace and tie at "tie" (trips 1 and 2) and "hub" (all three).
+*begin alpha
+*data normal from to tape compass clino
+
+*begin ; Trip 1
+*date 2020.01.11
+*team "Ann Example" instruments
+*calibrate declination 1.5
+*fix a1 1000 2000 300
+a1 a2 5.0 20 0
+a2 tie 5.0 30 0
+a2 hub 5.0 40 0
+*end
+
+*begin ; Trip 2
+*date 2020.02.22
+*team "Bob Sample" notes
+*calibrate declination 2.5
+*begin
+*flags duplicate
+tie b9 3.0 50 0
+*end
+tie b1 5.0 60 0
+b1 hub 5.0 70 0
+*end
+
+*begin
+*flags splay
+*data normal from to tape compass clino
+*end
+
+*begin ; Trip 3
+*date 2020.03.30
+*team "Cy Placeholder" tape
+*calibrate declination 3.5
+hub c1 5.0 80 0
+c1 c2 5.0 90 0
+*end
+
+c2 z1 4.0 100 0
+
+*end alpha
