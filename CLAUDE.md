@@ -105,6 +105,9 @@ Data model: `cwCavingRegion` → `cwSurveyNode` tree (`cwCave` is a thin node su
 - Import `QtQuick` as `QQ` (never `Q`), so it's easy to search for
 - **Item body ordering** (blank line between groups): `id`, `objectName`, property declarations, property assignments/aliases, signal declarations, functions, property bindings, signal handlers (`on*`), child objects, `states`/`transitions` (last)
 
+#### Private data
+- Fixtures, tests, plans and commit messages hold only fake or public (OpenStreetMap, Grottocenter) data: no real fixes, cave or survey names, owner paths, or exact project counts. Reproduce a private-data bug with a fake fixture of the same shape. The `private-dataset` skill has the rules; its pre-commit and commit-msg hooks block findings (`.claude/skills/private-dataset/scripts/install-hooks.sh`).
+
 #### C++ testing
 - Tests must be safe to run as **multiple concurrent processes** (nightly CI runs several in parallel). Never use hardcoded temp paths — include `QCoreApplication::applicationPid()` in the name or use `QTemporaryFile`/`QTemporaryDir`.
 - **Wait on a condition, never pump.** When a test needs a queued pass or a worker result to land, name the state it produces and wait for that: `REQUIRE(waitUntil([&] { return <state>; }))` from `testcases/TestHelper.h`, or `QSignalSpy::wait()`. A bare `QCoreApplication::processEvents()` asserts timing (one turn happened to be enough) where the test means to assert behavior; it is the C++ form of a fixed `wait()`.
