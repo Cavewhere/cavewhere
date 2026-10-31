@@ -236,7 +236,8 @@ MainWindowTest {
                       10000, "the root becomes attached")
             verify(sourceRoot.isSourceRoot, "the new node is the file's source root")
             compare(sourceRoot.kind, SurveyNodeKind.SurvexFile)
-            compare(sourceRoot.childNodeCount, 1, "doghill is the file's one top-level block")
+            tryVerify(() => sourceRoot.childNodeCount === 1, 10000,
+                      "doghill is the file's one top-level block")
             const doghill = sourceRoot.childNode(0)
             compare(doghill.name, "doghill")
             compare(doghill.kind, SurveyNodeKind.SurvexBlock)
