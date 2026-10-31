@@ -267,24 +267,29 @@ StandardPage {
             }
         }
 
-        QC.ScrollView {
-            id: scrollViewId
+        // The view takes its scroll bars directly rather than sitting in a
+        // ScrollView: a ScrollView follows its implicit height while the page
+        // is built, so the view's first fill would span every lead.
+        TableStaticView {
+            id: tableView
+            objectName: "leadTableView"
+
+            model: proxyModel
+            columnModel: columnModelId
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             implicitWidth: leadPage.isNarrow
                            ? 0
-                           : tableView.implicitWidth + QC.ScrollBar.vertical.implicitWidth
+                           : columnModelId.totalWidth + verticalScrollBarId.implicitWidth
+            contentWidth: leadPage.isNarrow ? width : columnModelId.totalWidth
+            acceptedButtons: Qt.NoButton
 
-            TableStaticView {
-                id: tableView
-                objectName: "leadTableView"
+            delegate: leadPage.isNarrow ? narrowDelegateComponent : wideDelegateComponent
 
-                model: proxyModel
-                columnModel: columnModelId
-
-                implicitWidth: leadPage.isNarrow ? 0 : columnModelId.totalWidth
-
-                delegate: leadPage.isNarrow ? narrowDelegateComponent : wideDelegateComponent
+            QC.ScrollBar.vertical: QC.ScrollBar { id: verticalScrollBarId }
+            QC.ScrollBar.horizontal: QC.ScrollBar {
+                policy: leadPage.isNarrow ? QC.ScrollBar.AlwaysOff : QC.ScrollBar.AsNeeded
             }
         }
     }
