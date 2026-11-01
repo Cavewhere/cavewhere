@@ -40,6 +40,40 @@
 #include "cavewhere.pb.h"
 #include "qt.pb.h"
 
+namespace {
+constexpr int kFirstVersionWithTrustedSightFlags = 6;
+
+//Files before version 6 can carry sight flags that contradict the shots, which
+//hides readings from the editor and the solve. Turn on any side the shots use.
+void repairLegacySightFlags(cwTrip* trip, int fileVersion)
+{
+    if (fileVersion >= kFirstVersionWithTrustedSightFlags) {
+        return;
+    }
+
+    cwTripCalibration* calibration = trip->calibrations();
+    bool hasFront = calibration->hasFrontSights();
+    bool hasBack = calibration->hasBackSights();
+
+    const auto scanShots = [&]() {
+        const QList<cwSurveyChunk*> chunks = trip->chunks();
+        for (const cwSurveyChunk* chunk : chunks) {
+            const QList<cwShot> shots = chunk->shots();
+            for (const cwShot& shot : shots) {
+                hasFront = hasFront || shot.hasFrontSightReading();
+                hasBack = hasBack || shot.hasBackSightReading();
+                if (hasFront && hasBack) {
+                    return;
+                }
+            }
+        }
+    };
+    scanShots();
+
+    calibration->setFrontSights(hasFront);
+    calibration->setBackSights(hasBack);
+}
+}
 
 cwRegionLoadTask::cwRegionLoadTask(QObject *parent) :
     cwRegionIOTask(parent)
@@ -233,7 +267,7 @@ cwRegionLoadTask::LoadData cwRegionLoadTask::loadCavingRegion(const CavewherePro
     for(int i = 0; i < protoRegion.caves_size(); i++) {
         const CavewhereProto::Cave& protoCave = protoRegion.caves(i);
         cwCave* cave = new cwCave();
-        loadCave(protoCave, cave);
+        loadCave(protoCave, cave, data.fileVersion);
 
         caves.append(cave);
     }
@@ -248,7 +282,7 @@ cwRegionLoadTask::LoadData cwRegionLoadTask::loadCavingRegion(const CavewherePro
  * @param protoCave
  * @param cave
  */
-void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *cave)
+void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *cave, int fileVersion)
 {
     QString name = loadName(protoCave);
     cwUnits::LengthUnit lengthUnit = static_cast<cwUnits::LengthUnit>(protoCave.lengthunit());
@@ -263,7 +297,7 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
 
     for(int i = 0; i < protoCave.legacy_trips_size(); i++) {
         cwTrip* trip = new cwTrip();
-        loadTrip(protoCave.legacy_trips(i), trip);
+        loadTrip(protoCave.legacy_trips(i), trip, fileVersion);
         trips.append(trip);
     }
     cave->addTrips(trips);
@@ -278,7 +312,7 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
  * @param protoTrip
  * @param trip
  */
-void cwRegionLoadTask::loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip *trip)
+void cwRegionLoadTask::loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip *trip, int fileVersion)
 {    
     QString tripName = loadName(protoTrip);
     QDate tripDate = loadDate(protoTrip.date());
@@ -299,6 +333,7 @@ void cwRegionLoadTask::loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip *t
     }
 
     trip->setChucks(chunks);
+    repairLegacySightFlags(trip, fileVersion);
 }
 
 /**

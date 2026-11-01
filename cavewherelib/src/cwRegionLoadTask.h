@@ -121,8 +121,8 @@ private:
     QByteArray readProtoBufferFromDatabase(bool* okay);
 
     LoadData loadCavingRegion(const CavewhereProto::CavingRegion& protoRegion);
-    void loadCave(const CavewhereProto::Cave& protoCave, cwCave* cave);
-    void loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip* trip);
+    void loadCave(const CavewhereProto::Cave& protoCave, cwCave* cave, int fileVersion);
+    void loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip* trip, int fileVersion);
     void loadSurveyNoteModel(const CavewhereProto::SurveyNoteModel& protoNoteModel,
                              cwSurveyNoteModel* noteModel);
     void loadTripCalibration(const CavewhereProto::TripCalibration& protoTripCalibration,

@@ -33,14 +33,6 @@ constexpr QLatin1String kAnonymousWallStation("..");
 //Column width for the padded data lines, negative for left alignment
 constexpr int kTextPadding = -11;
 
-bool hasReading(const cwCompassReading& compass, const cwClinoReading& clino)
-{
-    return compass.state() == cwCompassReading::State::Valid
-           || clino.state() == cwClinoReading::State::Valid
-           || clino.state() == cwClinoReading::State::Up
-           || clino.state() == cwClinoReading::State::Down;
-}
-
 bool isSightEmpty(const cwCompassReading& compass, const cwClinoReading& clino)
 {
     return compass.state() == cwCompassReading::State::Empty
@@ -51,13 +43,13 @@ bool isSightEmpty(const cwCompassReading& compass, const cwClinoReading& clino)
 //other side's readings, as a legacy trip with a stale flag does.
 bool isFrontSightOnlyLeg(const cwShot& shot)
 {
-    return hasReading(shot.compass(), shot.clino())
+    return shot.hasFrontSightReading()
            && isSightEmpty(shot.backCompass(), shot.backClino());
 }
 
 bool isBackSightOnlyLeg(const cwShot& shot)
 {
-    return hasReading(shot.backCompass(), shot.backClino())
+    return shot.hasBackSightReading()
            && isSightEmpty(shot.compass(), shot.clino());
 }
 

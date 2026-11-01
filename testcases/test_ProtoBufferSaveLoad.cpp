@@ -23,6 +23,15 @@
 #include "cwScrap.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwScrapManager.h"
+#include "cwTriangulatedData.h"
+#include "cwStationPositionLookup.h"
+#include "cwJobSettings.h"
+#include "asyncfuture.h"
+
+//Protobuf
+#include "cavewhere.pb.h"
+#include "qt.pb.h"
 
 //std includes
 #include <memory>
@@ -33,6 +42,11 @@
 #include <QUuid>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QTemporaryDir>
+#include <QBuffer>
+#include <QImage>
 
 //catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -463,3 +477,306 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
 }
 
 
+
+namespace {
+//Pre-v6 region files store sight flags that can contradict their shots.
+constexpr int kFirstVersionWithTrustedSightFlags = 6;
+constexpr int kLegacyImageId = 1;
+constexpr int kNoteSizePixels = 200;
+constexpr int kNoteDotsPerMeter = 7874;
+constexpr double kLegLength = 10.0;
+constexpr double kNorth = 0.0;
+constexpr double kEast = 90.0;
+constexpr double kSouth = 180.0;
+constexpr double kLevel = 0.0;
+
+struct LegacyLeg {
+    QString from;
+    QString to;
+    double compass;
+};
+
+struct LegacySightFlags {
+    bool front;
+    bool back;
+};
+
+enum class LegacySightSide {
+    Front,
+    Back
+};
+
+const QList<LegacyLeg> kPhakeLegs {
+    {QStringLiteral("a1"), QStringLiteral("a2"), kNorth},
+    {QStringLiteral("a2"), QStringLiteral("a3"), kEast},
+    {QStringLiteral("a3"), QStringLiteral("a4"), kSouth}
+};
+
+void setLegacyPoint(QtProto::QPointF* protoPoint, const QPointF& point)
+{
+    protoPoint->set_x(point.x());
+    protoPoint->set_y(point.y());
+}
+
+//A pre-v6 trip, Phake Cave style: the legs carry readings on one side only, in
+//the v5 value + state fields, and the trip stores the given sight flags.
+void addLegacyTrip(CavewhereProto::Cave* protoCave,
+                   LegacySightFlags storedFlags,
+                   LegacySightSide readingSide)
+{
+    auto protoTrip = protoCave->add_legacy_trips();
+    protoTrip->set_name("alpha");
+    auto date = protoTrip->mutable_date();
+    date->set_year(2020);
+    date->set_month(1);
+    date->set_day(1);
+
+    auto calibration = protoTrip->mutable_tripcalibration();
+    calibration->set_distanceunit(CavewhereProto::Units::Meters);
+    calibration->set_frontsights(storedFlags.front);
+    calibration->set_backsights(storedFlags.back);
+
+    auto chunk = protoTrip->add_chunks();
+    chunk->add_legacy_stations()->set_name(kPhakeLegs.first().from.toStdString());
+    for(const LegacyLeg& leg : kPhakeLegs) {
+        chunk->add_legacy_stations()->set_name(leg.to.toStdString());
+
+        auto shot = chunk->add_legacy_shots();
+        shot->set_includedistance(true);
+        shot->set_legacy_distance(kLegLength);
+        if(readingSide == LegacySightSide::Front) {
+            shot->set_legacy_compass(leg.compass);
+            shot->set_legacy_clino(kLevel);
+            //v5 states default to Valid, so an empty side is spelled out.
+            shot->set_legacy_backcompassstate(CavewhereProto::CompassStates::Empty);
+            shot->set_legacy_backclinostate(CavewhereProto::ClinoStates::Empty);
+        } else {
+            shot->set_legacy_backcompass(leg.compass);
+            shot->set_legacy_backclino(kLevel);
+            shot->set_legacy_compassstate(CavewhereProto::CompassStates::Empty);
+            shot->set_legacy_clinostate(CavewhereProto::ClinoStates::Empty);
+        }
+    }
+}
+
+CavewhereProto::CavingRegion legacyPhakeRegion(LegacySightFlags storedFlags,
+                                               LegacySightSide readingSide,
+                                               std::optional<int> fileVersion)
+{
+    CavewhereProto::CavingRegion protoRegion;
+    if(fileVersion.has_value()) {
+        protoRegion.set_version(fileVersion.value());
+    }
+
+    auto protoCave = protoRegion.add_caves();
+    protoCave->set_name("Phake Cave");
+    protoCave->set_lengthunit(CavewhereProto::Units::Meters);
+    protoCave->set_depthunit(CavewhereProto::Units::Meters);
+    addLegacyTrip(protoCave, storedFlags, readingSide);
+    return protoRegion;
+}
+
+//One plan note on the trip, with a square scrap tied to a1 and a2. The scrap's
+//outline spans more than a dozen meters at the note's scale, so a carpeted
+//scrap has many grid vertices inside it.
+void addLegacyNoteWithScrap(CavewhereProto::Trip* protoTrip)
+{
+    auto protoNote = protoTrip->mutable_legacy_notemodel()->add_notes();
+
+    auto protoImage = protoNote->mutable_image();
+    protoImage->set_legacy_originalid(kLegacyImageId);
+    protoImage->set_dotpermeter(kNoteDotsPerMeter);
+    protoImage->mutable_size()->set_width(kNoteSizePixels);
+    protoImage->mutable_size()->set_height(kNoteSizePixels);
+
+    auto resolution = protoNote->mutable_imageresolution();
+    resolution->set_value(kNoteDotsPerMeter);
+    resolution->set_unit(CavewhereProto::Units::DotsPerMeter);
+
+    auto protoScrap = protoNote->add_scraps();
+    const QList<QPointF> outline {
+        {0.1, 0.1}, {0.9, 0.1}, {0.9, 0.9}, {0.1, 0.9}
+    };
+    for(const QPointF& point : outline) {
+        setLegacyPoint(protoScrap->add_outlinepoints(), point);
+    }
+
+    auto addNoteStation = [protoScrap](const QString& name, const QPointF& position) {
+        auto noteStation = protoScrap->add_notestations();
+        noteStation->mutable_legacy_name()->set_stringdata(name.toStdString());
+        setLegacyPoint(noteStation->mutable_positiononnote(), position);
+    };
+    addNoteStation(QStringLiteral("a1"), QPointF(0.5, 0.2));
+    addNoteStation(QStringLiteral("a2"), QPointF(0.5, 0.8));
+
+    protoScrap->set_calculatenotetransform(true);
+    protoScrap->set_type(CavewhereProto::Scrap::Plan);
+}
+
+QByteArray legacyNotePng()
+{
+    QImage image(kNoteSizePixels, kNoteSizePixels, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    image.setDotsPerMeterX(kNoteDotsPerMeter);
+    image.setDotsPerMeterY(kNoteDotsPerMeter);
+
+    QByteArray pngData;
+    QBuffer buffer(&pngData);
+    buffer.open(QIODevice::WriteOnly);
+    image.save(&buffer, "PNG");
+    return pngData;
+}
+
+//Writes a pre-v6 SQLite project with the legacy schema: the serialized region
+//in ObjectData row 1, and each png in Images under kLegacyImageId onward.
+bool writeLegacyProjectFile(const QString& filename,
+                            const CavewhereProto::CavingRegion& protoRegion,
+                            const QList<QByteArray>& pngImages = {})
+{
+    const QString connectionName = QStringLiteral("legacySightFlags-%1-%2")
+                                       .arg(QCoreApplication::applicationPid())
+                                       .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+
+    const bool written = [&]() {
+        QSqlDatabase database = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        database.setDatabaseName(filename);
+        if(!database.open()) {
+            return false;
+        }
+
+        QSqlQuery query(database);
+        if(!query.exec(QStringLiteral("CREATE TABLE ObjectData (id INTEGER PRIMARY KEY AUTOINCREMENT,protoBuffer BLOB)"))
+            || !query.exec(QStringLiteral("CREATE TABLE Images (id INTEGER PRIMARY KEY AUTOINCREMENT,type STRING,shouldDelete BOOL,width INTEGER,height INTEGER,dotsPerMeter INTEGER,imageData BLOB)"))) {
+            return false;
+        }
+
+        const std::string regionBytes = protoRegion.SerializeAsString();
+        query.prepare(QStringLiteral("INSERT INTO ObjectData (id, protoBuffer) VALUES (1, ?)"));
+        query.addBindValue(QByteArray(regionBytes.data(), static_cast<qsizetype>(regionBytes.size())));
+        if(!query.exec()) {
+            return false;
+        }
+
+        int imageId = kLegacyImageId;
+        for(const QByteArray& png : pngImages) {
+            const QImage image = QImage::fromData(png, "PNG");
+            query.prepare(QStringLiteral("INSERT INTO Images (id, type, shouldDelete, width, height, dotsPerMeter, imageData) VALUES (?, 'png', 0, ?, ?, ?, ?)"));
+            query.addBindValue(imageId);
+            query.addBindValue(image.width());
+            query.addBindValue(image.height());
+            query.addBindValue(image.dotsPerMeterX());
+            query.addBindValue(png);
+            if(!query.exec()) {
+                return false;
+            }
+            imageId++;
+        }
+
+        database.close();
+        return true;
+    }();
+
+    QSqlDatabase::removeDatabase(connectionName);
+    return written;
+}
+
+//Loads the file the way the app opens a legacy project, which converts it and
+//reloads the converted project.
+void loadLegacyProject(cwRootData* rootData, const QString& filename)
+{
+    rootData->project()->loadOrConvert(filename);
+    rootData->project()->waitLoadToFinish();
+
+    const auto errors = rootData->project()->errorModel()->toList();
+    INFO("Load errors:" << errors.size());
+    REQUIRE(!cwError::containsFatal(errors));
+    REQUIRE(rootData->project()->cavingRegion()->caveCount() == 1);
+    REQUIRE(rootData->project()->cavingRegion()->cave(0)->tripCount() == 1);
+}
+}
+
+TEST_CASE("Loading a pre-v6 region repairs sight flags that contradict the shots", "[ProtoSaveLoad][cwRegionLoadTask]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString filename = tempDir.filePath(QStringLiteral("legacy-sight-flags.cw"));
+
+    auto rootData = std::make_unique<cwRootData>();
+
+    auto loadedFlags = [&](const CavewhereProto::CavingRegion& protoRegion) {
+        REQUIRE(writeLegacyProjectFile(filename, protoRegion));
+        loadLegacyProject(rootData.get(), filename);
+        const auto calibration = rootData->project()->cavingRegion()->cave(0)->trip(0)->calibrations();
+        return LegacySightFlags{calibration->hasFrontSights(), calibration->hasBackSights()};
+    };
+
+    SECTION("A back-only trip whose shots carry front readings gets front sights") {
+        const auto flags = loadedFlags(legacyPhakeRegion({false, true}, LegacySightSide::Front, std::nullopt));
+        CHECK(flags.front == true);
+        CHECK(flags.back == true);
+    }
+
+    SECTION("A trip with neither sight gets the side its shots carry") {
+        const auto flags = loadedFlags(legacyPhakeRegion({false, false}, LegacySightSide::Front, std::nullopt));
+        CHECK(flags.front == true);
+        CHECK(flags.back == false);
+    }
+
+    SECTION("A front-only trip whose shots carry backsights gets back sights and keeps front sights") {
+        const auto flags = loadedFlags(legacyPhakeRegion({true, false}, LegacySightSide::Back, std::nullopt));
+        CHECK(flags.front == true);
+        CHECK(flags.back == true);
+    }
+
+    SECTION("A version 6 file keeps its stored flags") {
+        const auto flags = loadedFlags(legacyPhakeRegion({false, true}, LegacySightSide::Front,
+                                                          kFirstVersionWithTrustedSightFlags));
+        CHECK(flags.front == false);
+        CHECK(flags.back == true);
+    }
+
+    rootData->futureManagerModel()->waitForFinished();
+}
+
+TEST_CASE("A pre-v6 project with stale sight flags solves and carpets its scraps", "[ProtoSaveLoad][cwRegionLoadTask]") {
+    cwJobSettings::initialize();
+    REQUIRE(cwJobSettings::instance()->automaticUpdate());
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString filename = tempDir.filePath(QStringLiteral("Phake Cave.cw"));
+
+    auto protoRegion = legacyPhakeRegion({false, true}, LegacySightSide::Front, std::nullopt);
+    addLegacyNoteWithScrap(protoRegion.mutable_caves(0)->mutable_legacy_trips(0));
+    REQUIRE(writeLegacyProjectFile(filename, protoRegion, {legacyNotePng()}));
+
+    auto rootData = std::make_unique<cwRootData>();
+    loadLegacyProject(rootData.get(), filename);
+
+    auto cave = rootData->project()->cavingRegion()->cave(0);
+    auto trip = cave->trip(0);
+    CHECK(trip->calibrations()->hasFrontSights() == true);
+
+    rootData->linePlotManager()->waitToFinish();
+    rootData->scrapManager()->waitForFinish();
+
+    CHECK(!cave->scopedPositions().positions().isEmpty());
+    CHECK(cave->scopedPositions().hasPosition(QStringLiteral("a2")));
+
+    REQUIRE(trip->notes()->notes().size() == 1);
+    auto note = trip->notes()->notes().at(0);
+    REQUIRE(note->scraps().size() == 1);
+    auto scrap = note->scrap(0);
+
+    auto results = rootData->scrapManager()->triangulateScraps({scrap}).scraps;
+    REQUIRE(results.size() == 1);
+    REQUIRE(AsyncFuture::waitForFinished(results.first().data));
+    REQUIRE(results.first().data.resultCount() == 1);
+
+    //An unsolved scrap morphs to its bare outline; a carpeted one fills with
+    //grid vertices.
+    const auto vertexCount = results.first().data.result().scrapGeometry().vertexCount();
+    INFO("Vertex count:" << vertexCount << " outline points:" << scrap->points().size());
+    CHECK(vertexCount > 4 * scrap->points().size());
+
+    rootData->futureManagerModel()->waitForFinished();
+}

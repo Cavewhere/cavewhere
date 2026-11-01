@@ -60,6 +60,10 @@ public:
     cwClinoReading backClino() const;
     void setBackClino(const cwClinoReading& reading);
 
+    // A side has a reading when its compass is valid or its clino is valid, up, or down
+    bool hasFrontSightReading() const;
+    bool hasBackSightReading() const;
+
     // Multi-measurement API
     void addMeasurement(const cwShotMeasurement& measurement);
     void removeMeasurementAt(int index);

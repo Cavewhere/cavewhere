@@ -1,6 +1,16 @@
 // cwShot.cpp
 #include "cwShot.h"
 
+namespace {
+bool hasSightReading(const cwCompassReading& compass, const cwClinoReading& clino)
+{
+    return compass.state() == cwCompassReading::State::Valid
+           || clino.state() == cwClinoReading::State::Valid
+           || clino.state() == cwClinoReading::State::Up
+           || clino.state() == cwClinoReading::State::Down;
+}
+}
+
 // --- PrivateData ---
 
 cwShot::cwShot() :
@@ -103,6 +113,14 @@ void cwShot::setBackClino(const cwClinoReading& r) {
         m_measurements.append(back);
     }
     m_measurements[1].clino = r;
+}
+
+bool cwShot::hasFrontSightReading() const {
+    return hasSightReading(compass(), clino());
+}
+
+bool cwShot::hasBackSightReading() const {
+    return hasSightReading(backCompass(), backClino());
 }
 
 // --- Multi-measurement API ---
