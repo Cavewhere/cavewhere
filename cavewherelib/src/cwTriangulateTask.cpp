@@ -26,6 +26,7 @@
 //Qt includes
 #include <QDebug>
 #include <QDir>
+#include <QHash>
 #include <cmath>
 
 namespace {
@@ -36,6 +37,15 @@ namespace {
     //minutes. A real scrap never needs anywhere near this many points, so we
     //clamp the per-axis point count and log when the clamp trips.
     constexpr int kMaxGridPointsPerAxis = 2048;
+
+    //Merge lookup cells span this many merge tolerances, so a point's matches
+    //always sit in its own cell or a neighbor, even after float rounding
+    constexpr double kMergeCellTolerances = 2.0;
+
+    //Coordinates past this magnitude would overflow a merge cell key, so those
+    //points are appended without a lookup. Merged points are normalized note
+    //coordinates, far inside this bound.
+    constexpr float kMaxMergeCoordinate = 1.0e9f;
 
     //What one scrap's node hangs off itself: cropping, the texture encode and
     //the triangulation
@@ -238,6 +248,12 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
 
     //Create the regualar mesh that covers the croppedImage
     PointGrid pointGrid = createPointGrid(bounds, scrap);
+    if(pointGrid.Points.isEmpty()) {
+        cwTriangulatedData emptyData;
+        emptyData.setTexture(texture);
+        emptyData.setCroppedImage(croppedResult.image);
+        return emptyData;
+    }
     mesh.advance();
 
     //Find all the points in the regualar mesh that are in the scrap's polygon
@@ -340,23 +356,26 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     double numberOfPointsX = inCave.width() / gridResolutionMeters;
     double numberOfPointsY = inCave.height() / gridResolutionMeters;
 
-    //Safety net: a degenerate note transform (bad scale) makes inCave enormous
-    //and asks for an unbounded grid that pins every core for minutes in
-    //createQuads(). Clamp the per-axis point count (and treat non-finite counts
-    //as the clamp limit) so we still span bounds, just coarsely. Deltas are
-    //derived from the clamped counts below, so the grid keeps covering bounds.
-    if(!std::isfinite(numberOfPointsX) || numberOfPointsX > kMaxGridPointsPerAxis
-       || !std::isfinite(numberOfPointsY) || numberOfPointsY > kMaxGridPointsPerAxis) {
+    //A non-finite or non-positive note scale has no sensible grid, so the
+    //scrap gets no geometry. An empty grid tells triangulateGeometry to stop.
+    if(!std::isfinite(scale) || scale <= 0.0
+       || !std::isfinite(numberOfPointsX) || !std::isfinite(numberOfPointsY)) {
+        qWarning() << "cwTriangulateTask: skipping scrap geometry, degenerate note scale or grid"
+                   << "scale=" << scale << "inCave=" << inCave;
+        return grid;
+    }
+
+    //Safety net: a bad but finite scale makes inCave enormous and asks for an
+    //unbounded grid that pins every core for minutes in createQuads(). Clamp
+    //the per-axis point count so we still span bounds, just coarsely. Deltas
+    //are derived from the clamped counts below, so the grid keeps covering bounds.
+    if(numberOfPointsX > kMaxGridPointsPerAxis || numberOfPointsY > kMaxGridPointsPerAxis) {
         qWarning() << "cwTriangulateTask: clamping pathological point grid"
                    << QSizeF(numberOfPointsX, numberOfPointsY)
                    << "to" << kMaxGridPointsPerAxis << "per axis (degenerate note scale?)"
                    << "scale=" << scale << "inCave=" << inCave;
-        numberOfPointsX = std::isfinite(numberOfPointsX)
-                              ? qMin(numberOfPointsX, double(kMaxGridPointsPerAxis))
-                              : double(kMaxGridPointsPerAxis);
-        numberOfPointsY = std::isfinite(numberOfPointsY)
-                              ? qMin(numberOfPointsY, double(kMaxGridPointsPerAxis))
-                              : double(kMaxGridPointsPerAxis);
+        numberOfPointsX = qMin(numberOfPointsX, double(kMaxGridPointsPerAxis));
+        numberOfPointsY = qMin(numberOfPointsY, double(kMaxGridPointsPerAxis));
     }
 
     double xDelta = bounds.width() / numberOfPointsX;
@@ -756,35 +775,73 @@ void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSe
 {
     static const float PointTolerance = 0.000001f;
 
-    foreach(QPointF unAddedPoint, unAddedTriangles) {
+    const double cellSize = kMergeCellTolerances * PointTolerance;
 
-        bool foundExistIndex = false;
-        uint32_t index;
+    using Cell = std::pair<qint64, qint64>;
+    const auto cellOf = [cellSize](float x, float y) {
+        return Cell(static_cast<qint64>(std::floor(x / cellSize)),
+                    static_cast<qint64>(std::floor(y / cellSize)));
+    };
+    const auto isHashable = [](float x, float y) {
+        return std::isfinite(x) && std::isfinite(y)
+               && std::fabs(x) <= kMaxMergeCoordinate && std::fabs(y) <= kMaxMergeCoordinate;
+    };
 
-        //Search for the point in the point set
-        //This is a slow linear search, could be replace with a kd-tree of the pointSet
-        //Good enough for now...
-        for(int i = 0; i < pointSet.size(); i++) {
-            const QVector3D& point = pointSet[i];
-            float xDelta = fabs((float)unAddedPoint.x() - point.x());
-            float yDelta = fabs((float)unAddedPoint.y() - point.y());
+    //Each cell lists its point indices in increasing order
+    QHash<Cell, QVector<uint32_t>> cells;
+    cells.reserve(pointSet.size() + unAddedTriangles.size());
+    const auto insertPoint = [&](uint32_t i) {
+        const QVector3D& point = pointSet.at(i);
+        if(isHashable(point.x(), point.y())) {
+            cells[cellOf(point.x(), point.y())].append(i);
+        }
+    };
+    for(int i = 0; i < pointSet.size(); i++) {
+        insertPoint(static_cast<uint32_t>(i));
+    }
 
-            if(xDelta <= PointTolerance && yDelta <= PointTolerance) {
-                //Hey we found the point
-                index = (uint32_t)i;
-                foundExistIndex = true;
-                break;
+    //Returns the lowest index within tolerance, or -1
+    const auto findExisting = [&](float x, float y) -> qint64 {
+        if(!isHashable(x, y)) {
+            return -1;
+        }
+        const Cell center = cellOf(x, y);
+        qint64 found = -1;
+        for(qint64 dy = -1; dy <= 1; dy++) {
+            for(qint64 dx = -1; dx <= 1; dx++) {
+                const auto it = cells.constFind(Cell(center.first + dx, center.second + dy));
+                if(it == cells.constEnd()) {
+                    continue;
+                }
+                for(const uint32_t i : it.value()) {
+                    if(found >= 0 && i >= found) {
+                        break;
+                    }
+                    const QVector3D& point = pointSet.at(i);
+                    if(std::fabs(x - point.x()) <= PointTolerance
+                       && std::fabs(y - point.y()) <= PointTolerance) {
+                        found = i;
+                        break;
+                    }
+                }
             }
         }
+        return found;
+    };
 
-        //If we didn't find the index this is a new point, so add it to the pointSet
-        if(!foundExistIndex) {
-            index = (uint32_t)pointSet.size(); //The last index
+    indices.reserve(indices.size() + unAddedTriangles.size());
+    for(const QPointF& unAddedPoint : unAddedTriangles) {
+        const float x = static_cast<float>(unAddedPoint.x());
+        const float y = static_cast<float>(unAddedPoint.y());
+        const qint64 existing = findExisting(x, y);
+        if(existing >= 0) {
+            indices.append(static_cast<uint32_t>(existing));
+        } else {
+            const uint32_t index = static_cast<uint32_t>(pointSet.size());
             pointSet.append(QVector3D(unAddedPoint));
+            insertPoint(index);
+            indices.append(index);
         }
-
-        //The next index for the triangles
-        indices.append(index);
     }
 }
 

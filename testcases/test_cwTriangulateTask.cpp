@@ -51,10 +51,14 @@
 #include <QImageWriter>
 #include <QPointF>
 #include <QUuid>
+#include <QVector2D>
 #include <QVector3D>
+#include <QElapsedTimer>
 
 //Std includes
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <random>
 
 static QSizeF geometryBoundsSize(const cwGeometry& geometry)
@@ -266,11 +270,8 @@ static cwTriangulateInData scrapInDataForImage(const QString& imagePath,
     return inData;
 }
 
-static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
-                                                 QSize overrideOriginalSize = QSize())
+static cwTriangulatedData triangulateScrap(const cwTriangulateInData& inData)
 {
-    const cwTriangulateInData inData = scrapInDataForImage(imagePath, overrideOriginalSize);
-
     const QDir tempDir = triangulateTaskDataRootDir();
     tempDir.mkpath(".");
 
@@ -285,6 +286,12 @@ static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
     REQUIRE(futures.first().resultCount() == 1);
 
     return futures.first().result();
+}
+
+static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
+                                                 QSize overrideOriginalSize = QSize())
+{
+    return triangulateScrap(scrapInDataForImage(imagePath, overrideOriginalSize));
 }
 
 TEST_CASE("A compressed crop skips the decode and still reaches the renderer",
@@ -663,4 +670,218 @@ TEST_CASE("A scrap canceled mid-crop writes nothing to the texture cache", "[cwT
     const QStringList cachedFiles = filesUnder(dataRootDir);
     INFO("Cached files: " << cachedFiles.join(QStringLiteral(", ")).toStdString());
     CHECK(cachedFiles.isEmpty());
+}
+
+namespace {
+    //Interpolated shots and z smoothing cost more than the grid on large
+    //meshes, so these fixtures turn both off and leave the grid and the merge
+    //as the work
+    cwTriangulateWarpingData gridOnlyMorphing(double gridResolutionMeters)
+    {
+        cwTriangulateWarpingData morphing;
+        morphing.gridResolutionMeters = gridResolutionMeters;
+        morphing.useShotInterpolationSpacing = false;
+        morphing.useSmoothingRadius = false;
+        return morphing;
+    }
+
+    cwTriangulateInData scrapOnTestNote(const QPolygonF& outline, double gridResolutionMeters)
+    {
+        const QString imagePath = QDir(testDatasetDir())
+                                      .filePath(QStringLiteral("scrap-image-no-rotation.jpg"));
+        REQUIRE(QFileInfo::exists(imagePath));
+
+        cwTriangulateInData inData = scrapInDataForImage(imagePath);
+        inData.setOutline(outline);
+        inData.setMorphingSettings(gridOnlyMorphing(gridResolutionMeters));
+        return inData;
+    }
+
+    //A thin triangle along the bounds' diagonal: a full grid over the bounds
+    //holds only a few points inside it, so a 2048-per-axis grid finishes in
+    //seconds rather than hours
+    QPolygonF diagonalSliverOutline()
+    {
+        QPolygonF outline;
+        outline << QPointF(0.1, 0.1) << QPointF(0.9, 0.9) << QPointF(0.9, 0.899);
+        return outline;
+    }
+
+    constexpr double kOneToOneHundred = 100.0;
+    constexpr double kDegenerateGridResolutionMeters = 0.5;
+
+    cwTriangulateInData degenerateScaleScrap(double scaleNumeratorMeters)
+    {
+        cwTriangulateInData inData = scrapOnTestNote(diagonalSliverOutline(),
+                                                     kDegenerateGridResolutionMeters);
+
+        cwNoteTransformationData transform = inData.noteTransform();
+        transform.scale.scaleNumerator = {cwUnits::Meters, scaleNumeratorMeters, false};
+        transform.scale.scaleDenominator = {cwUnits::Meters, kOneToOneHundred, false};
+        inData.setNoteTransform(transform);
+        return inData;
+    }
+
+    //A long, thin parallelogram across the note. Its length scales its grid,
+    //its inside points and its edge quads together, while its height, and so
+    //the grid's rows, stays fixed. No edge lies on a grid line.
+    constexpr double kBandLeft = 0.1;
+    constexpr double kBandTop = 0.5;
+    constexpr double kBandHeight = 0.012;
+    constexpr double kBandShear = 0.005;
+    constexpr double kBandRise = 0.002;
+    constexpr double kShortBandLength = 0.2;
+    constexpr double kGrowthFactor = 4.0;
+    constexpr double kLongBandLength = kShortBandLength * kGrowthFactor;
+
+    //The note is 600 by 400 pixels at 300 dpi; at 1:100 the short band is
+    //about 250 cells long and 10 cells high
+    constexpr double kBandGridResolutionMeters = 0.004;
+
+    QPolygonF bandOutline(double length)
+    {
+        const double right = kBandLeft + length;
+        QPolygonF outline;
+        outline << QPointF(kBandLeft, kBandTop + kBandHeight)
+                << QPointF(kBandLeft + kBandShear, kBandTop)
+                << QPointF(right, kBandTop + kBandRise)
+                << QPointF(right - kBandShear, kBandTop + kBandHeight + kBandRise);
+        return outline;
+    }
+
+    //Linear growth is kGrowthFactor; the rest is room for a loaded machine
+    constexpr double kMaxGrowthRatio = 6.0;
+    constexpr int kTimingRepeats = 3;
+
+    //The merge's point tolerance in normalized note coordinates
+    constexpr double kMergePointTolerance = 0.000001;
+
+    //What the long band triangulates to, recorded from the linear-search
+    //merge: one vertex per distinct point
+    constexpr qsizetype kLongBandVertexCount = 12259;
+    constexpr qsizetype kLongBandIndexCount = 67383;
+
+    //Fastest of kTimingRepeats triangulations of \a inData. Each one reuses the
+    //cached crop, so the mesh is what grows.
+    qint64 triangulateNanoseconds(const cwTriangulateInData& inData)
+    {
+        qint64 fastest = std::numeric_limits<qint64>::max();
+        for(int repeat = 0; repeat < kTimingRepeats; ++repeat) {
+            QElapsedTimer timer;
+            timer.start();
+            const cwTriangulatedData data = triangulateScrap(inData);
+            fastest = std::min(fastest, timer.nsecsElapsed());
+            REQUIRE(data.scrapGeometry().vertexCount() > 0);
+        }
+        return fastest;
+    }
+}
+
+TEST_CASE("A scrap whose note scale is not finite and positive builds no geometry",
+          "[cwTriangulateTask][DegenerateNoteScale]")
+{
+    // A degenerate note transform (a shot drawn as a point) once reached the
+    // grid as a zero or nan scale, which asked for an unbounded grid; the
+    // clamp then built 2048 by 2048 points and a merge that ran for minutes.
+    // The scrap has no size in the cave, so it gets no geometry, and the run
+    // still settles with one result.
+    double scaleNumeratorMeters = 0.0;
+    SECTION("Zero") {
+        scaleNumeratorMeters = 0.0;
+    }
+    SECTION("Not a number") {
+        scaleNumeratorMeters = std::numeric_limits<double>::quiet_NaN();
+    }
+    SECTION("Infinite") {
+        scaleNumeratorMeters = std::numeric_limits<double>::infinity();
+    }
+    SECTION("Negative") {
+        scaleNumeratorMeters = -1.0;
+    }
+    INFO("Scale numerator: " << scaleNumeratorMeters);
+
+    const cwTriangulatedData data = triangulateScrap(degenerateScaleScrap(scaleNumeratorMeters));
+    CHECK(data.scrapGeometry().vertexCount() == 0);
+    CHECK(data.scrapGeometry().indices().isEmpty());
+}
+
+TEST_CASE("A finite note scale that asks for a huge grid still builds geometry",
+          "[cwTriangulateTask][DegenerateNoteScale]")
+{
+    // A tiny but finite scale makes the scrap enormous in the cave; the grid
+    // clamps to its per-axis limit and the scrap keeps its geometry.
+    constexpr double kTinyScaleNumeratorMeters = 1.0e-9;
+    const cwTriangulatedData data = triangulateScrap(degenerateScaleScrap(kTinyScaleNumeratorMeters));
+    CHECK(data.scrapGeometry().vertexCount() > 0);
+    CHECK_FALSE(data.scrapGeometry().indices().isEmpty());
+}
+
+TEST_CASE("Merging the edge triangles keeps one vertex per distinct point",
+          "[cwTriangulateTask][MergeTriangles]")
+{
+    // The edge quads' triangles share corners with each other and with the
+    // inside grid, and neighboring quads compute their shared crossings
+    // separately, so the merge sees near-duplicates within its tolerance.
+    const QPolygonF outline = bandOutline(kLongBandLength);
+    const cwTriangulatedData data = triangulateScrap(scrapOnTestNote(outline, kBandGridResolutionMeters));
+    const cwGeometry& geometry = data.scrapGeometry();
+
+    CHECK(geometry.vertexCount() == kLongBandVertexCount);
+    CHECK(geometry.indices().size() == kLongBandIndexCount);
+
+    const qsizetype vertexCount = geometry.vertexCount();
+    const bool indicesInRange = std::all_of(geometry.indices().cbegin(), geometry.indices().cend(),
+                                            [vertexCount](uint32_t index) { return index < vertexCount; });
+    CHECK(indicesInRange);
+
+    // Texture coordinates are the note points mapped onto the bounds, so two
+    // vertices the merge kept apart sit more than its tolerance apart here too
+    const QRectF bounds = outline.boundingRect();
+    const double halfToleranceX = kMergePointTolerance / bounds.width() / 2.0;
+    const double halfToleranceY = kMergePointTolerance / bounds.height() / 2.0;
+
+    QVector<QVector2D> texCoords = geometry.values<QVector2D>(cwGeometry::Semantic::TexCoord0);
+    std::sort(texCoords.begin(), texCoords.end(), [](const QVector2D& left, const QVector2D& right) {
+        return left.x() < right.x();
+    });
+
+    const auto countCoincidentPairs = [&]() {
+        qsizetype pairs = 0;
+        for(qsizetype i = 0; i < texCoords.size(); ++i) {
+            for(qsizetype j = i + 1; j < texCoords.size(); ++j) {
+                const QVector2D& left = texCoords.at(i);
+                const QVector2D& right = texCoords.at(j);
+                if(right.x() - left.x() > halfToleranceX) {
+                    break;
+                }
+                if(std::abs(right.y() - left.y()) <= halfToleranceY) {
+                    ++pairs;
+                }
+            }
+        }
+        return pairs;
+    };
+    CHECK(countCoincidentPairs() == 0);
+}
+
+TEST_CASE("Triangulating a scrap grows linearly with its outline",
+          "[cwTriangulateTask][MergeTriangles][MergeGrowth]")
+{
+    // A band four times as long has four times the grid, the inside points and
+    // the edge triangles. A merge that scans every kept point for each edge
+    // vertex costs sixteen times as much; one that looks points up costs four.
+    const cwTriangulateInData shortBand = scrapOnTestNote(bandOutline(kShortBandLength),
+                                                          kBandGridResolutionMeters);
+    const cwTriangulateInData longBand = scrapOnTestNote(bandOutline(kLongBandLength),
+                                                         kBandGridResolutionMeters);
+
+    // Warm the crop cache, so neither size pays for the crop's encode
+    triangulateScrap(shortBand);
+    triangulateScrap(longBand);
+
+    const qint64 shortNs = triangulateNanoseconds(shortBand);
+    const qint64 longNs = triangulateNanoseconds(longBand);
+    INFO("triangulate: " << shortNs << " ns for the short band, " << longNs << " ns for the long one");
+    REQUIRE(shortNs > 0);
+    CHECK(static_cast<double>(longNs) / static_cast<double>(shortNs) <= kMaxGrowthRatio);
 }
