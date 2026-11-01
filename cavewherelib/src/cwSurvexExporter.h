@@ -64,6 +64,7 @@ private:
     static void writeChunk(QTextStream& stream,
                            bool hasFrontSights,
                            bool hasBackSights,
+                           const QString& normalDataLine,
                            const cwTripCalibrationData& calibration,
                            const cwSurveyChunkData& chunk,
                            QStringList& errors);

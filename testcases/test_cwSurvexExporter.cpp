@@ -12,11 +12,19 @@
 #include "cwDistanceReading.h"
 #include "cwCompassReading.h"
 #include "cwClinoReading.h"
+#include "cwLinePlotManager.h"
+#include "cwCave.h"
+#include "cwTrip.h"
+#include "cwStationPositionLookup.h"
+
+//Catch includes
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 //Qt includes
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QDir>
+#include <QRegularExpression>
 #include <QTextStream>
 
 namespace {
@@ -35,6 +43,81 @@ QString writeTripToString(const cwTripData& trip) {
     INFO(errors.join('\n').toStdString());
     REQUIRE(errors.isEmpty());
     return QString::fromUtf8(outputData);
+}
+
+const QString kFrontSightDataLine = QStringLiteral("*data normal from to tape compass clino");
+const QString kBackSightDataLine = QStringLiteral("*data normal from to tape backcompass backclino");
+const QString kDataNormalPrefix = QStringLiteral("*data normal");
+
+cwShot makeShot(const QString& distance,
+                const QString& compass,
+                const QString& clino,
+                const QString& backCompass,
+                const QString& backClino)
+{
+    cwShot shot;
+    shot.setDistance(cwDistanceReading(distance));
+    shot.setCompass(cwCompassReading(compass));
+    shot.setClino(cwClinoReading(clino));
+    shot.setBackCompass(cwCompassReading(backCompass));
+    shot.setBackClino(cwClinoReading(backClino));
+    return shot;
+}
+
+//! Trip alpha with one chunk a1, a2, ... joined by \a shots, under the given sight flags
+cwTripData sightFlagTrip(bool hasFrontSights, bool hasBackSights, const QList<cwShot>& shots)
+{
+    cwTripData trip;
+    trip.name = QStringLiteral("alpha");
+    trip.calibrations.setFrontSights(hasFrontSights);
+    trip.calibrations.setBackSights(hasBackSights);
+
+    cwSurveyChunkData chunk;
+    for(qsizetype i = 0; i <= shots.size(); i++) {
+        chunk.stations.append(cwStation(QStringLiteral("a%1").arg(i + 1)));
+    }
+    chunk.shots = shots;
+    trip.chunks.append(chunk);
+    return trip;
+}
+
+QStringList trimmedLines(const QString& text)
+{
+    QStringList lines;
+    const QStringList rawLines = text.split(QLatin1Char('\n'));
+    for(const QString& line : rawLines) {
+        lines.append(line.trimmed());
+    }
+    return lines;
+}
+
+QStringList tokens(const QString& line)
+{
+    static const QRegularExpression whitespace(QStringLiteral("\\s+"));
+    return line.split(whitespace, Qt::SkipEmptyParts);
+}
+
+//! Index of the leg line from \a from to \a to, or -1
+qsizetype legLineIndex(const QStringList& lines, const QString& from, const QString& to)
+{
+    for(qsizetype i = 0; i < lines.size(); i++) {
+        const QStringList lineTokens = tokens(lines.at(i));
+        if(lineTokens.size() >= 2 && lineTokens.at(0) == from && lineTokens.at(1) == to) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+//! The *data normal line in force at \a index: the last one written before it
+QString activeDataLine(const QStringList& lines, qsizetype index)
+{
+    for(qsizetype i = index - 1; i >= 0; i--) {
+        if(lines.at(i).startsWith(kDataNormalPrefix)) {
+            return lines.at(i);
+        }
+    }
+    return QString();
 }
 
 } // namespace
@@ -281,4 +364,143 @@ TEST_CASE("cwSurvexExporter rewrites scientific-notation distances", "[cwSurvexE
     REQUIRE_FALSE(dataLine.isEmpty());
     CHECK(dataLine.contains(QStringLiteral("110.00")));
     CHECK_FALSE(dataLine.contains(QLatin1Char('e')));
+}
+
+TEST_CASE("cwSurvexExporter writes a back-only trip's front-only leg under front-sight columns", "[cwSurvexExporter]") {
+    const cwTripData trip = sightFlagTrip(false, true, {
+        makeShot(QStringLiteral("10.0"), QStringLiteral("90"), QStringLiteral("0"), QString(), QString()),
+        makeShot(QStringLiteral("5.0"), QString(), QStringLiteral("DOWN"), QString(), QStringLiteral("UP"))
+    });
+
+    const QStringList lines = trimmedLines(writeTripToString(trip));
+    INFO(lines.join(QLatin1Char('\n')).toStdString());
+
+    const qsizetype a1a2 = legLineIndex(lines, QStringLiteral("a1"), QStringLiteral("a2"));
+    const qsizetype a2a3 = legLineIndex(lines, QStringLiteral("a2"), QStringLiteral("a3"));
+    REQUIRE(a1a2 >= 0);
+    REQUIRE(a2a3 > a1a2);
+
+    CHECK(activeDataLine(lines, a1a2).toStdString() == kFrontSightDataLine.toStdString());
+    CHECK(tokens(lines.at(a1a2)) == QStringList({QStringLiteral("a1"), QStringLiteral("a2"),
+                                                 QStringLiteral("10.0"), QStringLiteral("90"), QStringLiteral("0")}));
+
+    CHECK(activeDataLine(lines, a2a3).toStdString() == kBackSightDataLine.toStdString());
+    CHECK(tokens(lines.at(a2a3)) == QStringList({QStringLiteral("a2"), QStringLiteral("a3"),
+                                                 QStringLiteral("5.0"), QStringLiteral("-"), QStringLiteral("UP")}));
+}
+
+TEST_CASE("cwSurvexExporter writes a front-only trip's back-only leg under backsight columns", "[cwSurvexExporter]") {
+    const cwTripData trip = sightFlagTrip(true, false, {
+        makeShot(QStringLiteral("10.0"), QString(), QString(), QStringLiteral("270"), QStringLiteral("0")),
+        makeShot(QStringLiteral("5.0"), QString(), QStringLiteral("DOWN"), QString(), QStringLiteral("UP"))
+    });
+
+    const QStringList lines = trimmedLines(writeTripToString(trip));
+    INFO(lines.join(QLatin1Char('\n')).toStdString());
+
+    const qsizetype a1a2 = legLineIndex(lines, QStringLiteral("a1"), QStringLiteral("a2"));
+    const qsizetype a2a3 = legLineIndex(lines, QStringLiteral("a2"), QStringLiteral("a3"));
+    REQUIRE(a1a2 >= 0);
+    REQUIRE(a2a3 > a1a2);
+
+    CHECK(activeDataLine(lines, a1a2).toStdString() == kBackSightDataLine.toStdString());
+    CHECK(tokens(lines.at(a1a2)) == QStringList({QStringLiteral("a1"), QStringLiteral("a2"),
+                                                 QStringLiteral("10.0"), QStringLiteral("270"), QStringLiteral("0")}));
+
+    CHECK(activeDataLine(lines, a2a3).toStdString() == kFrontSightDataLine.toStdString());
+    CHECK(tokens(lines.at(a2a3)) == QStringList({QStringLiteral("a2"), QStringLiteral("a3"),
+                                                 QStringLiteral("5.0"), QStringLiteral("-"), QStringLiteral("DOWN")}));
+}
+
+TEST_CASE("cwSurvexExporter switches the column set once per run of stale-flag legs", "[cwSurvexExporter]") {
+    const cwTripData trip = sightFlagTrip(false, true, {
+        makeShot(QStringLiteral("10.0"), QStringLiteral("90"), QStringLiteral("0"), QString(), QString()),
+        makeShot(QStringLiteral("10.0"), QStringLiteral("180"), QStringLiteral("0"), QString(), QString()),
+        makeShot(QStringLiteral("5.0"), QString(), QStringLiteral("DOWN"), QString(), QStringLiteral("UP"))
+    });
+
+    const QStringList lines = trimmedLines(writeTripToString(trip));
+    INFO(lines.join(QLatin1Char('\n')).toStdString());
+
+    const qsizetype a1a2 = legLineIndex(lines, QStringLiteral("a1"), QStringLiteral("a2"));
+    const qsizetype a2a3 = legLineIndex(lines, QStringLiteral("a2"), QStringLiteral("a3"));
+    const qsizetype a3a4 = legLineIndex(lines, QStringLiteral("a3"), QStringLiteral("a4"));
+    REQUIRE(a1a2 >= 0);
+    REQUIRE(a2a3 > a1a2);
+    REQUIRE(a3a4 > a2a3);
+
+    CHECK(activeDataLine(lines, a1a2).toStdString() == kFrontSightDataLine.toStdString());
+    CHECK(activeDataLine(lines, a2a3).toStdString() == kFrontSightDataLine.toStdString());
+    CHECK(activeDataLine(lines, a3a4).toStdString() == kBackSightDataLine.toStdString());
+    CHECK(lines.count(kFrontSightDataLine) == 1);
+}
+
+TEST_CASE("cwSurvexExporter restores the trip's column set when a chunk ends on a stale-flag leg", "[cwSurvexExporter]") {
+    cwTripData trip = sightFlagTrip(false, true, {
+        makeShot(QStringLiteral("10.0"), QStringLiteral("90"), QStringLiteral("0"), QString(), QString())
+    });
+
+    cwSurveyChunkData secondChunk;
+    secondChunk.stations.append(cwStation(QStringLiteral("a2")));
+    secondChunk.stations.append(cwStation(QStringLiteral("a3")));
+    secondChunk.shots.append(makeShot(QStringLiteral("5.0"), QString(), QStringLiteral("DOWN"), QString(), QStringLiteral("UP")));
+    trip.chunks.append(secondChunk);
+
+    const QStringList lines = trimmedLines(writeTripToString(trip));
+    INFO(lines.join(QLatin1Char('\n')).toStdString());
+
+    const qsizetype a1a2 = legLineIndex(lines, QStringLiteral("a1"), QStringLiteral("a2"));
+    const qsizetype a2a3 = legLineIndex(lines, QStringLiteral("a2"), QStringLiteral("a3"));
+    REQUIRE(a1a2 >= 0);
+    REQUIRE(a2a3 > a1a2);
+
+    CHECK(activeDataLine(lines, a1a2).toStdString() == kFrontSightDataLine.toStdString());
+    CHECK(activeDataLine(lines, a2a3).toStdString() == kBackSightDataLine.toStdString());
+    CHECK(tokens(lines.at(a2a3)) == QStringList({QStringLiteral("a2"), QStringLiteral("a3"),
+                                                 QStringLiteral("5.0"), QStringLiteral("-"), QStringLiteral("UP")}));
+}
+
+TEST_CASE("cwSurvexExporter stale sight flags still solve through cavern", "[cwSurvexExporter]") {
+    cwTripData tripData;
+
+    SECTION("Back-only trip with front-only legs") {
+        tripData = sightFlagTrip(false, true, {
+            makeShot(QStringLiteral("10.0"), QStringLiteral("90"), QStringLiteral("0"), QString(), QString()),
+            makeShot(QStringLiteral("5.0"), QString(), QStringLiteral("DOWN"), QString(), QStringLiteral("UP"))
+        });
+    }
+
+    SECTION("Front-only trip with back-only legs") {
+        tripData = sightFlagTrip(true, false, {
+            makeShot(QStringLiteral("10.0"), QString(), QString(), QStringLiteral("270"), QStringLiteral("0")),
+            makeShot(QStringLiteral("5.0"), QString(), QStringLiteral("DOWN"), QString(), QStringLiteral("UP"))
+        });
+    }
+
+    cwCavingRegion region;
+    auto cave = new cwCave();
+    cave->setName(QStringLiteral("Phake Cave"));
+    region.addCave(cave);
+
+    auto trip = new cwTrip();
+    cave->addTrip(trip);
+    trip->setData(tripData);
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    INFO(plotManager->solveErrorMessage().toStdString());
+    CHECK_FALSE(plotManager->hasSolveError());
+
+    const cwStationPositionLookup positions = cave->scopedPositions();
+    REQUIRE(positions.hasPosition(QStringLiteral("a3")));
+    REQUIRE(positions.hasPosition(QStringLiteral("a1")));
+
+    //Both variants run 10 m east and then 5 m straight down
+    constexpr double kTolerance = 0.01;
+    const QVector3D a3FromA1 = positions.position(QStringLiteral("a3")) - positions.position(QStringLiteral("a1"));
+    CHECK_THAT(a3FromA1.x(), Catch::Matchers::WithinAbs(10.0, kTolerance));
+    CHECK_THAT(a3FromA1.y(), Catch::Matchers::WithinAbs(0.0, kTolerance));
+    CHECK_THAT(a3FromA1.z(), Catch::Matchers::WithinAbs(-5.0, kTolerance));
 }

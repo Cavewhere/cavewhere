@@ -20,8 +20,10 @@
 namespace {
 
 //The front-sight reading order. Splays are always front sights, so this is also
-//the order a splay block declares whatever the trip's own *data line says.
+//the order a splay block declares whatever the trip's own *data line says, and
+//the order writeChunk switches to for a front-only leg in a back-only trip.
 constexpr QLatin1String kFrontSightDataLine("*data normal from to tape compass clino");
+constexpr QLatin1String kBackSightDataLine("*data normal from to tape backcompass backclino");
 
 //Survex's anonymous wall station: a splay ends against the passage wall, not at
 //a station anybody named. Cavern treats a leg to `..` as a splay on its own, so
@@ -30,6 +32,34 @@ constexpr QLatin1String kAnonymousWallStation("..");
 
 //Column width for the padded data lines, negative for left alignment
 constexpr int kTextPadding = -11;
+
+bool hasReading(const cwCompassReading& compass, const cwClinoReading& clino)
+{
+    return compass.state() == cwCompassReading::State::Valid
+           || clino.state() == cwClinoReading::State::Valid
+           || clino.state() == cwClinoReading::State::Up
+           || clino.state() == cwClinoReading::State::Down;
+}
+
+bool isSightEmpty(const cwCompassReading& compass, const cwClinoReading& clino)
+{
+    return compass.state() == cwCompassReading::State::Empty
+           && clino.state() == cwClinoReading::State::Empty;
+}
+
+//A leg the trip's sight flags would write as "- -" although it carries the
+//other side's readings, as a legacy trip with a stale flag does.
+bool isFrontSightOnlyLeg(const cwShot& shot)
+{
+    return hasReading(shot.compass(), shot.clino())
+           && isSightEmpty(shot.backCompass(), shot.backClino());
+}
+
+bool isBackSightOnlyLeg(const cwShot& shot)
+{
+    return hasReading(shot.backCompass(), shot.backClino())
+           && isSightEmpty(shot.compass(), shot.clino());
+}
 
 } // namespace
 
@@ -159,7 +189,7 @@ void cwSurvexExporter::writeShotData(QTextStream& stream, const cwTripData& trip
                 .arg(QStringLiteral("Compass"), kTextPadding)
                 .arg(QStringLiteral("Clino"), kTextPadding);
     } else if(hasBackSights) {
-        normalDataLine = QStringLiteral("*data normal from to tape backcompass backclino");
+        normalDataLine = kBackSightDataLine;
         dataLineComment = QStringLiteral(";%1%2 %3 %4 %5")
                 .arg(QStringLiteral("From"), kTextPadding)
                 .arg(QStringLiteral("To"), kTextPadding)
@@ -175,7 +205,7 @@ void cwSurvexExporter::writeShotData(QTextStream& stream, const cwTripData& trip
 
     for(int i = 0; i < trip.chunks.size(); i++) {
         //Write the chunk data
-        writeChunk(stream, hasFrontSights, hasBackSights, trip.calibrations, trip.chunks.at(i), errors);
+        writeChunk(stream, hasFrontSights, hasBackSights, normalDataLine, trip.calibrations, trip.chunks.at(i), errors);
     }
 
     writeSplayData(stream, trip, normalDataLine, hasBackSights, errors);
@@ -405,10 +435,16 @@ QString cwSurvexExporter::clinoToString(const cwClinoReading& reading)
 
 /**
   \brief Writes a chunk to a stream
+
+  \a normalDataLine is the trip's *data line, active when the chunk starts. A
+  leg whose readings are all on the side the trip's flags leave out is written
+  under that side's *data line instead, and \a normalDataLine is active again
+  when the chunk ends.
   */
 void cwSurvexExporter::writeChunk(QTextStream& stream,
-                                  bool hasFrontSights, //True if the dataset has backsights
-                                  bool hasBackSights, //True if the dataset has frontsights
+                                  bool hasFrontSights,
+                                  bool hasBackSights,
+                                  const QString& normalDataLine,
                                   const cwTripCalibrationData& calibration,
                                   const cwSurveyChunkData& chunk,
                                   QStringList& errors) {
@@ -417,12 +453,7 @@ void cwSurvexExporter::writeChunk(QTextStream& stream,
         return;
     }
 
-    QString dataLineTemplate;
-    if(hasBackSights && hasFrontSights) {
-        dataLineTemplate = QStringLiteral("%1 %2 %3 %4 %5 %6 %7");
-    } else {
-        dataLineTemplate = QStringLiteral("%1 %2 %3 %4 %5");
-    }
+    QString activeDataLine = normalDataLine;
 
     //A chunk carries one shot per leg. A snapshot with a short shots list has
     //legs with no reading at all, so stop at the last leg that has one.
@@ -496,10 +527,28 @@ void cwSurvexExporter::writeChunk(QTextStream& stream,
             backClino = QStringLiteral("-");
         }
 
+        bool writesFrontSights = hasFrontSights;
+        bool writesBackSights = hasBackSights;
+        QString legDataLine = normalDataLine;
+        if(!hasFrontSights && isFrontSightOnlyLeg(shot)) {
+            writesFrontSights = true;
+            writesBackSights = false;
+            legDataLine = kFrontSightDataLine;
+        } else if(!hasBackSights && isBackSightOnlyLeg(shot)) {
+            writesFrontSights = false;
+            writesBackSights = true;
+            legDataLine = kBackSightDataLine;
+        }
+
+        if(legDataLine != activeDataLine) {
+            stream << legDataLine << Qt::endl;
+            activeDataLine = legDataLine;
+        }
+
         //Figure out the line of data
         QString line;
-        if(hasFrontSights && hasBackSights) {
-             line = dataLineTemplate
+        if(writesFrontSights && writesBackSights) {
+             line = QStringLiteral("%1 %2 %3 %4 %5 %6 %7")
                     .arg(fromStation.name(), kTextPadding)
                     .arg(toStation.name(), kTextPadding)
                     .arg(distance, kTextPadding)
@@ -507,20 +556,13 @@ void cwSurvexExporter::writeChunk(QTextStream& stream,
                     .arg(backCompass, kTextPadding)
                     .arg(clino, kTextPadding)
                     .arg(backClino, kTextPadding);
-        } else if(hasFrontSights) {
-            line = dataLineTemplate
+        } else {
+            line = QStringLiteral("%1 %2 %3 %4 %5")
                    .arg(fromStation.name(), kTextPadding)
                    .arg(toStation.name(), kTextPadding)
                    .arg(distance, kTextPadding)
-                   .arg(compass, kTextPadding)
-                   .arg(clino, kTextPadding);
-        } else if(hasBackSights) {
-            line = dataLineTemplate
-                   .arg(fromStation.name(), kTextPadding)
-                   .arg(toStation.name(), kTextPadding)
-                   .arg(distance, kTextPadding)
-                   .arg(backCompass, kTextPadding)
-                   .arg(backClino, kTextPadding);
+                   .arg(writesFrontSights ? compass : backCompass, kTextPadding)
+                   .arg(writesFrontSights ? clino : backClino, kTextPadding);
         }
 
         //Distance should be excluded, mark as duplicate
@@ -534,5 +576,9 @@ void cwSurvexExporter::writeChunk(QTextStream& stream,
         if(!shot.isDistanceIncluded()) {
             stream << QStringLiteral("*flags not duplicate") << Qt::endl;
         }
+    }
+
+    if(activeDataLine != normalDataLine) {
+        stream << normalDataLine << Qt::endl;
     }
 }
